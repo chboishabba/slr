@@ -22,4 +22,4 @@ jobs:
       - name: Source-contract checks
         run: python3 scripts/verify_source_contract.py
       - name: Python syntax checks
-        run: python3 -m py_compile python/spacy_stream.py python/gwb_tranche.py scripts/bench_stream.py scripts/verify_source_contract.py
+        run: python3 -m py_compile python/spacy_stream.py python/gwb_tranche.py python/gwb_full_run.py python/gwb_certify.py scripts/bench_stream.py scripts/verify_source_contract.py
