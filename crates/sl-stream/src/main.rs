@@ -1,4 +1,5 @@
 use sensiblaw_core::*;
+use sensiblaw_parity::*;
 use std::io::{self, BufRead};
 use std::time::Instant;
 
@@ -34,15 +35,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut paragraph: Option<ParagraphAccumulator> = None;
     let mut paragraph_count = 0u64;
     let mut publisher = GenerationPublisher::default();
+    let mut parity_checked = 0u64;
+    let mut parity_failed = 0u64;
+    let mut parity_enabled = false;
 
     for line in stdin.lock().lines() {
         let line = line?;
         let fields: Vec<&str> = line.split('\t').collect();
         if fields.is_empty() { continue; }
         match fields[0] {
+            "C" => {
+                parity_enabled = fields.get(1).copied() == Some("parity=1");
+            }
             "D" => {
                 revision = fields.get(1).and_then(|x| x.parse().ok()).unwrap_or(1);
-                pipeline_start = Some(Instant::now());
+                if pipeline_start.is_none() { pipeline_start = Some(Instant::now()); }
             }
             "P" => {
                 let paragraph_id = fields.get(1).and_then(|x| x.parse().ok()).unwrap_or(0);
@@ -79,8 +86,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 });
             }
             "E" => {
+                let observations = std::mem::take(&mut pending);
+                if parity_enabled {
+                    let parity = active.measure(|| {
+                        check_direct_reference_parity(observations.clone(), |symbol| {
+                            symbols.get(symbol).map(shape).unwrap_or(DependencyShape::Unresolved)
+                        })
+                    });
+                    parity_checked = parity_checked.saturating_add(1);
+                    if !parity.holds() {
+                        parity_failed = parity_failed.saturating_add(1);
+                        eprintln!("SL_PARITY_FAIL sentence_id={} direct={:?} reference={:?}", parity.sentence_id, parity.direct, parity.reference);
+                    }
+                }
                 let compilation = active.measure(|| {
-                    let packed = PackedSentence::from_observations(std::mem::take(&mut pending));
+                    let packed = PackedSentence::from_observations(observations);
                     compile_packed_sentence(packed, |symbol| {
                         symbols.get(symbol).map(shape).unwrap_or(DependencyShape::Unresolved)
                     })
@@ -109,7 +129,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let elapsed = pipeline_start.map(|t| t.elapsed()).unwrap_or_default();
-    eprintln!("SL_METRIC active_ns={} pipeline_wall_ns={} sentences={} paragraphs={} candidates={} residuals={} symbols={} published={}",
-        active.active.as_nanos(), elapsed.as_nanos(), sentences, paragraph_count, candidates, residuals, symbols.len(), publisher.current().is_some() as u8);
+    eprintln!("SL_METRIC active_ns={} pipeline_wall_ns={} sentences={} paragraphs={} candidates={} residuals={} symbols={} published={} parity_checked={} parity_failed={}",
+        active.active.as_nanos(), elapsed.as_nanos(), sentences, paragraph_count, candidates, residuals, symbols.len(), publisher.current().is_some() as u8, parity_checked, parity_failed);
+    if parity_failed != 0 {
+        return Err(format!("direct/reference parity failed for {parity_failed} sentence(s)").into());
+    }
     Ok(())
 }
