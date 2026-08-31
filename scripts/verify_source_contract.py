@@ -5,7 +5,7 @@ core = (root/'crates/sl-core/src/lib.rs').read_text()
 parity = (root/'crates/sl-parity/src/lib.rs').read_text()
 stream = (root/'crates/sl-stream/src/main.rs').read_text()
 worker = (root/'python/spacy_stream.py').read_text()
-gwb = (root/'python/gwb_tranche.py').read_text()
+gwb_prepare = (root/'python/gwb_prepare.py').read_text()
 gwb_full = (root/'python/gwb_full_run.py').read_text()
 gwb_certify = (root/'python/gwb_certify.py').read_text()
 arch = (root/'docs/ARCHITECTURE.md').read_text()
@@ -30,8 +30,10 @@ checks = {
     'parser unavailable marker': 'dep = "-"' in worker,
     'published total-time gate': 'T_total <= 2 * T_spaCy_parse' in arch,
     'direct-delta contract documented': 'Paragraph fusion accepts only `SentenceOutwardDelta`' in direct,
-    'gwb raw payload strict': 'bio_count != 6 or book_count != 4' in gwb,
-    'gwb derived artifacts excluded': 'derived_inventory_artifacts_reingested": False' in gwb,
+    'canonical gwb payload exact': 'len(paths) != 10 or len(bios) != 6 or len(books) != 4' in gwb_prepare,
+    'canonical gwb family membership explicit': 'PUBLIC_BIOS not in memberships[p]' in gwb_prepare and 'BOOKS not in memberships[p]' in gwb_prepare,
+    'canonical gwb source order independent': 'source_family_order_independent": True' in gwb_prepare and 'source_kind_then_resolved_path' in gwb_prepare,
+    'canonical gwb derived artifacts excluded': 'derived_inventory_artifacts_reingested": False' in gwb_prepare,
     'full gwb preloads hashes before timing': 'preload_verified_documents' in gwb_full and 'all_projected_text_hashes_verified_before_timing' in gwb_full,
     'full gwb avoids stdout pipe deadlock': 'stdout=subprocess.DEVNULL' in gwb_full,
     'full gwb uses file-backed stderr': 'NamedTemporaryFile' in gwb_full and 'stderr=err_file' in gwb_full,
@@ -41,7 +43,7 @@ checks = {
     'full gwb distinct receipt schema': 'sensiblaw.gwb-full-certification-receipt.v0_1' in gwb_full,
     'strict certify exposes no subset option': 'add_argument("--limit"' not in gwb_certify and 'limit=None' in gwb_certify,
     'strict certify checks complete document count': 'complete_document_count' in gwb_certify,
-    'gwb phase split documented': 'Source projection' in gwb_doc and 'Full certification run' in gwb_doc,
+    'gwb phase split documented': 'Canonical source projection' in gwb_doc and 'Full certification run' in gwb_doc,
     'cargo lock committed': (root/'Cargo.lock').exists(),
 }
 for k,v in checks.items(): print(('PASS' if v else 'FAIL'), k)
