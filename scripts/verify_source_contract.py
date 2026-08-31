@@ -4,6 +4,7 @@ root = Path(__file__).resolve().parents[1]
 core = (root/'crates/sl-core/src/lib.rs').read_text()
 parity = (root/'crates/sl-parity/src/lib.rs').read_text()
 expansion = (root/'crates/sl-semantic-expansion/src/lib.rs').read_text()
+metrics = (root/'crates/sl-metrics/src/lib.rs').read_text()
 stream = (root/'crates/sl-stream/src/main.rs').read_text()
 worker = (root/'python/spacy_stream.py').read_text()
 gwb_tranche = (root/'python/gwb_tranche.py').read_text()
@@ -31,6 +32,11 @@ checks = {
     'semantic expansion candidates stay candidate-only': 'candidate_only: true' in expansion,
     'semantic expansion retains ambiguous fibres': 'CandidateAlternativeFibre' in expansion and 'ClauseInterpretationAmbiguous' in expansion,
     'semantic expansion preserves unresolved scope': 'NegationScopeUnresolved' in expansion and 'ConditionalScopeUnresolved' in expansion and 'ReferenceAttachmentUnresolved' in expansion,
+    'metrics retains fine timing vector': 'pub struct RuntimeTimingVector' in metrics and 'post_parser_tail_ns' in metrics,
+    'metrics gate tier is derived projection': 'pub struct PerformanceProjection' in metrics and 'performance_projection(&self)' in metrics,
+    'metrics exact ratio avoids float authority': 'pub struct ExactRatio' in metrics and 'numerator: self.total_pipeline_wall_ns' in metrics,
+    'metrics same projection can hide fine timing': 'same_projection_does_not_mean_same_timing_vector' in metrics,
+    'metrics rejects zero parser denominator': 'ZeroParserTime' in metrics,
     'full gwb explicitly enables parity': 'proc.stdin.write("C\\tparity=1\\n")' in gwb_full,
     'paragraph framing': 'print(f"P\\t{paragraph_id}"' in worker and 'print(f"Q\\t{paragraph_id}"' in worker,
     'whitespace sentences filtered': 'if not sent.text.strip()' in worker,
