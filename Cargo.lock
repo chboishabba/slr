@@ -11,6 +11,10 @@ name = "sensiblaw-core"
 version = "0.1.0"
 
 [[package]]
+name = "sensiblaw-metrics"
+version = "0.1.0"
+
+[[package]]
 name = "sensiblaw-parity"
 version = "0.1.0"
 dependencies = [
