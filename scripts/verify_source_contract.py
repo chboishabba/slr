@@ -3,6 +3,7 @@ from pathlib import Path
 root = Path(__file__).resolve().parents[1]
 core = (root/'crates/sl-core/src/lib.rs').read_text()
 parity = (root/'crates/sl-parity/src/lib.rs').read_text()
+expansion = (root/'crates/sl-semantic-expansion/src/lib.rs').read_text()
 stream = (root/'crates/sl-stream/src/main.rs').read_text()
 worker = (root/'python/spacy_stream.py').read_text()
 gwb_tranche = (root/'python/gwb_tranche.py').read_text()
@@ -25,6 +26,11 @@ checks = {
     'stream does not auto publish': 'publisher.publish' not in stream,
     'parity compiler exists': 'pub fn check_direct_reference_parity' in parity and 'pub struct ConsumerObservation' in parity,
     'parity is opt-in not production default': 'let mut parity_enabled = false' in stream and '"C" =>' in stream,
+    'semantic expansion is separate crate': 'pub fn compile_expanded_candidates' in expansion,
+    'semantic expansion has no publication API': 'GenerationPublisher' not in expansion and '.publish(' not in expansion,
+    'semantic expansion candidates stay candidate-only': 'candidate_only: true' in expansion,
+    'semantic expansion retains ambiguous fibres': 'CandidateAlternativeFibre' in expansion and 'ClauseInterpretationAmbiguous' in expansion,
+    'semantic expansion preserves unresolved scope': 'NegationScopeUnresolved' in expansion and 'ConditionalScopeUnresolved' in expansion and 'ReferenceAttachmentUnresolved' in expansion,
     'full gwb explicitly enables parity': 'proc.stdin.write("C\\tparity=1\\n")' in gwb_full,
     'paragraph framing': 'print(f"P\\t{paragraph_id}"' in worker and 'print(f"Q\\t{paragraph_id}"' in worker,
     'whitespace sentences filtered': 'if not sent.text.strip()' in worker,
