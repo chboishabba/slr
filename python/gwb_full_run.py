@@ -22,12 +22,13 @@ import spacy
 from gwb_tranche import (
     PROFILE_REF,
     PROJECTION_SCHEMA,
-    RUN_SCHEMA,
     emit_document,
     performance_tier,
     sha256_bytes,
     sha256_text,
 )
+
+FULL_RUN_SCHEMA = "sensiblaw.gwb-full-certification-receipt.v0_1"
 
 SL_METRIC_RE = re.compile(
     r"SL_METRIC active_ns=(\d+) pipeline_wall_ns=(\d+) sentences=(\d+) paragraphs=(\d+) "
@@ -82,7 +83,6 @@ def run(ns: argparse.Namespace) -> int:
     if not rust_bin.exists():
         raise SystemExit(f"missing Rust stream binary: {rust_bin}")
 
-    # Model loading is a cold-start diagnostic surface, not parser occupancy.
     model_load_start = time.perf_counter_ns()
     nlp = spacy.load(ns.model)
     model_load_ns = time.perf_counter_ns() - model_load_start
@@ -90,8 +90,6 @@ def run(ns: argparse.Namespace) -> int:
     output = Path(ns.output).resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
 
-    # File-backed stderr is intentional: a tranche-wide parity failure could emit
-    # enough diagnostics to fill a pipe before the controller reaches wait().
     with tempfile.NamedTemporaryFile(mode="w+", encoding="utf-8", prefix="gwb-sl-stderr-", delete=False) as err_file:
         err_path = Path(err_file.name)
         proc = subprocess.Popen(
@@ -174,9 +172,10 @@ def run(ns: argparse.Namespace) -> int:
     ratio = pipeline_wall_ns / max(parse_ns, 1)
 
     receipt = {
-        "schema_version": RUN_SCHEMA,
-        "authority": "execution_and_parity_receipt_only",
+        "schema_version": FULL_RUN_SCHEMA,
+        "authority": "full_gwb_execution_and_parity_certification_receipt",
         "profile_ref": PROFILE_REF,
+        "canonical_driver": "python/gwb_full_run.py",
         "projection_manifest": str(manifest_path),
         "projection_manifest_sha256": sha256_bytes(manifest_bytes),
         "document_count": len(loaded),
