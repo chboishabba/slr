@@ -22,4 +22,4 @@ The Rust implementation follows the published DASHI/SensibLaw runtime contracts 
 - the 1.5x, 1.2x and post-parser 0.1x performance milestones on representative corpora.
 - cryptographic receipt signing / distributed consensus publication.
 
-Those remain gates. Absence of their receipts is not interpreted as success.
+Those remain gates. Absence of their receipts is not interpreted as success. CI compilation is a software validation receipt only; it does not certify the still-open semantic or performance gates.
