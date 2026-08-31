@@ -43,7 +43,8 @@ def preload_verified_documents(manifest: dict, limit: int | None) -> list[tuple[
     loaded: list[tuple[dict, str]] = []
     for doc in docs:
         path = Path(doc["projected_path"]).resolve()
-        text = path.read_text(encoding="utf-8")
+        with path.open("r", encoding="utf-8", newline="") as handle:
+            text = handle.read()
         actual_hash = sha256_text(text)
         expected_hash = str(doc["projected_sha256"])
         if actual_hash != expected_hash:
