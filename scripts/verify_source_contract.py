@@ -4,12 +4,14 @@ root = Path(__file__).resolve().parents[1]
 core = (root/'crates/sl-core/src/lib.rs').read_text()
 parity = (root/'crates/sl-parity/src/lib.rs').read_text()
 expansion = (root/'crates/sl-semantic-expansion/src/lib.rs').read_text()
+expanded_cert = (root/'crates/sl-expanded-cert/src/main.rs').read_text()
 stream = (root/'crates/sl-stream/src/main.rs').read_text()
 worker = (root/'python/spacy_stream.py').read_text()
 gwb_tranche = (root/'python/gwb_tranche.py').read_text()
 gwb_prepare = (root/'python/gwb_prepare.py').read_text()
 gwb_full = (root/'python/gwb_full_run.py').read_text()
 gwb_certify = (root/'python/gwb_certify.py').read_text()
+gwb_expanded = (root/'python/gwb_expanded_certify.py').read_text()
 arch = (root/'docs/ARCHITECTURE.md').read_text()
 direct = (root/'docs/DIRECT_DELTA.md').read_text()
 gwb_doc = (root/'docs/GWB_TRANCHE.md').read_text()
@@ -31,6 +33,16 @@ checks = {
     'semantic expansion candidates stay candidate-only': 'candidate_only: true' in expansion,
     'semantic expansion retains ambiguous fibres': 'CandidateAlternativeFibre' in expansion and 'ClauseInterpretationAmbiguous' in expansion,
     'semantic expansion preserves unresolved scope': 'NegationScopeUnresolved' in expansion and 'ConditionalScopeUnresolved' in expansion and 'ReferenceAttachmentUnresolved' in expansion,
+    'expanded direct compiler independent of reference projection': 'pub fn compile_expanded_direct' in expansion and 'without calling `project_sentence`' in expansion,
+    'expanded parity uses stable consumer observation': 'pub struct ExpandedConsumerObservation' in expansion and 'StableHeadRelation' in expansion,
+    'expanded parity excludes transient token ids': 'stable_observation_does_not_depend_on_token_id_values' in expansion,
+    'expanded parity retains source span authority': 'source_span_remains_part_of_stable_observation' in expansion,
+    'expanded cert supports parity/direct modes': 'parity_enabled' in expanded_cert and 'direct_active_ns=' in expanded_cert and 'reference_active_ns=' in expanded_cert,
+    'expanded cert has zero publication effects': 'publication_effects=0' in expanded_cert and 'GenerationPublisher' not in expanded_cert,
+    'expanded gwb requires same parser observation stream': 'same_parser_observation_stream_across_passes' in gwb_expanded and 'parser_observation_sha256' in gwb_expanded,
+    'expanded gwb separates parity and performance passes': 'reference_certification_cost_excluded_from_production_speed_claim' in gwb_expanded and 'direct_only_performance_pass' in gwb_expanded,
+    'expanded gwb performance uses direct-only pass': 'direct_only_architectural_2x_gate_pass' in gwb_expanded,
+    'expanded gwb strict full corpus': 'complete 10-document GWB v0.1 corpus' in gwb_expanded and 'add_argument("--limit"' not in gwb_expanded,
     'full gwb explicitly enables parity': 'proc.stdin.write("C\\tparity=1\\n")' in gwb_full,
     'paragraph framing': 'print(f"P\\t{paragraph_id}"' in worker and 'print(f"Q\\t{paragraph_id}"' in worker,
     'whitespace sentences filtered': 'if not sent.text.strip()' in worker,
