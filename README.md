@@ -5,8 +5,10 @@ From-scratch Rust foundation for SensibLaw, built against the current DASHI/Sens
 ## Current slice
 
 - `sensiblaw-core`: revision-scoped spans, packed fibre-local sentence carrier, typed head failures, candidate semantic fibres, direct PNF deltas/residuals, natural child-to-parent transport, outward-only paragraph fusion, and fail-closed generation publication.
+- `sensiblaw-parity`: opt-in direct/reference certification over consumer-visible semantic observations; it is not part of the mandatory production hot path.
 - `sensiblaw-stream`: streaming parser-observation consumer that compiles each closed sentence immediately and stages candidate generations without granting publication authority.
 - `python/spacy_stream.py`: replaceable spaCy sidecar using paragraph/sentence-framed TSV; parser output is observation evidence only.
+- `python/gwb_tranche.py`: full GWB v0.1 source-projection + sustained spaCy→Rust certification runner with opt-in direct/reference parity receipts.
 - `scripts/bench_stream.py`: concurrent spaCy/Rust benchmark enforcing the published total-walltime gate `T_total <= 2 * T_spaCy_parse`.
 
 The parser sidecar never owns canonical semantic state; Rust owns deterministic compilation and publication boundaries.
@@ -17,10 +19,11 @@ The parser sidecar never owns canonical semantic state; Rust owns deterministic 
 cargo test --workspace
 cargo build --workspace
 python3 scripts/bench_stream.py fixtures/sample.txt
+# Full GWB: see docs/GWB_TRANCHE.md
 ```
 
 ## Direct-delta execution laws
 
-See `docs/DIRECT_DELTA.md` and `docs/PROOF_OBLIGATIONS.md`. The current mandatory path is designed around zero sentence-local DB crossings, zero production parser-token writes, zero unchanged-relation writes, and zero parent rescans of closed sentence interiors. Candidate generations remain invisible until separately certified and published.
+See `docs/DIRECT_DELTA.md`, `docs/PROOF_OBLIGATIONS.md`, and `docs/GWB_TRANCHE.md`. The current mandatory path is designed around zero sentence-local DB crossings, zero production parser-token writes, zero unchanged-relation writes, and zero parent rescans of closed sentence interiors. Candidate generations remain invisible until separately certified and published.
 
-The direct/reference parity gate and production cutover remain deliberately uncertified until their receipts exist.
+Direct/reference parity is now implemented as an opt-in certification path; it is not part of the mandatory production stream. Full-corpus parity and stricter performance tiers remain run-derived receipts rather than source-code claims.
