@@ -1,21 +1,28 @@
 # GWB full tranche v0.1
 
-The GWB proving corpus is run as two explicit phases.
+The GWB proving corpus is run as two explicit authority-separated phases.
 
-## 1. Source projection
+## 1. Canonical source projection
 
-`python/gwb_tranche.py prepare` consumes the historical `tranche-profile:gwb:v0_1`
-source inventory. In strict v0.1 mode it requires the two declared source families and
-exactly ten unique raw narrative sources after path deduplication: six biography HTML
-files plus four books (EPUB/PDF). Derived JSON/timeline/manifest artifacts under the
-broad directory are not recursively treated as narrative source documents.
+Use `python/gwb_prepare.py`. It consumes the historical `tranche-profile:gwb:v0_1`
+source inventory and tracks all family memberships per resolved path, so overlapping
+families may appear in any inventory order without changing the admitted corpus.
 
-Every projected document records source SHA-256, source byte count, projection method,
-projection time, projected SHA-256 and projected byte count. This phase has
-`authority = source_projection_only`.
+The strict v0.1 payload is exactly ten unique raw narrative sources:
+
+- six biography HTML files, each belonging to `source-family:gwb-public-bios:v1`;
+- four EPUB/PDF books, each belonging to `source-family:gwb-books:v1`.
+
+Derived JSON/timeline/manifest artifacts are not recursively treated as narrative source
+documents. Deterministic document ordinals are assigned by source kind and resolved path,
+not manifest ordering.
+
+Every projected document records source SHA-256, source byte count, all family refs,
+projection method, projection time, projected SHA-256 and projected byte count. This
+phase has `authority = source_projection_only`.
 
 ```sh
-python3 python/gwb_tranche.py prepare \
+python3 python/gwb_prepare.py \
   --inventory /path/to/source_inventory.json \
   --source-root /path/to/SensibLaw \
   --output .tmp/gwb-rust
@@ -57,9 +64,10 @@ The canonical receipt schema is:
 sensiblaw.gwb-full-certification-receipt.v0_1
 ```
 
-The lower-level `gwb_full_run.py` is an implementation/debug surface. A debug subset
-must not be treated as tranche certification merely because it produced JSON; the
-strict `gwb_certify.py` entrypoint is the authority gate for complete-corpus runs.
+The lower-level `gwb_full_run.py` and historical combined `gwb_tranche.py` are
+implementation/debug surfaces. A debug subset must not be treated as tranche
+certification merely because it produced JSON; `gwb_certify.py` is the complete-corpus
+authority gate.
 
 ## Timing hygiene
 
