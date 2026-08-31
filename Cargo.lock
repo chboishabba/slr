@@ -18,6 +18,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "sensiblaw-semantic-expansion"
+version = "0.1.0"
+dependencies = [
+ "sensiblaw-core",
+]
+
+[[package]]
 name = "sensiblaw-stream"
 version = "0.1.0"
 dependencies = [
