@@ -42,16 +42,46 @@ The driver performs two complete passes with one loaded spaCy model:
 1. parity pass: direct + reference expanded compilers;
 2. direct-only performance pass: direct expanded compiler only.
 
-Each emitted parser frame is hashed. A successful receipt requires both passes to have
-the exact same parser-observation SHA-256 and byte count, the same direct semantic
-accounting, full direct/reference parity on the parity pass, zero publication effects,
-exact Rust/controller sentence+paragraph accounting, and the direct-only total semantic
-pipeline gate `T_total <= 2*T_spaCy_parse`.
+## Canonical parser-observation identity
+
+The first v0.1 strict attempt hashed every frame emitted by `emit_document`, including the
+per-document runtime telemetry frame:
+
+```text
+M\tspacy_parse_ns=...
+```
+
+That made cross-pass raw-stream equality too strong: parity and direct-only passes can
+have identical parser observations while legitimately reporting different parse timing.
+The failed v0.1 receipt is retained as a negative receipt rather than treated as semantic
+failure.
+
+The corrected v0.2 receipt hashes only the declared semantic parser-observation language:
+
+```text
+D P S T E Q
+```
+
+`M` runtime telemetry and control frames are excluded from semantic observation identity.
+They remain separately recorded as performance evidence.
+
+A successful v0.2 receipt therefore requires both passes to have the exact same canonical
+parser-observation SHA-256 and hashed byte count, the same direct semantic accounting,
+full direct/reference parity on the parity pass, zero publication effects, exact
+Rust/controller sentence+paragraph accounting, and the direct-only total semantic pipeline
+gate `T_total <= 2*T_spaCy_parse`.
 
 Reference certification cost is not included in the production-speed claim. The receipt
 reports framing-active time, direct semantic active time, reference semantic active time,
 total pipeline walltime, parser occupancy, post-parser tail, candidate count, residual
 count, alternative-fibre count and projection-failure count separately.
+
+The observed v0.1 run on `0833fb4b56a63ee5f9780ad355949b7352b54f25` already established
+41,044/41,044 expanded parity, 236,232 candidates, 706,246 residuals, 27,618 alternative
+fibres, zero projection failures, zero publication effects, and a 1.0644x direct-only
+performance result. Full strict certification remained false only because the old digest
+included runtime timing telemetry. The corrected v0.2 digest must still be rerun; the
+v0.1 observations do not pre-certify it.
 
 A successful expanded receipt is bounded to the exact code identity, GWB corpus,
 projection manifest, spaCy model/version and stable expanded observation surface used by
