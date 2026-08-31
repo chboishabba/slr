@@ -15,7 +15,7 @@ use std::collections::HashMap;
 
 use sensiblaw_core::{
     Annotation, FibreAddress, HeadCommit, HeadDeclaration, ProjectionError, StableSourceEvidence,
-    SymbolId, TextSpan, TokenId, TokenObservation, project_sentence,
+    SymbolId, TextSpan, TokenObservation, project_sentence,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -50,7 +50,7 @@ pub enum ExpansionSignal {
     Unsupported,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ExpandedCandidateKind {
     Role(ExpandedSemanticRole),
     ScopedNegation,
@@ -58,7 +58,7 @@ pub enum ExpandedCandidateKind {
     ReferenceRelation,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ScopeState {
     SyntacticallyLocal,
     ScopeUnresolved,
@@ -66,7 +66,7 @@ pub enum ScopeState {
     ContextRequired,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ExpansionResidualKind {
     NegationScopeUnresolved,
     ModalityScopeUnresolved,
@@ -109,6 +109,56 @@ pub struct ExpandedSentenceEmission {
     pub projection_failures: Vec<ProjectionError>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum StableHeadRelation {
+    Root,
+    LocalOrdinal(u32),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct StableCandidateObservation {
+    pub kind: ExpandedCandidateKind,
+    pub span: TextSpan,
+    pub address: FibreAddress,
+    pub head: StableHeadRelation,
+    pub scope: ScopeState,
+    pub candidate_only: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct StableResidualObservation {
+    pub kind: ExpansionResidualKind,
+    pub address: FibreAddress,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct StableAlternativeFibreObservation {
+    pub address: FibreAddress,
+    pub alternatives: Vec<ExpandedSemanticRole>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExpandedConsumerObservation {
+    pub sentence_id: u64,
+    pub candidates: Vec<StableCandidateObservation>,
+    pub residuals: Vec<StableResidualObservation>,
+    pub alternative_fibres: Vec<StableAlternativeFibreObservation>,
+    pub projection_failures: Vec<ProjectionError>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExpandedParityReceipt {
+    pub sentence_id: u64,
+    pub direct: ExpandedConsumerObservation,
+    pub reference: ExpandedConsumerObservation,
+}
+
+impl ExpandedParityReceipt {
+    pub fn holds(&self) -> bool {
+        self.direct == self.reference
+    }
+}
+
 fn evidence(observation: &TokenObservation) -> StableSourceEvidence {
     StableSourceEvidence {
         span: observation.span,
@@ -148,6 +198,179 @@ fn push_residual(
             local_ordinal: observation.local_ordinal,
         },
     });
+}
+
+fn stable_head_relation(
+    observation: &TokenObservation,
+    committed_head: HeadCommit,
+    token_to_local: &HashMap<u64, u32>,
+) -> StableHeadRelation {
+    match committed_head {
+        HeadCommit::Root => StableHeadRelation::Root,
+        HeadCommit::Dependency(token_id) => token_to_local
+            .get(&token_id)
+            .copied()
+            .map(StableHeadRelation::LocalOrdinal)
+            .unwrap_or_else(|| match observation.declared_head {
+                HeadDeclaration::SelfHead => StableHeadRelation::Root,
+                HeadDeclaration::LocalOrdinal(local) => StableHeadRelation::LocalOrdinal(local),
+            }),
+    }
+}
+
+fn observe_emission(
+    tokens: &[TokenObservation],
+    emission: &ExpandedSentenceEmission,
+) -> ExpandedConsumerObservation {
+    let token_to_local: HashMap<u64, u32> = tokens
+        .iter()
+        .map(|token| (token.token_id, token.local_ordinal))
+        .collect();
+    let token_by_local: HashMap<u32, &TokenObservation> = tokens
+        .iter()
+        .map(|token| (token.local_ordinal, token))
+        .collect();
+
+    let mut candidates: Vec<_> = emission
+        .candidates
+        .iter()
+        .map(|candidate| {
+            let source = token_by_local
+                .get(&candidate.evidence.address.local_ordinal)
+                .copied();
+            let head = source
+                .map(|observation| {
+                    stable_head_relation(observation, candidate.committed_head, &token_to_local)
+                })
+                .unwrap_or(StableHeadRelation::Root);
+            StableCandidateObservation {
+                kind: candidate.kind,
+                span: candidate.evidence.span,
+                address: candidate.evidence.address,
+                head,
+                scope: candidate.scope,
+                candidate_only: candidate.candidate_only,
+            }
+        })
+        .collect();
+    candidates.sort();
+
+    let mut residuals: Vec<_> = emission
+        .residuals
+        .iter()
+        .map(|residual| StableResidualObservation {
+            kind: residual.kind,
+            address: residual.address,
+        })
+        .collect();
+    residuals.sort();
+
+    let mut alternative_fibres: Vec<_> = emission
+        .alternative_fibres
+        .iter()
+        .map(|fibre| StableAlternativeFibreObservation {
+            address: fibre.address,
+            alternatives: fibre.alternatives.clone(),
+        })
+        .collect();
+    alternative_fibres.sort();
+
+    let mut projection_failures = emission.projection_failures.clone();
+    projection_failures.sort_by_key(|failure| match failure {
+        ProjectionError::MissingDependentHead { local_ordinal, head_ordinal } => {
+            (0u8, *local_ordinal, *head_ordinal)
+        }
+        ProjectionError::DuplicateLocalOrdinal(local_ordinal) => (1u8, *local_ordinal, 0),
+    });
+
+    ExpandedConsumerObservation {
+        sentence_id: emission.sentence_id,
+        candidates,
+        residuals,
+        alternative_fibres,
+        projection_failures,
+    }
+}
+
+/// Reference implementation: project through the canonical row projection,
+/// then emit richer candidate semantics from those committed rows.
+pub fn compile_expanded_candidates(
+    tokens: Vec<TokenObservation>,
+    classify: impl Fn(SymbolId) -> ExpansionSignal,
+) -> ExpandedSentenceEmission {
+    let sentence_id = tokens.first().map(|token| token.sentence_id).unwrap_or(0);
+    let receipt = project_sentence(tokens);
+    let mut out = ExpandedSentenceEmission {
+        sentence_id,
+        candidates: Vec::new(),
+        residuals: Vec::new(),
+        alternative_fibres: Vec::new(),
+        projection_failures: receipt.failures,
+    };
+
+    for row in receipt.rows {
+        let observation = &row.observation;
+        let symbol = match observation.dependency {
+            Annotation::Present(symbol) => symbol,
+            Annotation::Unavailable(_) => continue,
+        };
+        emit_signal(&mut out, observation, row.committed_head, classify(symbol));
+    }
+    out
+}
+
+/// Independent direct implementation: build the local ordinal map and committed
+/// heads in one sentence-local pass rather than consuming `project_sentence`.
+pub fn compile_expanded_direct(
+    tokens: Vec<TokenObservation>,
+    classify: impl Fn(SymbolId) -> ExpansionSignal,
+) -> ExpandedSentenceEmission {
+    let sentence_id = tokens.first().map(|token| token.sentence_id).unwrap_or(0);
+    let max_local = tokens.iter().map(|token| token.local_ordinal).max().unwrap_or(0) as usize;
+    let mut by_local = vec![None; max_local.saturating_add(1)];
+    let mut failures = Vec::new();
+    for token in &tokens {
+        if by_local[token.local_ordinal as usize]
+            .replace(token.token_id)
+            .is_some()
+        {
+            failures.push(ProjectionError::DuplicateLocalOrdinal(token.local_ordinal));
+        }
+    }
+
+    let mut out = ExpandedSentenceEmission {
+        sentence_id,
+        candidates: Vec::new(),
+        residuals: Vec::new(),
+        alternative_fibres: Vec::new(),
+        projection_failures: failures,
+    };
+    for observation in &tokens {
+        let committed_head = match observation.declared_head {
+            HeadDeclaration::SelfHead => Some(HeadCommit::Root),
+            HeadDeclaration::LocalOrdinal(head_local) => {
+                match by_local.get(head_local as usize).and_then(|entry| *entry) {
+                    Some(head) => Some(HeadCommit::Dependency(head)),
+                    None => {
+                        out.projection_failures.push(ProjectionError::MissingDependentHead {
+                            local_ordinal: observation.local_ordinal,
+                            head_ordinal: head_local,
+                        });
+                        None
+                    }
+                }
+            }
+        };
+        let Some(committed_head) = committed_head else {
+            continue;
+        };
+        let symbol = match observation.dependency {
+            Annotation::Present(symbol) => symbol,
+            Annotation::Unavailable(_) => continue,
+        };
+        emit_signal(&mut out, observation, committed_head, classify(symbol));
+    }
+    out
 }
 
 fn emit_signal(
@@ -256,191 +479,42 @@ fn emit_signal(
     }
 }
 
-/// Reference compiler: project through the row-oriented reference projection.
-pub fn compile_expanded_candidates(
-    tokens: Vec<TokenObservation>,
-    classify: impl Fn(SymbolId) -> ExpansionSignal,
-) -> ExpandedSentenceEmission {
-    let sentence_id = tokens.first().map(|token| token.sentence_id).unwrap_or(0);
-    let receipt = project_sentence(tokens);
-    let mut out = ExpandedSentenceEmission {
-        sentence_id,
-        candidates: Vec::new(),
-        residuals: Vec::new(),
-        alternative_fibres: Vec::new(),
-        projection_failures: receipt.failures,
-    };
-
-    for row in receipt.rows {
-        let observation = &row.observation;
-        let symbol = match observation.dependency {
-            Annotation::Present(symbol) => symbol,
-            Annotation::Unavailable(_) => continue,
-        };
-        emit_signal(&mut out, observation, row.committed_head, classify(symbol));
-    }
-
-    out
-}
-
-/// Direct compiler: independently resolves sentence-local heads from a packed local
-/// ordinal map without calling `project_sentence`.
-///
-/// This is the candidate semantic expansion path whose representation parity is
-/// checked against `compile_expanded_candidates`.
-pub fn compile_expanded_direct(
-    tokens: Vec<TokenObservation>,
-    classify: impl Fn(SymbolId) -> ExpansionSignal,
-) -> ExpandedSentenceEmission {
-    let sentence_id = tokens.first().map(|token| token.sentence_id).unwrap_or(0);
-    let max_local = tokens.iter().map(|token| token.local_ordinal).max().unwrap_or(0) as usize;
-    let mut by_local = vec![None; max_local.saturating_add(1)];
-    let mut failures = Vec::new();
-
-    for token in &tokens {
-        let slot = &mut by_local[token.local_ordinal as usize];
-        if slot.replace(token.token_id).is_some() {
-            failures.push(ProjectionError::DuplicateLocalOrdinal(token.local_ordinal));
-        }
-    }
-
-    let mut out = ExpandedSentenceEmission {
-        sentence_id,
-        candidates: Vec::new(),
-        residuals: Vec::new(),
-        alternative_fibres: Vec::new(),
-        projection_failures: failures,
-    };
-
-    for observation in &tokens {
-        let committed_head = match observation.declared_head {
-            HeadDeclaration::SelfHead => Some(HeadCommit::Root),
-            HeadDeclaration::LocalOrdinal(head_local) => {
-                match by_local.get(head_local as usize).and_then(|token| *token) {
-                    Some(head) => Some(HeadCommit::Dependency(head)),
-                    None => {
-                        out.projection_failures.push(ProjectionError::MissingDependentHead {
-                            local_ordinal: observation.local_ordinal,
-                            head_ordinal: head_local,
-                        });
-                        None
-                    }
-                }
-            }
-        };
-        let Some(committed_head) = committed_head else { continue };
-        let symbol = match observation.dependency {
-            Annotation::Present(symbol) => symbol,
-            Annotation::Unavailable(_) => continue,
-        };
-        emit_signal(&mut out, observation, committed_head, classify(symbol));
-    }
-
-    out
-}
-
-// ---- stable expanded parity observation ------------------------------------
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum StableHeadRelation {
-    Root,
-    LocalOrdinal(u32),
-    UnknownExternal,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct StableExpandedCandidate {
-    pub kind: ExpandedCandidateKind,
-    pub evidence: StableSourceEvidence,
-    pub head: StableHeadRelation,
-    pub scope: ScopeState,
-    pub candidate_only: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ExpandedConsumerObservation {
-    pub sentence_id: u64,
-    pub candidates: Vec<StableExpandedCandidate>,
-    pub residuals: Vec<ExpansionResidual>,
-    pub alternative_fibres: Vec<CandidateAlternativeFibre>,
-    pub projection_failures: Vec<ProjectionError>,
-}
-
-fn stable_head_relation(
-    head: HeadCommit,
-    token_locality: &HashMap<TokenId, u32>,
-) -> StableHeadRelation {
-    match head {
-        HeadCommit::Root => StableHeadRelation::Root,
-        HeadCommit::Dependency(token_id) => token_locality
-            .get(&token_id)
-            .copied()
-            .map(StableHeadRelation::LocalOrdinal)
-            .unwrap_or(StableHeadRelation::UnknownExternal),
-    }
-}
-
-pub fn expanded_consumer_observation(
-    tokens: &[TokenObservation],
-    emission: &ExpandedSentenceEmission,
-) -> ExpandedConsumerObservation {
-    let token_locality: HashMap<TokenId, u32> = tokens
-        .iter()
-        .map(|token| (token.token_id, token.local_ordinal))
-        .collect();
-    let candidates = emission
-        .candidates
-        .iter()
-        .map(|candidate| StableExpandedCandidate {
-            kind: candidate.kind,
-            evidence: candidate.evidence,
-            head: stable_head_relation(candidate.committed_head, &token_locality),
-            scope: candidate.scope,
-            candidate_only: candidate.candidate_only,
-        })
-        .collect();
-    ExpandedConsumerObservation {
-        sentence_id: emission.sentence_id,
-        candidates,
-        residuals: emission.residuals.clone(),
-        alternative_fibres: emission.alternative_fibres.clone(),
-        projection_failures: emission.projection_failures.clone(),
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ExpandedParityReceipt {
-    pub sentence_id: u64,
-    pub direct: ExpandedConsumerObservation,
-    pub reference: ExpandedConsumerObservation,
-}
-
-impl ExpandedParityReceipt {
-    pub fn holds(&self) -> bool { self.direct == self.reference }
-}
-
 pub fn check_expanded_parity(
     tokens: Vec<TokenObservation>,
     classify: impl Copy + Fn(SymbolId) -> ExpansionSignal,
 ) -> ExpandedParityReceipt {
     let sentence_id = tokens.first().map(|token| token.sentence_id).unwrap_or(0);
-    let direct_emission = compile_expanded_direct(tokens.clone(), classify);
-    let reference_emission = compile_expanded_candidates(tokens.clone(), classify);
+    let reference = compile_expanded_candidates(tokens.clone(), classify);
+    let direct = compile_expanded_direct(tokens.clone(), classify);
     ExpandedParityReceipt {
         sentence_id,
-        direct: expanded_consumer_observation(&tokens, &direct_emission),
-        reference: expanded_consumer_observation(&tokens, &reference_emission),
+        direct: observe_emission(&tokens, &direct),
+        reference: observe_emission(&tokens, &reference),
     }
+}
+
+pub fn observe_direct_expanded(
+    tokens: Vec<TokenObservation>,
+    classify: impl Fn(SymbolId) -> ExpansionSignal,
+) -> ExpandedConsumerObservation {
+    let original = tokens.clone();
+    let direct = compile_expanded_direct(tokens, classify);
+    observe_emission(&original, &direct)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sensiblaw_core::{Capability, HeadDeclaration, TextSpan};
+    use sensiblaw_core::{Capability, TextSpan};
 
-    fn token(local: u32, head: HeadDeclaration, dep: Annotation) -> TokenObservation {
+    fn token_with_id(
+        token_id: u64,
+        local: u32,
+        head: HeadDeclaration,
+        dep: Annotation,
+    ) -> TokenObservation {
         TokenObservation {
-            token_id: 100 + local as u64,
+            token_id,
             sentence_id: 7,
             local_ordinal: local,
             span: TextSpan::new(1, local, local + 1).unwrap(),
@@ -451,6 +525,10 @@ mod tests {
             dependency: dep,
             declared_head: head,
         }
+    }
+
+    fn token(local: u32, head: HeadDeclaration, dep: Annotation) -> TokenObservation {
+        token_with_id(100 + local as u64, local, head, dep)
     }
 
     #[test]
@@ -506,69 +584,55 @@ mod tests {
     }
 
     #[test]
-    fn direct_reference_expanded_parity_holds_on_rich_fixture() {
-        let tokens = vec![
-            token(0, HeadDeclaration::LocalOrdinal(1), Annotation::Present(10)),
-            token(1, HeadDeclaration::SelfHead, Annotation::Present(11)),
-            token(2, HeadDeclaration::LocalOrdinal(1), Annotation::Present(12)),
-            token(3, HeadDeclaration::LocalOrdinal(1), Annotation::Present(13)),
+    fn direct_and_reference_match_on_stable_semantic_observation() {
+        let receipt = check_expanded_parity(
+            vec![
+                token(0, HeadDeclaration::LocalOrdinal(1), Annotation::Present(10)),
+                token(1, HeadDeclaration::SelfHead, Annotation::Present(20)),
+            ],
+            |symbol| match symbol {
+                10 => ExpansionSignal::Negation,
+                20 => ExpansionSignal::ConditionalMarker,
+                _ => ExpansionSignal::Unsupported,
+            },
+        );
+        assert!(receipt.holds());
+    }
+
+    #[test]
+    fn transient_token_ids_are_not_semantic_parity_authority() {
+        let first = vec![
+            token_with_id(100, 0, HeadDeclaration::LocalOrdinal(1), Annotation::Present(10)),
+            token_with_id(101, 1, HeadDeclaration::SelfHead, Annotation::Present(20)),
         ];
-        let receipt = check_expanded_parity(tokens, |symbol| match symbol {
-            10 => ExpansionSignal::NominalSubject,
-            11 => ExpansionSignal::Unsupported,
-            12 => ExpansionSignal::Negation,
-            13 => ExpansionSignal::ClausalModifier,
+        let second = vec![
+            token_with_id(900, 0, HeadDeclaration::LocalOrdinal(1), Annotation::Present(10)),
+            token_with_id(901, 1, HeadDeclaration::SelfHead, Annotation::Present(20)),
+        ];
+        let classify = |symbol| match symbol {
+            10 => ExpansionSignal::Negation,
+            20 => ExpansionSignal::ConditionalMarker,
             _ => ExpansionSignal::Unsupported,
-        });
-        assert!(receipt.holds());
-        assert_eq!(receipt.direct.candidates.len(), 2);
-        assert_eq!(receipt.direct.alternative_fibres.len(), 1);
-    }
-
-    #[test]
-    fn direct_reference_expanded_parity_preserves_missing_head_failure() {
-        let tokens = vec![token(
-            0,
-            HeadDeclaration::LocalOrdinal(99),
-            Annotation::Present(10),
-        )];
-        let receipt = check_expanded_parity(tokens, |_| ExpansionSignal::NominalSubject);
-        assert!(receipt.holds());
-        assert_eq!(receipt.direct.projection_failures.len(), 1);
-        assert!(receipt.direct.candidates.is_empty());
-    }
-
-    #[test]
-    fn stable_observation_does_not_depend_on_token_id_values() {
-        let mut left = vec![
-            token(0, HeadDeclaration::LocalOrdinal(1), Annotation::Present(10)),
-            token(1, HeadDeclaration::SelfHead, Annotation::Unavailable(Capability::Dependency)),
-        ];
-        let mut right = left.clone();
-        left[0].token_id = 1000;
-        left[1].token_id = 2000;
-        right[0].token_id = 9000;
-        right[1].token_id = 8000;
-        let classify = |symbol| if symbol == 10 { ExpansionSignal::NominalSubject } else { ExpansionSignal::Unsupported };
-        let left_emission = compile_expanded_direct(left.clone(), classify);
-        let right_emission = compile_expanded_direct(right.clone(), classify);
+        };
         assert_eq!(
-            expanded_consumer_observation(&left, &left_emission),
-            expanded_consumer_observation(&right, &right_emission)
+            observe_direct_expanded(first, classify),
+            observe_direct_expanded(second, classify),
         );
     }
 
     #[test]
-    fn source_span_remains_part_of_stable_observation() {
-        let left = vec![token(0, HeadDeclaration::SelfHead, Annotation::Present(10))];
-        let mut right = left.clone();
-        right[0].span = TextSpan::new(1, 10, 11).unwrap();
-        let classify = |_| ExpansionSignal::NominalSubject;
-        let left_emission = compile_expanded_direct(left.clone(), classify);
-        let right_emission = compile_expanded_direct(right.clone(), classify);
+    fn source_span_change_is_visible_to_semantic_parity() {
+        let first = vec![token_with_id(
+            100,
+            0,
+            HeadDeclaration::SelfHead,
+            Annotation::Present(10),
+        )];
+        let mut second = first.clone();
+        second[0].span = TextSpan::new(1, 10, 11).unwrap();
         assert_ne!(
-            expanded_consumer_observation(&left, &left_emission),
-            expanded_consumer_observation(&right, &right_emission)
+            observe_direct_expanded(first, |_| ExpansionSignal::Negation),
+            observe_direct_expanded(second, |_| ExpansionSignal::Negation),
         );
     }
 }
