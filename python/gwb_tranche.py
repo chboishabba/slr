@@ -325,7 +325,9 @@ def cmd_run(ns: argparse.Namespace) -> int:
     pid = 0
     per_document = []
     for revision, doc in enumerate(docs, 1):
-        text = Path(doc["projected_path"]).read_text(encoding="utf-8")
+        path = Path(doc["projected_path"])
+        with path.open("r", encoding="utf-8", newline="") as handle:
+            text = handle.read()
         before_sid, before_pid = sid, pid
         sid, pid, d_parse, _, _ = emit_document(nlp, proc.stdin, text, revision, sid, pid)
         parse_ns += d_parse
