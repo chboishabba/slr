@@ -1,0 +1,27 @@
+name: Rust direct-delta checks
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.78.0
+        with:
+          components: rustfmt, clippy
+      - name: Format
+        run: cargo fmt --all -- --check
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Unit tests
+        run: cargo test --workspace
+      - name: Source-contract checks
+        run: python3 scripts/verify_source_contract.py
+      - name: Python syntax checks
+        run: python3 -m py_compile python/spacy_stream.py scripts/bench_stream.py scripts/verify_source_contract.py
