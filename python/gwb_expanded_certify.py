@@ -6,10 +6,11 @@ The same prepared corpus and one loaded spaCy model are run twice:
 1. parity pass: expanded direct + row/reference compilers;
 2. performance pass: expanded direct compiler only.
 
-Each parser frame is SHA-256 hashed. Certification requires the two parser-observation
-stream digests to be identical, so parity and performance apply to the same observation
-object. Reference-certification cost is deliberately excluded from the production-speed
-claim; the direct-only pass owns the parser-relative performance gate.
+Certification compares a canonical parser-observation digest over D/P/S/T/E/Q frames
+only. Runtime telemetry such as M\tspacy_parse_ns=... is deliberately excluded from
+that digest: timing belongs to the performance receipt, not to semantic observation
+identity. Reference-certification cost is excluded from the production-speed claim;
+the direct-only pass owns the parser-relative performance gate.
 """
 from __future__ import annotations
 
@@ -33,7 +34,8 @@ from gwb_tranche import (
     sha256_bytes,
 )
 
-SCHEMA = "sensiblaw.gwb-expanded-semantic-certification-receipt.v0_1"
+SCHEMA = "sensiblaw.gwb-expanded-semantic-certification-receipt.v0_2"
+SEMANTIC_FRAME_KINDS = {"D", "P", "S", "T", "E", "Q"}
 METRIC_RE = re.compile(
     r"SL_EXPANDED_METRIC parity_mode=(\d+) framing_active_ns=(\d+) direct_active_ns=(\d+) "
     r"reference_active_ns=(\d+) pipeline_wall_ns=(\d+) sentences=(\d+) paragraphs=(\d+) "
@@ -42,16 +44,23 @@ METRIC_RE = re.compile(
 )
 
 
-class HashingTextSink:
+class CanonicalObservationHashingSink:
+    """Forward every frame, but hash only the semantic parser-observation language."""
+
     def __init__(self, delegate) -> None:
         self.delegate = delegate
         self.digest = hashlib.sha256()
-        self.bytes_written = 0
+        self.bytes_hashed = 0
+        self.telemetry_frames_excluded = 0
 
     def write(self, text: str):
-        encoded = text.encode("utf-8")
-        self.digest.update(encoded)
-        self.bytes_written += len(encoded)
+        frame_kind = text.split("\t", 1)[0].rstrip("\n")
+        if frame_kind in SEMANTIC_FRAME_KINDS:
+            encoded = text.encode("utf-8")
+            self.digest.update(encoded)
+            self.bytes_hashed += len(encoded)
+        else:
+            self.telemetry_frames_excluded += 1
         return self.delegate.write(text)
 
     def flush(self):
@@ -99,7 +108,7 @@ def run_pass(nlp, loaded, rust_bin: Path, parity: bool, diagnostics: int) -> dic
         assert proc.stdin is not None
         proc.stdin.write(f"C\tparity={1 if parity else 0}\n")
         proc.stdin.flush()
-        sink = HashingTextSink(proc.stdin)
+        sink = CanonicalObservationHashingSink(proc.stdin)
 
         external_start = time.perf_counter_ns()
         parse_ns = 0
@@ -157,8 +166,9 @@ def run_pass(nlp, loaded, rust_bin: Path, parity: bool, diagnostics: int) -> dic
     return {
         "mode": "parity" if parity else "direct_only",
         "rust_return_code": rc,
-        "parser_observation_sha256": sink.hexdigest(),
-        "parser_observation_bytes": sink.bytes_written,
+        "canonical_parser_observation_sha256": sink.hexdigest(),
+        "canonical_parser_observation_bytes": sink.bytes_hashed,
+        "runtime_telemetry_frames_excluded_from_observation_digest": sink.telemetry_frames_excluded,
         "spacy_parser_wall_occupancy_ns": parse_ns,
         "external_controller_wall_ns": end_ns - external_start,
         "post_parser_tail_ns": end_ns - last_parser_emit_ns,
@@ -209,8 +219,10 @@ def main() -> int:
     direct_pass = run_pass(nlp, loaded, rust_bin, False, ns.max_parity_diagnostics)
 
     same_observation_stream = (
-        parity_pass["parser_observation_sha256"] == direct_pass["parser_observation_sha256"]
-        and parity_pass["parser_observation_bytes"] == direct_pass["parser_observation_bytes"]
+        parity_pass["canonical_parser_observation_sha256"]
+        == direct_pass["canonical_parser_observation_sha256"]
+        and parity_pass["canonical_parser_observation_bytes"]
+        == direct_pass["canonical_parser_observation_bytes"]
     )
     same_direct_accounting = all(
         parity_pass["metrics"][key] == direct_pass["metrics"][key]
@@ -245,11 +257,17 @@ def main() -> int:
         "spacy_version": spacy.__version__,
         "spacy_model_cold_load_ns": model_load_ns,
         "rust_binary": str(rust_bin),
+        "parser_observation_digest_contract": {
+            "included_frame_kinds": sorted(SEMANTIC_FRAME_KINDS),
+            "excluded_runtime_telemetry_frame_kinds": ["M"],
+            "control_frames_excluded": True,
+        },
         "parity_pass": parity_pass,
         "direct_only_performance_pass": direct_pass,
         "invariants": {
             "all_projected_text_hashes_verified_before_both_passes": True,
-            "same_parser_observation_stream_across_passes": same_observation_stream,
+            "same_canonical_parser_observation_stream_across_passes": same_observation_stream,
+            "runtime_timing_telemetry_excluded_from_semantic_observation_identity": True,
             "same_direct_semantic_accounting_across_passes": same_direct_accounting,
             "expanded_direct_reference_parity": parity_ok,
             "direct_only_integrity": direct_integrity_ok,
@@ -271,7 +289,8 @@ def main() -> int:
     )
     print(
         f"GWB_EXPANDED_OBSERVATION digest_match={same_observation_stream} "
-        f"sha256={direct_pass['parser_observation_sha256']} bytes={direct_pass['parser_observation_bytes']}"
+        f"sha256={direct_pass['canonical_parser_observation_sha256']} "
+        f"bytes={direct_pass['canonical_parser_observation_bytes']}"
     )
     print(
         f"GWB_EXPANDED_DIRECT active_ns={dmetric['direct_active_ns']} framing_ns={dmetric['framing_active_ns']} "
