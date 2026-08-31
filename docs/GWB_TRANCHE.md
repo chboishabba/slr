@@ -14,8 +14,6 @@ Every projected document records source SHA-256, source byte count, projection m
 projection time, projected SHA-256 and projected byte count. This phase has
 `authority = source_projection_only`.
 
-Example:
-
 ```sh
 python3 python/gwb_tranche.py prepare \
   --inventory /path/to/source_inventory.json \
@@ -23,7 +21,7 @@ python3 python/gwb_tranche.py prepare \
   --output .tmp/gwb-rust
 ```
 
-## 2. Direct semantic run
+## 2. Full certification run
 
 Build release first:
 
@@ -31,29 +29,50 @@ Build release first:
 cargo build --release --workspace
 ```
 
-Then run the projected corpus through one loaded spaCy model and one long-lived Rust
-stream process:
+The user-facing full-tranche command is `python/gwb_certify.py`. It intentionally has
+no subset/limit flag. It drives the lower-level `gwb_full_run.py` implementation and
+then independently checks that the receipt covers the complete projection manifest.
 
 ```sh
-python3 python/gwb_tranche.py run \
+python3 python/gwb_certify.py \
   --manifest .tmp/gwb-rust/source_projection.json \
   --rust-bin target/release/sensiblaw-stream \
   --model en_core_web_sm \
-  --output .tmp/gwb-rust/run-receipt.json
+  --output .tmp/gwb-rust/full-certification.json
 ```
 
-The receipt is fail-closed. Exit success requires all of:
+A successful full certification requires all of:
 
-1. Rust process success.
-2. Direct/reference consumer parity for every emitted sentence.
-3. Parser evidence published zero semantic generations.
-4. `T_total <= 2*T_spaCy_parse` over the sustained full-corpus stream.
+1. Every projected text is preloaded and its SHA-256 + byte count are reverified before timing starts.
+2. Rust process success.
+3. Direct/reference consumer parity for every emitted sentence.
+4. Controller and Rust sentence/paragraph accounting agree.
+5. Parser evidence published zero semantic generations.
+6. `T_total <= 2*T_spaCy_parse` over the sustained full-corpus stream.
+7. Receipt document count equals the prepared manifest document count.
 
-The receipt additionally classifies `<=1.5x` and `<=1.2x` performance tiers without
-claiming either from a single unreviewed run. Source projection time is deliberately
-reported in the projection manifest and excluded from the parser-relative semantic
-compiler gate rather than being silently assigned to either parser or post-parser work.
+The canonical receipt schema is:
 
-Parity is an opt-in certification path. The ordinary stream remains direct-only unless
-it receives the `C\tparity=1` control frame, so the reference compiler is not part of
-the mandatory production hot path.
+```text
+sensiblaw.gwb-full-certification-receipt.v0_1
+```
+
+The lower-level `gwb_full_run.py` is an implementation/debug surface. A debug subset
+must not be treated as tranche certification merely because it produced JSON; the
+strict `gwb_certify.py` entrypoint is the authority gate for complete-corpus runs.
+
+## Timing hygiene
+
+Source projection and spaCy model cold-load are explicitly reported outside the
+parser-relative semantic performance gate. All projected text is read and verified
+before the Rust stream receives its first document frame, preventing disk I/O from
+being charged to later document parsing. Rust sentence chatter is sent to `DEVNULL`
+and tranche diagnostics use a file-backed stderr handle, so a large corpus or a large
+parity-failure set cannot fill an unread pipe and deadlock the run.
+
+The receipt classifies `<=1.5x` and `<=1.2x` tiers but does not promote those tiers from
+source code alone. The run receipt is the evidence.
+
+Parity remains opt-in at the Rust stream level (`C\tparity=1`); ordinary production
+streaming remains direct-only, so the reference compiler is not part of the mandatory
+hot path.
