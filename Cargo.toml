@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/sl-core", "crates/sl-parity", "crates/sl-semantic-expansion", "crates/sl-stream", "crates/sl-bench"]
+members = ["crates/sl-core", "crates/sl-parity", "crates/sl-semantic-expansion", "crates/sl-expanded-cert", "crates/sl-stream", "crates/sl-bench"]
 resolver = "2"
 
 [workspace.package]
