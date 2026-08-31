@@ -3,7 +3,8 @@ use sensiblaw_core::{
     TextSpan, TokenId, TokenObservation,
 };
 use sensiblaw_semantic_expansion::{
-    ExpansionSignal, ExpandedConsumerObservation, check_expanded_parity,
+    ExpansionSignal, ExpandedConsumerObservation, compile_expanded_candidates,
+    compile_expanded_direct, expanded_consumer_observation,
 };
 use std::io::{self, BufRead};
 use std::time::Instant;
@@ -43,12 +44,15 @@ fn observation_summary(observation: &ExpandedConsumerObservation) -> String {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let stdin = io::stdin();
     let mut symbols = SymbolTable::default();
-    let mut active = ActiveTimer::default();
+    let mut framing_active = ActiveTimer::default();
+    let mut direct_active = ActiveTimer::default();
+    let mut reference_active = ActiveTimer::default();
     let mut revision: RevisionId = 1;
     let mut sentence_id: SentenceId = 0;
     let mut pending = Vec::<TokenObservation>::new();
     let mut next_token: TokenId = 1;
     let mut pipeline_start: Option<Instant> = None;
+    let mut parity_enabled = false;
 
     let mut sentences = 0u64;
     let mut paragraphs = 0u64;
@@ -66,6 +70,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             continue;
         }
         match fields[0] {
+            "C" => {
+                parity_enabled = fields.get(1).copied() == Some("parity=1");
+            }
             "D" => {
                 revision = fields.get(1).and_then(|value| value.parse().ok()).unwrap_or(1);
                 if pipeline_start.is_none() {
@@ -80,7 +87,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 pending.clear();
             }
             "T" => {
-                active.measure(|| {
+                framing_active.measure(|| {
                     if fields.len() < 10 {
                         return;
                     }
@@ -135,40 +142,56 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             "E" => {
                 let observations = std::mem::take(&mut pending);
-                let receipt = active.measure(|| {
-                    check_expanded_parity(observations, |symbol| {
+                let direct = direct_active.measure(|| {
+                    compile_expanded_direct(observations.clone(), |symbol| {
                         symbols
                             .get(symbol)
                             .map(signal)
                             .unwrap_or(ExpansionSignal::Unsupported)
                     })
                 });
-                sentences = sentences.saturating_add(1);
-                parity_checked = parity_checked.saturating_add(1);
-                candidates = candidates.saturating_add(receipt.direct.candidates.len() as u64);
-                residuals = residuals.saturating_add(receipt.direct.residuals.len() as u64);
-                alternatives = alternatives.saturating_add(receipt.direct.alternative_fibres.len() as u64);
+                candidates = candidates.saturating_add(direct.candidates.len() as u64);
+                residuals = residuals.saturating_add(direct.residuals.len() as u64);
+                alternatives = alternatives.saturating_add(direct.alternative_fibres.len() as u64);
                 projection_failures = projection_failures
-                    .saturating_add(receipt.direct.projection_failures.len() as u64);
-                if !receipt.holds() {
-                    parity_failed = parity_failed.saturating_add(1);
-                    eprintln!(
-                        "SL_EXPANDED_PARITY_FAIL sentence_id={} direct={} reference={}",
-                        receipt.sentence_id,
-                        observation_summary(&receipt.direct),
-                        observation_summary(&receipt.reference),
-                    );
+                    .saturating_add(direct.projection_failures.len() as u64);
+                sentences = sentences.saturating_add(1);
+
+                if parity_enabled {
+                    let reference = reference_active.measure(|| {
+                        compile_expanded_candidates(observations.clone(), |symbol| {
+                            symbols
+                                .get(symbol)
+                                .map(signal)
+                                .unwrap_or(ExpansionSignal::Unsupported)
+                        })
+                    });
+                    let direct_observation = expanded_consumer_observation(&observations, &direct);
+                    let reference_observation = expanded_consumer_observation(&observations, &reference);
+                    parity_checked = parity_checked.saturating_add(1);
+                    if direct_observation != reference_observation {
+                        parity_failed = parity_failed.saturating_add(1);
+                        eprintln!(
+                            "SL_EXPANDED_PARITY_FAIL sentence_id={} direct={} reference={}",
+                            direct.sentence_id,
+                            observation_summary(&direct_observation),
+                            observation_summary(&reference_observation),
+                        );
+                    }
                 }
             }
-            "Q" | "M" | "C" => {}
+            "Q" | "M" => {}
             _ => {}
         }
     }
 
     let pipeline_wall = pipeline_start.map(|start| start.elapsed()).unwrap_or_default();
     eprintln!(
-        "SL_EXPANDED_METRIC active_ns={} pipeline_wall_ns={} sentences={} paragraphs={} candidates={} residuals={} alternatives={} projection_failures={} symbols={} publication_effects=0 parity_checked={} parity_failed={}",
-        active.active.as_nanos(),
+        "SL_EXPANDED_METRIC parity_mode={} framing_active_ns={} direct_active_ns={} reference_active_ns={} pipeline_wall_ns={} sentences={} paragraphs={} candidates={} residuals={} alternatives={} projection_failures={} symbols={} publication_effects=0 parity_checked={} parity_failed={}",
+        u8::from(parity_enabled),
+        framing_active.active.as_nanos(),
+        direct_active.active.as_nanos(),
+        reference_active.active.as_nanos(),
         pipeline_wall.as_nanos(),
         sentences,
         paragraphs,
@@ -181,7 +204,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         parity_failed,
     );
 
-    if parity_failed != 0 {
+    if parity_enabled && parity_failed != 0 {
         return Err(format!("expanded semantic parity failed for {parity_failed} sentence(s)").into());
     }
     Ok(())
