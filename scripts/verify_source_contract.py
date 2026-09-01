@@ -4,7 +4,9 @@ root = Path(__file__).resolve().parents[1]
 core = (root/'crates/sl-core/src/lib.rs').read_text()
 parity = (root/'crates/sl-parity/src/lib.rs').read_text()
 expansion = (root/'crates/sl-semantic-expansion/src/lib.rs').read_text()
+admission = (root/'crates/sl-semantic-admission/src/lib.rs').read_text()
 expanded_cert = (root/'crates/sl-expanded-cert/src/main.rs').read_text()
+gold = (root/'fixtures/legal_semantic_conformance_v0_1.tsv').read_text()
 stream = (root/'crates/sl-stream/src/main.rs').read_text()
 worker = (root/'python/spacy_stream.py').read_text()
 gwb_tranche = (root/'python/gwb_tranche.py').read_text()
@@ -37,15 +39,26 @@ checks = {
     'expanded parity uses stable consumer observation': 'pub struct ExpandedConsumerObservation' in expansion and 'StableHeadRelation' in expansion,
     'expanded parity excludes transient token ids': 'transient_token_ids_are_not_semantic_parity_authority' in expansion,
     'expanded parity retains source span authority': 'source_span_change_is_visible_to_semantic_parity' in expansion,
+    'semantic admission is separate and non-publishing': 'pub struct AdmissionReceipt' in admission and 'GenerationPublisher' not in admission and '.publish(' not in admission,
+    'semantic admission has no parser authority variant': 'enum ResolutionAuthority' in admission and 'Parser' not in admission.split('pub enum ResolutionAuthority', 1)[1].split('}', 1)[0],
+    'semantic admission requires policy and resolver refs': 'MissingPolicyReference' in admission and 'MissingResolverReference' in admission,
+    'semantic admission resolves declared scope exactly': 'ScopeResolutionMismatch' in admission and 'scope_matches' in admission,
+    'semantic admission rejection retains evidence': 'retained_candidates' in admission and 'retained_residuals' in admission and 'retained_alternative_fibres' in admission,
+    'legal semantic gold corpus exists': 'actor_subject\tcovered' in gold and 'clause_ambiguity\tcovered' in gold,
+    'legal semantic gold retains producer gaps': gold.count('\tproducer_gap\t') == 6 and 'action_predicate\tproducer_gap' in gold and 'provenance_relation\tproducer_gap' in gold,
+    'gold tests compare exact consumer objects': 'covered_gold_fixtures_match_exact_consumer_objects' in admission and 'expected(row, sentence_id)' in admission,
+    'residual frontier is typed by residual kind': 'pub struct ResidualFrontier' in admission and 'RESIDUAL_KINDS' in admission,
+    'residual ranking is not semantic quality': 'Work-selection score only; never semantic confidence/truth/authority.' in admission,
     'expanded cert supports parity/direct modes': 'parity_enabled' in expanded_cert and 'direct_active_ns=' in expanded_cert and 'reference_active_ns=' in expanded_cert,
     'expanded cert has zero publication effects': 'publication_effects=0' in expanded_cert and 'GenerationPublisher' not in expanded_cert,
+    'expanded cert emits residual frontier': 'SL_EXPANDED_RESIDUAL kind=' in expanded_cert and 'ResidualFrontier' in expanded_cert,
     'expanded gwb uses canonical observation digest': 'CanonicalObservationHashingSink' in gwb_expanded and 'SEMANTIC_FRAME_KINDS = {"D", "P", "S", "T", "E", "Q"}' in gwb_expanded,
     'expanded gwb excludes timing telemetry from semantic identity': 'excluded_runtime_telemetry_frame_kinds": ["M"]' in gwb_expanded and 'runtime_timing_telemetry_excluded_from_semantic_observation_identity' in gwb_expanded,
     'expanded gwb requires same canonical parser observation': 'same_canonical_parser_observation_stream_across_passes' in gwb_expanded and 'canonical_parser_observation_sha256' in gwb_expanded,
     'expanded gwb separates parity and performance passes': 'reference_certification_cost_excluded_from_production_speed_claim' in gwb_expanded and 'direct_only_performance_pass' in gwb_expanded,
     'expanded gwb performance uses direct-only pass': 'direct_only_architectural_2x_gate_pass' in gwb_expanded,
     'expanded gwb strict full corpus': 'complete 10-document GWB v0.1 corpus' in gwb_expanded and 'add_argument("--limit"' not in gwb_expanded,
-    'expanded gwb receipt schema versioned after telemetry fix': 'sensiblaw.gwb-expanded-semantic-certification-receipt.v0_2' in gwb_expanded,
+    'expanded gwb v0.3 residual frontier accounted': 'sensiblaw.gwb-expanded-semantic-certification-receipt.v0_3' in gwb_expanded and 'residual_frontier_sums_to_residual_total' in gwb_expanded and 'same_residual_frontier_across_passes' in gwb_expanded,
     'full gwb explicitly enables parity': 'proc.stdin.write("C\\tparity=1\\n")' in gwb_full,
     'paragraph framing': 'print(f"P\\t{paragraph_id}"' in worker and 'print(f"Q\\t{paragraph_id}"' in worker,
     'whitespace sentences filtered': 'if not sent.text.strip()' in worker,
