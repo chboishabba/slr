@@ -6,8 +6,10 @@ Two passes use the same prepared corpus and loaded spaCy model:
 2. performance: expanded direct only.
 
 D/P/S/T/E/Q define parser-observation identity. Runtime M telemetry is excluded.
-v0.3 additionally records exact residual-kind histograms and requires them to
-account for the residual total and match across the two passes.
+v0.4 keeps the stable eight-way residual frontier from v0.3 and adds a relative-fine
+observer inside `unsupported_dependency`, keyed by the actual spaCy dependency label.
+The fine diagnostic is workflow evidence only: it does not alter semantic authority or
+consumer-observation parity.
 """
 from __future__ import annotations
 
@@ -25,7 +27,7 @@ import spacy
 from gwb_full_run import preload_verified_documents
 from gwb_tranche import PROFILE_REF, PROJECTION_SCHEMA, emit_document, performance_tier, sha256_bytes
 
-SCHEMA = "sensiblaw.gwb-expanded-semantic-certification-receipt.v0_3"
+SCHEMA = "sensiblaw.gwb-expanded-semantic-certification-receipt.v0_4"
 SEMANTIC_FRAME_KINDS = {"D", "P", "S", "T", "E", "Q"}
 RESIDUAL_KINDS = (
     "negation_scope_unresolved",
@@ -44,6 +46,7 @@ METRIC_RE = re.compile(
     r"symbols=(\d+) publication_effects=(\d+) parity_checked=(\d+) parity_failed=(\d+)"
 )
 RESIDUAL_RE = re.compile(r"^SL_EXPANDED_RESIDUAL kind=([a-z_]+) count=(\d+)$", re.MULTILINE)
+UNSUPPORTED_DEP_RE = re.compile(r"^SL_EXPANDED_UNSUPPORTED_DEP label=([^\s]+) count=(\d+)$", re.MULTILINE)
 
 
 class CanonicalObservationHashingSink:
@@ -96,6 +99,15 @@ def parse_residual_frontier(stderr: str) -> dict[str, int]:
     return {kind: found[kind] for kind in RESIDUAL_KINDS}
 
 
+def parse_unsupported_dependency_fibre(stderr: str) -> dict[str, int]:
+    found: dict[str, int] = {}
+    for label, count in UNSUPPORTED_DEP_RE.findall(stderr):
+        if label in found:
+            raise SystemExit(f"duplicate unsupported-dependency fibre line for {label}")
+        found[label] = int(count)
+    return dict(sorted(found.items()))
+
+
 def run_pass(nlp, loaded, rust_bin: Path, parity: bool, diagnostics: int) -> dict:
     with tempfile.NamedTemporaryFile(mode="w+", encoding="utf-8", prefix="gwb-expanded-stderr-", delete=False) as err_file:
         err_path = Path(err_file.name)
@@ -145,6 +157,7 @@ def run_pass(nlp, loaded, rust_bin: Path, parity: bool, diagnostics: int) -> dic
 
     metric = parse_metric(stderr)
     residual_frontier = parse_residual_frontier(stderr)
+    unsupported_dependency_fibre = parse_unsupported_dependency_fibre(stderr)
     expected_sentences = sum(item["sentences"] for item in per_document)
     expected_paragraphs = sum(item["paragraphs"] for item in per_document)
     identity_ok = metric["sentences"] == expected_sentences and metric["paragraphs"] == expected_paragraphs
@@ -154,6 +167,9 @@ def run_pass(nlp, loaded, rust_bin: Path, parity: bool, diagnostics: int) -> dic
     )
     publication_ok = metric["publication_effects"] == 0
     residual_accounting_ok = sum(residual_frontier.values()) == metric["residuals"]
+    unsupported_fibre_accounting_ok = (
+        sum(unsupported_dependency_fibre.values()) == residual_frontier["unsupported_dependency"]
+    )
     rust_ok = rc == 0
     ratio = metric["pipeline_wall_ns"] / max(parse_ns, 1)
 
@@ -177,11 +193,13 @@ def run_pass(nlp, loaded, rust_bin: Path, parity: bool, diagnostics: int) -> dic
         "performance_tier": performance_tier(ratio),
         "metrics": metric,
         "residual_frontier": residual_frontier,
+        "unsupported_dependency_relative_fibre": unsupported_dependency_fibre,
         "invariants": {
             "sentence_paragraph_accounting_matches_controller": identity_ok,
             "parity_mode_contract_holds": parity_ok,
             "publication_effects_zero": publication_ok,
             "residual_frontier_sums_to_residual_total": residual_accounting_ok,
+            "unsupported_dependency_fibre_sums_to_coarse_residual": unsupported_fibre_accounting_ok,
             "rust_process_success": rust_ok,
         },
         "per_document": per_document,
@@ -233,6 +251,10 @@ def main() -> int:
         )
     )
     same_residual_frontier = parity_pass["residual_frontier"] == direct_pass["residual_frontier"]
+    same_unsupported_dependency_fibre = (
+        parity_pass["unsupported_dependency_relative_fibre"]
+        == direct_pass["unsupported_dependency_relative_fibre"]
+    )
     parity_ok = all(parity_pass["invariants"].values())
     direct_integrity_ok = all(direct_pass["invariants"].values())
     performance_ok = (
@@ -241,12 +263,12 @@ def main() -> int:
     )
     gate_pass = (
         same_observation_stream and same_direct_accounting and same_residual_frontier
-        and parity_ok and direct_integrity_ok and performance_ok
+        and same_unsupported_dependency_fibre and parity_ok and direct_integrity_ok and performance_ok
     )
 
     receipt = {
         "schema_version": SCHEMA,
-        "authority": "bounded_gwb_expanded_semantic_parity_performance_and_residual_frontier_receipt",
+        "authority": "bounded_gwb_expanded_semantic_parity_performance_and_relative_residual_fibre_receipt",
         "profile_ref": PROFILE_REF,
         "projection_manifest": str(manifest_path),
         "projection_manifest_sha256": sha256_bytes(manifest_bytes),
@@ -261,6 +283,12 @@ def main() -> int:
             "excluded_runtime_telemetry_frame_kinds": ["M"],
             "control_frames_excluded": True,
         },
+        "residual_refinement_contract": {
+            "coarse_residual": "unsupported_dependency",
+            "relative_fine_coordinate": "spacy_dependency_label",
+            "changes_semantic_authority": False,
+            "changes_canonical_consumer_observation": False,
+        },
         "parity_pass": parity_pass,
         "direct_only_performance_pass": direct_pass,
         "invariants": {
@@ -269,6 +297,7 @@ def main() -> int:
             "runtime_timing_telemetry_excluded_from_semantic_observation_identity": True,
             "same_direct_semantic_accounting_across_passes": same_direct_accounting,
             "same_residual_frontier_across_passes": same_residual_frontier,
+            "same_unsupported_dependency_relative_fibre_across_passes": same_unsupported_dependency_fibre,
             "expanded_direct_reference_parity": parity_ok,
             "direct_only_integrity": direct_integrity_ok,
             "direct_only_architectural_2x_gate_pass": performance_ok,
@@ -294,6 +323,8 @@ def main() -> int:
     )
     for kind, count in direct_pass["residual_frontier"].items():
         print(f"GWB_EXPANDED_RESIDUAL kind={kind} count={count}")
+    for label, count in direct_pass["unsupported_dependency_relative_fibre"].items():
+        print(f"GWB_EXPANDED_UNSUPPORTED_DEP label={label} count={count}")
     print(
         f"GWB_EXPANDED_DIRECT active_ns={dmetric['direct_active_ns']} framing_ns={dmetric['framing_active_ns']} "
         f"total/spacy={direct_pass['parser_relative_ratio']:.4f}x "
