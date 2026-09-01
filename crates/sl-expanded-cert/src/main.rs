@@ -1,3 +1,9 @@
+mod relation_attachment;
+
+use relation_attachment::{
+    RELATION_ATTACHMENT_KINDS, direct_candidates as direct_relation_candidates,
+    kind_from_dependency_label, reference_candidates as reference_relation_candidates,
+};
 use sensiblaw_core::{
     ActiveTimer, Annotation, Capability, HeadDeclaration, RevisionId, SentenceId, SymbolTable,
     TextSpan, TokenId, TokenObservation,
@@ -51,6 +57,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut reference_active = ActiveTimer::default();
     let mut residual_frontier = ResidualFrontier::default();
     let mut unsupported_dependency_fibre = BTreeMap::<String, u64>::new();
+    let mut relation_attachment_frontier = BTreeMap::<&'static str, u64>::new();
     let mut revision: RevisionId = 1;
     let mut sentence_id: SentenceId = 0;
     let mut pending = Vec::<TokenObservation>::new();
@@ -66,6 +73,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut projection_failures = 0u64;
     let mut parity_checked = 0u64;
     let mut parity_failed = 0u64;
+    let mut relation_candidates = 0u64;
+    let mut relation_parity_checked = 0u64;
+    let mut relation_parity_failed = 0u64;
 
     for line in stdin.lock().lines() {
         let line = line?;
@@ -165,6 +175,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         *count = count.saturating_add(1);
                     }
                 }
+
+                let direct_relations = direct_relation_candidates(&observations, |symbol| {
+                    symbols.get(symbol).and_then(kind_from_dependency_label)
+                });
+                relation_candidates =
+                    relation_candidates.saturating_add(direct_relations.len() as u64);
+                for candidate in &direct_relations {
+                    let count = relation_attachment_frontier
+                        .entry(candidate.kind.name())
+                        .or_default();
+                    *count = count.saturating_add(1);
+                }
+
                 candidates = candidates.saturating_add(direct.candidates.len() as u64);
                 residuals = residuals.saturating_add(direct.residuals.len() as u64);
                 alternatives = alternatives.saturating_add(direct.alternative_fibres.len() as u64);
@@ -188,6 +211,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             direct.sentence_id,
                             observation_summary(&direct_observation),
                             observation_summary(&reference_observation),
+                        );
+                    }
+
+                    let reference_relations = reference_relation_candidates(
+                        observations.clone(),
+                        |symbol| symbols.get(symbol).and_then(kind_from_dependency_label),
+                    );
+                    relation_parity_checked = relation_parity_checked.saturating_add(1);
+                    if direct_relations != reference_relations {
+                        relation_parity_failed = relation_parity_failed.saturating_add(1);
+                        eprintln!(
+                            "SL_RELATION_ATTACHMENT_PARITY_FAIL sentence_id={} direct={} reference={}",
+                            sentence_id,
+                            direct_relations.len(),
+                            reference_relations.len(),
                         );
                     }
                 }
@@ -225,9 +263,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     for (label, count) in unsupported_dependency_fibre {
         eprintln!("SL_EXPANDED_UNSUPPORTED_DEP label={label} count={count}");
     }
+    eprintln!(
+        "SL_RELATION_ATTACHMENT_METRIC parity_mode={} candidates={} parity_checked={} parity_failed={} semantic_authority=0 publication_effects=0",
+        u8::from(parity_enabled),
+        relation_candidates,
+        relation_parity_checked,
+        relation_parity_failed,
+    );
+    for kind in RELATION_ATTACHMENT_KINDS {
+        eprintln!(
+            "SL_RELATION_ATTACHMENT kind={} count={}",
+            kind.name(),
+            relation_attachment_frontier.get(kind.name()).copied().unwrap_or(0),
+        );
+    }
 
     if parity_enabled && parity_failed != 0 {
         return Err(format!("expanded semantic parity failed for {parity_failed} sentence(s)").into());
+    }
+    if parity_enabled && relation_parity_failed != 0 {
+        return Err(format!(
+            "relation attachment parity failed for {relation_parity_failed} sentence(s)"
+        )
+        .into());
     }
     Ok(())
 }
