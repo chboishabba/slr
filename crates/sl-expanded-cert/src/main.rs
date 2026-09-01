@@ -4,8 +4,8 @@ use sensiblaw_core::{
 };
 use sensiblaw_semantic_admission::{RESIDUAL_KINDS, ResidualFrontier, residual_kind_name};
 use sensiblaw_semantic_expansion::{
-    ExpansionSignal, ExpandedConsumerObservation, compile_expanded_candidates,
-    compile_expanded_direct, expanded_consumer_observation,
+    ExpansionSignal, ExpandedConsumerObservation, StableResidualObservation,
+    compile_expanded_candidates, compile_expanded_direct, expanded_consumer_observation,
 };
 use std::io::{self, BufRead};
 use std::time::Instant;
@@ -72,18 +72,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             continue;
         }
         match fields[0] {
-            "C" => {
-                parity_enabled = fields.get(1).copied() == Some("parity=1");
-            }
+            "C" => parity_enabled = fields.get(1).copied() == Some("parity=1"),
             "D" => {
                 revision = fields.get(1).and_then(|value| value.parse().ok()).unwrap_or(1);
                 if pipeline_start.is_none() {
                     pipeline_start = Some(Instant::now());
                 }
             }
-            "P" => {
-                paragraphs = paragraphs.saturating_add(1);
-            }
+            "P" => paragraphs = paragraphs.saturating_add(1),
             "S" => {
                 sentence_id = fields.get(1).and_then(|value| value.parse().ok()).unwrap_or(0);
                 pending.clear();
@@ -146,14 +142,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let observations = std::mem::take(&mut pending);
                 let direct = direct_active.measure(|| {
                     compile_expanded_direct(observations.clone(), |symbol| {
-                        symbols
-                            .get(symbol)
-                            .map(signal)
-                            .unwrap_or(ExpansionSignal::Unsupported)
+                        symbols.get(symbol).map(signal).unwrap_or(ExpansionSignal::Unsupported)
                     })
                 });
-                let direct_observation = expanded_consumer_observation(&observations, &direct);
-                residual_frontier.observe_consumer(&direct_observation);
+                for residual in &direct.residuals {
+                    residual_frontier.observe_residual(&StableResidualObservation {
+                        kind: residual.kind,
+                        address: residual.address,
+                    });
+                }
                 candidates = candidates.saturating_add(direct.candidates.len() as u64);
                 residuals = residuals.saturating_add(direct.residuals.len() as u64);
                 alternatives = alternatives.saturating_add(direct.alternative_fibres.len() as u64);
@@ -164,12 +161,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 if parity_enabled {
                     let reference = reference_active.measure(|| {
                         compile_expanded_candidates(observations.clone(), |symbol| {
-                            symbols
-                                .get(symbol)
-                                .map(signal)
-                                .unwrap_or(ExpansionSignal::Unsupported)
+                            symbols.get(symbol).map(signal).unwrap_or(ExpansionSignal::Unsupported)
                         })
                     });
+                    let direct_observation = expanded_consumer_observation(&observations, &direct);
                     let reference_observation = expanded_consumer_observation(&observations, &reference);
                     parity_checked = parity_checked.saturating_add(1);
                     if direct_observation != reference_observation {
