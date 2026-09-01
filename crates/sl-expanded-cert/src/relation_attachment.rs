@@ -1,6 +1,6 @@
 use sensiblaw_core::{
-    Annotation, FibreAddress, HeadCommit, HeadDeclaration, ProjectionError, SymbolId, TextSpan,
-    TokenObservation, project_sentence,
+    Annotation, FibreAddress, HeadCommit, HeadDeclaration, SymbolId, TextSpan, TokenObservation,
+    project_sentence,
 };
 use std::collections::HashMap;
 
@@ -167,15 +167,6 @@ pub fn direct_candidates(
     out
 }
 
-pub fn projection_failure_count(tokens: Vec<TokenObservation>) -> usize {
-    let receipt = project_sentence(tokens);
-    receipt
-        .failures
-        .iter()
-        .filter(|failure| matches!(failure, ProjectionError::MissingDependentHead { .. }))
-        .count()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -225,8 +216,14 @@ mod tests {
 
     #[test]
     fn parser_label_does_not_choose_legal_role() {
-        assert_eq!(kind_from_dependency_label("prep"), Some(RelationAttachmentKind::Preposition));
-        assert_eq!(kind_from_dependency_label("pobj"), Some(RelationAttachmentKind::PrepositionalObject));
+        assert_eq!(
+            kind_from_dependency_label("prep"),
+            Some(RelationAttachmentKind::Preposition)
+        );
+        assert_eq!(
+            kind_from_dependency_label("pobj"),
+            Some(RelationAttachmentKind::PrepositionalObject)
+        );
         assert_eq!(kind_from_dependency_label("ROOT"), None);
     }
 }
