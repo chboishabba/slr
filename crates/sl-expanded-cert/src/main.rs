@@ -4,9 +4,10 @@ use sensiblaw_core::{
 };
 use sensiblaw_semantic_admission::{RESIDUAL_KINDS, ResidualFrontier, residual_kind_name};
 use sensiblaw_semantic_expansion::{
-    ExpansionSignal, ExpandedConsumerObservation, StableResidualObservation,
+    ExpansionResidualKind, ExpansionSignal, ExpandedConsumerObservation, StableResidualObservation,
     compile_expanded_candidates, compile_expanded_direct, expanded_consumer_observation,
 };
+use std::collections::BTreeMap;
 use std::io::{self, BufRead};
 use std::time::Instant;
 
@@ -49,6 +50,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut direct_active = ActiveTimer::default();
     let mut reference_active = ActiveTimer::default();
     let mut residual_frontier = ResidualFrontier::default();
+    let mut unsupported_dependency_fibre = BTreeMap::<String, u64>::new();
     let mut revision: RevisionId = 1;
     let mut sentence_id: SentenceId = 0;
     let mut pending = Vec::<TokenObservation>::new();
@@ -150,6 +152,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         kind: residual.kind,
                         address: residual.address,
                     });
+                    if residual.kind == ExpansionResidualKind::UnsupportedDependency {
+                        let label = observations
+                            .iter()
+                            .find(|token| token.local_ordinal == residual.address.local_ordinal)
+                            .and_then(|token| match token.dependency {
+                                Annotation::Present(symbol) => symbols.get(symbol),
+                                Annotation::Unavailable(_) => None,
+                            })
+                            .unwrap_or("<unavailable>");
+                        let count = unsupported_dependency_fibre.entry(label.to_owned()).or_default();
+                        *count = count.saturating_add(1);
+                    }
                 }
                 candidates = candidates.saturating_add(direct.candidates.len() as u64);
                 residuals = residuals.saturating_add(direct.residuals.len() as u64);
@@ -207,6 +221,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             residual_kind_name(kind),
             residual_frontier.count(kind),
         );
+    }
+    for (label, count) in unsupported_dependency_fibre {
+        eprintln!("SL_EXPANDED_UNSUPPORTED_DEP label={label} count={count}");
     }
 
     if parity_enabled && parity_failed != 0 {
