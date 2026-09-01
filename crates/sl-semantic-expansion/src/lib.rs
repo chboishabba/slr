@@ -18,7 +18,7 @@ use sensiblaw_core::{
     SymbolId, TextSpan, TokenObservation, project_sentence,
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ExpandedSemanticRole {
     Actor,
     Action,
@@ -218,7 +218,7 @@ fn stable_head_relation(
     }
 }
 
-fn observe_emission(
+pub fn expanded_consumer_observation(
     tokens: &[TokenObservation],
     emission: &ExpandedSentenceEmission,
 ) -> ExpandedConsumerObservation {
@@ -488,8 +488,8 @@ pub fn check_expanded_parity(
     let direct = compile_expanded_direct(tokens.clone(), classify);
     ExpandedParityReceipt {
         sentence_id,
-        direct: observe_emission(&tokens, &direct),
-        reference: observe_emission(&tokens, &reference),
+        direct: expanded_consumer_observation(&tokens, &direct),
+        reference: expanded_consumer_observation(&tokens, &reference),
     }
 }
 
@@ -499,7 +499,7 @@ pub fn observe_direct_expanded(
 ) -> ExpandedConsumerObservation {
     let original = tokens.clone();
     let direct = compile_expanded_direct(tokens, classify);
-    observe_emission(&original, &direct)
+    expanded_consumer_observation(&original, &direct)
 }
 
 #[cfg(test)]
