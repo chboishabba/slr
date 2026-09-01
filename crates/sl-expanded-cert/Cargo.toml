@@ -8,3 +8,4 @@ rust-version.workspace = true
 [dependencies]
 sensiblaw-core = { path = "../sl-core" }
 sensiblaw-semantic-expansion = { path = "../sl-semantic-expansion" }
+sensiblaw-semantic-admission = { path = "../sl-semantic-admission" }
