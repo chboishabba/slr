@@ -15,6 +15,7 @@ name = "sensiblaw-expanded-cert"
 version = "0.1.0"
 dependencies = [
  "sensiblaw-core",
+ "sensiblaw-semantic-admission",
  "sensiblaw-semantic-expansion",
 ]
 
@@ -23,6 +24,14 @@ name = "sensiblaw-parity"
 version = "0.1.0"
 dependencies = [
  "sensiblaw-core",
+]
+
+[[package]]
+name = "sensiblaw-semantic-admission"
+version = "0.1.0"
+dependencies = [
+ "sensiblaw-core",
+ "sensiblaw-semantic-expansion",
 ]
 
 [[package]]
