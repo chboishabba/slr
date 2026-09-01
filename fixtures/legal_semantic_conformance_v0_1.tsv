@@ -1,0 +1,17 @@
+fixture_id	status	signal	local	head	start	end	expected_candidate	expected_scope	expected_residual	expected_alternatives
+actor_subject	covered	NominalSubject	0	1	0	3	Role:Actor	SyntacticallyLocal	-	-
+object_direct	covered	DirectObject	0	1	10	13	Role:Object	SyntacticallyLocal	-	-
+negation_scope	covered	Negation	0	1	20	23	ScopedNegation	ScopeUnresolved	NegationScopeUnresolved	-
+modal_scope	covered	ModalAuxiliary	0	1	30	33	Role:Modality	ScopeUnresolved	ModalityScopeUnresolved	-
+temporal_anchor	covered	TemporalModifier	0	1	40	43	Role:Temporal	ContextRequired	TemporalAnchorUnresolved	-
+condition_scope	covered	ConditionalMarker	0	1	50	53	ConditionalRelation	ScopeUnresolved	ConditionalScopeUnresolved	-
+clause_ambiguity	covered	ClausalModifier	0	1	60	63	-	-	ClauseInterpretationAmbiguous	Condition,Temporal,Qualifier
+reference_attachment	covered	ReferenceAttachment	0	1	70	73	ReferenceRelation	AttachmentUnresolved	ReferenceAttachmentUnresolved	-
+qualifier_attachment	covered	QualifierAttachment	0	1	80	83	Role:Qualifier	AttachmentUnresolved	QualifierAttachmentUnresolved	-
+unsupported_dependency	covered	Unsupported	0	1	90	93	-	-	UnsupportedDependency	-
+action_predicate	producer_gap	-	0	1	100	103	Role:Action	-	-	-
+exception_clause	producer_gap	-	0	1	110	113	Role:Exception	-	-	-
+jurisdiction_context	producer_gap	-	0	1	120	123	Role:Jurisdiction	-	-	-
+speaker_attribution	producer_gap	-	0	1	130	133	Role:Speaker	-	-	-
+evidence_relation	producer_gap	-	0	1	140	143	Role:Evidence	-	-	-
+provenance_relation	producer_gap	-	0	1	150	153	Role:Provenance	-	-	-

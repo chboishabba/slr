@@ -2,9 +2,10 @@ use sensiblaw_core::{
     ActiveTimer, Annotation, Capability, HeadDeclaration, RevisionId, SentenceId, SymbolTable,
     TextSpan, TokenId, TokenObservation,
 };
+use sensiblaw_semantic_admission::{RESIDUAL_KINDS, ResidualFrontier, residual_kind_name};
 use sensiblaw_semantic_expansion::{
-    ExpansionSignal, ExpandedConsumerObservation, compile_expanded_candidates,
-    compile_expanded_direct, expanded_consumer_observation,
+    ExpansionSignal, ExpandedConsumerObservation, StableResidualObservation,
+    compile_expanded_candidates, compile_expanded_direct, expanded_consumer_observation,
 };
 use std::io::{self, BufRead};
 use std::time::Instant;
@@ -47,6 +48,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut framing_active = ActiveTimer::default();
     let mut direct_active = ActiveTimer::default();
     let mut reference_active = ActiveTimer::default();
+    let mut residual_frontier = ResidualFrontier::default();
     let mut revision: RevisionId = 1;
     let mut sentence_id: SentenceId = 0;
     let mut pending = Vec::<TokenObservation>::new();
@@ -70,18 +72,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             continue;
         }
         match fields[0] {
-            "C" => {
-                parity_enabled = fields.get(1).copied() == Some("parity=1");
-            }
+            "C" => parity_enabled = fields.get(1).copied() == Some("parity=1"),
             "D" => {
                 revision = fields.get(1).and_then(|value| value.parse().ok()).unwrap_or(1);
                 if pipeline_start.is_none() {
                     pipeline_start = Some(Instant::now());
                 }
             }
-            "P" => {
-                paragraphs = paragraphs.saturating_add(1);
-            }
+            "P" => paragraphs = paragraphs.saturating_add(1),
             "S" => {
                 sentence_id = fields.get(1).and_then(|value| value.parse().ok()).unwrap_or(0);
                 pending.clear();
@@ -144,12 +142,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let observations = std::mem::take(&mut pending);
                 let direct = direct_active.measure(|| {
                     compile_expanded_direct(observations.clone(), |symbol| {
-                        symbols
-                            .get(symbol)
-                            .map(signal)
-                            .unwrap_or(ExpansionSignal::Unsupported)
+                        symbols.get(symbol).map(signal).unwrap_or(ExpansionSignal::Unsupported)
                     })
                 });
+                for residual in &direct.residuals {
+                    residual_frontier.observe_residual(&StableResidualObservation {
+                        kind: residual.kind,
+                        address: residual.address,
+                    });
+                }
                 candidates = candidates.saturating_add(direct.candidates.len() as u64);
                 residuals = residuals.saturating_add(direct.residuals.len() as u64);
                 alternatives = alternatives.saturating_add(direct.alternative_fibres.len() as u64);
@@ -160,10 +161,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 if parity_enabled {
                     let reference = reference_active.measure(|| {
                         compile_expanded_candidates(observations.clone(), |symbol| {
-                            symbols
-                                .get(symbol)
-                                .map(signal)
-                                .unwrap_or(ExpansionSignal::Unsupported)
+                            symbols.get(symbol).map(signal).unwrap_or(ExpansionSignal::Unsupported)
                         })
                     });
                     let direct_observation = expanded_consumer_observation(&observations, &direct);
@@ -203,6 +201,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         parity_checked,
         parity_failed,
     );
+    for kind in RESIDUAL_KINDS {
+        eprintln!(
+            "SL_EXPANDED_RESIDUAL kind={} count={}",
+            residual_kind_name(kind),
+            residual_frontier.count(kind),
+        );
+    }
 
     if parity_enabled && parity_failed != 0 {
         return Err(format!("expanded semantic parity failed for {parity_failed} sentence(s)").into());
