@@ -1,16 +1,13 @@
 #!/usr/bin/env python3
-"""Strict GWB v0.1 certification for the post-baseline semantic-expansion lane.
+"""Strict GWB certification for the expanded semantic/admission frontier.
 
-The same prepared corpus and one loaded spaCy model are run twice:
+Two passes use the same prepared corpus and loaded spaCy model:
+1. parity: expanded direct + reference;
+2. performance: expanded direct only.
 
-1. parity pass: expanded direct + row/reference compilers;
-2. performance pass: expanded direct compiler only.
-
-Certification compares a canonical parser-observation digest over D/P/S/T/E/Q frames
-only. Runtime telemetry such as M\tspacy_parse_ns=... is deliberately excluded from
-that digest: timing belongs to the performance receipt, not to semantic observation
-identity. Reference-certification cost is excluded from the production-speed claim;
-the direct-only pass owns the parser-relative performance gate.
+D/P/S/T/E/Q define parser-observation identity. Runtime M telemetry is excluded.
+v0.3 additionally records exact residual-kind histograms and requires them to
+account for the residual total and match across the two passes.
 """
 from __future__ import annotations
 
@@ -26,27 +23,30 @@ import time
 import spacy
 
 from gwb_full_run import preload_verified_documents
-from gwb_tranche import (
-    PROFILE_REF,
-    PROJECTION_SCHEMA,
-    emit_document,
-    performance_tier,
-    sha256_bytes,
-)
+from gwb_tranche import PROFILE_REF, PROJECTION_SCHEMA, emit_document, performance_tier, sha256_bytes
 
-SCHEMA = "sensiblaw.gwb-expanded-semantic-certification-receipt.v0_2"
+SCHEMA = "sensiblaw.gwb-expanded-semantic-certification-receipt.v0_3"
 SEMANTIC_FRAME_KINDS = {"D", "P", "S", "T", "E", "Q"}
+RESIDUAL_KINDS = (
+    "negation_scope_unresolved",
+    "modality_scope_unresolved",
+    "temporal_anchor_unresolved",
+    "conditional_scope_unresolved",
+    "clause_interpretation_ambiguous",
+    "reference_attachment_unresolved",
+    "qualifier_attachment_unresolved",
+    "unsupported_dependency",
+)
 METRIC_RE = re.compile(
     r"SL_EXPANDED_METRIC parity_mode=(\d+) framing_active_ns=(\d+) direct_active_ns=(\d+) "
     r"reference_active_ns=(\d+) pipeline_wall_ns=(\d+) sentences=(\d+) paragraphs=(\d+) "
     r"candidates=(\d+) residuals=(\d+) alternatives=(\d+) projection_failures=(\d+) "
     r"symbols=(\d+) publication_effects=(\d+) parity_checked=(\d+) parity_failed=(\d+)"
 )
+RESIDUAL_RE = re.compile(r"^SL_EXPANDED_RESIDUAL kind=([a-z_]+) count=(\d+)$", re.MULTILINE)
 
 
 class CanonicalObservationHashingSink:
-    """Forward every frame, but hash only the semantic parser-observation language."""
-
     def __init__(self, delegate) -> None:
         self.delegate = delegate
         self.digest = hashlib.sha256()
@@ -75,35 +75,33 @@ def parse_metric(stderr: str) -> dict[str, int]:
     if len(matches) != 1:
         raise SystemExit(f"expected exactly one SL_EXPANDED_METRIC receipt, found {len(matches)}")
     keys = [
-        "parity_mode",
-        "framing_active_ns",
-        "direct_active_ns",
-        "reference_active_ns",
-        "pipeline_wall_ns",
-        "sentences",
-        "paragraphs",
-        "candidates",
-        "residuals",
-        "alternatives",
-        "projection_failures",
-        "symbols",
-        "publication_effects",
-        "parity_checked",
-        "parity_failed",
+        "parity_mode", "framing_active_ns", "direct_active_ns", "reference_active_ns",
+        "pipeline_wall_ns", "sentences", "paragraphs", "candidates", "residuals",
+        "alternatives", "projection_failures", "symbols", "publication_effects",
+        "parity_checked", "parity_failed",
     ]
     return dict(zip(keys, map(int, matches[0].groups())))
+
+
+def parse_residual_frontier(stderr: str) -> dict[str, int]:
+    found: dict[str, int] = {}
+    for kind, count in RESIDUAL_RE.findall(stderr):
+        if kind in found:
+            raise SystemExit(f"duplicate residual frontier line for {kind}")
+        found[kind] = int(count)
+    missing = [kind for kind in RESIDUAL_KINDS if kind not in found]
+    extras = sorted(set(found) - set(RESIDUAL_KINDS))
+    if missing or extras:
+        raise SystemExit(f"invalid residual frontier missing={missing} extras={extras}")
+    return {kind: found[kind] for kind in RESIDUAL_KINDS}
 
 
 def run_pass(nlp, loaded, rust_bin: Path, parity: bool, diagnostics: int) -> dict:
     with tempfile.NamedTemporaryFile(mode="w+", encoding="utf-8", prefix="gwb-expanded-stderr-", delete=False) as err_file:
         err_path = Path(err_file.name)
         proc = subprocess.Popen(
-            [str(rust_bin)],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.DEVNULL,
-            stderr=err_file,
-            text=True,
-            bufsize=1,
+            [str(rust_bin)], stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
+            stderr=err_file, text=True, bufsize=1,
         )
         assert proc.stdin is not None
         proc.stdin.write(f"C\tparity={1 if parity else 0}\n")
@@ -144,15 +142,18 @@ def run_pass(nlp, loaded, rust_bin: Path, parity: bool, diagnostics: int) -> dic
         err_path.unlink()
     except OSError:
         pass
+
     metric = parse_metric(stderr)
+    residual_frontier = parse_residual_frontier(stderr)
     expected_sentences = sum(item["sentences"] for item in per_document)
     expected_paragraphs = sum(item["paragraphs"] for item in per_document)
     identity_ok = metric["sentences"] == expected_sentences and metric["paragraphs"] == expected_paragraphs
-    if parity:
-        parity_ok = metric["parity_checked"] == metric["sentences"] and metric["parity_failed"] == 0
-    else:
-        parity_ok = metric["parity_checked"] == 0 and metric["parity_failed"] == 0
+    parity_ok = (
+        metric["parity_checked"] == metric["sentences"] and metric["parity_failed"] == 0
+        if parity else metric["parity_checked"] == 0 and metric["parity_failed"] == 0
+    )
     publication_ok = metric["publication_effects"] == 0
+    residual_accounting_ok = sum(residual_frontier.values()) == metric["residuals"]
     rust_ok = rc == 0
     ratio = metric["pipeline_wall_ns"] / max(parse_ns, 1)
 
@@ -175,10 +176,12 @@ def run_pass(nlp, loaded, rust_bin: Path, parity: bool, diagnostics: int) -> dic
         "parser_relative_ratio": ratio,
         "performance_tier": performance_tier(ratio),
         "metrics": metric,
+        "residual_frontier": residual_frontier,
         "invariants": {
             "sentence_paragraph_accounting_matches_controller": identity_ok,
             "parity_mode_contract_holds": parity_ok,
             "publication_effects_zero": publication_ok,
+            "residual_frontier_sums_to_residual_total": residual_accounting_ok,
             "rust_process_success": rust_ok,
         },
         "per_document": per_document,
@@ -219,35 +222,31 @@ def main() -> int:
     direct_pass = run_pass(nlp, loaded, rust_bin, False, ns.max_parity_diagnostics)
 
     same_observation_stream = (
-        parity_pass["canonical_parser_observation_sha256"]
-        == direct_pass["canonical_parser_observation_sha256"]
-        and parity_pass["canonical_parser_observation_bytes"]
-        == direct_pass["canonical_parser_observation_bytes"]
+        parity_pass["canonical_parser_observation_sha256"] == direct_pass["canonical_parser_observation_sha256"]
+        and parity_pass["canonical_parser_observation_bytes"] == direct_pass["canonical_parser_observation_bytes"]
     )
     same_direct_accounting = all(
         parity_pass["metrics"][key] == direct_pass["metrics"][key]
         for key in (
-            "sentences",
-            "paragraphs",
-            "candidates",
-            "residuals",
-            "alternatives",
-            "projection_failures",
-            "symbols",
-            "publication_effects",
+            "sentences", "paragraphs", "candidates", "residuals", "alternatives",
+            "projection_failures", "symbols", "publication_effects",
         )
     )
+    same_residual_frontier = parity_pass["residual_frontier"] == direct_pass["residual_frontier"]
     parity_ok = all(parity_pass["invariants"].values())
     direct_integrity_ok = all(direct_pass["invariants"].values())
     performance_ok = (
         direct_pass["metrics"]["pipeline_wall_ns"]
         <= 2 * max(direct_pass["spacy_parser_wall_occupancy_ns"], 1)
     )
-    gate_pass = same_observation_stream and same_direct_accounting and parity_ok and direct_integrity_ok and performance_ok
+    gate_pass = (
+        same_observation_stream and same_direct_accounting and same_residual_frontier
+        and parity_ok and direct_integrity_ok and performance_ok
+    )
 
     receipt = {
         "schema_version": SCHEMA,
-        "authority": "bounded_gwb_expanded_semantic_parity_and_performance_receipt",
+        "authority": "bounded_gwb_expanded_semantic_parity_performance_and_residual_frontier_receipt",
         "profile_ref": PROFILE_REF,
         "projection_manifest": str(manifest_path),
         "projection_manifest_sha256": sha256_bytes(manifest_bytes),
@@ -269,6 +268,7 @@ def main() -> int:
             "same_canonical_parser_observation_stream_across_passes": same_observation_stream,
             "runtime_timing_telemetry_excluded_from_semantic_observation_identity": True,
             "same_direct_semantic_accounting_across_passes": same_direct_accounting,
+            "same_residual_frontier_across_passes": same_residual_frontier,
             "expanded_direct_reference_parity": parity_ok,
             "direct_only_integrity": direct_integrity_ok,
             "direct_only_architectural_2x_gate_pass": performance_ok,
@@ -292,6 +292,8 @@ def main() -> int:
         f"sha256={direct_pass['canonical_parser_observation_sha256']} "
         f"bytes={direct_pass['canonical_parser_observation_bytes']}"
     )
+    for kind, count in direct_pass["residual_frontier"].items():
+        print(f"GWB_EXPANDED_RESIDUAL kind={kind} count={count}")
     print(
         f"GWB_EXPANDED_DIRECT active_ns={dmetric['direct_active_ns']} framing_ns={dmetric['framing_active_ns']} "
         f"total/spacy={direct_pass['parser_relative_ratio']:.4f}x "
