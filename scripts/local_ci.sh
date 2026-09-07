@@ -59,6 +59,7 @@ python3 -m py_compile \
   scripts/verify_docx_text_materialization_contract.py \
   scripts/verify_canonical_judgment_pnf_contract.py \
   scripts/verify_residual_bound_acquisition_contract.py \
+  scripts/verify_residual_bound_acquisition_permit.py \
   scripts/verify_live_legal_receipt.py \
   scripts/verify_live_hca_judgment_receipt.py \
   scripts/verify_live_receipt_lineage.py
@@ -75,6 +76,8 @@ cargo run -p sensiblaw-governed-legal-provider --example hca_landing_resource_di
 cargo run -p sensiblaw-governed-legal-provider --example docx_text_materialization
 cargo run -p sensiblaw-proof-search-loop --example canonical_judgment_pnf_bridge
 cargo run -p sensiblaw-proof-search-loop --example residual_bound_hca_acquisition
+python3 scripts/verify_residual_bound_acquisition_permit.py \
+  /tmp/sensiblaw-live-legal/residual-bound-acquisition-v01.json
 cargo run -p sensiblaw-proof-search-loop --example official_acquisition_compounding
 
 echo '== online readiness preflight =='
@@ -84,7 +87,7 @@ echo 'NOTE: bounded official HCA landing acquisition has been validated experime
 echo '      Resource discovery is zero-network and prefers the official DOCX for PNF.'
 echo '      DOCX -> canonical text -> existing PNF bridge is validated offline before live use.'
 echo '      Governed research acquisition must bind to the exact open residual/proposition/producer.'
-echo '      The next opt-in step is scripts/run_live_hca_judgment_smoke.sh, which reuses'
-echo '      the persisted landing page and spends at most one request on the DOCX.'
+echo '      The next opt-in step is scripts/run_live_hca_judgment_smoke.sh, which first emits'
+echo '      a residual-bound permit, then reuses the landing page and spends at most one DOCX request.'
 echo '      Exact-current-head live execution and Agda/kernel receipts remain separate.'
 echo 'LOCAL CI PASS'
