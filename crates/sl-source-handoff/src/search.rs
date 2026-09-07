@@ -42,6 +42,18 @@ pub enum RouteKind {
     Review,
 }
 
+pub const fn route_allowed_for_producer(producer: ProducerKind, route: RouteKind) -> bool {
+    match producer {
+        ProducerKind::EstablishSemanticCorrespondence | ProducerKind::ProveQualifierTransport => {
+            matches!(route, RouteKind::Think)
+        }
+        ProducerKind::AcquireReferenceEvidence | ProducerKind::AcquireProvenanceEvidence => {
+            matches!(route, RouteKind::Look)
+        }
+        ProducerKind::InterpretRank => matches!(route, RouteKind::Review),
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ProofRouteAdmission {
     pub exact_target: bool,
@@ -95,7 +107,9 @@ pub struct SearchCandidate {
 
 impl SearchCandidate {
     pub fn admitted(&self) -> bool {
-        if self.producer != producer_for(self.target) {
+        if self.producer != producer_for(self.target)
+            || !route_allowed_for_producer(self.producer, self.route_kind)
+        {
             return false;
         }
         match self.route_kind {
@@ -224,9 +238,20 @@ mod tests {
             proof_admission: Some(ProofRouteAdmission::least_privilege()),
             route_ref: "invalid theorem-only source acquisition".into(),
         };
-        // The generic admission bits alone are deliberately insufficient for an
-        // evidence producer; callers must use the producer's allowed route.
-        assert_ne!(default_candidate(candidate.target).route_kind, RouteKind::Think);
+        assert!(!candidate.admitted());
+    }
+
+    #[test]
+    fn acquisition_route_cannot_pay_semantic_correspondence_producer() {
+        let candidate = SearchCandidate {
+            target: BundleDiagnosis::MainSnakMismatch,
+            producer: ProducerKind::EstablishSemanticCorrespondence,
+            route_kind: RouteKind::Look,
+            cost: 0,
+            proof_admission: None,
+            route_ref: "invalid evidence-only semantic correspondence".into(),
+        };
+        assert!(!candidate.admitted());
     }
 
     #[test]
