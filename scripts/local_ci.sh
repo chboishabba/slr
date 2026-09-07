@@ -17,6 +17,7 @@ cargo check -p sensiblaw-governed-legal-provider --features live-network --examp
 cargo check -p sensiblaw-governed-legal-provider --features live-network --example live_hca_judgment_docx_smoke
 cargo check -p sensiblaw-proof-search-loop --example live_cullen_citation_review_queue
 cargo check -p sensiblaw-proof-search-loop --example live_cullen_residual_review_shortlist
+cargo check -p sensiblaw-proof-search-loop --example cullen_source_grounded_review_units
 
 echo '== pre-existing source contracts =='
 python3 scripts/verify_source_contract.py
@@ -59,6 +60,7 @@ cargo run -p sensiblaw-proof-search-loop --example residual_bound_hca_acquisitio
 cargo run -p sensiblaw-proof-search-loop --example judgment_citation_candidates
 cargo run -p sensiblaw-proof-search-loop --example reviewed_judgment_edge
 cargo run -p sensiblaw-proof-search-loop --example official_acquisition_compounding
+cargo run -p sensiblaw-proof-search-loop --example cullen_source_grounded_review_units
 
 echo '== online readiness preflight =='
 cargo run -p sensiblaw-proof-search-loop --example online_readiness_preflight
