@@ -6,13 +6,15 @@ use sensiblaw_proof_search_loop::judgment_candidates::{
     extract_judgment_citation_candidates_with_footnotes_and_anchors,
     FootnoteAnchorObservation,
 };
+use sensiblaw_proof_search_loop::live_artifact::{
+    cli_paths, load_and_validate_cullen_inputs, CANDIDATE_ONLY_AUTHORITY,
+};
 use sensiblaw_proof_search_loop::residual_review_shortlist::{
     shortlist_anchored_citations_for_residual, ResidualAnchorCriterion,
     ResidualCitationReviewDemand, ResidualShortlistedCitation,
 };
 use sha2::{Digest, Sha256};
 use std::fs;
-use std::path::PathBuf;
 
 fn json_escape(value: &str) -> String {
     value
@@ -53,10 +55,6 @@ fn shortlist_json(item: &ResidualShortlistedCitation) -> String {
     )
 }
 
-fn required_env(name: &str) -> String {
-    std::env::var(name).unwrap_or_else(|_| panic!("missing required environment variable {name}"))
-}
-
 fn refined_observer_text(body: &str, footnotes: &[(String, String)]) -> String {
     let mut out = String::from(body);
     for (id, text) in footnotes {
@@ -86,14 +84,12 @@ fn criterion(
 }
 
 fn main() {
-    let docx_path = PathBuf::from(required_env("SENSIBLAW_JUDGMENT_DOCX"));
-    let output_path = PathBuf::from(required_env("SENSIBLAW_CULLEN_RESIDUAL_SHORTLIST"));
-    let document_ref = required_env("SENSIBLAW_DOCUMENT_REF");
-    let source_revision_ref = required_env("SENSIBLAW_SOURCE_REVISION_REF");
-    let residual_ref = required_env("SENSIBLAW_BOUND_RESIDUAL_REF");
-    let proposition_ref = required_env("SENSIBLAW_BOUND_PROPOSITION_REF");
+    let (receipt_path, docx_path, output_path) =
+        cli_paths("cullen-positive-operational-act-shortlist-v01.json");
+    let inputs = load_and_validate_cullen_inputs(&receipt_path, &docx_path, &output_path)
+        .expect("validate retained governed HCA judgment receipt and DOCX");
 
-    let docx_bytes = fs::read(&docx_path).expect("read retained official judgment DOCX");
+    let docx_bytes = fs::read(&inputs.docx_path).expect("read retained official judgment DOCX");
     let judgment = extract_docx_canonical_judgment(&docx_bytes)
         .expect("materialize body, footnotes and anchors");
     let footnotes = judgment
@@ -118,8 +114,8 @@ fn main() {
         .collect::<Vec<_>>();
 
     let candidates = extract_judgment_citation_candidates_with_footnotes_and_anchors(
-        &document_ref,
-        &source_revision_ref,
+        &inputs.document_ref,
+        &inputs.source_revision_ref,
         &refined_sha256,
         &judgment.body.text,
         &footnotes,
@@ -127,31 +123,31 @@ fn main() {
     );
 
     let demand = ResidualCitationReviewDemand {
-        residual_ref: residual_ref.clone(),
-        proposition_ref: proposition_ref.clone(),
+        residual_ref: inputs.residual_ref.clone(),
+        proposition_ref: inputs.proposition_ref.clone(),
         criteria: vec![
             criterion(
                 "criterion:cullen:positive-negligent-conduct",
-                &residual_ref,
-                &proposition_ref,
+                &inputs.residual_ref,
+                &inputs.proposition_ref,
                 &["positive negligent conduct", "physical injury"],
             ),
             criterion(
                 "criterion:cullen:careless-act-vs-omission",
-                &residual_ref,
-                &proposition_ref,
+                &inputs.residual_ref,
+                &inputs.proposition_ref,
                 &["careless acts causing personal injury", "careless omissions"],
             ),
             criterion(
                 "criterion:cullen:positive-act-vs-omission",
-                &residual_ref,
-                &proposition_ref,
+                &inputs.residual_ref,
+                &inputs.proposition_ref,
                 &["positive acts in creating risk", "omission to act"],
             ),
             criterion(
                 "criterion:cullen:actions-not-failure-to-protect",
-                &residual_ref,
-                &proposition_ref,
+                &inputs.residual_ref,
+                &inputs.proposition_ref,
                 &["failed to protect her", "their actions resulted in her being injured"],
             ),
         ],
@@ -185,24 +181,56 @@ fn main() {
             "  \"shortlist\": [\n    {}\n  ]\n",
             "}}\n"
         ),
-        json_escape(&residual_ref),
-        json_escape(&proposition_ref),
-        json_escape(&document_ref),
-        json_escape(&source_revision_ref),
+        json_escape(&inputs.residual_ref),
+        json_escape(&inputs.proposition_ref),
+        json_escape(&inputs.document_ref),
+        json_escape(&inputs.source_revision_ref),
         json_escape(&refined_sha256),
         candidates.len(),
         shortlist.len(),
         body,
     );
 
-    if let Some(parent) = output_path.parent() {
+    let parsed: serde_json::Value =
+        serde_json::from_str(&receipt).expect("self-validate residual shortlist JSON");
+    assert_eq!(parsed["schema_version"], "sl.residual_citation_review_shortlist.v0_1");
+    assert_eq!(parsed["authority"], CANDIDATE_ONLY_AUTHORITY);
+    assert_eq!(parsed["network_requests"], 0);
+    assert_eq!(parsed["candidate_count"], candidates.len());
+    assert_eq!(parsed["shortlist_count"], shortlist.len());
+    assert_eq!(parsed["shortlist_claimed_semantic_payment"], false);
+    assert_eq!(parsed["shortlist_claimed_citation_treatment"], false);
+    assert_eq!(parsed["shortlist_claimed_current_authority"], false);
+    assert_eq!(parsed["shortlist_claimed_consumer_closure"], false);
+
+    let robinson_count = shortlist
+        .iter()
+        .filter(|item| item.candidate.citation_text == "[2018] AC 736")
+        .count();
+    let modbury_count = shortlist
+        .iter()
+        .filter(|item| item.candidate.citation_text == "(2000) 205 CLR 254")
+        .count();
+    let mallonland_count = shortlist
+        .iter()
+        .filter(|item| item.candidate.citation_text == "(2024) 98 ALJR 956")
+        .count();
+    assert!(robinson_count > 0, "Robinson must survive the Cullen residual shortlist");
+    assert!(modbury_count > 0, "Modbury must survive the Cullen residual shortlist");
+    assert_eq!(mallonland_count, 0, "Mallonland must not enter this residual shortlist merely because it was observed");
+
+    if let Some(parent) = inputs.output_path.parent() {
         fs::create_dir_all(parent).expect("create residual shortlist directory");
     }
-    fs::write(&output_path, receipt).expect("write residual citation shortlist");
+    fs::write(&inputs.output_path, receipt).expect("write residual citation shortlist");
     println!(
-        "cullen_residual_shortlist={} candidates={} shortlist={} network=0 authority=experimental_candidate_only",
-        output_path.display(),
+        "cullen_residual_shortlist={} candidates={} shortlist={} robinson={} modbury={} mallonland={} network=0 authority={}",
+        inputs.output_path.display(),
         candidates.len(),
         shortlist.len(),
+        robinson_count,
+        modbury_count,
+        mallonland_count,
+        CANDIDATE_ONLY_AUTHORITY,
     );
 }
