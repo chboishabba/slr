@@ -121,17 +121,16 @@ fn main() {
         .iter()
         .map(|footnote| (footnote.footnote_id.clone(), footnote.text.clone()))
         .collect::<Vec<_>>();
-    let anchors = judgment
-        .body_paragraphs
-        .iter()
-        .flat_map(|paragraph| {
-            paragraph.footnote_ids.iter().map(|footnote_id| FootnoteAnchorObservation {
+    let mut anchors = Vec::new();
+    for paragraph in &judgment.body_paragraphs {
+        for footnote_id in &paragraph.footnote_ids {
+            anchors.push(FootnoteAnchorObservation {
                 footnote_id: footnote_id.clone(),
                 paragraph_ordinal: paragraph.paragraph_ordinal,
                 paragraph_text: paragraph.text.clone(),
-            })
-        })
-        .collect::<Vec<_>>();
+            });
+        }
+    }
     let refined_text = refined_observer_text(&judgment.body.text, &footnotes);
     let refined_sha256 = format!("sha256:{:x}", Sha256::digest(refined_text.as_bytes()));
 
