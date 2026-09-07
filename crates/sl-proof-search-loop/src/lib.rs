@@ -7,6 +7,7 @@
 pub mod frontier;
 pub mod hypothesis;
 pub mod local;
+pub mod planner;
 pub mod query;
 pub mod reasoning;
 pub mod receipt;
