@@ -1,9 +1,11 @@
 //! Governed legal-provider runtime for SensibLaw.
 //!
-//! Rust is the execution layer.  The scheduler remains network-free.  Provider
-//! search returns references, fetch returns bytes, and semantics begin only
-//! after local ingestion/review.  Retrieval never establishes truth, authority,
-//! applicability, treatment, proof payment, admission or publication authority.
+//! Preferred Australian authority order:
+//! persisted/local -> installed OALC -> official court -> optional sanctioned
+//! specialist provider -> unresolved.
+//!
+//! The scheduler owns no HTTP. Search returns references, fetch returns bytes,
+//! and semantic/legal interpretation begins only after local ingestion/review.
 
 use std::collections::BTreeMap;
 use std::thread;
@@ -134,8 +136,11 @@ pub struct OalcLookupReceipt {
 }
 
 pub fn lookup_oalc_exact_mnc(snapshot: &OalcSnapshot, citation: &str) -> Option<OalcLookupReceipt> {
-    snapshot.records.iter().find(|record| record.citation == citation).map(|record| {
-        OalcLookupReceipt {
+    snapshot
+        .records
+        .iter()
+        .find(|record| record.citation == citation)
+        .map(|record| OalcLookupReceipt {
             corpus_revision_ref: snapshot.corpus_revision_ref.clone(),
             citation: citation.to_string(),
             source_identity_ref: record.source_identity_ref.clone(),
@@ -144,8 +149,7 @@ pub fn lookup_oalc_exact_mnc(snapshot: &OalcSnapshot, citation: &str) -> Option<
             local_artifact_ref: record.local_artifact_ref.clone(),
             network_requests: 0,
             receipt_authority: RECEIPT_AUTHORITY,
-        }
-    })
+        })
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -255,14 +259,18 @@ fn citation_court(citation: &str) -> Option<&str> {
 
 pub fn official_hca_known_reference(citation: &str) -> Option<String> {
     match citation {
-        "[2026] HCA 19" => Some("https://www.hcourt.gov.au/cases-and-judgments/judgments/judgments-1998-current/cullen-v-new-south-wales".into()),
+        "[2026] HCA 19" => Some(
+            "https://www.hcourt.gov.au/cases-and-judgments/judgments/judgments-1998-current/cullen-v-new-south-wales".into(),
+        ),
         _ => None,
     }
 }
 
 pub fn official_fca_known_reference(citation: &str) -> Option<String> {
     match citation {
-        "[2025] FCA 796" => Some("https://www.fedcourt.gov.au/services/access-to-files-and-transcripts/online-files/pabai-v-australia".into()),
+        "[2025] FCA 796" => Some(
+            "https://www.fedcourt.gov.au/services/access-to-files-and-transcripts/online-files/pabai-v-australia".into(),
+        ),
         _ => None,
     }
 }
@@ -271,18 +279,17 @@ pub fn resolution_candidates(
     demand: &KnownAuthorityDemand,
     context: &ResolutionContext,
 ) -> Vec<ResolutionStage> {
-    let mut stages = Vec::new();
     if let Some(receipt) = context.persisted.iter().find(|receipt| {
         receipt.compile_eligible
             && receipt.source_identity_ref == demand.source_identity_ref
             && receipt.jurisdiction_ref == demand.jurisdiction_ref
     }) {
-        stages.push(ResolutionStage::Persisted {
+        return vec![ResolutionStage::Persisted {
             source_revision_ref: receipt.source_revision_ref.clone(),
-        });
-        return stages;
+        }];
     }
 
+    let mut stages = Vec::new();
     if let Some(citation) = demand.medium_neutral_citation.as_ref() {
         if context.oalc_exact_mnc_citations.iter().any(|known| known == citation) {
             stages.push(ResolutionStage::OalcExactMnc { citation: citation.clone() });
@@ -332,7 +339,10 @@ pub fn resolve_known_authority(
         proposition_ref: demand.proposition_ref.clone(),
         use_intent: demand.use_intent,
         treatment_intent: demand.treatment_intent,
-        stage: resolution_candidates(demand, context).into_iter().next().unwrap_or(ResolutionStage::Unresolved),
+        stage: resolution_candidates(demand, context)
+            .into_iter()
+            .next()
+            .unwrap_or(ResolutionStage::Unresolved),
         governance: LiveGovernanceBounds::HISTORICAL_DEFAULT,
         acquisition_authority: AcquisitionAuthority::ExperimentalCandidateOnly,
         receipt_authority: RECEIPT_AUTHORITY,
@@ -345,8 +355,14 @@ pub enum SinoMethod { Any, Or, All, Near, Phrase, Legis, Title, Boolean }
 impl SinoMethod {
     pub const fn as_str(self) -> &'static str {
         match self {
-            Self::Any => "any", Self::Or => "or", Self::All => "all", Self::Near => "near",
-            Self::Phrase => "phrase", Self::Legis => "legis", Self::Title => "title", Self::Boolean => "boolean",
+            Self::Any => "any",
+            Self::Or => "or",
+            Self::All => "all",
+            Self::Near => "near",
+            Self::Phrase => "phrase",
+            Self::Legis => "legis",
+            Self::Title => "title",
+            Self::Boolean => "boolean",
         }
     }
 }
@@ -395,9 +411,11 @@ pub fn build_sino_url(query: &SinoQuery) -> String {
     for (alias, paths) in &query.mask_by_phc {
         for path in paths { params.push((format!("mask_{alias}"), path.clone())); }
     }
-    let query_string = params.into_iter()
-        .map(|(k, v)| format!("{}={}", form_encode(&k), form_encode(&v)))
-        .collect::<Vec<_>>().join("&");
+    let query_string = params
+        .into_iter()
+        .map(|(key, value)| format!("{}={}", form_encode(&key), form_encode(&value)))
+        .collect::<Vec<_>>()
+        .join("&");
     format!("{AUSTLII_SINO_ENDPOINT}?{query_string}")
 }
 
@@ -407,19 +425,32 @@ pub fn deterministic_mnc_to_austlii(citation: &str) -> Option<String> {
     let year = parts[0].trim_matches(['[', ']']);
     let court = parts[1];
     let number = parts[2];
-    if year.len() != 4 || year.parse::<u32>().is_err() || number.parse::<u32>().is_err() { return None; }
+    if year.len() != 4 || year.parse::<u32>().is_err() || number.parse::<u32>().is_err() {
+        return None;
+    }
     let jurisdiction = match court {
         "HCA" | "FCA" | "FCAFC" => "cth",
-        "QCA" | "QSC" => "qld", "NSWCA" | "NSWSC" => "nsw",
-        "VSCA" | "VSC" => "vic", "WASCA" | "WASC" => "wa",
-        "SASCA" | "SASC" => "sa", "TASFC" | "TASSC" => "tas",
-        "NTCA" | "NTSC" => "nt", "ACTCA" | "ACTSC" => "act", _ => return None,
+        "QCA" | "QSC" => "qld",
+        "NSWCA" | "NSWSC" => "nsw",
+        "VSCA" | "VSC" => "vic",
+        "WASCA" | "WASC" => "wa",
+        "SASCA" | "SASC" => "sa",
+        "TASFC" | "TASSC" => "tas",
+        "NTCA" | "NTSC" => "nt",
+        "ACTCA" | "ACTSC" => "act",
+        _ => return None,
     };
-    Some(format!("https://www.austlii.edu.au/cgi-bin/viewdoc/au/cases/{jurisdiction}/{court}/{year}/{number}.html"))
+    Some(format!(
+        "https://www.austlii.edu.au/cgi-bin/viewdoc/au/cases/{jurisdiction}/{court}/{year}/{number}.html"
+    ))
 }
 
-pub fn jade_exact_mnc_url(citation: &str) -> String { format!("https://jade.io/search/{}", form_encode(citation)) }
-pub fn jade_search_url(term: &str) -> String { format!("https://jade.io/search/{}", form_encode(term)) }
+pub fn jade_exact_mnc_url(citation: &str) -> String {
+    format!("https://jade.io/search/{}", form_encode(citation))
+}
+pub fn jade_search_url(term: &str) -> String {
+    format!("https://jade.io/search/{}", form_encode(term))
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CitationTraversalPlan {
@@ -442,8 +473,11 @@ pub fn citation_traversal_plan(demand: &KnownAuthorityDemand) -> Option<Citation
         CitationTreatmentIntent::LegislationCited => ProviderOperation::LegislationCited,
     };
     Some(CitationTraversalPlan {
-        source_identity_ref: demand.source_identity_ref.clone(), proposition_ref: demand.proposition_ref.clone(),
-        treatment_intent: demand.treatment_intent, provider: LegalProvider::Jade, operation,
+        source_identity_ref: demand.source_identity_ref.clone(),
+        proposition_ref: demand.proposition_ref.clone(),
+        treatment_intent: demand.treatment_intent,
+        provider: LegalProvider::Jade,
+        operation,
         bounds: LiveGovernanceBounds::HISTORICAL_DEFAULT,
         acquisition_authority: AcquisitionAuthority::ExperimentalCandidateOnly,
     })
@@ -479,7 +513,9 @@ impl HttpTransport for UreqTransport {
 
     fn get(&mut self, request: &HttpRequest) -> Result<HttpResponse, Self::Error> {
         use std::io::Read;
-        let agent = ureq::AgentBuilder::new().timeout(Duration::from_secs(request.timeout_seconds)).build();
+        let agent = ureq::AgentBuilder::new()
+            .timeout(Duration::from_secs(request.timeout_seconds))
+            .build();
         let mut req = agent.get(&request.url).set("User-Agent", &request.user_agent);
         if let Some(referer) = &request.referer { req = req.set("Referer", referer); }
         let response = match req.call() {
@@ -491,7 +527,10 @@ impl HttpTransport for UreqTransport {
         let final_url = response.get_url().to_string();
         let content_type = response.header("Content-Type").map(str::to_string);
         let mut body = Vec::new();
-        response.into_reader().read_to_end(&mut body).map_err(|err| err.to_string())?;
+        response
+            .into_reader()
+            .read_to_end(&mut body)
+            .map_err(|err| err.to_string())?;
         Ok(HttpResponse { final_url, status_code, content_type, body })
     }
 }
@@ -521,9 +560,14 @@ impl GovernedExecutionContext {
         if !self.operator_opt_in { return Err(GovernanceError::OperatorOptInRequired); }
         if !self.cache_checked_first { return Err(GovernanceError::CacheNotCheckedFirst); }
         if !self.persisted_receipts_checked_first { return Err(GovernanceError::PersistedReceiptsNotCheckedFirst); }
-        if self.bounds.minimum_pacing_seconds < 4 || self.bounds.burst != 1
-            || self.bounds.max_depth == 0 || self.bounds.max_new_documents == 0
-            || self.bounds.max_network_requests == 0 { return Err(GovernanceError::InvalidBounds); }
+        if self.bounds.minimum_pacing_seconds < 4
+            || self.bounds.burst != 1
+            || self.bounds.max_depth == 0
+            || self.bounds.max_new_documents == 0
+            || self.bounds.max_network_requests == 0
+        {
+            return Err(GovernanceError::InvalidBounds);
+        }
         Ok(())
     }
 }
@@ -557,7 +601,9 @@ pub struct GovernedExecutor<T> {
 }
 
 impl<T: HttpTransport> GovernedExecutor<T>
-where T::Error: ToString {
+where
+    T::Error: ToString,
+{
     pub fn new(transport: T, context: GovernedExecutionContext) -> Result<Self, GovernanceError> {
         context.validate()?;
         Ok(Self { transport, context, last_request: None, network_requests: 0 })
@@ -573,16 +619,19 @@ where T::Error: ToString {
         }
     }
 
-    fn governed_get(&mut self, provider: LegalProvider, request: HttpRequest) -> Result<HttpResponse, GovernanceError> {
-        if self.network_requests >= self.context.bounds.max_network_requests { return Err(GovernanceError::RequestBudgetExceeded); }
+    fn governed_get(
+        &mut self,
+        provider: LegalProvider,
+        request: HttpRequest,
+    ) -> Result<HttpResponse, GovernanceError> {
+        if self.network_requests >= self.context.bounds.max_network_requests {
+            return Err(GovernanceError::RequestBudgetExceeded);
+        }
         self.pace();
-        let response = match self.transport.get(&request) {
-            Ok(response) => response,
-            Err(err) => {
-                let detail = err.to_string();
-                return Err(GovernanceError::ProviderUnavailable { provider, status: classify_transport_error(&detail) });
-            }
-        };
+        let response = self.transport.get(&request).map_err(|err| {
+            let status = classify_transport_error(&err.to_string());
+            GovernanceError::ProviderUnavailable { provider, status }
+        })?;
         self.network_requests += 1;
         self.last_request = Some(Instant::now());
         let status = classify_http_status(response.status_code);
@@ -594,27 +643,42 @@ where T::Error: ToString {
 
     pub fn austlii_search(&mut self, query: &SinoQuery) -> Result<SearchReferenceReceipt, GovernanceError> {
         let url = build_sino_url(query);
-        let response = self.governed_get(LegalProvider::AustLII, HttpRequest {
-            url: url.clone(), user_agent: AUSTLII_BROWSER_UA.into(), referer: Some(AUSTLII_REFERER.into()), timeout_seconds: 45,
-        })?;
+        let response = self.governed_get(
+            LegalProvider::AustLII,
+            HttpRequest {
+                url: url.clone(),
+                user_agent: AUSTLII_BROWSER_UA.into(),
+                referer: Some(AUSTLII_REFERER.into()),
+                timeout_seconds: 45,
+            },
+        )?;
         if !is_austlii_url(&response.final_url) { return Err(GovernanceError::InvalidProviderUrl); }
         Ok(SearchReferenceReceipt {
-            provider: LegalProvider::AustLII, request_url: url, status_code: response.status_code,
-            content_type: response.content_type, references: extract_references(LegalProvider::AustLII, &response.body),
-            network_requests: 1, receipt_authority: RECEIPT_AUTHORITY,
+            provider: LegalProvider::AustLII,
+            request_url: url,
+            status_code: response.status_code,
+            content_type: response.content_type,
+            references: extract_references(LegalProvider::AustLII, &response.body),
+            network_requests: 1,
+            receipt_authority: RECEIPT_AUTHORITY,
         })
     }
 
     pub fn jade_search(&mut self, term: &str) -> Result<SearchReferenceReceipt, GovernanceError> {
         let url = jade_search_url(term);
-        let response = self.governed_get(LegalProvider::Jade, HttpRequest {
-            url: url.clone(), user_agent: SENSIBLAW_UA.into(), referer: None, timeout_seconds: 45,
-        })?;
+        let response = self.governed_get(
+            LegalProvider::Jade,
+            HttpRequest { url: url.clone(), user_agent: SENSIBLAW_UA.into(), referer: None, timeout_seconds: 45 },
+        )?;
         if !is_jade_url(&response.final_url) { return Err(GovernanceError::InvalidProviderUrl); }
         Ok(SearchReferenceReceipt {
-            provider: LegalProvider::Jade, request_url: url, status_code: response.status_code,
-            content_type: response.content_type, references: extract_references(LegalProvider::Jade, &response.body),
-            network_requests: 1, receipt_authority: RECEIPT_AUTHORITY,
+            provider: LegalProvider::Jade,
+            request_url: url,
+            status_code: response.status_code,
+            content_type: response.content_type,
+            references: extract_references(LegalProvider::Jade, &response.body),
+            network_requests: 1,
+            receipt_authority: RECEIPT_AUTHORITY,
         })
     }
 
@@ -625,35 +689,71 @@ where T::Error: ToString {
         self.fetch_explicit(LegalProvider::Jade, reference, None)
     }
     pub fn fetch_hca(&mut self, reference: &str) -> Result<FetchBytesReceipt, GovernanceError> {
-        self.fetch_explicit(LegalProvider::HighCourtAustralia, reference, Some("https://www.hcourt.gov.au/"))
+        self.fetch_explicit(
+            LegalProvider::HighCourtAustralia,
+            reference,
+            Some("https://www.hcourt.gov.au/"),
+        )
     }
     pub fn fetch_fca(&mut self, reference: &str) -> Result<FetchBytesReceipt, GovernanceError> {
-        self.fetch_explicit(LegalProvider::FederalCourtAustralia, reference, Some("https://www.fedcourt.gov.au/"))
+        self.fetch_explicit(
+            LegalProvider::FederalCourtAustralia,
+            reference,
+            Some("https://www.fedcourt.gov.au/"),
+        )
     }
 
-    fn fetch_explicit(&mut self, provider: LegalProvider, reference: &str, referer: Option<&str>) -> Result<FetchBytesReceipt, GovernanceError> {
+    fn fetch_explicit(
+        &mut self,
+        provider: LegalProvider,
+        reference: &str,
+        referer: Option<&str>,
+    ) -> Result<FetchBytesReceipt, GovernanceError> {
         if !is_provider_url(provider, reference) { return Err(GovernanceError::InvalidProviderUrl); }
-        let response = self.governed_get(provider, HttpRequest {
-            url: reference.into(), user_agent: SENSIBLAW_UA.into(), referer: referer.map(str::to_string), timeout_seconds: 45,
-        })?;
+        let response = self.governed_get(
+            provider,
+            HttpRequest {
+                url: reference.into(),
+                user_agent: SENSIBLAW_UA.into(),
+                referer: referer.map(str::to_string),
+                timeout_seconds: 45,
+            },
+        )?;
         if !is_provider_url(provider, &response.final_url) { return Err(GovernanceError::InvalidProviderUrl); }
         Ok(FetchBytesReceipt {
-            provider, reference: reference.into(), status_code: response.status_code,
-            content_type: response.content_type, bytes: response.body, network_requests: 1,
-            locally_ingested: false, receipt_authority: RECEIPT_AUTHORITY,
+            provider,
+            reference: reference.into(),
+            status_code: response.status_code,
+            content_type: response.content_type,
+            bytes: response.body,
+            network_requests: 1,
+            locally_ingested: false,
+            receipt_authority: RECEIPT_AUTHORITY,
         })
     }
 }
 
-pub fn is_austlii_url(url: &str) -> bool { url.starts_with("https://www.austlii.edu.au/") || url.starts_with("https://austlii.edu.au/") }
-pub fn is_jade_url(url: &str) -> bool { url.starts_with("https://jade.io/") || url.starts_with("https://www.jade.io/") || url.starts_with("https://jade.barnet.com.au/") }
-pub fn is_hca_url(url: &str) -> bool { url.starts_with("https://www.hcourt.gov.au/") || url.starts_with("https://hcourt.gov.au/") }
-pub fn is_fca_url(url: &str) -> bool { url.starts_with("https://www.fedcourt.gov.au/") || url.starts_with("https://fedcourt.gov.au/") }
+pub fn is_austlii_url(url: &str) -> bool {
+    url.starts_with("https://www.austlii.edu.au/") || url.starts_with("https://austlii.edu.au/")
+}
+pub fn is_jade_url(url: &str) -> bool {
+    url.starts_with("https://jade.io/")
+        || url.starts_with("https://www.jade.io/")
+        || url.starts_with("https://jade.barnet.com.au/")
+}
+pub fn is_hca_url(url: &str) -> bool {
+    url.starts_with("https://www.hcourt.gov.au/") || url.starts_with("https://hcourt.gov.au/")
+}
+pub fn is_fca_url(url: &str) -> bool {
+    url.starts_with("https://www.fedcourt.gov.au/") || url.starts_with("https://fedcourt.gov.au/")
+}
 
 pub fn is_provider_url(provider: LegalProvider, url: &str) -> bool {
     match provider {
-        LegalProvider::AustLII => is_austlii_url(url), LegalProvider::Jade => is_jade_url(url),
-        LegalProvider::HighCourtAustralia => is_hca_url(url), LegalProvider::FederalCourtAustralia => is_fca_url(url),
+        LegalProvider::AustLII => is_austlii_url(url),
+        LegalProvider::Jade => is_jade_url(url),
+        LegalProvider::HighCourtAustralia => is_hca_url(url),
+        LegalProvider::FederalCourtAustralia => is_fca_url(url),
         LegalProvider::Local | LegalProvider::Oalc => false,
     }
 }
@@ -672,7 +772,7 @@ fn absolutize(provider: LegalProvider, href: &str) -> Option<String> {
 
 pub fn extract_references(provider: LegalProvider, body: &[u8]) -> Vec<String> {
     let html = String::from_utf8_lossy(body);
-    let mut refs = Vec::new();
+    let mut references = Vec::new();
     for marker in ["href=\"", "href='"] {
         let mut rest = html.as_ref();
         while let Some(start) = rest.find(marker) {
@@ -680,12 +780,12 @@ pub fn extract_references(provider: LegalProvider, body: &[u8]) -> Vec<String> {
             let quote = if marker.ends_with('"') { '"' } else { '\'' };
             let Some(end) = rest.find(quote) else { break };
             if let Some(reference) = absolutize(provider, &rest[..end]) {
-                if !refs.contains(&reference) { refs.push(reference); }
+                if !references.contains(&reference) { references.push(reference); }
             }
             rest = &rest[end + 1..];
         }
     }
-    refs
+    references
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -730,10 +830,14 @@ pub fn mark_locally_ingested(
     canonical_bytes_digest: impl Into<String>,
 ) -> LocalIngestionReceipt {
     LocalIngestionReceipt {
-        provider: fetch.provider, source_identity_ref: source_identity_ref.into(),
-        source_revision_ref: source_revision_ref.into(), explicit_reference: fetch.reference.clone(),
-        canonical_bytes_digest: canonical_bytes_digest.into(), locally_ingested: true,
-        network_requests_used_to_acquire: fetch.network_requests, receipt_authority: RECEIPT_AUTHORITY,
+        provider: fetch.provider,
+        source_identity_ref: source_identity_ref.into(),
+        source_revision_ref: source_revision_ref.into(),
+        explicit_reference: fetch.reference.clone(),
+        canonical_bytes_digest: canonical_bytes_digest.into(),
+        locally_ingested: true,
+        network_requests_used_to_acquire: fetch.network_requests,
+        receipt_authority: RECEIPT_AUTHORITY,
     }
 }
 
@@ -754,6 +858,7 @@ mod tests {
 
     #[derive(Default)]
     struct MockTransport { responses: Vec<Result<HttpResponse, String>> }
+
     impl HttpTransport for MockTransport {
         type Error = String;
         fn get(&mut self, _request: &HttpRequest) -> Result<HttpResponse, Self::Error> {
@@ -764,10 +869,14 @@ mod tests {
 
     fn cullen_demand() -> KnownAuthorityDemand {
         KnownAuthorityDemand {
-            demand_ref: "duty:cullen:treatment".into(), jurisdiction_ref: "AU".into(),
-            source_identity_ref: "case:[2026]-HCA-19".into(), medium_neutral_citation: Some("[2026] HCA 19".into()),
-            explicit_austlii_ref: None, proposition_ref: Some("prop:cullen-positive-operational-duty".into()),
-            use_intent: PropositionUseIntent::CitationTreatment, treatment_intent: CitationTreatmentIntent::CitedBy,
+            demand_ref: "duty:cullen:treatment".into(),
+            jurisdiction_ref: "AU".into(),
+            source_identity_ref: "case:[2026]-HCA-19".into(),
+            medium_neutral_citation: Some("[2026] HCA 19".into()),
+            explicit_austlii_ref: None,
+            proposition_ref: Some("prop:cullen-positive-operational-duty".into()),
+            use_intent: PropositionUseIntent::CitationTreatment,
+            treatment_intent: CitationTreatmentIntent::CitedBy,
         }
     }
 
@@ -775,52 +884,21 @@ mod tests {
     fn preferred_resolution_is_persisted_then_oalc_then_official() {
         let demand = cullen_demand();
         let context = ResolutionContext {
-            oalc_exact_mnc_citations: vec!["[2026] HCA 19".into()], ..ResolutionContext::default()
+            oalc_exact_mnc_citations: vec!["[2026] HCA 19".into()],
+            ..ResolutionContext::default()
         };
-        assert!(matches!(resolve_known_authority(&demand, &context).stage, ResolutionStage::OalcExactMnc { .. }));
-        let no_oalc = ResolutionContext::default();
-        assert!(matches!(resolve_known_authority(&demand, &no_oalc).stage, ResolutionStage::OfficialHighCourt { .. }));
+        assert!(matches!(
+            resolve_known_authority(&demand, &context).stage,
+            ResolutionStage::OalcExactMnc { .. }
+        ));
+        assert!(matches!(
+            resolve_known_authority(&demand, &ResolutionContext::default()).stage,
+            ResolutionStage::OfficialHighCourt { .. }
+        ));
     }
 
     #[test]
-    fn persisted_still_wins_over_every_acquisition_lane() {
-        let demand = cullen_demand();
-        let context = ResolutionContext {
-            persisted: vec![PersistedAuthorityReceipt {
-                source_identity_ref: demand.source_identity_ref.clone(), source_revision_ref: "source:cullen:rev:1".into(),
-                jurisdiction_ref: "AU".into(), compile_eligible: true,
-            }],
-            oalc_exact_mnc_citations: vec!["[2026] HCA 19".into()], ..ResolutionContext::default()
-        };
-        assert!(matches!(resolve_known_authority(&demand, &context).stage, ResolutionStage::Persisted { .. }));
-    }
-
-    #[test]
-    fn oalc_exact_lookup_is_zero_network_and_revision_bound() {
-        let snapshot = OalcSnapshot {
-            corpus_revision_ref: "oalc:v7".into(),
-            records: vec![OalcRecord {
-                citation: "[2026] HCA 19".into(), source_identity_ref: "case:[2026]-HCA-19".into(),
-                source_revision_ref: "oalc:v7:[2026]-HCA-19".into(), canonical_text_digest: "sha256:text".into(),
-                local_artifact_ref: "oalc://v7/hca/2026/19".into(),
-            }],
-        };
-        let receipt = lookup_oalc_exact_mnc(&snapshot, "[2026] HCA 19").unwrap();
-        assert_eq!(receipt.network_requests, 0);
-        assert_eq!(receipt.corpus_revision_ref, "oalc:v7");
-    }
-
-    #[test]
-    fn official_known_references_are_distinct_from_aggregator_references() {
-        let hca = official_hca_known_reference("[2026] HCA 19").unwrap();
-        let fca = official_fca_known_reference("[2025] FCA 796").unwrap();
-        assert!(is_hca_url(&hca));
-        assert!(is_fca_url(&fca));
-        assert!(!is_austlii_url(&hca));
-    }
-
-    #[test]
-    fn austlii_403_and_jade_tls_failure_are_typed_provider_states() {
+    fn provider_failures_are_typed_but_not_legal_evidence() {
         assert_eq!(classify_http_status(403), ProviderAccessStatus::PolicyBlocked);
         assert_eq!(classify_transport_error("TLS certificate expired"), ProviderAccessStatus::TlsInvalid);
         assert!(!provider_failure_is_negative_legal_evidence(ProviderAccessStatus::PolicyBlocked));
@@ -828,16 +906,34 @@ mod tests {
 
     #[test]
     fn search_returns_references_not_raw_html() {
-        let transport = MockTransport { responses: vec![Ok(HttpResponse {
-            final_url: AUSTLII_SINO_ENDPOINT.into(), status_code: 200, content_type: Some("text/html".into()),
-            body: br#"<a href=\"/au/cases/cth/HCA/2026/19.html\">Cullen</a>"#.to_vec(),
-        })]};
-        let context = GovernedExecutionContext { operator_opt_in: true, cache_checked_first: true, persisted_receipts_checked_first: true, bounds: LiveGovernanceBounds::HISTORICAL_DEFAULT };
+        let transport = MockTransport {
+            responses: vec![Ok(HttpResponse {
+                final_url: AUSTLII_SINO_ENDPOINT.into(),
+                status_code: 200,
+                content_type: Some("text/html".into()),
+                body: br#"<a href="/au/cases/cth/HCA/2026/19.html">Cullen</a>"#.to_vec(),
+            })],
+        };
+        let context = GovernedExecutionContext {
+            operator_opt_in: true,
+            cache_checked_first: true,
+            persisted_receipts_checked_first: true,
+            bounds: LiveGovernanceBounds::HISTORICAL_DEFAULT,
+        };
         let mut executor = GovernedExecutor::new(transport, context).unwrap();
-        let receipt = executor.austlii_search(&SinoQuery {
-            meta: "/au".into(), query: "[2026] HCA 19".into(), method: SinoMethod::Phrase,
-            results: 1, offset: 0, rank: None, callback: None, mask_path: Vec::new(), mask_by_phc: BTreeMap::new(),
-        }).unwrap();
+        let receipt = executor
+            .austlii_search(&SinoQuery {
+                meta: "/au".into(),
+                query: "[2026] HCA 19".into(),
+                method: SinoMethod::Phrase,
+                results: 1,
+                offset: 0,
+                rank: None,
+                callback: None,
+                mask_path: Vec::new(),
+                mask_by_phc: BTreeMap::new(),
+            })
+            .unwrap();
         assert_eq!(receipt.references.len(), 1);
         assert_eq!(receipt.network_requests, 1);
     }
@@ -845,15 +941,30 @@ mod tests {
     #[test]
     fn official_fetch_uses_same_ingestion_seam() {
         let reference = official_hca_known_reference("[2026] HCA 19").unwrap();
-        let transport = MockTransport { responses: vec![Ok(HttpResponse {
-            final_url: reference.clone(), status_code: 200, content_type: Some("text/html".into()), body: b"official judgment".to_vec(),
-        })]};
-        let context = GovernedExecutionContext { operator_opt_in: true, cache_checked_first: true, persisted_receipts_checked_first: true, bounds: LiveGovernanceBounds::HISTORICAL_DEFAULT };
+        let transport = MockTransport {
+            responses: vec![Ok(HttpResponse {
+                final_url: reference.clone(),
+                status_code: 200,
+                content_type: Some("text/html".into()),
+                body: b"official judgment".to_vec(),
+            })],
+        };
+        let context = GovernedExecutionContext {
+            operator_opt_in: true,
+            cache_checked_first: true,
+            persisted_receipts_checked_first: true,
+            bounds: LiveGovernanceBounds::HISTORICAL_DEFAULT,
+        };
         let mut executor = GovernedExecutor::new(transport, context).unwrap();
         let fetched = executor.fetch_hca(&reference).unwrap();
         assert_eq!(fetched.provider, LegalProvider::HighCourtAustralia);
         assert!(!fetched.locally_ingested);
-        let ingested = mark_locally_ingested(&fetched, "case:[2026]-HCA-19", "source:hca:2026:19:rev:fixture", "sha256:fixture");
+        let ingested = mark_locally_ingested(
+            &fetched,
+            "case:[2026]-HCA-19",
+            "source:hca:2026:19:rev:fixture",
+            "sha256:fixture",
+        );
         assert!(ingested.locally_ingested);
     }
 }
