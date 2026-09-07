@@ -101,11 +101,13 @@ fn main() {
         expected_whole_frontier_reduction: 2,
         shared_dependency_gain: 1,
     };
-    let selected_frontier = select_frontier_move(&frontier, &[frontier_move], 1)
+    let frontier_moves = vec![frontier_move];
+    let selected_frontier = select_frontier_move(&frontier, &frontier_moves, 1)
         .expect("persisted local move should be selectable");
 
     let first_gap = frontier.to_gaps().into_iter().next().expect("open gap");
-    let selected = schedule(&first_gap, &[persisted.clone()], SchedulerPolicy::default())
+    let scheduler_moves = vec![persisted.clone()];
+    let selected = schedule(&first_gap, &scheduler_moves, SchedulerPolicy::default())
         .expect("persisted move should schedule");
 
     let edge = PropositionReasoningEdge {
@@ -139,18 +141,20 @@ fn main() {
         authority: "experimental_candidate_only",
         ..ResearchWorldSnapshot::default()
     };
-    world.append_source(SourceRevisionRecord {
-        source_revision_ref: "source:cullen:rev:1".into(),
-        canonical_bytes_digest: "sha256:cullen".into(),
-        canonical_text_digest: "sha256:cullen".into(),
-        provider_receipt_ref: "provider:persisted".into(),
-        jurisdiction_ref: Some("AU".into()),
-        source_role_ref: "primary-case".into(),
-        authority_candidate_ref: Some("authority:cullen".into()),
-        parsed_pnf_ref: "pnf:cullen".into(),
-        citation_topology_ref: "citations:cullen".into(),
-        assessment_receipt_refs: vec!["assessment:cullen-comparator".into()],
-    }).expect("append-only source insert");
+    world
+        .append_source(SourceRevisionRecord {
+            source_revision_ref: "source:cullen:rev:1".into(),
+            canonical_bytes_digest: "sha256:cullen".into(),
+            canonical_text_digest: "sha256:cullen".into(),
+            provider_receipt_ref: "provider:persisted".into(),
+            jurisdiction_ref: Some("AU".into()),
+            source_role_ref: "primary-case".into(),
+            authority_candidate_ref: Some("authority:cullen".into()),
+            parsed_pnf_ref: "pnf:cullen".into(),
+            citation_topology_ref: "citations:cullen".into(),
+            assessment_receipt_refs: vec!["assessment:cullen-comparator".into()],
+        })
+        .expect("append-only source insert");
     world.apply_reasoning_delta(delta);
     assert!(world.query_vocabulary.contains("positive operational act"));
     assert!(world.authority_neighbourhood.contains("authority:donoghue"));
@@ -158,7 +162,7 @@ fn main() {
     let receipt = build_iteration_receipt(
         "runtime:offline-research-engine-v01",
         &frontier,
-        &[persisted.clone()],
+        &scheduler_moves,
         &selected,
         &persisted,
         Some("sha256:cullen".into()),
