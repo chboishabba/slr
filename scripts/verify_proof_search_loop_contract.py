@@ -2,10 +2,13 @@
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-LOOP = ROOT / "crates" / "sl-proof-search-loop" / "src" / "lib.rs"
+LOOP_SOURCES = [
+    ROOT / "crates" / "sl-proof-search-loop" / "src" / "lib.rs",
+    ROOT / "crates" / "sl-proof-search-loop" / "src" / "legacy.rs",
+]
 WORKSPACE = ROOT / "Cargo.toml"
 
-loop = LOOP.read_text(encoding="utf-8")
+loop = "\n".join(path.read_text(encoding="utf-8") for path in LOOP_SOURCES)
 workspace = WORKSPACE.read_text(encoding="utf-8")
 
 required = [
