@@ -5,11 +5,15 @@ LIB = ROOT / "crates/sl-governed-legal-provider/src/lib.rs"
 CARGO = ROOT / "crates/sl-governed-legal-provider/Cargo.toml"
 REPLAY = ROOT / "crates/sl-governed-legal-provider/examples/offline_replay_fixture.rs"
 LIVE = ROOT / "crates/sl-governed-legal-provider/examples/live_austlii_smoke.rs"
+RUNNER = ROOT / "scripts/run_live_legal_smoke.sh"
+VALIDATOR = ROOT / "scripts/verify_live_legal_receipt.py"
 
 lib = LIB.read_text(encoding="utf-8")
 cargo = CARGO.read_text(encoding="utf-8")
 replay = REPLAY.read_text(encoding="utf-8")
 live = LIVE.read_text(encoding="utf-8")
+runner = RUNNER.read_text(encoding="utf-8")
+validator = VALIDATOR.read_text(encoding="utf-8")
 
 required = {
     "historical pacing": "minimum_pacing_seconds: 4",
@@ -25,7 +29,7 @@ required = {
     "HTTP isolated in provider crate": "trait HttpTransport",
     "explicit operator opt in": "OperatorOptInRequired",
     "request budget": "RequestBudgetExceeded",
-    "candidate authority": 'experimental_candidate_only',
+    "candidate authority": "experimental_candidate_only",
     "local ingestion seam": "mark_locally_ingested",
 }
 for label, needle in required.items():
@@ -36,6 +40,8 @@ if 'live-network = ["dep:ureq"]' not in cargo:
     raise SystemExit("live HTTP must remain behind the explicit live-network feature")
 if 'ureq = ' not in cargo or 'optional = true' not in cargo:
     raise SystemExit("ureq transport must be optional")
+if 'sha2 = ' not in cargo:
+    raise SystemExit("live acquisition receipts must retain SHA256 bytes identity")
 
 for needle in (
     "first_network_requests=1 replay_network_requests=0",
@@ -47,12 +53,37 @@ for needle in (
 
 for needle in (
     "SENSIBLAW_LIVE_LEGAL_OPT_IN",
+    "SENSIBLAW_RUNTIME_HEAD",
     "max_network_requests: 1",
     "max_new_documents: 1",
-    "--features live-network",
+    "deterministic_mnc_to_austlii",
+    "fetch_austlii",
+    "Sha256::digest",
+    "sl.governed_legal_acquisition.v0_1",
+    "replay_run",
+    "search_claimed_semantic_payment",
+    "acquisition_claimed_authority_receipt",
 ):
     if needle not in live:
-        raise SystemExit(f"live smoke opt-in/bound lost: {needle}")
+        raise SystemExit(f"live smoke acquisition/receipt contract lost: {needle}")
+
+for needle in (
+    "git rev-parse HEAD",
+    "--features live-network",
+    "verify_live_legal_receipt.py",
+):
+    if needle not in runner:
+        raise SystemExit(f"explicit live runner contract lost: {needle}")
+
+for needle in (
+    'SCHEMA = "sl.governed_legal_acquisition.v0_1"',
+    'AUTHORITY = "experimental_candidate_only"',
+    'first.get("network_requests") != 1',
+    'replay.get("network_requests") != 0',
+    'replay.get("resolution") != "Persisted"',
+):
+    if needle not in validator:
+        raise SystemExit(f"live receipt validator contract lost: {needle}")
 
 # The proof scheduler itself must remain network-free. Live transport belongs
 # only in the governed provider crate.
