@@ -27,6 +27,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "sensiblaw-legal-follow-plan"
+version = "0.1.0"
+dependencies = [
+ "sensiblaw-legal-counterfactual",
+]
+
+[[package]]
 name = "sensiblaw-parity"
 version = "0.1.0"
 dependencies = [
