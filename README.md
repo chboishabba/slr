@@ -11,6 +11,7 @@ From-scratch Rust foundation for SensibLaw, built against the current DASHI/Sens
 - `sensiblaw-legal-follow-plan`: typed legal-source planning over persisted compatible revisions; missing compatible authority remains acquisition work and no network client exists in the planner.
 - `sensiblaw-evidential-reopen`: evidential PNF handoff plus sparse consumer/query/policy reopening over explicit reverse dependencies.
 - `sensiblaw-proof-search-scheduler`: **experimental candidate-only** offline-first scheduler: proof gap → minimum proof-reduction threshold → multi-axis Pareto frontier → selected local/persisted/live strategy receipt. Live AustLII/JADE is represented only as a governed strategy requirement; this crate performs no network I/O.
+- `sensiblaw-proof-search-loop`: **experimental candidate-only** offline return loop: selected persisted/local move → local artefact receipt → evidential/PNF bridge → reviewed proposition correspondence → frontier delta → sparse wake → reschedule. It fails closed if any claimed-offline artefact reports network work and still cannot promote correspondence to truth, holding, admission, or publication.
 - `sensiblaw-expanded-cert`: expanded semantic parity/performance runner plus typed residual-frontier accounting.
 - `sensiblaw-stream`: streaming parser-observation consumer that compiles each closed sentence immediately and stages candidate generations without granting publication authority.
 - `fixtures/legal_semantic_conformance_v0_1.tsv`: exact gold consumer-object fixtures plus explicit producer gaps.
@@ -28,17 +29,21 @@ The parser sidecar never owns canonical semantic state; Rust owns deterministic 
 ```sh
 cargo test --workspace
 cargo run -p sensiblaw-proof-search-scheduler --example offline_pabai
+cargo run -p sensiblaw-proof-search-loop --example offline_pabai_loop
 cargo build --workspace
 python3 scripts/verify_source_contract.py
 python3 scripts/verify_proof_search_scheduler_contract.py
+python3 scripts/verify_proof_search_loop_contract.py
 # Full GWB / semantic frontier runs: see docs/GWB_TRANCHE.md and docs/LEGAL_SEMANTIC_ADMISSION.md
 ```
 
 ## Proof-search scheduler boundary
 
-Until the corresponding Agda proof-search ABI has an exact-head kernel receipt, the Rust scheduler is deliberately experimental and candidate-only. It may rank and select a live strategy as a research candidate, but `require_offline_execution` rejects that selection and requires a separately governed live adapter. No semantic authority, legal authority, admission, publication, crawling, polling, or implicit HTTP execution is available from the scheduler crate.
+Until the corresponding Agda proof-search ABI has an exact-head kernel receipt, the Rust scheduler and return loop are deliberately experimental and candidate-only. A live strategy may be ranked as a research candidate, but `require_offline_execution` rejects implicit execution and requires a separately governed adapter. No semantic authority, legal authority, admission, publication, crawling, polling, or implicit HTTP execution is available from either proof-search crate.
 
 The current execution cost vector keeps network requests, pacing delay, citation depth, document breadth, cache misses, local-byte cost, parser/PNF cost, semantic-assessment cost and operator-review cost separate from expected proof reduction, discrimination, authority fitness, novelty and coverage gain. Cheap-but-useless moves are filtered before Pareto comparison.
+
+The return loop preserves the existing evidential boundary: parser/PNF is a local observation, reviewed correspondence can narrow or contest a proof frontier, and sparse reopening wakes only explicitly dependent consumer fibres. None of those receipts by themselves assert world truth or a legal holding.
 
 ## Direct-delta execution laws
 
