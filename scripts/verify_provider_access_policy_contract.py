@@ -13,25 +13,29 @@ required = [
     "ProviderNetworkMode::BulkSnapshotLocalFirst",
     "ProviderNetworkMode::AuthorisationRequired",
     "ProviderNetworkMode::NotConfigured",
+    "ReuseObligations",
     'provider_ref: "HighCourtAustralia"',
     'policy_source_ref: "https://www.hcourt.gov.au/terms-use"',
+    'reuse_policy_source_ref: "https://www.hcourt.gov.au/terms-use"',
     'provider_ref: "FederalCourtAustralia"',
     'policy_source_ref: "https://www.fedcourt.gov.au/robots.txt"',
+    'reuse_policy_source_ref: "https://www.fedcourt.gov.au/copyright"',
     'provider_ref: "OALC"',
     'provider_ref: "AustLII"',
     'provider_ref: "JADE"',
     "effective_minimum_interval_seconds",
-    "missing_published_numeric_limit_means_unlimited() -> bool",
-    "provider_permission_implies_semantic_authority() -> bool",
+    "missing_published_numeric_limit_means_unlimited() -> bool { false }",
+    "provider_permission_implies_semantic_authority() -> bool { false }",
+    "reuse_permission_implies_current_authority() -> bool { false }",
+    "attribution_required: true",
+    "original_source_url_required: true",
+    "accuracy_or_unaltered_copy_required: true",
+    "third_party_rights_may_apply: true",
 ]
 missing = [needle for needle in required if needle not in text]
 if missing:
     raise SystemExit(f"provider access policy contract missing: {missing}")
 
-if "missing_published_numeric_limit_means_unlimited() -> bool {\n    false\n}" not in text:
-    raise SystemExit("absence of published numeric rate must not mean unlimited access")
-if "provider_permission_implies_semantic_authority() -> bool {\n    false\n}" not in text:
-    raise SystemExit("provider permission must not manufacture semantic/legal authority")
 if "per_residual_network_preferred: false" not in text:
     raise SystemExit("provider policy lost local/cache-first research discipline")
 
