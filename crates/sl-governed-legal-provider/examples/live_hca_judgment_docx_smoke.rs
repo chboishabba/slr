@@ -1,10 +1,16 @@
 #[cfg(feature = "live-network")]
+#[path = "../src/docx_text.rs"]
+mod docx_text;
+#[cfg(feature = "live-network")]
 #[path = "../src/official_resource.rs"]
 mod official_resource;
 
 #[cfg(feature = "live-network")]
 fn main() {
-    use official_resource::{discover_hca_judgment_resources, preferred_hca_judgment_resource, JudgmentResourceKind};
+    use docx_text::extract_docx_canonical_text;
+    use official_resource::{
+        discover_hca_judgment_resources, preferred_hca_judgment_resource, JudgmentResourceKind,
+    };
     use sensiblaw_governed_legal_provider::*;
     use sha2::{Digest, Sha256};
     use std::fs;
@@ -74,6 +80,13 @@ fn main() {
     );
     assert!(ingested.locally_ingested);
 
+    let materialized = extract_docx_canonical_text(&fetched.bytes)
+        .expect("materialize official HCA DOCX into canonical local text");
+    let canonical_text_digest = format!("sha256:{:x}", Sha256::digest(materialized.text.as_bytes()));
+    let canonical_text_path = output_dir.join("judgment.txt");
+    fs::write(&canonical_text_path, materialized.text.as_bytes())
+        .expect("persist canonical HCA judgment text locally");
+
     let replay_context = ResolutionContext {
         persisted: vec![PersistedAuthorityReceipt {
             source_identity_ref: source_identity.clone(),
@@ -110,9 +123,11 @@ fn main() {
             "  \"document_kind\": \"Docx\",\n",
             "  \"document_reference\": \"{}\",\n",
             "  \"document_fetch\": {{\"network_requests\": 1, \"locally_ingested\": true, \"bytes_digest\": \"{}\", \"source_revision_ref\": \"{}\"}},\n",
+            "  \"canonical_text\": {{\"locally_materialized\": true, \"sha256\": \"{}\", \"paragraph_count\": {}}},\n",
             "  \"replay_run\": {{\"network_requests\": 0, \"resolution\": \"Persisted\"}},\n",
             "  \"document_fetch_claimed_semantic_payment\": false,\n",
-            "  \"document_fetch_claimed_legal_authority\": false\n",
+            "  \"document_fetch_claimed_legal_authority\": false,\n",
+            "  \"canonical_text_claimed_semantic_payment\": false\n",
             "}}\n"
         ),
         json_escape(&runtime_head),
@@ -120,13 +135,18 @@ fn main() {
         json_escape(&preferred.reference),
         json_escape(&digest),
         json_escape(&source_revision),
+        json_escape(&canonical_text_digest),
+        materialized.paragraph_count,
     );
     let receipt_path = output_dir.join("governed-official-judgment-acquisition-v01.json");
     fs::write(&receipt_path, receipt).expect("write official judgment acquisition receipt");
 
     println!(
-        "provider=HighCourtAustralia document=Docx landing_network=0 document_network=1 replay_network=0 receipt={} authority={}",
-        receipt_path.display(), RECEIPT_AUTHORITY
+        "provider=HighCourtAustralia document=Docx landing_network=0 document_network=1 replay_network=0 paragraphs={} text_digest={} receipt={} authority={}",
+        materialized.paragraph_count,
+        canonical_text_digest,
+        receipt_path.display(),
+        RECEIPT_AUTHORITY
     );
 }
 
