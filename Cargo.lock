@@ -11,12 +11,30 @@ name = "sensiblaw-core"
 version = "0.1.0"
 
 [[package]]
+name = "sensiblaw-evidential-reopen"
+version = "0.1.0"
+
+[[package]]
 name = "sensiblaw-expanded-cert"
 version = "0.1.0"
 dependencies = [
  "sensiblaw-core",
  "sensiblaw-semantic-admission",
  "sensiblaw-semantic-expansion",
+]
+
+[[package]]
+name = "sensiblaw-legal-counterfactual"
+version = "0.1.0"
+dependencies = [
+ "sensiblaw-semantic-status",
+]
+
+[[package]]
+name = "sensiblaw-legal-follow-plan"
+version = "0.1.0"
+dependencies = [
+ "sensiblaw-legal-counterfactual",
 ]
 
 [[package]]
@@ -39,6 +57,14 @@ name = "sensiblaw-semantic-expansion"
 version = "0.1.0"
 dependencies = [
  "sensiblaw-core",
+]
+
+[[package]]
+name = "sensiblaw-semantic-status"
+version = "0.1.0"
+dependencies = [
+ "sensiblaw-core",
+ "sensiblaw-semantic-expansion",
 ]
 
 [[package]]

@@ -4,7 +4,9 @@ root = Path(__file__).resolve().parents[1]
 core = (root/'crates/sl-core/src/lib.rs').read_text()
 parity = (root/'crates/sl-parity/src/lib.rs').read_text()
 expansion = (root/'crates/sl-semantic-expansion/src/lib.rs').read_text()
+semantic_status = (root/'crates/sl-semantic-status/src/lib.rs').read_text()
 admission = (root/'crates/sl-semantic-admission/src/lib.rs').read_text()
+counterfactual = (root/'crates/sl-legal-counterfactual/src/lib.rs').read_text()
 expanded_cert = (root/'crates/sl-expanded-cert/src/main.rs').read_text()
 gold = (root/'fixtures/legal_semantic_conformance_v0_1.tsv').read_text()
 stream = (root/'crates/sl-stream/src/main.rs').read_text()
@@ -39,11 +41,21 @@ checks = {
     'expanded parity uses stable consumer observation': 'pub struct ExpandedConsumerObservation' in expansion and 'StableHeadRelation' in expansion,
     'expanded parity excludes transient token ids': 'transient_token_ids_are_not_semantic_parity_authority' in expansion,
     'expanded parity retains source span authority': 'source_span_change_is_visible_to_semantic_parity' in expansion,
+    'semantic status remains orthogonal': 'pub enum OccurrenceStatus' in semantic_status and 'pub enum TruthStatus' in semantic_status and 'pub enum ApplicabilityStatus' in semantic_status and 'pub enum LiabilityStatus' in semantic_status,
+    'semantic status candidate-only unresolved state': 'candidate_only: true' in semantic_status and 'governed_admission_present: false' in semantic_status,
     'semantic admission is separate and non-publishing': 'pub struct AdmissionReceipt' in admission and 'GenerationPublisher' not in admission and '.publish(' not in admission,
     'semantic admission has no parser authority variant': 'enum ResolutionAuthority' in admission and 'Parser' not in admission.split('pub enum ResolutionAuthority', 1)[1].split('}', 1)[0],
     'semantic admission requires policy and resolver refs': 'MissingPolicyReference' in admission and 'MissingResolverReference' in admission,
     'semantic admission resolves declared scope exactly': 'ScopeResolutionMismatch' in admission and 'scope_matches' in admission,
     'semantic admission rejection retains evidence': 'retained_candidates' in admission and 'retained_residuals' in admission and 'retained_alternative_fibres' in admission,
+    'legal counterfactual family is separate downstream crate': 'pub struct CounterfactualFamily' in counterfactual and 'pub struct CounterfactualWorld' in counterfactual,
+    'legal counterfactual requires corrected relation not deletion': 'EventDeletionOnly' in counterfactual and 'CorrectedRelation' in counterfactual and 'event_deletion_only_does_not_count_as_corrected_world' in counterfactual,
+    'legal counterfactual supports admissible-world underidentification': 'Underidentified' in counterfactual and 'multiple_admissible_worlds_with_different_outcomes_are_underidentified' in counterfactual,
+    'one located world does not close open search': 'AlternativeWorldSearchIncomplete' in counterfactual and 'one_located_world_does_not_prove_unique_counterfactual_if_search_is_open' in counterfactual,
+    'physical compatibility is separate counterfactual gate': 'pub enum PhysicalCompatibility' in counterfactual and 'PhysicalModelResolver' in counterfactual,
+    'causal result leaves liability and remedy orthogonal': 'pub struct LegalCausationAssessment' in counterfactual and 'causal_dependence_does_not_close_liability_or_remedy' in counterfactual,
+    'counterfactual residual routes to exact producer': 'pub const fn producer_for' in counterfactual and 'RequiredProducer' in counterfactual,
+    'legal counterfactual stays off parser hot path': all(forbidden not in counterfactual for forbidden in ['spacy', 'Regex', 'regex::', 'postgres', 'sqlx', 'reqwest', 'publish(', 'auto_admit', 'automatic_admission']),
     'legal semantic gold corpus exists': 'actor_subject\tcovered' in gold and 'clause_ambiguity\tcovered' in gold,
     'legal semantic gold retains producer gaps': gold.count('\tproducer_gap\t') == 6 and 'action_predicate\tproducer_gap' in gold and 'provenance_relation\tproducer_gap' in gold,
     'gold tests compare exact consumer objects': 'covered_gold_fixtures_match_exact_consumer_objects' in admission and 'expected(row, sentence_id)' in admission,
