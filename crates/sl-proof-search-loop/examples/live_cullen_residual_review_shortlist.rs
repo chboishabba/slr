@@ -9,6 +9,7 @@ use sensiblaw_proof_search_loop::judgment_candidates::{
 use sensiblaw_proof_search_loop::live_artifact::{
     cli_paths, load_and_validate_cullen_inputs, CANDIDATE_ONLY_AUTHORITY,
 };
+use sensiblaw_proof_search_loop::live_artifact_validation::validate_cullen_shortlist_values;
 use sensiblaw_proof_search_loop::residual_review_shortlist::{
     shortlist_anchored_citations_for_residual, ResidualAnchorCriterion,
     ResidualCitationReviewDemand, ResidualShortlistedCitation,
@@ -155,6 +156,9 @@ fn main() {
 
     let shortlist = shortlist_anchored_citations_for_residual(&candidates, &demand)
         .expect("residual-indexed citation shortlist");
+    validate_cullen_shortlist_values(candidates.len(), &shortlist)
+        .expect("validate typed Cullen residual shortlist");
+
     let body = shortlist
         .iter()
         .map(shortlist_json)
@@ -215,9 +219,6 @@ fn main() {
         .iter()
         .filter(|item| item.candidate.citation_text == "(2024) 98 ALJR 956")
         .count();
-    assert!(robinson_count > 0, "Robinson must survive the Cullen residual shortlist");
-    assert!(modbury_count > 0, "Modbury must survive the Cullen residual shortlist");
-    assert_eq!(mallonland_count, 0, "Mallonland must not enter this residual shortlist merely because it was observed");
 
     if let Some(parent) = inputs.output_path.parent() {
         fs::create_dir_all(parent).expect("create residual shortlist directory");
