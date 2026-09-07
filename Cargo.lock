@@ -45,6 +45,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "sensiblaw-proof-search-loop"
+version = "0.1.0"
+dependencies = [
+ "sensiblaw-evidential-reopen",
+ "sensiblaw-proof-search-scheduler",
+]
+
+[[package]]
 name = "sensiblaw-proof-search-scheduler"
 version = "0.1.0"
 dependencies = [

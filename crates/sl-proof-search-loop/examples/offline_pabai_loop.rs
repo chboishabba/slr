@@ -6,6 +6,17 @@ use sensiblaw_proof_search_scheduler::{
     schedule, CandidateMove, ExecutionCostVector, ExecutionStrategy, ProofGap, ProofValueVector,
     SchedulerPolicy,
 };
+use std::{env, fs};
+
+fn json_escape(value: &str) -> String {
+    value
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+}
+
+fn disposition_name(disposition: impl std::fmt::Debug) -> String {
+    format!("{disposition:?}")
+}
 
 fn persisted_move(move_ref: &str, source_ref: &str, reduction: u64) -> CandidateMove {
     CandidateMove {
@@ -105,11 +116,46 @@ fn main() {
     .expect("narrowed frontier should schedule the next offline move");
 
     let next_move = iteration.next_move.expect("non-terminal fixture should continue");
+    let output = env::args()
+        .nth(1)
+        .unwrap_or_else(|| "target/offline_pabai_loop.json".into());
+    let receipt = format!(
+        "{{\n  \"schema_version\": \"sensiblaw.offline-proof-search-loop-receipt.v0_1\",\n  \"authority\": \"experimental_candidate_only\",\n  \"network_requests\": 0,\n  \"proof_gap\": {{\n    \"consumer_ref\": \"{}\",\n    \"residual_ref\": \"{}\",\n    \"missing_proposition_ref\": \"{}\"\n  }},\n  \"selected_move\": {{\n    \"move_ref\": \"{}\",\n    \"source_revision_ref\": \"{}\",\n    \"strategy\": \"PersistedAuthorityReceipt\"\n  }},\n  \"local_artifact\": {{\n    \"artifact_ref\": \"{}\",\n    \"document_ref\": \"{}\",\n    \"source_revision_ref\": \"{}\",\n    \"bytes_digest_ref\": \"{}\",\n    \"network_requests\": {}\n  }},\n  \"bridge\": {{\n    \"document_ref\": \"{}\",\n    \"canonical_text_sha256\": \"{}\",\n    \"graph_ref\": \"{}\"\n  }},\n  \"correspondence\": {{\n    \"document_ref\": \"{}\",\n    \"graph_ref\": \"{}\",\n    \"proposition_ref\": \"{}\",\n    \"world_truth_claimed\": {},\n    \"legal_holding_claimed\": {}\n  }},\n  \"assessment\": {{\n    \"grade\": \"ComparatorOnly\",\n    \"correspondence_status\": \"ReviewedSupported\",\n    \"observed_proof_reduction\": {},\n    \"disposition\": \"{}\",\n    \"changed_coordinates\": [\"{}\"]\n  }},\n  \"wake_requests\": [],\n  \"next_move\": {{\n    \"move_ref\": \"{}\",\n    \"strategy\": \"PersistedAuthorityReceipt\"\n  }},\n  \"delta_authority\": \"{}\",\n  \"iteration_authority\": \"{}\"\n}}\n",
+        json_escape(&gap.consumer_ref),
+        json_escape(&gap.residual_ref),
+        json_escape(&gap.missing_proposition_ref),
+        json_escape(&selected.selected_move_ref),
+        json_escape(&first.source_ref.clone().expect("source ref")),
+        json_escape(&artifact.local_artifact_ref),
+        json_escape(&artifact.document_ref),
+        json_escape(&artifact.source_revision_ref),
+        json_escape(&artifact.bytes_digest_ref),
+        artifact.network_requests,
+        json_escape(&bridge.document_ref),
+        json_escape(&bridge.canonical_text_sha256),
+        json_escape(&bridge.graph_ref),
+        json_escape(&correspondence.bridge_document_ref),
+        json_escape(&correspondence.graph_ref),
+        json_escape(&correspondence.proposition_ref),
+        correspondence.world_truth_claimed,
+        correspondence.legal_holding_claimed,
+        iteration.assessment.frontier_delta.observed_proof_reduction,
+        disposition_name(iteration.assessment.frontier_delta.disposition),
+        json_escape(&correspondence.proposition_ref),
+        json_escape(&next_move.selected_move_ref),
+        iteration.assessment.frontier_delta.delta_authority,
+        iteration.iteration_authority,
+    );
+    if let Some(parent) = std::path::Path::new(&output).parent() {
+        fs::create_dir_all(parent).expect("create receipt directory");
+    }
+    fs::write(&output, receipt).expect("write JSON receipt");
     println!(
-        "first={} delta={:?} next={} authority={} network=0",
+        "first={} delta={:?} next={} authority={} network=0 receipt={}",
         selected.selected_move_ref,
         iteration.assessment.frontier_delta.disposition,
         next_move.selected_move_ref,
         iteration.iteration_authority,
+        output,
     );
 }
