@@ -15,6 +15,7 @@ pub mod judgment_candidates;
 pub mod judgment_pnf;
 pub mod judgment_review;
 pub mod live_artifact;
+pub mod live_artifact_validation;
 pub mod local;
 pub mod online;
 pub mod planner;
