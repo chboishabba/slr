@@ -71,11 +71,17 @@ pub struct OfflineAssessmentReceipt {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum OfflineLoopError {
     SelectedMoveRequiresGovernedLiveAdapter,
+    SelectedMoveReceiptMismatch,
+    SelectedSourceRevisionMismatch,
     LocalArtifactPerformedNetworkWork,
     LocalArtifactNotIngested,
     BridgeDocumentMismatch,
+    BridgeDigestMismatch,
+    BridgeClaimsSemanticAuthority,
+    BridgeDoesNotRequireCorrespondence,
     CorrespondenceDocumentMismatch,
     CorrespondenceGraphMismatch,
+    CorrespondenceClaimsAuthority,
     TargetPropositionMismatch,
     UnsupportedCorrespondenceGrade,
     NoAdmissibleMoveMeetsThreshold,
@@ -91,17 +97,38 @@ fn disposition_for(grade: AssessmentGrade) -> FrontierDisposition {
     }
 }
 
+fn correspondence_compatible(status: CorrespondenceStatus, grade: AssessmentGrade) -> bool {
+    match grade {
+        AssessmentGrade::SupportsTargetCandidate
+        | AssessmentGrade::DefeatsTargetCandidate
+        | AssessmentGrade::ComparatorOnly => status == CorrespondenceStatus::ReviewedSupported,
+        AssessmentGrade::Ambiguous => matches!(
+            status,
+            CorrespondenceStatus::ReviewedSupported | CorrespondenceStatus::ReviewedAmbiguous
+        ),
+        AssessmentGrade::NoContribution => status != CorrespondenceStatus::Unreviewed,
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 pub fn assess_offline_result(
     gap: &ProofGap,
-    selected: &CandidateMoveReceipt,
+    selected_receipt: &CandidateMoveReceipt,
+    selected_move: &CandidateMove,
     artifact: &LocalArtifactReceipt,
     bridge: &EvidentialBridgeReceipt,
     correspondence: &ReviewedCorrespondenceReceipt,
     grade: AssessmentGrade,
     observed_proof_reduction: u64,
 ) -> Result<OfflineAssessmentReceipt, OfflineLoopError> {
-    require_offline_execution(selected)
+    require_offline_execution(selected_receipt)
         .map_err(|_| OfflineLoopError::SelectedMoveRequiresGovernedLiveAdapter)?;
+    if selected_receipt.selected_move_ref != selected_move.move_ref {
+        return Err(OfflineLoopError::SelectedMoveReceiptMismatch);
+    }
+    if selected_move.source_ref.as_deref() != Some(artifact.source_revision_ref.as_str()) {
+        return Err(OfflineLoopError::SelectedSourceRevisionMismatch);
+    }
     if artifact.network_requests != 0 {
         return Err(OfflineLoopError::LocalArtifactPerformedNetworkWork);
     }
@@ -111,26 +138,28 @@ pub fn assess_offline_result(
     if bridge.document_ref != artifact.document_ref {
         return Err(OfflineLoopError::BridgeDocumentMismatch);
     }
+    if bridge.canonical_text_sha256 != artifact.bytes_digest_ref {
+        return Err(OfflineLoopError::BridgeDigestMismatch);
+    }
+    if bridge.parser_observation_is_semantic_authority {
+        return Err(OfflineLoopError::BridgeClaimsSemanticAuthority);
+    }
+    if !bridge.semantic_correspondence_required {
+        return Err(OfflineLoopError::BridgeDoesNotRequireCorrespondence);
+    }
     if correspondence.bridge_document_ref != bridge.document_ref {
         return Err(OfflineLoopError::CorrespondenceDocumentMismatch);
     }
     if correspondence.graph_ref != bridge.graph_ref {
         return Err(OfflineLoopError::CorrespondenceGraphMismatch);
     }
+    if correspondence.world_truth_claimed || correspondence.legal_holding_claimed {
+        return Err(OfflineLoopError::CorrespondenceClaimsAuthority);
+    }
     if correspondence.proposition_ref != gap.missing_proposition_ref {
         return Err(OfflineLoopError::TargetPropositionMismatch);
     }
-
-    let compatible = match grade {
-        AssessmentGrade::SupportsTargetCandidate => {
-            correspondence.status == CorrespondenceStatus::ReviewedSupported
-        }
-        AssessmentGrade::DefeatsTargetCandidate
-        | AssessmentGrade::ComparatorOnly
-        | AssessmentGrade::Ambiguous
-        | AssessmentGrade::NoContribution => true,
-    };
-    if !compatible {
+    if !correspondence_compatible(correspondence.status, grade) {
         return Err(OfflineLoopError::UnsupportedCorrespondenceGrade);
     }
 
@@ -154,7 +183,7 @@ pub fn assess_offline_result(
     };
 
     Ok(OfflineAssessmentReceipt {
-        selected_move_ref: selected.selected_move_ref.clone(),
+        selected_move_ref: selected_receipt.selected_move_ref.clone(),
         source_revision_ref: artifact.source_revision_ref.clone(),
         document_ref: artifact.document_ref.clone(),
         proposition_ref: correspondence.proposition_ref.clone(),
@@ -215,7 +244,7 @@ mod tests {
     use super::*;
     use sensiblaw_evidential_reopen::{ConsumerFibreKey, Horizon};
     use sensiblaw_proof_search_scheduler::{
-        CandidateMove, ExecutionCostVector, ExecutionStrategy, ProofValueVector,
+        ExecutionCostVector, ExecutionPermission, ExecutionStrategy, ProofValueVector,
     };
 
     fn gap() -> ProofGap {
@@ -228,13 +257,36 @@ mod tests {
         }
     }
 
-    fn selected() -> CandidateMoveReceipt {
+    fn selected_move() -> CandidateMove {
+        CandidateMove {
+            move_ref: "move:persisted-cullen-comparator".into(),
+            strategy: ExecutionStrategy::PersistedAuthorityReceipt,
+            source_ref: Some("source:cullen:rev:1".into()),
+            provider_operation_ref: "persisted_authority_receipt".into(),
+            cost: ExecutionCostVector {
+                local_bytes_read_cost: 1,
+                parser_pnf_cost: 1,
+                semantic_assessment_cost: 1,
+                ..ExecutionCostVector::default()
+            },
+            value: ProofValueVector {
+                expected_proof_reduction: 3,
+                discriminative_value: 4,
+                authority_fitness: 5,
+                ..ProofValueVector::default()
+            },
+            admissible: true,
+            calibration_ref: "fixture:cullen".into(),
+        }
+    }
+
+    fn selected_receipt() -> CandidateMoveReceipt {
         CandidateMoveReceipt {
             consumer_ref: gap().consumer_ref,
             residual_ref: gap().residual_ref,
             selected_move_ref: "move:persisted-cullen-comparator".into(),
             selected_strategy: ExecutionStrategy::PersistedAuthorityReceipt,
-            execution_permission: sensiblaw_proof_search_scheduler::ExecutionPermission::OfflineExecutionAllowed,
+            execution_permission: ExecutionPermission::OfflineExecutionAllowed,
             semantic_authority: SemanticAuthorityStatus::ExperimentalCandidateOnly,
             frontier_move_refs: vec!["move:persisted-cullen-comparator".into()],
             threshold: 1,
@@ -285,7 +337,8 @@ mod tests {
         let bridge = bridge();
         let receipt = assess_offline_result(
             &gap(),
-            &selected(),
+            &selected_receipt(),
+            &selected_move(),
             &artifact(),
             &bridge,
             &correspondence(&bridge),
@@ -308,7 +361,8 @@ mod tests {
         assert_eq!(
             assess_offline_result(
                 &gap(),
-                &selected(),
+                &selected_receipt(),
+                &selected_move(),
                 &bad_artifact,
                 &bridge,
                 &correspondence(&bridge),
@@ -320,11 +374,52 @@ mod tests {
     }
 
     #[test]
+    fn selected_source_must_match_local_artifact_revision() {
+        let bridge = bridge();
+        let mut selected = selected_move();
+        selected.source_ref = Some("source:wrong:rev".into());
+        assert_eq!(
+            assess_offline_result(
+                &gap(),
+                &selected_receipt(),
+                &selected,
+                &artifact(),
+                &bridge,
+                &correspondence(&bridge),
+                AssessmentGrade::ComparatorOnly,
+                1,
+            ),
+            Err(OfflineLoopError::SelectedSourceRevisionMismatch)
+        );
+    }
+
+    #[test]
+    fn bridge_digest_must_match_local_artifact() {
+        let bridge = bridge();
+        let mut bad_artifact = artifact();
+        bad_artifact.bytes_digest_ref = "sha256:wrong".into();
+        assert_eq!(
+            assess_offline_result(
+                &gap(),
+                &selected_receipt(),
+                &selected_move(),
+                &bad_artifact,
+                &bridge,
+                &correspondence(&bridge),
+                AssessmentGrade::ComparatorOnly,
+                1,
+            ),
+            Err(OfflineLoopError::BridgeDigestMismatch)
+        );
+    }
+
+    #[test]
     fn delta_wakes_only_declared_consumer_dependency() {
         let bridge = bridge();
         let receipt = assess_offline_result(
             &gap(),
-            &selected(),
+            &selected_receipt(),
+            &selected_move(),
             &artifact(),
             &bridge,
             &correspondence(&bridge),
@@ -354,7 +449,8 @@ mod tests {
         let bridge = bridge();
         let assessment = assess_offline_result(
             &gap(),
-            &selected(),
+            &selected_receipt(),
+            &selected_move(),
             &artifact(),
             &bridge,
             &correspondence(&bridge),
