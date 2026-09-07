@@ -7,6 +7,8 @@
 //! Core law: consuming a source artifact never grants source authority or
 //! semantic-promotion authority. Review and promotion remain separate stages.
 
+pub mod bundle;
+
 pub const SOURCE_UNIT_SCHEMA: &str = "sl.source_unit.v1";
 pub const SOURCE_HANDOFF_SCHEMA: &str = "sl.source_handoff.v0_1";
 
