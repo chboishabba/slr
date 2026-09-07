@@ -90,7 +90,7 @@ if "ResearchTermination::ClosedCandidate" not in transition:
     raise SystemExit("frontier transition lost candidate-only closed state")
 
 fixture = (ROOT / "crates" / "sl-proof-search-loop" / "examples" / "offline_research_engine_v01.rs").read_text(encoding="utf-8")
-if "network_requests: 0" not in fixture:
+if "assert_eq!(receipt.execution_cost.network_requests, 0)" not in fixture:
     raise SystemExit("offline research engine fixture lost zero-network receipt")
 
 print("offline research engine v0.1 contract PASS")
