@@ -1,3 +1,4 @@
+#[cfg(feature = "live-network")]
 #[path = "../src/official_resource.rs"]
 mod official_resource;
 
