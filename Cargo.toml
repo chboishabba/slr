@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/sl-core", "crates/sl-parity", "crates/sl-semantic-expansion", "crates/sl-semantic-status", "crates/sl-semantic-admission", "crates/sl-legal-counterfactual", "crates/sl-legal-follow-plan", "crates/sl-evidential-reopen", "crates/sl-proof-search-scheduler", "crates/sl-expanded-cert", "crates/sl-stream", "crates/sl-bench"]
+members = ["crates/sl-core", "crates/sl-parity", "crates/sl-semantic-expansion", "crates/sl-semantic-status", "crates/sl-semantic-admission", "crates/sl-legal-counterfactual", "crates/sl-legal-follow-plan", "crates/sl-evidential-reopen", "crates/sl-proof-search-scheduler", "crates/sl-proof-search-loop", "crates/sl-expanded-cert", "crates/sl-stream", "crates/sl-bench"]
 resolver = "2"
 
 [workspace.package]
