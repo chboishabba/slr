@@ -16,12 +16,17 @@ for needle in (
     "extract_docx_canonical_text",
     "extract_docx_canonical_judgment",
     "document_xml_to_canonical_text",
+    "document_xml_to_canonical_paragraphs",
     "footnotes_xml_to_canonical_footnotes",
+    "CanonicalDocxParagraph",
     "CanonicalDocxFootnote",
+    "footnote_ids",
+    "footnoteReference",
     "word/document.xml",
     "word/footnotes.xml",
     "paragraph_count",
     "footnote_observation_is_citation_treatment() -> bool { false }",
+    "footnote_anchor_is_residual_relevance() -> bool { false }",
     "docx_text_materialization_is_semantic_payment() -> bool { false }",
     "docx_text_materialization_is_legal_authority() -> bool { false }",
 ):
@@ -53,8 +58,8 @@ if 'xml-rs = "0.8"' not in cargo:
 if 'zip = { version = "0.6"' not in cargo:
     raise SystemExit("DOCX ZIP reader dependency must remain explicit")
 
-for forbidden in ("publish(", "auto_admit", "semantic_authority: true", "legal_authority: true"):
+for forbidden in ("publish(", "auto_admit", "semantic_authority: true", "legal_authority: true", "residual_payment: true"):
     if forbidden in module or forbidden in example or forbidden in live:
         raise SystemExit(f"DOCX materialization acquired forbidden authority shortcut: {forbidden}")
 
-print("DOCX text materialization contract PASS")
+print("DOCX text + footnote anchor materialization contract PASS")
