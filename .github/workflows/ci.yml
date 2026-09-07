@@ -21,6 +21,8 @@ jobs:
         run: cargo run -p sensiblaw-proof-search-scheduler --example offline_pabai
       - name: Offline proof-search frontier loop
         run: cargo run -p sensiblaw-proof-search-loop --example offline_pabai_loop
+      - name: Offline research engine v0.1
+        run: cargo run -p sensiblaw-proof-search-loop --example offline_research_engine_v01
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Source-contract checks
@@ -30,5 +32,6 @@ jobs:
           python3 scripts/verify_legal_counterfactual_contract.py
           python3 scripts/verify_proof_search_scheduler_contract.py
           python3 scripts/verify_proof_search_loop_contract.py
+          python3 scripts/verify_offline_research_engine_contract.py
       - name: Python syntax checks
-        run: python3 -m py_compile python/spacy_stream.py python/gwb_tranche.py python/gwb_prepare.py python/gwb_full_run.py python/gwb_certify.py python/gwb_expanded_certify.py scripts/bench_stream.py scripts/verify_source_contract.py scripts/verify_semantic_status_contract.py scripts/verify_legal_counterfactual_contract.py scripts/verify_proof_search_scheduler_contract.py scripts/verify_proof_search_loop_contract.py
+        run: python3 -m py_compile python/spacy_stream.py python/gwb_tranche.py python/gwb_prepare.py python/gwb_full_run.py python/gwb_certify.py python/gwb_expanded_certify.py scripts/bench_stream.py scripts/verify_source_contract.py scripts/verify_semantic_status_contract.py scripts/verify_legal_counterfactual_contract.py scripts/verify_proof_search_scheduler_contract.py scripts/verify_proof_search_loop_contract.py scripts/verify_offline_research_engine_contract.py
