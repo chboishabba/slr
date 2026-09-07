@@ -1,4 +1,4 @@
-use sensiblaw_proof_search_scheduler::{CandidateMove, ProofGap};
+use sensiblaw_proof_search_scheduler::{dominates, CandidateMove, ProofGap};
 use std::collections::BTreeSet;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -78,6 +78,53 @@ pub fn rankable_candidates<'a>(
         .collect()
 }
 
+fn frontier_dominates(left: &FrontierCandidateMove, right: &FrontierCandidateMove) -> bool {
+    let no_less_frontier_gain = left.expected_whole_frontier_reduction >= right.expected_whole_frontier_reduction;
+    let no_less_shared_gain = left.shared_dependency_gain >= right.shared_dependency_gain;
+    let scheduler_no_worse = dominates(&left.move_, &right.move_) || left.move_ == right.move_;
+    let strictly_better = left.expected_whole_frontier_reduction > right.expected_whole_frontier_reduction
+        || left.shared_dependency_gain > right.shared_dependency_gain
+        || dominates(&left.move_, &right.move_);
+    no_less_frontier_gain && no_less_shared_gain && scheduler_no_worse && strictly_better
+}
+
+pub fn frontier_pareto<'a>(
+    frontier: &ProofFrontier,
+    candidates: &'a [FrontierCandidateMove],
+    minimum_whole_frontier_reduction: u64,
+) -> Vec<&'a FrontierCandidateMove> {
+    let rankable: Vec<&FrontierCandidateMove> = rankable_candidates(frontier, candidates)
+        .into_iter()
+        .filter(|c| c.move_.admissible)
+        .filter(|c| c.expected_whole_frontier_reduction >= minimum_whole_frontier_reduction)
+        .collect();
+    rankable
+        .iter()
+        .copied()
+        .filter(|candidate| {
+            !rankable.iter().copied().any(|other| {
+                other.move_.move_ref != candidate.move_.move_ref && frontier_dominates(other, candidate)
+            })
+        })
+        .collect()
+}
+
+pub fn select_frontier_move<'a>(
+    frontier: &ProofFrontier,
+    candidates: &'a [FrontierCandidateMove],
+    minimum_whole_frontier_reduction: u64,
+) -> Option<&'a FrontierCandidateMove> {
+    let mut p = frontier_pareto(frontier, candidates, minimum_whole_frontier_reduction);
+    p.sort_by(|a, b| {
+        b.expected_whole_frontier_reduction
+            .cmp(&a.expected_whole_frontier_reduction)
+            .then_with(|| b.shared_dependency_gain.cmp(&a.shared_dependency_gain))
+            .then_with(|| a.move_.cost.network_requests.cmp(&b.move_.cost.network_requests))
+            .then_with(|| a.move_.move_ref.cmp(&b.move_.move_ref))
+    });
+    p.first().copied()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -116,23 +163,33 @@ mod tests {
         }
     }
 
-    #[test]
-    fn one_move_may_target_multiple_open_residuals() {
-        let candidate = FrontierCandidateMove {
+    fn move_(id: &str, reduction: u64, network: u64) -> FrontierCandidateMove {
+        FrontierCandidateMove {
             target_residual_refs: vec!["r:a".into(), "r:b".into()],
             move_: CandidateMove {
-                move_ref: "move:shared".into(),
+                move_ref: id.into(),
                 strategy: ExecutionStrategy::PersistedAuthorityReceipt,
-                source_ref: Some("source:1".into()),
+                source_ref: Some(format!("source:{id}")),
                 provider_operation_ref: "local".into(),
-                cost: ExecutionCostVector::default(),
-                value: ProofValueVector::default(),
+                cost: ExecutionCostVector { network_requests: network, ..ExecutionCostVector::default() },
+                value: ProofValueVector { expected_proof_reduction: reduction, authority_fitness: 3, ..ProofValueVector::default() },
                 admissible: true,
                 calibration_ref: "test".into(),
             },
-            expected_whole_frontier_reduction: 2,
+            expected_whole_frontier_reduction: reduction,
             shared_dependency_gain: 1,
-        };
-        assert!(validate_frontier_move(&frontier(), &candidate));
+        }
+    }
+
+    #[test]
+    fn one_move_may_target_multiple_open_residuals() {
+        assert!(validate_frontier_move(&frontier(), &move_("shared", 2, 0)));
+    }
+
+    #[test]
+    fn selector_prefers_higher_frontier_reduction_before_network_tie_break() {
+        let low = move_("low", 1, 0);
+        let high = move_("high", 3, 0);
+        assert_eq!(select_frontier_move(&frontier(), &[low, high], 1).unwrap().move_.move_ref, "high");
     }
 }
