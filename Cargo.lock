@@ -7,6 +7,14 @@ name = "sensiblaw-bench"
 version = "0.1.0"
 
 [[package]]
+name = "sensiblaw-bundle-search"
+version = "0.1.0"
+dependencies = [
+ "sensiblaw-evidential-reopen",
+ "sensiblaw-source-handoff",
+]
+
+[[package]]
 name = "sensiblaw-core"
 version = "0.1.0"
 
