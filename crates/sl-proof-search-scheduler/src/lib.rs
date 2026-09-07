@@ -180,10 +180,10 @@ pub fn dominates(left: &CandidateMove, right: &CandidateMove) -> bool {
         && strictly_better_somewhere(left, right)
 }
 
-pub fn threshold_candidates<'a>(
-    candidates: &'a [CandidateMove],
+pub fn threshold_candidates(
+    candidates: &[CandidateMove],
     policy: SchedulerPolicy,
-) -> Vec<&'a CandidateMove> {
+) -> Vec<&CandidateMove> {
     candidates
         .iter()
         .filter(|candidate| candidate.admissible)

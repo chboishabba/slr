@@ -40,6 +40,9 @@ pub enum BridgeError {
 }
 
 impl EvidentialBridgeReceipt {
+    // This constructor mirrors the complete receipt ABI: splitting it would
+    // obscure which required boundary fields are supplied by the caller.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         run_ref: String,
         document_ref: String,
