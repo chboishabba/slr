@@ -27,6 +27,7 @@ python3 scripts/verify_proof_search_loop_contract.py
 python3 scripts/verify_offline_research_engine_contract.py
 python3 scripts/verify_online_readiness_contract.py
 python3 scripts/verify_governed_legal_provider_contract.py
+python3 scripts/verify_provider_access_policy_contract.py
 python3 scripts/verify_official_acquisition_handoff_contract.py
 python3 scripts/verify_hca_resource_discovery_contract.py
 python3 scripts/verify_docx_text_materialization_contract.py
@@ -60,6 +61,7 @@ python3 -m py_compile \
   scripts/verify_offline_research_engine_contract.py \
   scripts/verify_online_readiness_contract.py \
   scripts/verify_governed_legal_provider_contract.py \
+  scripts/verify_provider_access_policy_contract.py \
   scripts/verify_official_acquisition_handoff_contract.py \
   scripts/verify_hca_resource_discovery_contract.py \
   scripts/verify_docx_text_materialization_contract.py \
@@ -99,9 +101,12 @@ cargo run -p sensiblaw-proof-search-loop --example official_acquisition_compound
 echo '== online readiness preflight =='
 cargo run -p sensiblaw-proof-search-loop --example online_readiness_preflight
 
-echo 'NOTE: anchored Cullen queue v0.3 is locally validated at fc5aeec...: 202 body paragraphs,'
-echo '      163 footnotes/anchors, 190 candidates, 189 anchored footnote candidates, network=0.'
-echo '      The next step is zero-network: python3 scripts/run_local_cullen_residual_shortlist.py'
-echo '      Shortlist membership remains unreviewed candidate-only and cannot pay semantics.'
+echo 'NOTE: experimental online acquisition is already achieved.'
+echo '      Legal-host pacing remains self-capped at 1 request / 4 seconds, burst 1 unless'
+echo '      a provider publishes a stricter requirement. Missing published numeric limits'
+echo '      never mean unlimited access. HCA/FCA remain bounded/cache-first; OALC is'
+echo '      bulk-snapshot/local-first; AustLII/JADE are not default live lanes.'
+echo '      Anchored Cullen queue v0.3 is locally validated at fc5aeec...; the next semantic'
+echo '      step is the zero-network residual review shortlist, then explicit reviewed edges.'
 echo '      Exact-current-head live execution and Agda/kernel receipts remain separate.'
 echo 'LOCAL CI PASS'
