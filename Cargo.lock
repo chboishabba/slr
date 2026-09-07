@@ -440,6 +440,9 @@ dependencies = [
  "sensiblaw-evidential-reopen",
  "sensiblaw-governed-legal-provider",
  "sensiblaw-proof-search-scheduler",
+ "sha2",
+ "xml-rs",
+ "zip",
 ]
 
 [[package]]

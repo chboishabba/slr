@@ -136,6 +136,7 @@ pub fn footnotes_xml_to_canonical_footnotes(
     Ok(footnotes)
 }
 
+#[allow(dead_code)]
 pub fn extract_docx_canonical_text(bytes: &[u8]) -> Result<CanonicalDocxText, DocxTextError> {
     Ok(extract_docx_canonical_judgment(bytes)?.body)
 }

@@ -220,33 +220,38 @@ fn extract_citation_strings(text: &str) -> Vec<String> {
     out
 }
 
-fn push_candidates_for_observation(
-    candidates: &mut Vec<CitationOccurrenceCandidate>,
-    document_ref: &str,
-    source_revision_ref: &str,
-    canonical_text_sha256: &str,
+struct CandidateObservation<'a> {
+    document_ref: &'a str,
+    source_revision_ref: &'a str,
+    canonical_text_sha256: &'a str,
     ordinal: u64,
     locator: String,
     label: Option<String>,
-    observation_text: &str,
+    observation_text: &'a str,
+}
+
+fn push_candidates_for_observation(
+    candidates: &mut Vec<CitationOccurrenceCandidate>,
+    observation: CandidateObservation<'_>,
 ) {
-    let hints = treatment_hints(observation_text);
-    for citation in extract_citation_strings(observation_text) {
+    let hints = treatment_hints(observation.observation_text);
+    for citation in extract_citation_strings(observation.observation_text) {
         let duplicate = candidates.iter().any(|candidate| {
-            candidate.paragraph_locator_ref == locator && candidate.citation_text == citation
+            candidate.paragraph_locator_ref == observation.locator
+                && candidate.citation_text == citation
         });
         if duplicate {
             continue;
         }
         candidates.push(CitationOccurrenceCandidate {
-            document_ref: document_ref.to_string(),
-            source_revision_ref: source_revision_ref.to_string(),
-            canonical_text_sha256: canonical_text_sha256.to_string(),
-            paragraph_ordinal: ordinal,
-            paragraph_locator_ref: locator.clone(),
-            reported_paragraph_label: label.clone(),
+            document_ref: observation.document_ref.to_string(),
+            source_revision_ref: observation.source_revision_ref.to_string(),
+            canonical_text_sha256: observation.canonical_text_sha256.to_string(),
+            paragraph_ordinal: observation.ordinal,
+            paragraph_locator_ref: observation.locator.clone(),
+            reported_paragraph_label: observation.label.clone(),
             citation_text: citation,
-            paragraph_text: observation_text.to_string(),
+            paragraph_text: observation.observation_text.to_string(),
             lexical_treatment_hints: hints.clone(),
             reviewed: false,
             candidate_only: true,
@@ -269,13 +274,15 @@ pub fn extract_judgment_citation_candidates(
         let ordinal = index as u64 + 1;
         push_candidates_for_observation(
             &mut candidates,
-            document_ref,
-            source_revision_ref,
-            canonical_text_sha256,
-            ordinal,
-            format!("{document_ref}#paragraph-{ordinal}"),
-            reported_paragraph_label(paragraph),
-            paragraph,
+            CandidateObservation {
+                document_ref,
+                source_revision_ref,
+                canonical_text_sha256,
+                ordinal,
+                locator: format!("{document_ref}#paragraph-{ordinal}"),
+                label: reported_paragraph_label(paragraph),
+                observation_text: paragraph,
+            },
         );
     }
     candidates
@@ -299,13 +306,15 @@ pub fn extract_judgment_citation_candidates_with_footnotes(
         let ordinal = footnote_id.parse::<u64>().unwrap_or(0);
         push_candidates_for_observation(
             &mut candidates,
-            document_ref,
-            source_revision_ref,
-            canonical_text_sha256,
-            ordinal,
-            format!("{document_ref}#footnote-{footnote_id}"),
-            Some(format!("footnote:{footnote_id}")),
-            footnote_text.trim(),
+            CandidateObservation {
+                document_ref,
+                source_revision_ref,
+                canonical_text_sha256,
+                ordinal,
+                locator: format!("{document_ref}#footnote-{footnote_id}"),
+                label: Some(format!("footnote:{footnote_id}")),
+                observation_text: footnote_text.trim(),
+            },
         );
     }
     candidates
