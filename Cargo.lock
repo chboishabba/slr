@@ -45,6 +45,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "sensiblaw-proof-search-scheduler"
+version = "0.1.0"
+dependencies = [
+ "sensiblaw-legal-follow-plan",
+]
+
+[[package]]
 name = "sensiblaw-semantic-admission"
 version = "0.1.0"
 dependencies = [
