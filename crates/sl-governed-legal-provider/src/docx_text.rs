@@ -1,10 +1,10 @@
 //! Deterministic local DOCX -> canonical text materialization.
 //!
-//! This is a carrier transformation only.  It does not establish propositions,
+//! This is a carrier transformation only. It does not establish propositions,
 //! holdings, ratio, authority, applicability, treatment, truth or proof payment.
-//! The refined judgment observer preserves body text and DOCX footnote bodies as
-//! separate, stable carriers because legal authority identity commonly lives in
-//! footnotes even when the body contains only a short case name.
+//! The refined judgment observer preserves body text, DOCX footnote bodies, and
+//! the exact body-paragraph -> footnoteReference anchors needed by downstream
+//! residual-indexed review. Anchor preservation is observation, not treatment.
 
 use std::io::{Cursor, Read};
 use xml::reader::{EventReader, XmlEvent};
@@ -25,6 +25,13 @@ pub struct CanonicalDocxText {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CanonicalDocxParagraph {
+    pub paragraph_ordinal: u64,
+    pub text: String,
+    pub footnote_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CanonicalDocxFootnote {
     pub footnote_id: String,
     pub text: String,
@@ -34,6 +41,7 @@ pub struct CanonicalDocxFootnote {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CanonicalDocxJudgment {
     pub body: CanonicalDocxText,
+    pub body_paragraphs: Vec<CanonicalDocxParagraph>,
     pub footnotes: Vec<CanonicalDocxFootnote>,
 }
 
@@ -74,6 +82,65 @@ pub fn document_xml_to_canonical_text(xml: &str) -> Result<CanonicalDocxText, Do
         text: normalize_text(out),
         paragraph_count,
     })
+}
+
+pub fn document_xml_to_canonical_paragraphs(
+    xml: &str,
+) -> Result<Vec<CanonicalDocxParagraph>, DocxTextError> {
+    let parser = EventReader::new(xml.as_bytes());
+    let mut paragraphs = Vec::new();
+    let mut in_paragraph = false;
+    let mut in_text = false;
+    let mut current_text = String::new();
+    let mut current_footnote_ids = Vec::new();
+    let mut paragraph_ordinal = 0_u64;
+
+    for event in parser {
+        match event.map_err(|err| DocxTextError::InvalidDocumentXml(err.to_string()))? {
+            XmlEvent::StartElement { name, attributes, .. } => match name.local_name.as_str() {
+                "p" => {
+                    in_paragraph = true;
+                    current_text.clear();
+                    current_footnote_ids.clear();
+                }
+                "t" if in_paragraph => in_text = true,
+                "tab" if in_paragraph => current_text.push('\t'),
+                "br" | "cr" if in_paragraph => current_text.push('\n'),
+                "footnoteReference" if in_paragraph => {
+                    if let Some(id) = attributes
+                        .iter()
+                        .find(|attr| attr.name.local_name == "id")
+                        .map(|attr| attr.value.clone())
+                    {
+                        if !current_footnote_ids.contains(&id) {
+                            current_footnote_ids.push(id);
+                        }
+                    }
+                }
+                _ => {}
+            },
+            XmlEvent::EndElement { name } => match name.local_name.as_str() {
+                "t" => in_text = false,
+                "p" if in_paragraph => {
+                    paragraph_ordinal += 1;
+                    paragraphs.push(CanonicalDocxParagraph {
+                        paragraph_ordinal,
+                        text: normalize_text(current_text.clone()),
+                        footnote_ids: current_footnote_ids.clone(),
+                    });
+                    in_paragraph = false;
+                    in_text = false;
+                }
+                _ => {}
+            },
+            XmlEvent::Characters(text) | XmlEvent::CData(text) if in_text => {
+                current_text.push_str(&text);
+            }
+            _ => {}
+        }
+    }
+
+    Ok(paragraphs)
 }
 
 pub fn footnotes_xml_to_canonical_footnotes(
@@ -148,7 +215,7 @@ pub fn extract_docx_canonical_judgment(
     let mut archive = ZipArchive::new(cursor)
         .map_err(|err| DocxTextError::InvalidZip(err.to_string()))?;
 
-    let body = {
+    let (body, body_paragraphs) = {
         let mut document = archive
             .by_name("word/document.xml")
             .map_err(|err| DocxTextError::MissingDocumentXml(err.to_string()))?;
@@ -156,7 +223,10 @@ pub fn extract_docx_canonical_judgment(
         document
             .read_to_string(&mut xml)
             .map_err(|err| DocxTextError::InvalidDocumentXml(err.to_string()))?;
-        document_xml_to_canonical_text(&xml)?
+        (
+            document_xml_to_canonical_text(&xml)?,
+            document_xml_to_canonical_paragraphs(&xml)?,
+        )
     };
 
     let footnotes = match archive.by_name("word/footnotes.xml") {
@@ -170,7 +240,11 @@ pub fn extract_docx_canonical_judgment(
         Err(_) => Vec::new(),
     };
 
-    Ok(CanonicalDocxJudgment { body, footnotes })
+    Ok(CanonicalDocxJudgment {
+        body,
+        body_paragraphs,
+        footnotes,
+    })
 }
 
 #[allow(dead_code)]
@@ -179,6 +253,8 @@ pub const fn docx_text_materialization_is_semantic_payment() -> bool { false }
 pub const fn docx_text_materialization_is_legal_authority() -> bool { false }
 #[allow(dead_code)]
 pub const fn footnote_observation_is_citation_treatment() -> bool { false }
+#[allow(dead_code)]
+pub const fn footnote_anchor_is_residual_relevance() -> bool { false }
 
 #[cfg(test)]
 mod tests {
@@ -199,6 +275,28 @@ mod tests {
             materialized.text,
             "Cullen v New South Wales\n[2026] HCA 19\tpositive operational act\nduty of care\n"
         );
+    }
+
+    #[test]
+    fn body_paragraphs_preserve_footnote_reference_anchors() {
+        let xml = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    <w:p><w:r><w:t>Ordinary opening.</w:t></w:r></w:p>
+    <w:p>
+      <w:r><w:t>Liability is based upon positive acts in creating risk.</w:t></w:r>
+      <w:r><w:footnoteReference w:id="105"/></w:r>
+      <w:r><w:t> Robinson supplies the ordinary duty formulation.</w:t></w:r>
+      <w:r><w:footnoteReference w:id="106"/></w:r>
+    </w:p>
+  </w:body>
+</w:document>"#;
+        let paragraphs = document_xml_to_canonical_paragraphs(xml).unwrap();
+        assert_eq!(paragraphs.len(), 2);
+        assert_eq!(paragraphs[1].paragraph_ordinal, 2);
+        assert_eq!(paragraphs[1].footnote_ids, vec!["105", "106"]);
+        assert!(paragraphs[1].text.contains("positive acts in creating risk"));
+        assert!(!footnote_anchor_is_residual_relevance());
     }
 
     #[test]
