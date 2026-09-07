@@ -26,6 +26,12 @@ python3 scripts/verify_online_readiness_contract.py
 python3 scripts/verify_governed_legal_provider_contract.py
 python3 scripts/verify_official_acquisition_handoff_contract.py
 
+echo '== live receipt lineage (no network) =='
+python3 scripts/verify_live_receipt_lineage.py \
+  --receipt-head 9c3007be97f7e4a1e9a8bc9c7c85b92368515935 \
+  --validated-head bb6de859ca82700cba70d2784f11c39a2c4c1826 \
+  --output /tmp/sensiblaw-live-legal/live-receipt-lineage-v01.json
+
 echo '== Python syntax checks =='
 python3 -m py_compile \
   python/spacy_stream.py \
@@ -44,7 +50,8 @@ python3 -m py_compile \
   scripts/verify_online_readiness_contract.py \
   scripts/verify_governed_legal_provider_contract.py \
   scripts/verify_official_acquisition_handoff_contract.py \
-  scripts/verify_live_legal_receipt.py
+  scripts/verify_live_legal_receipt.py \
+  scripts/verify_live_receipt_lineage.py
 
 echo '== offline fixtures =='
 cargo run -p sensiblaw-proof-search-scheduler --example offline_pabai
@@ -59,7 +66,8 @@ cargo run -p sensiblaw-proof-search-loop --example official_acquisition_compound
 echo '== online readiness preflight =='
 cargo run -p sensiblaw-proof-search-loop --example online_readiness_preflight
 
-echo 'NOTE: live legal acquisition is opt-in and is not executed by CI.'
-echo '      First certification target is the official High Court source.'
-echo '      Run scripts/run_live_legal_smoke.sh explicitly when ready.'
+echo 'NOTE: bounded official HCA acquisition has been validated experimentally.'
+echo '      The retained live receipt is pinned to 9c3007...; the no-network lineage'
+echo '      audit bridges provider runtime source to locally validated bb6de85... only.'
+echo '      Exact-current-head live execution and Agda/kernel receipts remain separate.'
 echo 'LOCAL CI PASS'
