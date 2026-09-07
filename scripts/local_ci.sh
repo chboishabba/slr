@@ -12,8 +12,8 @@ cargo clippy --workspace --all-targets -- -D warnings
 echo '== cargo build --release --workspace =='
 cargo build --release --workspace
 
-echo '== live-provider feature compile =='
-cargo check -p sensiblaw-governed-legal-provider --features live-network
+echo '== live-provider feature compile (no network execution) =='
+cargo check -p sensiblaw-governed-legal-provider --features live-network --example live_austlii_smoke
 
 echo '== source contracts =='
 python3 scripts/verify_source_contract.py
@@ -41,7 +41,8 @@ python3 -m py_compile \
   scripts/verify_proof_search_loop_contract.py \
   scripts/verify_offline_research_engine_contract.py \
   scripts/verify_online_readiness_contract.py \
-  scripts/verify_governed_legal_provider_contract.py
+  scripts/verify_governed_legal_provider_contract.py \
+  scripts/verify_live_legal_receipt.py
 
 echo '== offline fixtures =='
 cargo run -p sensiblaw-proof-search-scheduler --example offline_pabai
@@ -54,5 +55,6 @@ cargo run -p sensiblaw-governed-legal-provider --example offline_replay_fixture
 echo '== online readiness preflight =='
 cargo run -p sensiblaw-proof-search-loop --example online_readiness_preflight
 
-echo 'NOTE: live_austlii_smoke is opt-in and is not executed by CI.'
+echo 'NOTE: live legal acquisition is opt-in and is not executed by CI.'
+echo '      Run scripts/run_live_legal_smoke.sh explicitly when ready.'
 echo 'LOCAL CI PASS'
