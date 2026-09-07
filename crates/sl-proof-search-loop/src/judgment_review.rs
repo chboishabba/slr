@@ -33,6 +33,10 @@ pub struct ReviewedCitationTreatmentDecision {
     pub evidence_refs: Vec<String>,
 }
 
+/// Short name used by the source-contract ABI; the longer name remains the
+/// compatibility surface for existing callers.
+pub type ReviewedCitationDecision = ReviewedCitationTreatmentDecision;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CitationReviewError {
     CandidateNotCandidateOnly,
@@ -99,6 +103,14 @@ pub fn compile_reviewed_candidate_edge(
         reviewed: true,
         candidate_only: true,
     })
+}
+
+/// Current ABI name for the locator-bound review transition.
+pub fn compile_reviewed_citation_edge(
+    candidate: &CitationOccurrenceCandidate,
+    decision: &ReviewedCitationDecision,
+) -> Result<PropositionReasoningEdge, CitationReviewError> {
+    compile_reviewed_candidate_edge(candidate, decision)
 }
 
 pub const fn lexical_hint_can_auto_compile_reviewed_edge() -> bool {

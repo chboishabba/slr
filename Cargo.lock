@@ -440,6 +440,8 @@ dependencies = [
  "sensiblaw-evidential-reopen",
  "sensiblaw-governed-legal-provider",
  "sensiblaw-proof-search-scheduler",
+ "serde",
+ "serde_json",
  "sha2",
  "xml-rs",
  "zip",
