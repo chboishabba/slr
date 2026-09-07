@@ -13,8 +13,10 @@ use std::collections::BTreeMap;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CitationReviewUnit {
     pub review_unit_ref: String,
-    pub citation_text: String,
+    pub document_ref: String,
     pub source_revision_ref: String,
+    pub canonical_text_sha256: String,
+    pub citation_text: String,
     pub citation_locator_refs: Vec<String>,
     pub anchor_paragraph_locator_refs: Vec<String>,
     pub anchor_paragraph_texts: Vec<String>,
@@ -25,8 +27,10 @@ pub struct CitationReviewUnit {
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 struct ReviewUnitKey {
-    citation_text: String,
+    document_ref: String,
     source_revision_ref: String,
+    canonical_text_sha256: String,
+    citation_text: String,
     anchor_locator_refs: Vec<String>,
     anchor_texts: Vec<String>,
 }
@@ -34,8 +38,10 @@ struct ReviewUnitKey {
 fn unit_ref(key: &ReviewUnitKey) -> String {
     let mut bytes = Vec::new();
     for value in [
-        &key.citation_text,
+        &key.document_ref,
         &key.source_revision_ref,
+        &key.canonical_text_sha256,
+        &key.citation_text,
         &key.anchor_locator_refs.join("\u{1f}"),
         &key.anchor_texts.join("\u{1f}"),
     ] {
@@ -46,7 +52,8 @@ fn unit_ref(key: &ReviewUnitKey) -> String {
     format!("review-unit:sha256:{:x}", Sha256::digest(bytes))
 }
 
-/// Quotient shortlisted occurrences by exact authority + body-anchor context.
+/// Quotient shortlisted occurrences by exact document + source revision +
+/// authority + body-anchor context.
 ///
 /// All input occurrences are retained as locator refs.  This is a review
 /// scheduling quotient only: it does not compile a treatment, reasoning edge,
@@ -58,15 +65,19 @@ pub fn cluster_shortlisted_citations(
     for item in shortlisted {
         let candidate = &item.candidate;
         let key = ReviewUnitKey {
-            citation_text: candidate.citation_text.clone(),
+            document_ref: candidate.document_ref.clone(),
             source_revision_ref: candidate.source_revision_ref.clone(),
+            canonical_text_sha256: candidate.canonical_text_sha256.clone(),
+            citation_text: candidate.citation_text.clone(),
             anchor_locator_refs: candidate.anchor_paragraph_locator_refs.clone(),
             anchor_texts: candidate.anchor_paragraph_texts.clone(),
         };
         let entry = grouped.entry(key.clone()).or_insert_with(|| CitationReviewUnit {
             review_unit_ref: unit_ref(&key),
-            citation_text: key.citation_text.clone(),
+            document_ref: key.document_ref.clone(),
             source_revision_ref: key.source_revision_ref.clone(),
+            canonical_text_sha256: key.canonical_text_sha256.clone(),
+            citation_text: key.citation_text.clone(),
             citation_locator_refs: Vec::new(),
             anchor_paragraph_locator_refs: key.anchor_locator_refs.clone(),
             anchor_paragraph_texts: key.anchor_texts.clone(),
@@ -135,6 +146,8 @@ mod tests {
             item("[2018] AC 736", "document:cullen#footnote-44", "document:cullen#paragraph-89"),
         ]);
         assert_eq!(units.len(), 1);
+        assert_eq!(units[0].document_ref, "document:cullen");
+        assert_eq!(units[0].canonical_text_sha256, "sha256:text");
         assert_eq!(units[0].citation_locator_refs.len(), 2);
         assert!(units[0].candidate_only);
         assert!(!review_unit_is_semantic_payment(&units[0]));
