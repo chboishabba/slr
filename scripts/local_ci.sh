@@ -12,9 +12,10 @@ cargo clippy --workspace --all-targets -- -D warnings
 echo '== cargo build --release --workspace =='
 cargo build --release --workspace
 
-echo '== live-provider feature compile (no network execution) =='
+echo '== live/provider-derived feature compile (no network execution) =='
 cargo check -p sensiblaw-governed-legal-provider --features live-network --example live_austlii_smoke
 cargo check -p sensiblaw-governed-legal-provider --features live-network --example live_hca_judgment_docx_smoke
+cargo check -p sensiblaw-proof-search-loop --example live_cullen_citation_review_queue
 
 echo '== source contracts =='
 python3 scripts/verify_source_contract.py
@@ -66,7 +67,9 @@ python3 -m py_compile \
   scripts/verify_judgment_review_gate_contract.py \
   scripts/verify_live_legal_receipt.py \
   scripts/verify_live_hca_judgment_receipt.py \
-  scripts/verify_live_receipt_lineage.py
+  scripts/verify_live_receipt_lineage.py \
+  scripts/run_local_cullen_review_queue.py \
+  scripts/verify_live_cullen_review_queue.py
 
 echo '== offline fixtures =='
 cargo run -p sensiblaw-proof-search-scheduler --example offline_pabai
@@ -89,13 +92,10 @@ cargo run -p sensiblaw-proof-search-loop --example official_acquisition_compound
 echo '== online readiness preflight =='
 cargo run -p sensiblaw-proof-search-loop --example online_readiness_preflight
 
-echo 'NOTE: bounded official HCA landing acquisition has been validated experimentally.'
-echo '      Resource discovery is zero-network and prefers the official DOCX for PNF.'
-echo '      DOCX -> canonical text -> existing PNF bridge is validated offline before live use.'
-echo '      Canonical text -> paragraph-located citation candidates is pre-review/candidate-only.'
-echo '      CitationUse/ReasoningRole promotion requires explicit locator-bound review evidence.'
-echo '      Governed research acquisition must bind to the exact open residual/proposition/producer.'
-echo '      The next opt-in step is scripts/run_live_hca_judgment_smoke.sh, which first emits'
-echo '      a residual-bound permit, then reuses the landing page and spends at most one DOCX request.'
+echo 'NOTE: full HCA DOCX materialization has been validated experimentally at runtime head 516867c...'
+echo '      The repair head acd6a25... changes only the escaped-JSON contract checker.'
+echo '      The next step is zero-network: python3 scripts/run_local_cullen_review_queue.py'
+echo '      against the retained judgment.txt and full-judgment receipt.'
+echo '      Extracted citations remain unreviewed candidate-only until locator-bound review.'
 echo '      Exact-current-head live execution and Agda/kernel receipts remain separate.'
 echo 'LOCAL CI PASS'
