@@ -223,8 +223,10 @@ mod tests {
             termination: ResearchTermination::ClosedCandidate,
             transition_authority: "experimental_candidate_only",
         };
-        let mut world = ResearchWorldSnapshot::default();
-        world.snapshot_ref = "world:1".into();
+        let mut world = ResearchWorldSnapshot {
+            snapshot_ref: "world:1".into(),
+            ..ResearchWorldSnapshot::default()
+        };
         world.query_vocabulary.insert("positive operational act".into());
         let receipt = build_frontier_iteration_receipt_v02(
             base,
