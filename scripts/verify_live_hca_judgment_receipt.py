@@ -33,6 +33,7 @@ def main() -> None:
         raise SystemExit("judgment document reference must stay on official HCA host")
 
     document = data.get("document_fetch") or {}
+    canonical = data.get("canonical_text") or {}
     replay = data.get("replay_run") or {}
     if document.get("network_requests") != 1:
         raise SystemExit("judgment document fetch must consume exactly one request")
@@ -40,16 +41,25 @@ def main() -> None:
         raise SystemExit("judgment document must pass through local ingestion")
     if not str(document.get("bytes_digest", "")).startswith("sha256:"):
         raise SystemExit("judgment document must retain SHA256 bytes identity")
+    if canonical.get("locally_materialized") is not True:
+        raise SystemExit("judgment DOCX must materialize canonical local text")
+    if not str(canonical.get("sha256", "")).startswith("sha256:"):
+        raise SystemExit("canonical text must retain SHA256 identity")
+    if not isinstance(canonical.get("paragraph_count"), int) or canonical["paragraph_count"] <= 0:
+        raise SystemExit("canonical text must retain a positive paragraph count")
     if replay.get("network_requests") != 0 or replay.get("resolution") != "Persisted":
         raise SystemExit("judgment document replay must resolve persisted with zero network")
     if data.get("document_fetch_claimed_semantic_payment") is not False:
         raise SystemExit("document acquisition cannot claim semantic payment")
     if data.get("document_fetch_claimed_legal_authority") is not False:
         raise SystemExit("document acquisition cannot claim legal authority")
+    if data.get("canonical_text_claimed_semantic_payment") is not False:
+        raise SystemExit("canonical text materialization cannot claim semantic payment")
 
     print(
         "official HCA judgment acquisition receipt PASS "
-        f"head={data['runtime_head']} landing=0 document=1 replay=0"
+        f"head={data['runtime_head']} landing=0 document=1 replay=0 "
+        f"paragraphs={canonical['paragraph_count']}"
     )
 
 
