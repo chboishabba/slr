@@ -19,6 +19,7 @@ python3 scripts/verify_legal_counterfactual_contract.py
 python3 scripts/verify_proof_search_scheduler_contract.py
 python3 scripts/verify_proof_search_loop_contract.py
 python3 scripts/verify_offline_research_engine_contract.py
+python3 scripts/verify_online_readiness_contract.py
 
 echo '== Python syntax checks =='
 python3 -m py_compile \
@@ -34,7 +35,8 @@ python3 -m py_compile \
   scripts/verify_legal_counterfactual_contract.py \
   scripts/verify_proof_search_scheduler_contract.py \
   scripts/verify_proof_search_loop_contract.py \
-  scripts/verify_offline_research_engine_contract.py
+  scripts/verify_offline_research_engine_contract.py \
+  scripts/verify_online_readiness_contract.py
 
 echo '== offline fixtures =='
 cargo run -p sensiblaw-proof-search-scheduler --example offline_pabai
