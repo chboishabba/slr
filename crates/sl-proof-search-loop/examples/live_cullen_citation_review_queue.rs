@@ -1,6 +1,12 @@
+#[path = "../../sl-governed-legal-provider/src/docx_text.rs"]
+mod docx_text;
+
+use docx_text::extract_docx_canonical_judgment;
 use sensiblaw_proof_search_loop::judgment_candidates::{
-    extract_judgment_citation_candidates, CitationOccurrenceCandidate, LexicalTreatmentHint,
+    extract_judgment_citation_candidates_with_footnotes, CitationOccurrenceCandidate,
+    LexicalTreatmentHint,
 };
+use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::PathBuf;
 
@@ -70,23 +76,48 @@ fn required_env(name: &str) -> String {
     std::env::var(name).unwrap_or_else(|_| panic!("missing required environment variable {name}"))
 }
 
+fn refined_observer_text(body: &str, footnotes: &[(String, String)]) -> String {
+    let mut out = String::from(body);
+    for (id, text) in footnotes {
+        out.push_str("\n[[footnote:");
+        out.push_str(id);
+        out.push_str("]]\n");
+        out.push_str(text);
+        if !out.ends_with('\n') {
+            out.push('\n');
+        }
+    }
+    out
+}
+
 fn main() {
-    let text_path = PathBuf::from(required_env("SENSIBLAW_CANONICAL_JUDGMENT_TEXT"));
+    let docx_path = PathBuf::from(required_env("SENSIBLAW_JUDGMENT_DOCX"));
     let output_path = PathBuf::from(required_env("SENSIBLAW_CULLEN_REVIEW_QUEUE"));
     let document_ref = required_env("SENSIBLAW_DOCUMENT_REF");
     let source_revision_ref = required_env("SENSIBLAW_SOURCE_REVISION_REF");
-    let canonical_text_sha256 = required_env("SENSIBLAW_CANONICAL_TEXT_SHA256");
+    let body_only_text_sha256 = required_env("SENSIBLAW_CANONICAL_TEXT_SHA256");
     let residual_ref = required_env("SENSIBLAW_BOUND_RESIDUAL_REF");
     let proposition_ref = required_env("SENSIBLAW_BOUND_PROPOSITION_REF");
     let producer_ref = required_env("SENSIBLAW_BOUND_PRODUCER_REF");
     let hypothesis_ref = required_env("SENSIBLAW_BOUND_HYPOTHESIS_REF");
 
-    let text = fs::read_to_string(&text_path).expect("read canonical judgment text");
-    let candidates = extract_judgment_citation_candidates(
+    let docx_bytes = fs::read(&docx_path).expect("read retained official judgment DOCX");
+    let judgment = extract_docx_canonical_judgment(&docx_bytes)
+        .expect("materialize body plus footnote judgment observer");
+    let footnotes = judgment
+        .footnotes
+        .iter()
+        .map(|footnote| (footnote.footnote_id.clone(), footnote.text.clone()))
+        .collect::<Vec<_>>();
+    let refined_text = refined_observer_text(&judgment.body.text, &footnotes);
+    let refined_sha256 = format!("sha256:{:x}", Sha256::digest(refined_text.as_bytes()));
+
+    let candidates = extract_judgment_citation_candidates_with_footnotes(
         &document_ref,
         &source_revision_ref,
-        &canonical_text_sha256,
-        &text,
+        &refined_sha256,
+        &judgment.body.text,
+        &footnotes,
     );
 
     let body = candidates
@@ -97,7 +128,7 @@ fn main() {
     let receipt = format!(
         concat!(
             "{{\n",
-            "  \"schema_version\": \"sl.judgment_citation_review_queue.v0_1\",\n",
+            "  \"schema_version\": \"sl.judgment_citation_review_queue.v0_2\",\n",
             "  \"authority\": \"experimental_candidate_only\",\n",
             "  \"network_requests\": 0,\n",
             "  \"binding\": {{",
@@ -108,7 +139,13 @@ fn main() {
             "}},\n",
             "  \"document_ref\": \"{}\",\n",
             "  \"source_revision_ref\": \"{}\",\n",
+            "  \"body_only_canonical_text_sha256\": \"{}\",\n",
             "  \"canonical_text_sha256\": \"{}\",\n",
+            "  \"observer_refinement\": {{",
+            "\"body_footnotes_preserved\":true,",
+            "\"body_paragraph_count\":{},",
+            "\"footnote_count\":{}",
+            "}},\n",
             "  \"candidate_count\": {},\n",
             "  \"all_candidates_reviewed\": false,\n",
             "  \"candidate_extraction_claimed_semantic_correspondence\": false,\n",
@@ -123,7 +160,10 @@ fn main() {
         json_escape(&hypothesis_ref),
         json_escape(&document_ref),
         json_escape(&source_revision_ref),
-        json_escape(&canonical_text_sha256),
+        json_escape(&body_only_text_sha256),
+        json_escape(&refined_sha256),
+        judgment.body.paragraph_count,
+        footnotes.len(),
         candidates.len(),
         body,
     );
@@ -133,8 +173,9 @@ fn main() {
     }
     fs::write(&output_path, receipt).expect("write citation review queue");
     println!(
-        "cullen_review_queue={} candidates={} network=0 authority=experimental_candidate_only",
+        "cullen_review_queue={} candidates={} footnotes={} network=0 authority=experimental_candidate_only",
         output_path.display(),
-        candidates.len()
+        candidates.len(),
+        footnotes.len(),
     );
 }
