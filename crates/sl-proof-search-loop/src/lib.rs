@@ -18,6 +18,7 @@ pub mod reasoning;
 pub mod receipt;
 pub mod transition;
 pub mod world;
+pub mod world_acquisition;
 
 #[path = "legacy.rs"]
 mod legacy;
