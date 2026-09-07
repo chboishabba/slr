@@ -21,6 +21,7 @@ pub mod provider;
 pub mod query;
 pub mod reasoning;
 pub mod receipt;
+pub mod residual_review_shortlist;
 pub mod transition;
 pub mod world;
 pub mod world_acquisition;
