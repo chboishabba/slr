@@ -20,6 +20,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "sensiblaw-legal-counterfactual"
+version = "0.1.0"
+dependencies = [
+ "sensiblaw-semantic-status",
+]
+
+[[package]]
 name = "sensiblaw-parity"
 version = "0.1.0"
 dependencies = [
@@ -39,6 +46,14 @@ name = "sensiblaw-semantic-expansion"
 version = "0.1.0"
 dependencies = [
  "sensiblaw-core",
+]
+
+[[package]]
+name = "sensiblaw-semantic-status"
+version = "0.1.0"
+dependencies = [
+ "sensiblaw-core",
+ "sensiblaw-semantic-expansion",
 ]
 
 [[package]]
