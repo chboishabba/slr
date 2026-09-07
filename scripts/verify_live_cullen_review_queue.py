@@ -5,11 +5,13 @@ import argparse
 import json
 from pathlib import Path
 
-SCHEMA = "sl.judgment_citation_review_queue.v0_2"
+SCHEMA = "sl.judgment_citation_review_queue.v0_3"
 AUTHORITY = "experimental_candidate_only"
 SELF_CITATION = "[2026] HCA 19"
 MALLONLAND_REPORTED = "(2024) 98 ALJR 956"
 MALLONLAND_PARALLEL = "418 ALR 639"
+ROBINSON_REPORTED = "[2018] AC 736"
+MODBURY_REPORTED = "(2000) 205 CLR 254"
 
 
 def main() -> None:
@@ -49,10 +51,14 @@ def main() -> None:
     refinement = data.get("observer_refinement") or {}
     if refinement.get("body_footnotes_preserved") is not True:
         raise SystemExit("refined observer must preserve DOCX footnotes")
+    if refinement.get("body_footnote_anchors_preserved") is not True:
+        raise SystemExit("v0.3 observer must preserve body-to-footnote anchors")
     if int(refinement.get("body_paragraph_count", 0)) <= 0:
         raise SystemExit("refined observer lost body paragraphs")
     if int(refinement.get("footnote_count", 0)) <= 0:
         raise SystemExit("refined observer found no material footnotes")
+    if int(refinement.get("footnote_anchor_count", 0)) <= 0:
+        raise SystemExit("refined observer found no body-to-footnote anchors")
 
     candidates = data.get("candidates") or []
     if data.get("candidate_count") != len(candidates):
@@ -65,12 +71,17 @@ def main() -> None:
         "candidate_extraction_claimed_semantic_correspondence",
         "candidate_extraction_claimed_citation_treatment",
         "candidate_extraction_claimed_current_authority",
+        "anchor_observation_claimed_residual_payment",
     ]:
         if data.get(forbidden_claim) is not False:
             raise SystemExit(f"review queue made forbidden claim: {forbidden_claim}")
 
     citations = set()
     footnote_candidates = 0
+    anchored_footnote_candidates = 0
+    robinson_positive_act_anchor = False
+    modbury_positive_act_anchor = False
+
     for candidate in candidates:
         if candidate.get("reviewed") is not False or candidate.get("candidate_only") is not True:
             raise SystemExit("every extracted citation occurrence must remain unreviewed candidate-only")
@@ -81,23 +92,46 @@ def main() -> None:
         locator = str(candidate.get("paragraph_locator_ref", ""))
         if not locator:
             raise SystemExit("candidate missing stable source locator")
-        if "#footnote-" in locator:
-            footnote_candidates += 1
         citation = str(candidate.get("citation_text", ""))
         if not citation:
             raise SystemExit("candidate missing citation text")
         citations.add(citation)
 
-    if footnote_candidates == 0:
-        raise SystemExit("refined queue exposed no footnote-located authority candidates")
+        anchors = candidate.get("anchor_paragraph_locator_refs") or []
+        anchor_texts = candidate.get("anchor_paragraph_texts") or []
+        if len(anchors) != len(anchor_texts):
+            raise SystemExit("candidate anchor locator/text arity mismatch")
+
+        if "#footnote-" in locator:
+            footnote_candidates += 1
+            if anchors:
+                anchored_footnote_candidates += 1
+
+        lowered_anchor = " ".join(str(text).lower() for text in anchor_texts)
+        if citation == ROBINSON_REPORTED and "positive acts in creating risk" in lowered_anchor:
+            robinson_positive_act_anchor = True
+        if citation == MODBURY_REPORTED and "positive acts in creating risk" in lowered_anchor:
+            modbury_positive_act_anchor = True
+
+    if data.get("footnote_candidate_count") != footnote_candidates:
+        raise SystemExit("footnote_candidate_count does not match candidates")
+    if data.get("anchored_footnote_candidate_count") != anchored_footnote_candidates:
+        raise SystemExit("anchored_footnote_candidate_count does not match candidates")
+    if anchored_footnote_candidates == 0:
+        raise SystemExit("v0.3 queue exposed no anchored footnote candidates")
     if not any(citation != SELF_CITATION for citation in citations):
         raise SystemExit("refined queue still exposes no substantive non-self authority")
     if MALLONLAND_REPORTED not in citations or MALLONLAND_PARALLEL not in citations:
-        raise SystemExit("refined Cullen queue did not recover Mallonland's reported/parallel citations")
+        raise SystemExit("refined Cullen queue lost Mallonland reporter identities")
+    if not robinson_positive_act_anchor:
+        raise SystemExit("Cullen queue did not anchor Robinson to the positive-acts proposition context")
+    if not modbury_positive_act_anchor:
+        raise SystemExit("Cullen queue did not anchor Modbury to the positive-acts proposition context")
 
     print(
-        "live Cullen citation review queue PASS "
+        "live Cullen anchored citation review queue PASS "
         f"candidates={len(candidates)} footnote_candidates={footnote_candidates} "
+        f"anchored_footnote_candidates={anchored_footnote_candidates} "
         f"network=0 authority={AUTHORITY}"
     )
 
