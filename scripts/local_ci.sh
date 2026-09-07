@@ -16,6 +16,7 @@ echo '== live/provider-derived feature compile (no network execution) =='
 cargo check -p sensiblaw-governed-legal-provider --features live-network --example live_austlii_smoke
 cargo check -p sensiblaw-governed-legal-provider --features live-network --example live_hca_judgment_docx_smoke
 cargo check -p sensiblaw-proof-search-loop --example live_cullen_citation_review_queue
+cargo check -p sensiblaw-proof-search-loop --example live_cullen_residual_review_shortlist
 
 echo '== source contracts =='
 python3 scripts/verify_source_contract.py
@@ -34,6 +35,7 @@ python3 scripts/verify_residual_bound_acquisition_contract.py
 python3 scripts/verify_judgment_candidate_extraction_contract.py
 python3 scripts/verify_judgment_review_gate_contract.py
 python3 scripts/verify_live_cullen_review_queue_contract.py
+python3 scripts/verify_live_cullen_residual_shortlist_contract.py
 
 echo '== live receipt lineage (no network) =='
 python3 scripts/verify_live_receipt_lineage.py \
@@ -71,7 +73,10 @@ python3 -m py_compile \
   scripts/verify_live_receipt_lineage.py \
   scripts/run_local_cullen_review_queue.py \
   scripts/verify_live_cullen_review_queue.py \
-  scripts/verify_live_cullen_review_queue_contract.py
+  scripts/verify_live_cullen_review_queue_contract.py \
+  scripts/run_local_cullen_residual_shortlist.py \
+  scripts/verify_live_cullen_residual_shortlist.py \
+  scripts/verify_live_cullen_residual_shortlist_contract.py
 
 echo '== offline fixtures =='
 cargo run -p sensiblaw-proof-search-scheduler --example offline_pabai
@@ -94,11 +99,9 @@ cargo run -p sensiblaw-proof-search-loop --example official_acquisition_compound
 echo '== online readiness preflight =='
 cargo run -p sensiblaw-proof-search-loop --example online_readiness_preflight
 
-echo 'NOTE: full HCA DOCX materialization has been validated experimentally at runtime head 516867c...'
-echo '      The repair head acd6a25... changes only the escaped-JSON contract checker.'
-echo '      The next step is zero-network: python3 scripts/run_local_cullen_review_queue.py'
-echo '      against retained judgment.docx; the refined observer preserves body + footnotes.'
-echo '      Queue v0.2 must recover substantive reported authorities including Mallonland.'
-echo '      Extracted citations remain unreviewed candidate-only until locator-bound review.'
+echo 'NOTE: anchored Cullen queue v0.3 is locally validated at fc5aeec...: 202 body paragraphs,'
+echo '      163 footnotes/anchors, 190 candidates, 189 anchored footnote candidates, network=0.'
+echo '      The next step is zero-network: python3 scripts/run_local_cullen_residual_shortlist.py'
+echo '      Shortlist membership remains unreviewed candidate-only and cannot pay semantics.'
 echo '      Exact-current-head live execution and Agda/kernel receipts remain separate.'
 echo 'LOCAL CI PASS'
