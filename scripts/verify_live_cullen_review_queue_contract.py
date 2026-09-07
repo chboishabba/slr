@@ -9,12 +9,15 @@ candidates = (ROOT / "crates/sl-proof-search-loop/src/judgment_candidates.rs").r
 observer = (ROOT / "crates/sl-governed-legal-provider/src/docx_text.rs").read_text(encoding="utf-8")
 
 required_example = [
-    "sl.judgment_citation_review_queue.v0_2",
+    "sl.judgment_citation_review_queue.v0_3",
     "extract_docx_canonical_judgment",
-    "extract_judgment_citation_candidates_with_footnotes",
+    "extract_judgment_citation_candidates_with_footnotes_and_anchors",
+    "FootnoteAnchorObservation",
     "body_only_canonical_text_sha256",
     "body_footnotes_preserved",
-    "footnote_count",
+    "body_footnote_anchors_preserved",
+    "footnote_anchor_count",
+    "anchored_footnote_candidate_count",
     "SENSIBLAW_BOUND_RESIDUAL_REF",
     "SENSIBLAW_BOUND_PROPOSITION_REF",
     "SENSIBLAW_BOUND_PRODUCER_REF",
@@ -24,6 +27,7 @@ required_example = [
     '"candidate_extraction_claimed_semantic_correspondence\\\": false',
     '"candidate_extraction_claimed_citation_treatment\\\": false',
     '"candidate_extraction_claimed_current_authority\\\": false',
+    '"anchor_observation_claimed_residual_payment\\\": false',
 ]
 missing = [needle for needle in required_example if needle not in example]
 if missing:
@@ -32,6 +36,7 @@ if missing:
 required_runner = [
     "governed-official-judgment-acquisition-v01.json",
     "judgment.docx",
+    "cullen-citation-review-queue-v03.json",
     "landing_page_network_requests",
     "document_fetch",
     "replay_run",
@@ -48,11 +53,15 @@ required_verifier = [
     "prop:cullen-positive-operational-duty",
     "producer:exact-primary-authority",
     "body_footnotes_preserved",
-    "footnote_count",
+    "body_footnote_anchors_preserved",
+    "footnote_anchor_count",
     "(2024) 98 ALJR 956",
     "418 ALR 639",
-    "candidate_count",
-    "paragraph_locator_ref",
+    "[2018] AC 736",
+    "(2000) 205 CLR 254",
+    "positive acts in creating risk",
+    "anchored_footnote_candidate_count",
+    "anchor_paragraph_locator_refs",
     "reviewed",
     "candidate_only",
 ]
@@ -61,28 +70,33 @@ if missing:
     raise SystemExit(f"live Cullen review queue verifier missing fail-closed checks: {missing}")
 
 for needle in (
-    "footnotes_xml_to_canonical_footnotes",
+    "document_xml_to_canonical_paragraphs",
+    "footnoteReference",
+    "CanonicalDocxParagraph",
     "word/footnotes.xml",
     "CanonicalDocxFootnote",
+    "footnote_anchor_is_residual_relevance",
 ):
     if needle not in observer:
-        raise SystemExit(f"refined observer lost footnote carrier: {needle}")
+        raise SystemExit(f"anchored observer lost required carrier: {needle}")
 
 for needle in (
     "extract_reported_citation_strings",
-    "extract_judgment_citation_candidates_with_footnotes",
-    "#footnote-",
-    "footnote_citation_candidate_is_treatment",
+    "extract_judgment_citation_candidates_with_footnotes_and_anchors",
+    "FootnoteAnchorObservation",
+    "anchor_paragraph_locator_refs",
+    "anchor_paragraph_texts",
+    "footnote_anchor_is_residual_payment",
 ):
     if needle not in candidates:
-        raise SystemExit(f"citation extractor lost footnote/reporter support: {needle}")
+        raise SystemExit(f"citation extractor lost anchor/reporter support: {needle}")
 
 for forbidden in ["ureq", "reqwest", "TcpStream", "std::net", "fetch_hca", "austlii_search", "jade_search"]:
     if forbidden in example or forbidden in runner:
         raise SystemExit(f"zero-network Cullen review queue gained forbidden network capability: {forbidden}")
 
-for forbidden in ["legal_holding_claimed = true", "current_authority = true", "semantic_payment = true"]:
+for forbidden in ["legal_holding_claimed = true", "current_authority = true", "semantic_payment = true", "residual_payment = true"]:
     if forbidden in example or forbidden in candidates:
         raise SystemExit(f"review queue gained forbidden semantic promotion: {forbidden}")
 
-print("live Cullen citation review queue contract PASS")
+print("live Cullen anchored citation review queue contract PASS")
