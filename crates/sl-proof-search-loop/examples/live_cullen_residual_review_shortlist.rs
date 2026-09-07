@@ -2,7 +2,10 @@
 mod docx_text;
 
 use docx_text::extract_docx_canonical_judgment;
-use sensiblaw_proof_search_loop::judgment_candidates::extract_judgment_citation_candidates_with_footnotes_and_anchors;
+use sensiblaw_proof_search_loop::judgment_candidates::{
+    extract_judgment_citation_candidates_with_footnotes_and_anchors,
+    FootnoteAnchorObservation,
+};
 use sensiblaw_proof_search_loop::residual_review_shortlist::{
     shortlist_anchored_citations_for_residual, ResidualAnchorCriterion,
     ResidualCitationReviewDemand, ResidualShortlistedCitation,
@@ -104,12 +107,12 @@ fn main() {
         .body_paragraphs
         .iter()
         .flat_map(|paragraph| {
-            paragraph.footnote_reference_ids.iter().map(|footnote_id| {
-                (
-                    footnote_id.clone(),
-                    format!("{document_ref}#paragraph-{}", paragraph.paragraph_ordinal),
-                    paragraph.text.clone(),
-                )
+            paragraph.footnote_ids.iter().map(|footnote_id| {
+                FootnoteAnchorObservation {
+                    footnote_id: footnote_id.clone(),
+                    paragraph_ordinal: paragraph.paragraph_ordinal,
+                    paragraph_text: paragraph.text.clone(),
+                }
             })
         })
         .collect::<Vec<_>>();
