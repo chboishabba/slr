@@ -12,8 +12,8 @@ RECEIPT = Path(os.environ.get(
     "SENSIBLAW_HCA_JUDGMENT_RECEIPT",
     str(LIVE_DIR / "governed-official-judgment-acquisition-v01.json"),
 ))
-TEXT = Path(os.environ.get("SENSIBLAW_CANONICAL_JUDGMENT_TEXT", str(LIVE_DIR / "judgment.txt")))
-OUTPUT = Path(os.environ.get("SENSIBLAW_CULLEN_REVIEW_QUEUE", str(LIVE_DIR / "cullen-citation-review-queue-v01.json")))
+DOCX = Path(os.environ.get("SENSIBLAW_JUDGMENT_DOCX", str(LIVE_DIR / "judgment.docx")))
+OUTPUT = Path(os.environ.get("SENSIBLAW_CULLEN_REVIEW_QUEUE", str(LIVE_DIR / "cullen-citation-review-queue-v02.json")))
 
 
 def require(condition: bool, message: str) -> None:
@@ -23,7 +23,7 @@ def require(condition: bool, message: str) -> None:
 
 def main() -> None:
     require(RECEIPT.is_file(), f"missing full-judgment receipt: {RECEIPT}")
-    require(TEXT.is_file(), f"missing canonical judgment text: {TEXT}")
+    require(DOCX.is_file(), f"missing retained official judgment DOCX: {DOCX}")
     data = json.loads(RECEIPT.read_text(encoding="utf-8"))
     require(data.get("schema_version") == "sl.governed_official_judgment_acquisition.v0_1", "unexpected full-judgment receipt schema")
     require(data.get("authority") == "experimental_candidate_only", "full-judgment receipt must remain candidate-only")
@@ -37,7 +37,7 @@ def main() -> None:
     canonical = data.get("canonical_text") or {}
     document = data.get("document_fetch") or {}
     required = {
-        "SENSIBLAW_CANONICAL_JUDGMENT_TEXT": str(TEXT),
+        "SENSIBLAW_JUDGMENT_DOCX": str(DOCX),
         "SENSIBLAW_CULLEN_REVIEW_QUEUE": str(OUTPUT),
         "SENSIBLAW_DOCUMENT_REF": data.get("document_source_identity_ref") or data.get("source_identity_ref") or "document:hca:[2026]-HCA-19:docx",
         "SENSIBLAW_SOURCE_REVISION_REF": document.get("source_revision_ref", ""),
