@@ -7,8 +7,6 @@
 //! The scheduler owns no HTTP. Search returns references, fetch returns bytes,
 //! and semantic/legal interpretation begins only after local ingestion/review.
 
-pub mod docx_text;
-
 use std::collections::BTreeMap;
 use std::thread;
 use std::time::{Duration, Instant};
@@ -144,7 +142,7 @@ pub fn lookup_oalc_exact_mnc(snapshot: &OalcSnapshot, citation: &str) -> Option<
         .find(|record| record.citation == citation)
         .map(|record| OalcLookupReceipt {
             corpus_revision_ref: snapshot.corpus_revision_ref.clone(),
-            citation: record.citation.clone(),
+            citation: citation.to_string(),
             source_identity_ref: record.source_identity_ref.clone(),
             source_revision_ref: record.source_revision_ref.clone(),
             canonical_text_digest: record.canonical_text_digest.clone(),
@@ -152,6 +150,31 @@ pub fn lookup_oalc_exact_mnc(snapshot: &OalcSnapshot, citation: &str) -> Option<
             network_requests: 0,
             receipt_authority: RECEIPT_AUTHORITY,
         })
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResolutionContext {
+    pub persisted: Vec<PersistedAuthorityReceipt>,
+    pub oalc_exact_mnc_citations: Vec<String>,
+    pub official_hca_available: bool,
+    pub official_fca_available: bool,
+    pub jade_exact_mnc_available: bool,
+    pub deterministic_austlii_mnc_available: bool,
+    pub austlii_search_allowed: bool,
+}
+
+impl Default for ResolutionContext {
+    fn default() -> Self {
+        Self {
+            persisted: Vec::new(),
+            oalc_exact_mnc_citations: Vec::new(),
+            official_hca_available: true,
+            official_fca_available: true,
+            jade_exact_mnc_available: false,
+            deterministic_austlii_mnc_available: true,
+            austlii_search_allowed: false,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -163,13 +186,323 @@ pub struct LiveGovernanceBounds {
     pub max_network_requests: u64,
 }
 
-pub const CANONICAL_LIVE_BOUNDS: LiveGovernanceBounds = LiveGovernanceBounds {
-    minimum_pacing_seconds: 4,
-    burst: 1,
-    max_depth: 1,
-    max_new_documents: 5,
-    max_network_requests: 1,
-};
+impl LiveGovernanceBounds {
+    pub const HISTORICAL_DEFAULT: Self = Self {
+        minimum_pacing_seconds: 4,
+        burst: 1,
+        max_depth: 1,
+        max_new_documents: 5,
+        max_network_requests: 6,
+    };
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ResolutionStage {
+    Persisted { source_revision_ref: String },
+    OalcExactMnc { citation: String },
+    OfficialHighCourt { citation: String, reference: Option<String> },
+    OfficialFederalCourt { citation: String, reference: Option<String> },
+    ExplicitAustLII { reference: String },
+    JadeExactMnc { citation: String },
+    DeterministicMncToAustLII { citation: String },
+    AustLIIReferenceSearch { citation: String },
+    Unresolved,
+}
+
+impl ResolutionStage {
+    pub const fn provider(&self) -> Option<LegalProvider> {
+        match self {
+            Self::Persisted { .. } => Some(LegalProvider::Local),
+            Self::OalcExactMnc { .. } => Some(LegalProvider::Oalc),
+            Self::OfficialHighCourt { .. } => Some(LegalProvider::HighCourtAustralia),
+            Self::OfficialFederalCourt { .. } => Some(LegalProvider::FederalCourtAustralia),
+            Self::ExplicitAustLII { .. }
+            | Self::DeterministicMncToAustLII { .. }
+            | Self::AustLIIReferenceSearch { .. } => Some(LegalProvider::AustLII),
+            Self::JadeExactMnc { .. } => Some(LegalProvider::Jade),
+            Self::Unresolved => None,
+        }
+    }
+
+    pub const fn is_live_candidate(&self) -> bool {
+        matches!(
+            self,
+            Self::OfficialHighCourt { .. }
+                | Self::OfficialFederalCourt { .. }
+                | Self::JadeExactMnc { .. }
+                | Self::AustLIIReferenceSearch { .. }
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct KnownAuthorityResolution {
+    pub demand_ref: String,
+    pub source_identity_ref: String,
+    pub proposition_ref: Option<String>,
+    pub use_intent: PropositionUseIntent,
+    pub treatment_intent: CitationTreatmentIntent,
+    pub stage: ResolutionStage,
+    pub governance: LiveGovernanceBounds,
+    pub acquisition_authority: AcquisitionAuthority,
+    pub receipt_authority: &'static str,
+}
+
+impl KnownAuthorityResolution {
+    pub const fn search_is_semantic_payment(&self) -> bool { false }
+    pub const fn acquisition_is_authority_receipt(&self) -> bool { false }
+}
+
+fn citation_court(citation: &str) -> Option<&str> {
+    citation.split_whitespace().nth(1)
+}
+
+pub fn official_hca_known_reference(citation: &str) -> Option<String> {
+    match citation {
+        "[2026] HCA 19" => Some(
+            "https://www.hcourt.gov.au/cases-and-judgments/judgments/judgments-1998-current/cullen-v-new-south-wales".into(),
+        ),
+        _ => None,
+    }
+}
+
+pub fn official_fca_known_reference(citation: &str) -> Option<String> {
+    match citation {
+        "[2025] FCA 796" => Some(
+            "https://www.fedcourt.gov.au/services/access-to-files-and-transcripts/online-files/pabai-v-australia".into(),
+        ),
+        _ => None,
+    }
+}
+
+pub fn resolution_candidates(
+    demand: &KnownAuthorityDemand,
+    context: &ResolutionContext,
+) -> Vec<ResolutionStage> {
+    if let Some(receipt) = context.persisted.iter().find(|receipt| {
+        receipt.compile_eligible
+            && receipt.source_identity_ref == demand.source_identity_ref
+            && receipt.jurisdiction_ref == demand.jurisdiction_ref
+    }) {
+        return vec![ResolutionStage::Persisted {
+            source_revision_ref: receipt.source_revision_ref.clone(),
+        }];
+    }
+
+    let mut stages = Vec::new();
+    if let Some(citation) = demand.medium_neutral_citation.as_ref() {
+        if context.oalc_exact_mnc_citations.iter().any(|known| known == citation) {
+            stages.push(ResolutionStage::OalcExactMnc { citation: citation.clone() });
+        }
+        match citation_court(citation) {
+            Some("HCA") if context.official_hca_available => stages.push(
+                ResolutionStage::OfficialHighCourt {
+                    citation: citation.clone(),
+                    reference: official_hca_known_reference(citation),
+                },
+            ),
+            Some("FCA" | "FCAFC") if context.official_fca_available => stages.push(
+                ResolutionStage::OfficialFederalCourt {
+                    citation: citation.clone(),
+                    reference: official_fca_known_reference(citation),
+                },
+            ),
+            _ => {}
+        }
+    }
+
+    if let Some(reference) = demand.explicit_austlii_ref.as_ref() {
+        stages.push(ResolutionStage::ExplicitAustLII { reference: reference.clone() });
+    }
+    if let Some(citation) = demand.medium_neutral_citation.as_ref() {
+        if context.jade_exact_mnc_available {
+            stages.push(ResolutionStage::JadeExactMnc { citation: citation.clone() });
+        }
+        if context.deterministic_austlii_mnc_available {
+            stages.push(ResolutionStage::DeterministicMncToAustLII { citation: citation.clone() });
+        }
+        if context.austlii_search_allowed {
+            stages.push(ResolutionStage::AustLIIReferenceSearch { citation: citation.clone() });
+        }
+    }
+    stages.push(ResolutionStage::Unresolved);
+    stages
+}
+
+pub fn resolve_known_authority(
+    demand: &KnownAuthorityDemand,
+    context: &ResolutionContext,
+) -> KnownAuthorityResolution {
+    KnownAuthorityResolution {
+        demand_ref: demand.demand_ref.clone(),
+        source_identity_ref: demand.source_identity_ref.clone(),
+        proposition_ref: demand.proposition_ref.clone(),
+        use_intent: demand.use_intent,
+        treatment_intent: demand.treatment_intent,
+        stage: resolution_candidates(demand, context)
+            .into_iter()
+            .next()
+            .unwrap_or(ResolutionStage::Unresolved),
+        governance: LiveGovernanceBounds::HISTORICAL_DEFAULT,
+        acquisition_authority: AcquisitionAuthority::ExperimentalCandidateOnly,
+        receipt_authority: RECEIPT_AUTHORITY,
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SinoMethod { Any, Or, All, Near, Phrase, Legis, Title, Boolean }
+
+impl SinoMethod {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Any => "any",
+            Self::Or => "or",
+            Self::All => "all",
+            Self::Near => "near",
+            Self::Phrase => "phrase",
+            Self::Legis => "legis",
+            Self::Title => "title",
+            Self::Boolean => "boolean",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SinoQuery {
+    pub meta: String,
+    pub query: String,
+    pub method: SinoMethod,
+    pub results: u32,
+    pub offset: u32,
+    pub rank: Option<String>,
+    pub callback: Option<String>,
+    pub mask_path: Vec<String>,
+    pub mask_by_phc: BTreeMap<String, Vec<String>>,
+}
+
+fn form_encode(value: &str) -> String {
+    let mut out = String::new();
+    for byte in value.bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => out.push(byte as char),
+            b' ' => out.push('+'),
+            other => {
+                const HEX: &[u8; 16] = b"0123456789ABCDEF";
+                out.push('%');
+                out.push(HEX[(other >> 4) as usize] as char);
+                out.push(HEX[(other & 0x0f) as usize] as char);
+            }
+        }
+    }
+    out
+}
+
+pub fn build_sino_url(query: &SinoQuery) -> String {
+    let mut params = vec![
+        ("meta".to_string(), query.meta.clone()),
+        ("method".to_string(), query.method.as_str().to_string()),
+        ("query".to_string(), query.query.clone()),
+        ("results".to_string(), query.results.to_string()),
+        ("offset".to_string(), query.offset.to_string()),
+    ];
+    if let Some(rank) = &query.rank { params.push(("rank".into(), rank.clone())); }
+    if let Some(callback) = &query.callback { params.push(("callback".into(), callback.clone())); }
+    for path in &query.mask_path { params.push(("mask_path".into(), path.clone())); }
+    for (alias, paths) in &query.mask_by_phc {
+        for path in paths { params.push((format!("mask_{alias}"), path.clone())); }
+    }
+    let query_string = params
+        .into_iter()
+        .map(|(key, value)| format!("{}={}", form_encode(&key), form_encode(&value)))
+        .collect::<Vec<_>>()
+        .join("&");
+    format!("{AUSTLII_SINO_ENDPOINT}?{query_string}")
+}
+
+pub fn deterministic_mnc_to_austlii(citation: &str) -> Option<String> {
+    let parts: Vec<_> = citation.split_whitespace().collect();
+    if parts.len() != 3 { return None; }
+    let year = parts[0].trim_matches(['[', ']']);
+    let court = parts[1];
+    let number = parts[2];
+    if year.len() != 4 || year.parse::<u32>().is_err() || number.parse::<u32>().is_err() {
+        return None;
+    }
+    let jurisdiction = match court {
+        "HCA" | "FCA" | "FCAFC" => "cth",
+        "QCA" | "QSC" => "qld",
+        "NSWCA" | "NSWSC" => "nsw",
+        "VSCA" | "VSC" => "vic",
+        "WASCA" | "WASC" => "wa",
+        "SASCA" | "SASC" => "sa",
+        "TASFC" | "TASSC" => "tas",
+        "NTCA" | "NTSC" => "nt",
+        "ACTCA" | "ACTSC" => "act",
+        _ => return None,
+    };
+    Some(format!(
+        "https://www.austlii.edu.au/cgi-bin/viewdoc/au/cases/{jurisdiction}/{court}/{year}/{number}.html"
+    ))
+}
+
+pub fn jade_exact_mnc_url(citation: &str) -> String {
+    format!("https://jade.io/search/{}", form_encode(citation))
+}
+pub fn jade_search_url(term: &str) -> String {
+    format!("https://jade.io/search/{}", form_encode(term))
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CitationTraversalPlan {
+    pub source_identity_ref: String,
+    pub proposition_ref: Option<String>,
+    pub treatment_intent: CitationTreatmentIntent,
+    pub provider: LegalProvider,
+    pub operation: ProviderOperation,
+    pub bounds: LiveGovernanceBounds,
+    pub acquisition_authority: AcquisitionAuthority,
+}
+
+pub fn citation_traversal_plan(demand: &KnownAuthorityDemand) -> Option<CitationTraversalPlan> {
+    let operation = match demand.treatment_intent {
+        CitationTreatmentIntent::None => return None,
+        CitationTreatmentIntent::CitedBy
+        | CitationTreatmentIntent::AppliedOrFollowedCandidate
+        | CitationTreatmentIntent::DistinguishedOrNarrowedCandidate => ProviderOperation::CitedBy,
+        CitationTreatmentIntent::CasesCited => ProviderOperation::CasesCited,
+        CitationTreatmentIntent::LegislationCited => ProviderOperation::LegislationCited,
+    };
+    Some(CitationTraversalPlan {
+        source_identity_ref: demand.source_identity_ref.clone(),
+        proposition_ref: demand.proposition_ref.clone(),
+        treatment_intent: demand.treatment_intent,
+        provider: LegalProvider::Jade,
+        operation,
+        bounds: LiveGovernanceBounds::HISTORICAL_DEFAULT,
+        acquisition_authority: AcquisitionAuthority::ExperimentalCandidateOnly,
+    })
+}
+
+pub const fn citation_traversal_is_treatment_proof(_plan: &CitationTraversalPlan) -> bool { false }
+pub const fn provider_failure_is_negative_legal_evidence(_status: ProviderAccessStatus) -> bool { false }
+
+pub fn classify_http_status(status: u16) -> ProviderAccessStatus {
+    match status {
+        401 => ProviderAccessStatus::AuthorisationRequired,
+        403 => ProviderAccessStatus::PolicyBlocked,
+        408 | 425 | 429 | 500..=599 => ProviderAccessStatus::TemporarilyUnavailable,
+        _ => ProviderAccessStatus::Available,
+    }
+}
+
+pub fn classify_transport_error(message: &str) -> ProviderAccessStatus {
+    let lower = message.to_ascii_lowercase();
+    if lower.contains("certificate") || lower.contains("tls") || lower.contains("x509") {
+        ProviderAccessStatus::TlsInvalid
+    } else {
+        ProviderAccessStatus::TemporarilyUnavailable
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HttpRequest {
