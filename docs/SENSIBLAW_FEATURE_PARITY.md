@@ -1,100 +1,109 @@
 # SensibLaw -> slr feature-parity frontier
 
 This document tracks behavioural/contract parity and the forward Rust roadmap. It
-is not a mandate to port Python/PostgreSQL implementation details into the Rust
-hot path.
+is not a mandate to port historical Python/PostgreSQL implementation details into
+the Rust hot path.
 
-## Governing performance rule
+## Governing runtime rule
 
-`slr` remains the direct-delta execution kernel. New legal workflow capabilities
-must compile from already-produced semantic/status/residual carriers and must not
-force parser reruns, document rescans, DB crossings, provider I/O or publication
-on sentence-local execution.
+`slr` remains the direct-delta execution kernel. Legal research is downstream of
+sentence-local parsing:
 
-The legal-research loop is downstream of sentence-local parsing:
+`proof frontier -> candidate moves -> Pareto schedule -> local/OALC/official acquisition -> local ingestion -> PNF/reviewed correspondence -> reasoning graph delta -> frontier delta -> sparse wake -> reschedule`
 
-`proof frontier -> candidate research moves -> Pareto schedule -> local/persisted/live execution strategy -> local ingestion -> PNF/reviewed correspondence -> frontier delta -> sparse wake -> reschedule`
-
-Live provider execution is never implicit. Network access is a separately governed
-strategy and remains outside the semantic hot path.
+Provider execution is never implicit. Search returns references, fetch returns
+bytes, and semantic/legal interpretation begins only after local ingestion/review.
 
 ## Current runtime status
 
-The experimental offline research spine now materially implements R0-R5 and the
-offline portion of R7. Validated/local fixtures cover multi-residual scheduling,
+The experimental offline research spine materially implements R0-R5 and the
+offline/return portions of R7. Local validation covers multi-residual scheduling,
 dialectical hypotheses, provider-neutral queries, local corpus execution,
 proposition/citation/reasoning enrichment, immutable research memory and
 multi-iteration compounding.
 
-R6 is now an acquisition/failover layer rather than an AustLII dependency. Its
-preferred Australian authority order is:
+The preferred Australian acquisition order is now:
 
-`persisted/local -> installed OALC exact MNC -> official court source -> optional sanctioned/specialist provider -> unresolved`
+`persisted/local -> installed OALC exact MNC -> official court -> optional sanctioned/specialist provider -> unresolved`
 
-Current provider policy:
+AustLII and JADE are not mandatory runtime dependencies. Provider failures such as
+`PolicyBlocked` and `TlsInvalid` are acquisition coordinates only and never become
+negative proposition evidence.
 
-- OALC is the preferred bulk/local corpus substrate and is zero-network once installed;
-- High Court of Australia and Federal Court of Australia are first-class official providers;
-- AustLII public automated case-law access is not a required runtime dependency;
-- JADE remains an optional citation/treatment discovery lane;
-- provider failures such as `PolicyBlocked` and `TlsInvalid` are acquisition states,
-  never negative proposition evidence.
+### Experimental online milestone reached
 
-The first experimental-online certification target is one bounded official HCA
-fetch followed by immutable local ingestion and same-demand zero-network replay.
-Production promotion remains separately gated by exact-head Agda/kernel receipts.
+A bounded official High Court acquisition succeeded for `Cullen v New South Wales
+[2026] HCA 19`:
+
+`official HCA landing -> 1 request -> SHA256-bound local ingestion -> same-demand persisted replay -> 0 requests`
+
+Observed artifact digest:
+
+`sha256:5959632dbf3d88c3ddd96addb200dacdccf9d4aaf56cdccfacd8ca2b92cda991`
+
+The retained receipt is `sl.governed_legal_acquisition.v0_1` with
+`experimental_candidate_only` authority and no semantic/legal authority claims.
+It embeds runtime head `9c3007be97f7e4a1e9a8bc9c7c85b92368515935`.
+
+The later repair head `bb6de859ca82700cba70d2784f11c39a2c4c1826` passed local CI. The
+`9c3007..bb6de85` delta does not change the governed provider runtime library; a
+separate no-network lineage audit records that fact. This is sufficient for
+experimental capability calibration, but it is deliberately not called
+byte-for-byte build identity or exact-current-head live execution.
+
+The readiness state is therefore:
+
+`ExperimentalLiveAcquisitionReady`
+
+while production remains blocked by exact-head live/runtime provenance and the
+corresponding exact-head Agda/kernel receipt.
 
 ## Already present in slr
 
-- revision-scoped parser spans and packed sentence carriers;
-- direct/reference parity and direct-delta execution;
-- candidate-only semantic expansion with unresolved/alternative fibres;
+- revision-scoped parser spans and direct/reference parity;
 - fail-closed governed semantic admission;
-- typed residual frontier and producer work selection;
-- relation-attachment candidate production;
-- orthogonal semantic/legal status product;
-- admissible counterfactual world families with underidentification preserved;
-- typed legal-source planning over persisted compatible revisions;
-- evidential PNF handoff preserving document/hash/graph identities;
-- sparse consumer/query/policy reopening over explicit reverse dependencies;
-- offline-first costed proof-search scheduler and frontier-return loop;
-- multi-residual `ProofFrontier` and whole-frontier scheduling;
+- typed residual/producer frontier and sparse wake dependencies;
+- admissible counterfactual world families;
+- offline-first costed/Pareto proof-search scheduler;
+- deterministic single-gap and whole-frontier receipts;
+- multi-residual `ProofFrontier`;
 - support/defeater/comparator/contradiction/treatment/terminology hypotheses;
 - provider-neutral `QueryExpr` and local execution;
 - proposition-level citation/reasoning/condition graph deltas;
 - append-only source/research memory with revisable conclusions;
-- deterministic iteration receipts through the v0.2 whole-frontier ABI;
-- compounding offline iterations where learned vocabulary/authority neighbourhoods
-  become later zero-network search context;
-- governed-provider crate with explicit network isolation, pacing/bounds and replay;
-- OALC exact-MNC snapshot/index path;
+- multi-iteration offline knowledge compounding;
+- separately governed provider crate; scheduler owns no HTTP;
+- OALC exact-MNC streaming/index path;
 - official HCA/FCA provider/fetch paths;
-- typed provider-access states and failover candidates.
+- typed provider-access/failover states;
+- SHA256-bound local ingestion and persisted zero-network replay;
+- successful bounded official HCA landing-page acquisition;
+- acquisition -> immutable research-world handoff;
+- zero-network HCA landing-page judgment-resource discovery;
+- bounded full-HCA-DOCX acquisition runner/receipt path, source-written pending
+  local validation and intentional execution.
 
 ## Core research-growth rule
 
 Every newly parsed legal source should enrich the reusable legal/world graph even
 when it does not close the current proof gap.
 
-A parsed case should be able to contribute candidate coordinates for source/case
-identity and revision, court/jurisdiction/time, opinion segment, propositions,
-facts/conditions/circumstances, rules/tests, reasoning roles, authorities cited,
-pinpoints, citation treatment, holding/ratio/obiter candidates, outcome/remedy,
+A parsed case may contribute source/revision identity, court/jurisdiction/time,
+opinion segment, propositions, facts/conditions/circumstances, tests/rules,
+reasoning roles, citation identities and treatments, pinpoints, outcome/remedy,
 exceptions/defeaters/burdens and lexical realisations.
-
-The intended accumulation loop is:
 
 `retrieve -> ingest -> parse -> PNF -> citation/reasoning extraction -> reviewed typed graph deltas -> frontier assessment -> next search`
 
-The graph learned from one research run becomes zero-network context for later
-runs. Search should therefore move progressively from text retrieval toward graph
-proof search and missing-data acquisition.
+The graph learned today becomes zero-network context tomorrow.
 
 Firewalls remain:
 
 `citation != adoption != ratio != current authority`
 
 `parsed proposition != truth`
+
+`provider failure != proposition false`
 
 `descriptive frequency != doctrine`
 
@@ -106,184 +115,178 @@ Firewalls remain:
 
 ### R0 - deterministic offline spine
 
-Status: implemented and locally validated on the stacked proof-search PRs.
+**Status: implemented and validated on the stacked offline line.**
 
-- deterministic source/runtime-pinned receipts;
-- candidate-only authority boundary;
-- replayable scheduler and return loop;
-- source/document/digest/PNF/correspondence welds;
-- zero-network fixtures.
+Deterministic candidate-only receipts, replayable scheduler/return loop,
+source/document/digest/PNF welds, and zero-network fixtures are present.
 
 ### R1 - multi-residual proof frontier
 
-Status: materially implemented in Offline Research Engine v0.1.
+**Status: materially implemented.**
 
-- first-class multiple residuals/payments/contested/authority-blocked coordinates;
-- whole-frontier scheduling and shared-dependency value;
-- candidate satisfaction distinct from legal proof closure;
-- terminal states include contested, authority-blocked, underidentified, saturated
-  and budget-exhausted, with budget exhaustion never meaning false.
+Whole-frontier scheduling, shared-dependency value, contested/authority-blocked/
+underidentified states, candidate satisfaction and budget/saturation boundaries are
+present. Candidate closure is not legal proof closure.
 
-### R2 - dialectical research hypothesis families
+### R2 - dialectical hypothesis families
 
-Status: materially implemented.
+**Status: materially implemented.**
 
-Native hypothesis kinds include support, defeater/exception, comparator/analogy,
-contradiction/counterexample, authority treatment and terminology/identity discovery.
-Supporting and defeating results update different coordinates rather than one
-relevance score.
+Support, defeater/exception, comparator/analogy, contradiction/counterexample,
+authority-treatment and terminology/identity hypotheses are distinct first-class
+moves.
 
 ### R3 - provider-neutral query algebra
 
-Status: materially implemented for local and pure provider lowering.
+**Status: materially implemented.**
 
-The query carrier supports terms, phrases, Boolean structure, proximity, ordered
-proximity, citation, provision, court, jurisdiction and dates. Provider lowering
-grants no semantic authority. Equivalent local queries may be coalesced across
-residuals without inferring proof value from hit count.
+Terms, phrases, Boolean structure, proximity, citation, provision, court,
+jurisdiction and date filters compile independently of provider execution. Query
+hits never manufacture proof value.
 
 ### R4 - local corpus and immutable authority store
 
-Status: materially implemented at the store-neutral/runtime-receipt layer.
+**Status: materially implemented at the store-neutral/runtime layer.**
 
-- append-only source revisions and artifact digests;
-- local query execution and reuse before live acquisition;
-- query vocabulary and authority-neighbourhood accumulation;
-- source rewrite attempts fail closed;
-- missing local material remains acquisition work.
+Append-only source revisions, local execution/reuse, vocabulary/authority
+neighbourhood accumulation and fail-closed rewrite handling are present. Durable
+production persistence/migration remains R10.
 
-Durable production storage/migrations remain R10 work.
+### R5 - proposition-level citation/reasoning graph
 
-### R5 - proposition-level citation and reasoning graph
+**Status: materially implemented at candidate/review boundary.**
 
-Status: materially implemented at candidate/review boundary.
+Source/opinion/proposition/citation/treatment, conditions/circumstances, reasoning
+roles, outcomes/remedies, burden/exception and lexical coordinates are retained.
+Graph enrichment does not itself establish ratio, binding force, applicability or
+truth.
 
-Stable carriers retain source/opinion/proposition/citation/treatment,
-condition/circumstance, reasoning role, outcome/remedy, burden/exception and lexical
-coordinates. Graph enrichment does not itself establish ratio, binding force,
-applicability or truth.
+### R6 - governed Australian authority acquisition/failover
 
-### R6 - governed Australian authority acquisition and failover
+**Status: experimental live acquisition achieved.**
 
-Status: implementation present; live official-source receipt still requires an
-explicit operator run.
+Implemented and exercised:
 
-Preferred acquisition order:
+1. persisted/local first;
+2. installed OALC exact-MNC lane;
+3. official HCA/FCA providers;
+4. optional sanctioned AustLII/JADE lanes;
+5. `0.25 rps`, burst `1`, explicit depth/document/request budgets;
+6. no crawl/ad-hoc polling;
+7. search -> references;
+8. fetch -> bytes;
+9. local ingestion before parser/PNF;
+10. SHA256-bound source revisions;
+11. same-demand replay with zero network;
+12. typed `ProviderAccessStatus` and failover;
+13. successful official HCA landing fetch for `[2026] HCA 19`.
 
-1. compatible persisted/local source revision;
-2. installed OALC exact-MNC index;
-3. official court publication (currently HCA/FCA first-class);
-4. explicit/sanctioned specialist provider when available;
-5. unresolved.
-
-Implemented contracts:
-
-- separate `sensiblaw-governed-legal-provider`; scheduler owns no HTTP;
-- default legal-host pacing `0.25 rps`, burst `1`;
-- explicit `max_depth`, `max_new_documents`, and network-request budget;
-- cache and persisted receipts checked first;
-- no crawling/ad-hoc polling;
-- search returns references only;
-- fetch returns bytes only;
-- parser/PNF runs only after local ingestion;
-- SHA256-bound source revisions and same-demand zero-network replay;
-- optional live transport behind `live-network` + explicit operator opt-in;
-- OALC streaming JSONL indexing against the published corpus schema, retaining
-  MNC/source/version/text-digest coordinates rather than loading full corpus text;
-- official HCA calibration for `[2026] HCA 19` and FCA calibration for
-  `[2025] FCA 796`;
-- `ProviderAccessStatus` distinguishes `Available`, `PolicyBlocked`, `TlsInvalid`,
-  `TemporarilyUnavailable`, `AuthorisationRequired`, and `NotConfigured`;
-- provider failure never becomes negative legal evidence;
-- AustLII public/reference and authorised/sanctioned access modes remain explicit;
-- JADE is optional treatment/citation discovery rather than a mandatory document lane.
-
-R6 acceptance gate:
-
-`official HCA known authority -> exactly one governed fetch -> SHA256/local source revision -> replay same demand -> network_requests=0`
-
-The fixture form is locally deterministic. Experimental-online readiness is reached
-only after an intentional real official-source fetch emits a receipt accepted by
-`scripts/verify_live_legal_receipt.py`.
+The old R6 acceptance gate is therefore achieved.
 
 ### R7 - iterative online/offline research engine
 
-Status: offline compounding materially implemented; online acquisition handoff is
-next after the R6 live receipt.
+**Status: offline compounding implemented; online return path source-written and
+partly calibrated. This is now the primary implementation frontier.**
 
-Next work after R6 certification:
+Current path:
 
-- let a scheduled live acquisition return through immutable ingestion/PNF;
-- extract citation/reasoning/treatment deltas from the newly acquired authority;
-- update only affected proof residuals;
-- add newly learned source/citation/lexical coordinates to local memory;
-- require the next iteration to prefer the newly persisted artifact at zero network.
+`official landing source -> local resource discovery -> preferred DOCX -> bounded document acquisition -> local source revision -> PNF -> citation/reasoning/treatment delta -> affected residual update -> next local-first iteration`
 
-Saturation remains frontier-relative and must require repeated stability across
+The landing page for Cullen exposes both official DOCX and PDF judgment files. The
+new zero-network discovery fixture identifies both and deliberately prefers DOCX
+for text/PNF processing. The next bounded live action should reuse the already
+persisted landing page and spend exactly one request on that DOCX.
+
+Next R7 tasks, in order:
+
+1. validate the HCA resource-discovery/full-DOCX source tranche locally;
+2. run one explicitly opted-in DOCX acquisition;
+3. pin its SHA256/source revision and prove same-document replay is zero-network;
+4. transform DOCX bytes into canonical local text with a parser receipt;
+5. feed canonical text through existing PNF;
+6. extract real Cullen citation/proposition/reasoning candidates with exact
+   paragraph/source locators;
+7. compare those source-grounded edges against the Mallonland/Cullen/Pabai/Woolcock
+   lineage graph rather than fixture-only reasoning edges;
+8. reschedule the surviving proof frontier using newly learned authorities,
+   treatments, conditions and lexical terms.
+
+Saturation remains frontier-relative and requires repeated stability across
 independent search families.
 
-### R8 - precedent geometry and discriminator search
+### R8 - precedent geometry/discriminator search
 
-After enough cases are structurally represented:
+After sufficient source-grounded structured cases exist:
 
 - nearest comparable/opposite-outcome cases;
 - minimal differing coordinate;
-- candidate minimal separator/counterexample searches;
-- separators remain candidate discriminators, not doctrine or legal cause.
+- candidate minimal separator and counterexample search;
+- feed discriminators back into R2/R3;
+- never treat statistical/geometric separation itself as doctrine or legal cause.
 
-### R9 - corpus-derived lexical fibres and descriptive jurisprudence
+### R9 - corpus-derived lexical fibres/descriptive jurisprudence
 
 - learn court/time/jurisdiction lexical realisations;
 - use them for query expansion while preserving `query expansion != proof expansion`;
-- descriptive authority-treatment and outcome statistics may rank search but cannot
-  create legal rules, holdings, truth or causation.
+- descriptive treatment/outcome statistics may rank research but cannot create
+  holdings, rules, truth or causation.
 
 ### R10 - durable governance/publication
 
 - append-only durable receipt/world-model store;
 - replay/migration/parity across Rust versions and Agda owners;
-- promotion/publication boundary distinct from parsing/retrieval/graph/statistics;
-- cryptographic identity/signature at receipt/promotion boundaries, not inference.
+- promotion/publication boundary distinct from acquisition/parsing/reasoning;
+- cryptographic identity/signature belongs at receipt/promotion boundaries.
 
-## Immediate acceptance milestone: Offline Research Engine v0.1
+## Acceptance milestones
 
-Status: achieved on the experimental Rust line.
+### Offline Research Engine v0.1
 
-The engine now demonstrates a real multi-residual frontier, opposing/comparator
-hypotheses, provider-neutral/local queries, persisted/local execution, graph
-richment, sparse frontier updates, Pareto rescheduling and deterministic JSON with
-`network_requests=0`. Subsequent compounding fixtures reuse knowledge learned by
-prior iterations.
+**Achieved.**
 
-The next acceptance milestone is **Governed Official Acquisition v0.1**:
+Multi-residual frontier, opposing/comparator hypotheses, provider-neutral/local
+queries, local execution, graph enrichment, sparse updates, Pareto rescheduling and
+deterministic zero-network iteration receipts are demonstrated.
 
-1. resolve a known MNC locally/OALC first;
-2. if absent, select an official HCA/FCA source;
-3. execute one explicitly bounded live fetch;
-4. bind bytes to SHA256 and immutable source revision;
-5. ingest locally before PNF;
-6. replay the identical demand from persisted material with zero network;
-7. emit a deterministic candidate-only acquisition receipt;
-8. route the acquired authority into the normal R7 reasoning/frontier loop.
+### Governed Official Acquisition v0.1
+
+**Achieved experimentally.**
+
+`[2026] HCA 19 -> official HCA landing -> 1 governed fetch -> SHA256/local source revision -> persisted replay=0`
+
+### Full Judgment Materialization v0.1
+
+**Current milestone.**
+
+Acceptance:
+
+1. reuse the persisted HCA landing artifact with `network_requests=0`;
+2. discover official DOCX/PDF references locally;
+3. select DOCX as the preferred full-text carrier;
+4. perform exactly one governed document fetch;
+5. SHA256-bind and locally ingest the DOCX;
+6. replay the same document demand with zero network;
+7. emit `sl.governed_official_judgment_acquisition.v0_1` candidate-only receipt;
+8. produce canonical text/PNF receipt without semantic promotion;
+9. begin source-grounded proposition/citation/reasoning extraction.
 
 ## Canonical formal counterparts
 
-The formal direction remains Agda parity/authority over Rust semantics, not a
-Python port. Relevant owners cover proof-directed corpus search/query algebra,
-governed legal-network strategy, Pareto scheduling, iterative frontier search,
-reasoning/citation graph enrichment, immutable research memory, bounded Rust receipt
-ABIs and governed-online provider boundaries.
+Agda remains the parity/authority layer over Rust runtime semantics. Current owners
+cover proof-directed corpus search/query algebra, governed network policy, Pareto
+scheduling, multi-residual iteration, reasoning/citation graph enrichment,
+immutable research memory, official Australian provider order, observed HCA live
+acquisition, acquisition-to-world handoff and official judgment resource discovery.
 
-Historical SensibLaw remains reference-only for architecture/acquisition behaviour;
-it does not define current Rust or Agda semantics.
+Historical SensibLaw remains reference-only for acquisition architecture. It does
+not define current Rust or Agda semantics.
 
 ## Explicit non-goals
 
 - no Python-to-Rust line-by-line port;
-- no PostgreSQL in sentence-local compilation;
-- no parser token writes as production semantic state;
 - no uncontrolled crawler;
-- no missing source/provider failure -> negative fact conversion;
+- no provider failure -> negative fact conversion;
 - no citation -> adoption/ratio/current-authority conversion;
-- no parser/proximity/statistics -> holding/truth conversion;
-- no causal dependence -> liability/remedy/authority promotion.
+- no retrieval/parser/statistics -> holding/truth conversion;
+- no acquired bytes -> proposition correspondence shortcut;
+- no causal dependence -> liability/remedy promotion.
