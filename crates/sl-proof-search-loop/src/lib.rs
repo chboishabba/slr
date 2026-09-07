@@ -9,6 +9,7 @@ pub mod acquisition;
 pub mod engine;
 pub mod frontier;
 pub mod hypothesis;
+pub mod judgment_pnf;
 pub mod local;
 pub mod online;
 pub mod planner;
