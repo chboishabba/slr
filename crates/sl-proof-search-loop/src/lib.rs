@@ -1,7 +1,8 @@
 //! Offline proof-search runtime spine.
 //!
-//! The legacy single-gap return loop remains included below; the additional
-//! modules implement the Agda-aligned Offline Research Engine v0.1 surface.
+//! The validated single-gap return loop remains available through a preserved
+//! legacy module; the additional modules implement the Agda-aligned Offline
+//! Research Engine v0.1 surface around it.
 
 pub mod frontier;
 pub mod hypothesis;
@@ -11,4 +12,6 @@ pub mod reasoning;
 pub mod receipt;
 pub mod world;
 
-include!("legacy.rs");
+#[path = "legacy.rs"]
+mod legacy;
+pub use legacy::*;
