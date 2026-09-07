@@ -16,7 +16,11 @@ required = [
     "pub fn assess_offline_result",
     "pub fn wake_from_delta",
     "pub fn reschedule_after_delta",
+    "SelectedMoveReceiptMismatch",
+    "SelectedSourceRevisionMismatch",
     "LocalArtifactPerformedNetworkWork",
+    "BridgeDigestMismatch",
+    "CorrespondenceClaimsAuthority",
     'delta_authority: "experimental_candidate_only"',
     'iteration_authority: "experimental_candidate_only"',
     "world_truth_claimed",
@@ -46,11 +50,19 @@ for forbidden in [
     if forbidden in loop:
         raise SystemExit(f"proof-search loop acquired forbidden capability: {forbidden}")
 
-if "artifact.network_requests != 0" not in loop:
-    raise SystemExit("offline loop no longer fails closed on network activity")
-if "correspondence.proposition_ref != gap.missing_proposition_ref" not in loop:
-    raise SystemExit("offline loop lost exact target-proposition weld")
-if "correspondence.graph_ref != bridge.graph_ref" not in loop:
-    raise SystemExit("offline loop lost exact graph weld")
+required_welds = [
+    "selected_receipt.selected_move_ref != selected_move.move_ref",
+    "selected_move.source_ref.as_deref() != Some(artifact.source_revision_ref.as_str())",
+    "artifact.network_requests != 0",
+    "bridge.canonical_text_sha256 != artifact.bytes_digest_ref",
+    "bridge.parser_observation_is_semantic_authority",
+    "!bridge.semantic_correspondence_required",
+    "correspondence.proposition_ref != gap.missing_proposition_ref",
+    "correspondence.graph_ref != bridge.graph_ref",
+    "correspondence.world_truth_claimed || correspondence.legal_holding_claimed",
+]
+missing_welds = [needle for needle in required_welds if needle not in loop]
+if missing_welds:
+    raise SystemExit(f"offline proof-search weld missing: {missing_welds}")
 
 print("offline proof-search frontier loop contract PASS")
