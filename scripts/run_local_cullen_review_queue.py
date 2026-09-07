@@ -13,7 +13,7 @@ RECEIPT = Path(os.environ.get(
     str(LIVE_DIR / "governed-official-judgment-acquisition-v01.json"),
 ))
 DOCX = Path(os.environ.get("SENSIBLAW_JUDGMENT_DOCX", str(LIVE_DIR / "judgment.docx")))
-OUTPUT = Path(os.environ.get("SENSIBLAW_CULLEN_REVIEW_QUEUE", str(LIVE_DIR / "cullen-citation-review-queue-v02.json")))
+OUTPUT = Path(os.environ.get("SENSIBLAW_CULLEN_REVIEW_QUEUE", str(LIVE_DIR / "cullen-citation-review-queue-v03.json")))
 
 
 def require(condition: bool, message: str) -> None:
@@ -63,7 +63,7 @@ def main() -> None:
         cwd=ROOT,
         check=True,
     )
-    print(f"LOCAL CULLEN REVIEW QUEUE PASS output={OUTPUT}")
+    print(f"LOCAL CULLEN ANCHORED REVIEW QUEUE PASS output={OUTPUT}")
 
 
 if __name__ == "__main__":
