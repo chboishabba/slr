@@ -14,9 +14,14 @@ cargo = CARGO.read_text(encoding="utf-8")
 
 for needle in (
     "extract_docx_canonical_text",
+    "extract_docx_canonical_judgment",
     "document_xml_to_canonical_text",
+    "footnotes_xml_to_canonical_footnotes",
+    "CanonicalDocxFootnote",
     "word/document.xml",
+    "word/footnotes.xml",
     "paragraph_count",
+    "footnote_observation_is_citation_treatment() -> bool { false }",
     "docx_text_materialization_is_semantic_payment() -> bool { false }",
     "docx_text_materialization_is_legal_authority() -> bool { false }",
 ):
