@@ -21,14 +21,14 @@ fn main() {
 
     let runtime_head = std::env::var("SENSIBLAW_RUNTIME_HEAD")
         .expect("SENSIBLAW_RUNTIME_HEAD must pin the exact git head for a live receipt");
-    let citation = std::env::var("SENSIBLAW_AUSTLII_SMOKE_CITATION")
+    let citation = std::env::var("SENSIBLAW_HCA_SMOKE_CITATION")
         .unwrap_or_else(|_| "[2026] HCA 19".to_string());
-    let source_identity = std::env::var("SENSIBLAW_AUSTLII_SMOKE_SOURCE_ID")
-        .unwrap_or_else(|_| "case:Cullen-v-State-of-Queensland-2026-HCA-19".to_string());
-    let proposition = std::env::var("SENSIBLAW_AUSTLII_SMOKE_PROPOSITION")
+    let source_identity = std::env::var("SENSIBLAW_HCA_SMOKE_SOURCE_ID")
+        .unwrap_or_else(|_| "case:[2026]-HCA-19".to_string());
+    let proposition = std::env::var("SENSIBLAW_HCA_SMOKE_PROPOSITION")
         .unwrap_or_else(|_| "prop:cullen-positive-operational-duty".to_string());
-    let explicit = deterministic_mnc_to_austlii(&citation)
-        .expect("smoke citation must have a deterministic AustLII case URL");
+    let official = official_hca_known_reference(&citation)
+        .expect("smoke citation must have an exact official HCA reference calibration");
 
     let output_dir = PathBuf::from(
         std::env::var("SENSIBLAW_LIVE_RECEIPT_DIR")
@@ -37,18 +37,21 @@ fn main() {
     fs::create_dir_all(&output_dir).expect("create live receipt directory");
 
     let demand = KnownAuthorityDemand {
-        demand_ref: "live-smoke:known-authority".into(),
+        demand_ref: "live-smoke:official-hca".into(),
         jurisdiction_ref: "AU".into(),
         source_identity_ref: source_identity.clone(),
         medium_neutral_citation: Some(citation.clone()),
-        explicit_austlii_ref: Some(explicit.clone()),
+        explicit_austlii_ref: None,
         proposition_ref: Some(proposition.clone()),
         use_intent: PropositionUseIntent::SourceProposition,
         treatment_intent: CitationTreatmentIntent::CitedBy,
     };
 
     let first_resolution = resolve_known_authority(&demand, &ResolutionContext::default());
-    assert!(matches!(first_resolution.stage, ResolutionStage::ExplicitAustLII { .. }));
+    assert!(matches!(
+        first_resolution.stage,
+        ResolutionStage::OfficialHighCourt { .. }
+    ));
 
     let context = GovernedExecutionContext {
         operator_opt_in: true,
@@ -61,9 +64,10 @@ fn main() {
         },
     };
     let mut executor = GovernedExecutor::new(UreqTransport, context).expect("governance preflight");
-    let fetched = executor.fetch_austlii(&explicit).expect("bounded AustLII document fetch");
+    let fetched = executor.fetch_hca(&official).expect("bounded official HCA document fetch");
     assert_eq!(executor.network_requests(), 1);
     assert_eq!(fetched.network_requests, 1);
+    assert_eq!(fetched.provider, LegalProvider::HighCourtAustralia);
     assert!(!fetched.locally_ingested);
 
     let digest = format!("sha256:{:x}", Sha256::digest(&fetched.bytes));
@@ -96,7 +100,8 @@ fn main() {
             "  \"schema_version\": \"sl.governed_legal_acquisition.v0_1\",\n",
             "  \"runtime_head\": \"{}\",\n",
             "  \"authority\": \"experimental_candidate_only\",\n",
-            "  \"provider\": \"AustLII\",\n",
+            "  \"provider\": \"HighCourtAustralia\",\n",
+            "  \"provider_access_status\": \"Available\",\n",
             "  \"source_identity_ref\": \"{}\",\n",
             "  \"proposition_ref\": \"{}\",\n",
             "  \"medium_neutral_citation\": \"{}\",\n",
@@ -111,7 +116,7 @@ fn main() {
         json_escape(&source_identity),
         json_escape(&proposition),
         json_escape(&citation),
-        json_escape(&explicit),
+        json_escape(&official),
         json_escape(&digest),
         json_escape(&source_revision),
     );
@@ -119,9 +124,8 @@ fn main() {
     fs::write(&receipt_path, receipt).expect("write deterministic live acquisition receipt");
 
     println!(
-        "receipt={} first_network_requests=1 replay_network_requests=0 authority={}",
-        receipt_path.display(),
-        RECEIPT_AUTHORITY
+        "provider=HighCourtAustralia receipt={} first_network_requests=1 replay_network_requests=0 authority={}",
+        receipt_path.display(), RECEIPT_AUTHORITY
     );
 }
 
