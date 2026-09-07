@@ -42,6 +42,7 @@ pub fn family_for_residual(residual: &ProofResidual) -> Vec<SearchHypothesis> {
         mk(SearchHypothesisKind::Comparator, "comparator"),
         mk(SearchHypothesisKind::Contradiction, "contradiction"),
         mk(SearchHypothesisKind::AuthorityTreatment, "treatment"),
+        mk(SearchHypothesisKind::TerminologyExpansion, "terminology"),
     ]
 }
 
@@ -55,7 +56,7 @@ mod tests {
     use crate::frontier::ProofResidual;
 
     #[test]
-    fn open_residual_gets_opposing_and_comparator_searches() {
+    fn open_residual_gets_opposing_comparator_treatment_and_terminology_searches() {
         let r = ProofResidual {
             residual_ref: "r".into(),
             proposition_ref: "p".into(),
@@ -70,5 +71,7 @@ mod tests {
         assert!(family.iter().any(|h| h.kind == SearchHypothesisKind::Support));
         assert!(family.iter().any(|h| h.kind == SearchHypothesisKind::Defeater));
         assert!(family.iter().any(|h| h.kind == SearchHypothesisKind::Comparator));
+        assert!(family.iter().any(|h| h.kind == SearchHypothesisKind::AuthorityTreatment));
+        assert!(family.iter().any(|h| h.kind == SearchHypothesisKind::TerminologyExpansion));
     }
 }
