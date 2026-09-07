@@ -24,6 +24,7 @@ python3 scripts/verify_proof_search_loop_contract.py
 python3 scripts/verify_offline_research_engine_contract.py
 python3 scripts/verify_online_readiness_contract.py
 python3 scripts/verify_governed_legal_provider_contract.py
+python3 scripts/verify_official_acquisition_handoff_contract.py
 
 echo '== Python syntax checks =='
 python3 -m py_compile \
@@ -42,6 +43,7 @@ python3 -m py_compile \
   scripts/verify_offline_research_engine_contract.py \
   scripts/verify_online_readiness_contract.py \
   scripts/verify_governed_legal_provider_contract.py \
+  scripts/verify_official_acquisition_handoff_contract.py \
   scripts/verify_live_legal_receipt.py
 
 echo '== offline fixtures =='
@@ -52,6 +54,7 @@ cargo run -p sensiblaw-proof-search-loop --example offline_compounding_iteration
 cargo run -p sensiblaw-proof-search-loop --example offline_current_treatment_iteration_v03
 cargo run -p sensiblaw-governed-legal-provider --example oalc_jsonl_index
 cargo run -p sensiblaw-governed-legal-provider --example offline_replay_fixture
+cargo run -p sensiblaw-proof-search-loop --example official_acquisition_compounding
 
 echo '== online readiness preflight =='
 cargo run -p sensiblaw-proof-search-loop --example online_readiness_preflight
