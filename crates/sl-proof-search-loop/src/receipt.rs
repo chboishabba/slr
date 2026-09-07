@@ -1,7 +1,10 @@
 use crate::frontier::ProofFrontier;
+use crate::transition::{FrontierTransitionReceipt, ResearchTermination};
+use crate::world::ResearchWorldSnapshot;
 use sensiblaw_proof_search_scheduler::{CandidateMove, CandidateMoveReceipt, ExecutionCostVector};
 
 pub const ITERATION_SCHEMA: &str = "sl.proof_search_iteration.v0_1";
+pub const FRONTIER_ITERATION_SCHEMA_V02: &str = "sl.proof_search_frontier_iteration.v0_2";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CanonicalIterationReceipt {
@@ -92,6 +95,73 @@ pub fn build_iteration_receipt(
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CanonicalFrontierIterationReceiptV02 {
+    pub schema_version: &'static str,
+    pub base_iteration: CanonicalIterationReceipt,
+    pub prior_frontier_ref: String,
+    pub next_frontier_ref: String,
+    pub changed_residual_refs: Vec<String>,
+    pub termination: ResearchTermination,
+    pub world_snapshot_ref: String,
+    pub learned_query_terms: Vec<String>,
+    pub learned_authority_refs: Vec<String>,
+    pub reasoning_delta_refs: Vec<String>,
+    pub authority_boundary: &'static str,
+}
+
+fn termination_name(termination: ResearchTermination) -> &'static str {
+    match termination {
+        ResearchTermination::Continue => "Continue",
+        ResearchTermination::ClosedCandidate => "ClosedCandidate",
+        ResearchTermination::Contested => "Contested",
+        ResearchTermination::AuthorityBlocked => "AuthorityBlocked",
+        ResearchTermination::Underidentified => "Underidentified",
+        ResearchTermination::SaturatedCandidate => "SaturatedCandidate",
+        ResearchTermination::BudgetExhausted => "BudgetExhausted",
+    }
+}
+
+impl CanonicalFrontierIterationReceiptV02 {
+    pub fn to_canonical_json(&self) -> String {
+        format!(
+            "{{\"schema_version\":{},\"base_iteration\":{},\"prior_frontier_ref\":{},\"next_frontier_ref\":{},\"changed_residual_refs\":{},\"termination\":{},\"world_snapshot_ref\":{},\"learned_query_terms\":{},\"learned_authority_refs\":{},\"reasoning_delta_refs\":{},\"authority_boundary\":{}}}",
+            q(self.schema_version),
+            self.base_iteration.to_canonical_json(),
+            q(&self.prior_frontier_ref),
+            q(&self.next_frontier_ref),
+            arr(&self.changed_residual_refs),
+            q(termination_name(self.termination)),
+            q(&self.world_snapshot_ref),
+            arr(&self.learned_query_terms),
+            arr(&self.learned_authority_refs),
+            arr(&self.reasoning_delta_refs),
+            q(self.authority_boundary),
+        )
+    }
+}
+
+pub fn build_frontier_iteration_receipt_v02(
+    base_iteration: CanonicalIterationReceipt,
+    transition: &FrontierTransitionReceipt,
+    world: &ResearchWorldSnapshot,
+    reasoning_delta_refs: Vec<String>,
+) -> CanonicalFrontierIterationReceiptV02 {
+    CanonicalFrontierIterationReceiptV02 {
+        schema_version: FRONTIER_ITERATION_SCHEMA_V02,
+        base_iteration,
+        prior_frontier_ref: transition.prior_frontier_ref.clone(),
+        next_frontier_ref: transition.next_frontier_ref.clone(),
+        changed_residual_refs: transition.changed_residual_refs.clone(),
+        termination: transition.termination,
+        world_snapshot_ref: world.snapshot_ref.clone(),
+        learned_query_terms: world.query_vocabulary.iter().cloned().collect(),
+        learned_authority_refs: world.authority_neighbourhood.iter().cloned().collect(),
+        reasoning_delta_refs,
+        authority_boundary: "experimental_candidate_only",
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -121,5 +191,50 @@ mod tests {
         };
         assert_eq!(receipt.to_canonical_json(), receipt.to_canonical_json());
         assert!(receipt.to_canonical_json().contains("sl.proof_search_iteration.v0_1"));
+    }
+
+    #[test]
+    fn frontier_receipt_v02_keeps_candidate_termination_and_learned_world() {
+        let base = CanonicalIterationReceipt {
+            schema_version: ITERATION_SCHEMA,
+            runtime_head: "head".into(),
+            consumer_ref: "c".into(),
+            frontier_ref: "f0".into(),
+            proof_gap_refs: vec!["r1".into()],
+            candidate_move_refs: vec!["m1".into()],
+            pareto_frontier_refs: vec!["m1".into()],
+            selected_move_ref: "m1".into(),
+            selected_source_revision_ref: None,
+            execution_cost: ExecutionCostVector::default(),
+            artifact_digest_ref: None,
+            pnf_receipt_ref: None,
+            assessment_ref: None,
+            frontier_delta_ref: None,
+            wake_refs: vec![],
+            next_move_ref: None,
+            authority_boundary: "experimental_candidate_only",
+            input_digest_ref: "in".into(),
+            output_digest_ref: "out".into(),
+        };
+        let transition = FrontierTransitionReceipt {
+            prior_frontier_ref: "f0".into(),
+            next_frontier_ref: "f1".into(),
+            changed_residual_refs: vec!["r1".into()],
+            termination: ResearchTermination::ClosedCandidate,
+            transition_authority: "experimental_candidate_only",
+        };
+        let mut world = ResearchWorldSnapshot::default();
+        world.snapshot_ref = "world:1".into();
+        world.query_vocabulary.insert("positive operational act".into());
+        let receipt = build_frontier_iteration_receipt_v02(
+            base,
+            &transition,
+            &world,
+            vec!["reasoning:1".into()],
+        );
+        let json = receipt.to_canonical_json();
+        assert!(json.contains(FRONTIER_ITERATION_SCHEMA_V02));
+        assert!(json.contains("ClosedCandidate"));
+        assert!(json.contains("positive operational act"));
     }
 }
