@@ -18,6 +18,7 @@ pub mod local;
 pub mod online;
 pub mod planner;
 pub mod provider;
+pub mod provider_access_policy;
 pub mod query;
 pub mod reasoning;
 pub mod receipt;
