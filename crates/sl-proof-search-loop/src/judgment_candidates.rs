@@ -1,9 +1,10 @@
 //! Source-located candidate extraction from canonical judgment text.
 //!
 //! This module is deliberately pre-review. It identifies stable body/footnote
-//! locators, medium-neutral and reported citation-shaped strings, and lexical
-//! treatment hints. It does not infer proposition correspondence, CitationUse,
-//! ReasoningRole, ratio, authority, applicability or truth.
+//! locators, medium-neutral and reported citation-shaped strings, lexical
+//! treatment hints, and (when supplied) exact body-paragraph footnote anchors.
+//! None of those observations infer proposition correspondence, CitationUse,
+//! ReasoningRole, ratio, authority, applicability, residual payment or truth.
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum LexicalTreatmentHint {
@@ -27,9 +28,18 @@ pub struct CitationOccurrenceCandidate {
     pub reported_paragraph_label: Option<String>,
     pub citation_text: String,
     pub paragraph_text: String,
+    pub anchor_paragraph_locator_refs: Vec<String>,
+    pub anchor_paragraph_texts: Vec<String>,
     pub lexical_treatment_hints: Vec<LexicalTreatmentHint>,
     pub reviewed: bool,
     pub candidate_only: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FootnoteAnchorObservation {
+    pub footnote_id: String,
+    pub paragraph_ordinal: u64,
+    pub paragraph_text: String,
 }
 
 fn reported_paragraph_label(paragraph: &str) -> Option<String> {
@@ -80,7 +90,7 @@ fn is_year_token(token: &str) -> bool {
 }
 
 fn clean_token(token: &str) -> &str {
-    token.trim_matches(|ch: char| matches!(ch, ',' | ';' | '.' | ':' ))
+    token.trim_matches(|ch: char| matches!(ch, ',' | ';' | '.' | ':'))
 }
 
 fn is_number_token(token: &str) -> bool {
@@ -149,7 +159,6 @@ fn extract_reported_citation_strings(text: &str) -> Vec<String> {
     for i in 0..tokens.len() {
         let token = clean_token(tokens[i]);
 
-        // (2000) 205 CLR 254 / (2024) 98 ALJR 956
         if is_year_token(token)
             && i + 3 < tokens.len()
             && is_number_token(tokens[i + 1])
@@ -169,7 +178,6 @@ fn extract_reported_citation_strings(text: &str) -> Vec<String> {
             continue;
         }
 
-        // [2018] AC 736 / [1989] AC 53 / neutral citations already found above.
         if is_year_token(token)
             && i + 2 < tokens.len()
             && is_upper_reporter_token(tokens[i + 1])
@@ -187,7 +195,6 @@ fn extract_reported_citation_strings(text: &str) -> Vec<String> {
             continue;
         }
 
-        // Parallel reporter without repeated year, eg 418 ALR 639.
         let previous_is_year = i > 0 && is_year_token(clean_token(tokens[i - 1]));
         if !previous_is_year
             && i + 2 < tokens.len()
@@ -228,6 +235,8 @@ struct CandidateObservation<'a> {
     locator: String,
     label: Option<String>,
     observation_text: &'a str,
+    anchor_locator_refs: Vec<String>,
+    anchor_texts: Vec<String>,
 }
 
 fn push_candidates_for_observation(
@@ -252,6 +261,8 @@ fn push_candidates_for_observation(
             reported_paragraph_label: observation.label.clone(),
             citation_text: citation,
             paragraph_text: observation.observation_text.to_string(),
+            anchor_paragraph_locator_refs: observation.anchor_locator_refs.clone(),
+            anchor_paragraph_texts: observation.anchor_texts.clone(),
             lexical_treatment_hints: hints.clone(),
             reviewed: false,
             candidate_only: true,
@@ -272,6 +283,7 @@ pub fn extract_judgment_citation_candidates(
             continue;
         }
         let ordinal = index as u64 + 1;
+        let locator = format!("{document_ref}#paragraph-{ordinal}");
         push_candidates_for_observation(
             &mut candidates,
             CandidateObservation {
@@ -279,9 +291,11 @@ pub fn extract_judgment_citation_candidates(
                 source_revision_ref,
                 canonical_text_sha256,
                 ordinal,
-                locator: format!("{document_ref}#paragraph-{ordinal}"),
+                locator: locator.clone(),
                 label: reported_paragraph_label(paragraph),
                 observation_text: paragraph,
+                anchor_locator_refs: vec![locator],
+                anchor_texts: vec![paragraph.to_string()],
             },
         );
     }
@@ -295,6 +309,24 @@ pub fn extract_judgment_citation_candidates_with_footnotes(
     canonical_text: &str,
     footnotes: &[(String, String)],
 ) -> Vec<CitationOccurrenceCandidate> {
+    extract_judgment_citation_candidates_with_footnotes_and_anchors(
+        document_ref,
+        source_revision_ref,
+        canonical_text_sha256,
+        canonical_text,
+        footnotes,
+        &[],
+    )
+}
+
+pub fn extract_judgment_citation_candidates_with_footnotes_and_anchors(
+    document_ref: &str,
+    source_revision_ref: &str,
+    canonical_text_sha256: &str,
+    canonical_text: &str,
+    footnotes: &[(String, String)],
+    anchors: &[FootnoteAnchorObservation],
+) -> Vec<CitationOccurrenceCandidate> {
     let mut candidates = extract_judgment_citation_candidates(
         document_ref,
         source_revision_ref,
@@ -304,6 +336,19 @@ pub fn extract_judgment_citation_candidates_with_footnotes(
 
     for (footnote_id, footnote_text) in footnotes {
         let ordinal = footnote_id.parse::<u64>().unwrap_or(0);
+        let matching_anchors = anchors
+            .iter()
+            .filter(|anchor| anchor.footnote_id == *footnote_id)
+            .collect::<Vec<_>>();
+        let anchor_locator_refs = matching_anchors
+            .iter()
+            .map(|anchor| format!("{document_ref}#paragraph-{}", anchor.paragraph_ordinal))
+            .collect::<Vec<_>>();
+        let anchor_texts = matching_anchors
+            .iter()
+            .map(|anchor| anchor.paragraph_text.clone())
+            .collect::<Vec<_>>();
+
         push_candidates_for_observation(
             &mut candidates,
             CandidateObservation {
@@ -314,6 +359,8 @@ pub fn extract_judgment_citation_candidates_with_footnotes(
                 locator: format!("{document_ref}#footnote-{footnote_id}"),
                 label: Some(format!("footnote:{footnote_id}")),
                 observation_text: footnote_text.trim(),
+                anchor_locator_refs,
+                anchor_texts,
             },
         );
     }
@@ -342,6 +389,12 @@ pub const fn footnote_citation_candidate_is_treatment(
     false
 }
 
+pub const fn footnote_anchor_is_residual_payment(
+    _candidate: &CitationOccurrenceCandidate,
+) -> bool {
+    false
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -362,6 +415,7 @@ mod tests {
         assert!(candidates[0]
             .lexical_treatment_hints
             .contains(&LexicalTreatmentHint::AppliedCandidate));
+        assert_eq!(candidates[0].anchor_paragraph_locator_refs.len(), 1);
         assert!(!citation_candidate_is_semantic_correspondence(&candidates[0]));
         assert!(!lexical_hint_is_citation_use(
             LexicalTreatmentHint::AppliedCandidate
@@ -402,5 +456,36 @@ mod tests {
         }));
         assert!(candidates.iter().all(|candidate| !candidate.reviewed && candidate.candidate_only));
         assert!(!footnote_citation_candidate_is_treatment(&candidates[0]));
+    }
+
+    #[test]
+    fn footnote_candidate_retains_exact_body_anchor_without_becoming_payment() {
+        let footnotes = vec![(
+            "105".to_string(),
+            "AA (2026) 100 ALJR 170; Robinson [2018] AC 736 at 761 [73].".to_string(),
+        )];
+        let anchors = vec![FootnoteAnchorObservation {
+            footnote_id: "105".into(),
+            paragraph_ordinal: 64,
+            paragraph_text: "Any liability would be based upon positive acts in creating risk, not an omission.".into(),
+        }];
+        let candidates = extract_judgment_citation_candidates_with_footnotes_and_anchors(
+            "document:hca:[2026]-HCA-19:docx",
+            "source-revision:fixture",
+            "sha256:refined",
+            "Cullen v New South Wales\n",
+            &footnotes,
+            &anchors,
+        );
+        let robinson = candidates
+            .iter()
+            .find(|candidate| candidate.citation_text == "[2018] AC 736")
+            .unwrap();
+        assert_eq!(
+            robinson.anchor_paragraph_locator_refs,
+            vec!["document:hca:[2026]-HCA-19:docx#paragraph-64"]
+        );
+        assert!(robinson.anchor_paragraph_texts[0].contains("positive acts in creating risk"));
+        assert!(!footnote_anchor_is_residual_payment(robinson));
     }
 }
