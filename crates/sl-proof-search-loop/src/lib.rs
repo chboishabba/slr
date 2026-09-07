@@ -13,6 +13,7 @@ pub mod frontier;
 pub mod hypothesis;
 pub mod judgment_candidates;
 pub mod judgment_pnf;
+pub mod judgment_review;
 pub mod local;
 pub mod online;
 pub mod planner;
