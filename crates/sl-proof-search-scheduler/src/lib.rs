@@ -248,7 +248,7 @@ pub fn schedule(
     })
 }
 
-/// The scheduler can authorize only offline execution.  A live result is a
+/// The scheduler can authorize only offline execution. A live result is a
 /// typed handoff requirement, never an implicit network call.
 pub fn require_offline_execution(
     receipt: &CandidateMoveReceipt,
@@ -262,8 +262,8 @@ pub fn require_offline_execution(
 }
 
 /// Convert an already-typed legal-follow plan into a scheduler move without
-/// performing acquisition.  Persisted plans become offline candidates;
-/// acquisition-required plans become governed-live *candidate* moves only.
+/// performing acquisition. Persisted plans become offline candidates;
+/// acquisition-required plans become governed-live candidate moves only.
 pub fn move_from_legal_source_plan(
     plan: &LegalSourcePlan,
     expected_proof_reduction: u64,
@@ -441,7 +441,8 @@ mod tests {
             1,
             4,
         );
-        let thresholded = threshold_candidates(&[local.clone(), live.clone()], SchedulerPolicy::default());
+        let candidates = [local.clone(), live.clone()];
+        let thresholded = threshold_candidates(&candidates, SchedulerPolicy::default());
         let frontier = pareto_frontier(&thresholded);
         assert_eq!(frontier.len(), 2);
 
