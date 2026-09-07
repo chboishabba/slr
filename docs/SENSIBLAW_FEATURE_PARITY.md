@@ -31,8 +31,7 @@ on sentence-local execution.
 - optional physical-compatibility gate for real-world claims that depend on
   physics/engineering/medicine/climate/etc.;
 - multiple admissible corrected worlds may leave the outcome underidentified;
-- one located world does not imply unique identification while enumeration is
-  open;
+- one located world does not imply unique identification while enumeration is open;
 - causal identification remains separate from scope, violation, liability,
   remedy and authority;
 - consumer-relative closure and first-live-residual routing.
@@ -51,32 +50,52 @@ Parity target: `SensibLaw/src/pnf/legal_adjunct.py` plus
 - only source/authority residual producers may emit legal-follow demands;
 - no HTTP/network acquisition capability in the Rust planning crate.
 
+### Evidential PNF handoff
+
+Parity target: mature SensibLaw evidential bridge semantics.
+
+- parser/numeric run, document, hash and graph identities are retained;
+- world resolution must remain deferred;
+- document-local numeric PNF may not claim cross-document identity closure;
+- parser observation is not semantic authority;
+- reviewed semantic correspondence is separately required;
+- reviewed correspondence still does not automatically claim world truth or a
+  legal holding.
+
+### Consumer/query/policy residual contracts + sparse reopening
+
+Parity target: mature SensibLaw reverse-dependency/wakeup semantics, including
+migration 139, without making PostgreSQL the semantic owner.
+
+- stable source/evidence/proposition/authority/counterfactual coordinates;
+- exact `(demand, consumer, query, policy)` fibre keys;
+- each consumer declares required coordinates and minimum horizon;
+- reverse dependencies compile from that declaration;
+- new evidence wakes only matching dependencies;
+- missing dependency means zero affected work, not negative evidence;
+- no document/corpus scan and no semantic inference occurs in wake selection.
+
 ## Existing SensibLaw capability still to port as contracts
 
 Priority is ordered to preserve the current performance constitution.
 
 ### P0 - typed/sparse, no I/O
 
-1. Evidential PNF correspondence receipt:
-   numeric/parser structure -> separately reviewed proposition correspondence,
-   with parser structure != semantic/legal truth.
-2. Consumer/query/policy indexed residual contract:
-   closure for one consumer does not mutate unresolved global axes.
-3. Sparse reverse-dependency reopening:
-   new evidence wakes only consumers/questions that declared dependency on the
-   affected coordinates.
-4. Proof-graph/common-ground/controversy residual surface:
+1. Proof-graph/common-ground/controversy residual surface:
    exact typed meet may close source-comparison work; partial/no-meet/conflict
    remain distinct and compile to targeted follow work.
-5. Authority/citation treatment graph carriers:
+2. Authority/citation treatment graph carriers:
    source relationship/follow/discuss/distinguish/overrule etc. remain evidence
    carriers and do not independently create legal applicability.
+3. Consumer-local non-monotone conclusion recomputation:
+   append evidence/provenance while allowing exceptions/defeaters to revise the
+   currently reachable conclusion without erasing prior receipts.
 
 ### P1 - store-neutral execution interfaces
 
 1. Append-only evidence/provenance revision interface.
-2. Residual H3/H6/H9-equivalent horizon interface without encoding PostgreSQL
-   schema into core semantics.
+2. Residual H3/H6/H9-equivalent horizon execution interface without encoding
+   PostgreSQL schema into core semantics.
 3. Consumer-local wakeup index keyed by stable semantic/source coordinates.
 4. Persisted legal-source revision lookup interface consumed by the planner.
 
@@ -93,6 +112,18 @@ Priority is ordered to preserve the current performance constitution.
 2. Governed promotion/publication boundary.
 3. Replay/migration/parity receipts across the Python and Rust implementations.
 
+## Canonical formal counterparts
+
+The repo-state audit identifies the current DASHI owners rather than creating a
+parallel counterfactual ontology:
+
+- #791: legal factual/but-for causation;
+- #794: generic corrected-world/realised-repair + Country/Two-Eyed/POSIWID;
+- #808: physical compatibility/realisation and experimental discrimination,
+  stacked on #794.
+
+Closed #805 was a stale-snapshot duplicate and is explicitly superseded.
+
 ## Explicit non-goals
 
 - no Python-to-Rust line-by-line port;
@@ -105,10 +136,10 @@ Priority is ordered to preserve the current performance constitution.
 - no causal dependence -> liability/remedy/authority promotion;
 - no physically imagined alternative -> realised-world promotion.
 
-## Cross-domain formal parent
+## Cross-domain formal boundary
 
-DASHI owns the reusable counterfactual contract. Legal and physical bridges are
-separate interpretations of that generic discipline. TSFV/multiverse machinery
+Legal and physical counterfactual bridges reuse a common discipline while
+remaining semantically and authoritatively distinct. TSFV/multiverse machinery
 supplies a realisation/admissibility warning only: a parameter point or viable
 history is not automatically a physically realised world. It does not supply
 legal doctrine or authority.
