@@ -30,14 +30,14 @@ if missing:
 
 required_permit = [
     'sl.residual_bound_authority_demand.v0_1',
-    '"residual_ref"',
-    '"proposition_ref"',
-    '"scheduled_producer_ref"',
-    '"hypothesis_ref"',
-    '"source_route_pays_scheduled_gap"',
-    '"source_route_uses_scheduled_producer"',
-    '"acquisition_claimed_semantic_payment"',
-    '"acquisition_claimed_consumer_closure"',
+    r'\"residual_ref\"',
+    r'\"proposition_ref\"',
+    r'\"scheduled_producer_ref\"',
+    r'\"hypothesis_ref\"',
+    r'\"source_route_pays_scheduled_gap\"',
+    r'\"source_route_uses_scheduled_producer\"',
+    r'\"acquisition_claimed_semantic_payment\"',
+    r'\"acquisition_claimed_consumer_closure\"',
 ]
 missing = [needle for needle in required_permit if needle not in permit_fixture]
 if missing:
@@ -48,11 +48,11 @@ required_live = [
     "sl.residual_bound_authority_demand.v0_1",
     "source_route_pays_scheduled_gap",
     "source_route_uses_scheduled_producer",
-    '"binding"',
-    '"residual_ref"',
-    '"scheduled_producer_ref"',
-    '"hypothesis_ref"',
-    '"acquisition_claimed_consumer_closure"',
+    r'\"binding\"',
+    r'\"residual_ref\"',
+    r'\"scheduled_producer_ref\"',
+    r'\"hypothesis_ref\"',
+    r'\"acquisition_claimed_consumer_closure\"',
 ]
 missing = [needle for needle in required_live if needle not in live_runner]
 if missing:
