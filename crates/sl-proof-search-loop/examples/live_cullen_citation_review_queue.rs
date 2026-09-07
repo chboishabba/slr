@@ -6,9 +6,11 @@ use sensiblaw_proof_search_loop::judgment_candidates::{
     extract_judgment_citation_candidates_with_footnotes_and_anchors,
     CitationOccurrenceCandidate, FootnoteAnchorObservation, LexicalTreatmentHint,
 };
+use sensiblaw_proof_search_loop::live_artifact::{
+    cli_paths, load_and_validate_cullen_inputs, CANDIDATE_ONLY_AUTHORITY,
+};
 use sha2::{Digest, Sha256};
 use std::fs;
-use std::path::PathBuf;
 
 fn json_escape(value: &str) -> String {
     value
@@ -84,10 +86,6 @@ fn candidate_json(candidate: &CitationOccurrenceCandidate) -> String {
     )
 }
 
-fn required_env(name: &str) -> String {
-    std::env::var(name).unwrap_or_else(|_| panic!("missing required environment variable {name}"))
-}
-
 fn refined_observer_text(body: &str, footnotes: &[(String, String)]) -> String {
     let mut out = String::from(body);
     for (id, text) in footnotes {
@@ -103,17 +101,12 @@ fn refined_observer_text(body: &str, footnotes: &[(String, String)]) -> String {
 }
 
 fn main() {
-    let docx_path = PathBuf::from(required_env("SENSIBLAW_JUDGMENT_DOCX"));
-    let output_path = PathBuf::from(required_env("SENSIBLAW_CULLEN_REVIEW_QUEUE"));
-    let document_ref = required_env("SENSIBLAW_DOCUMENT_REF");
-    let source_revision_ref = required_env("SENSIBLAW_SOURCE_REVISION_REF");
-    let body_only_text_sha256 = required_env("SENSIBLAW_CANONICAL_TEXT_SHA256");
-    let residual_ref = required_env("SENSIBLAW_BOUND_RESIDUAL_REF");
-    let proposition_ref = required_env("SENSIBLAW_BOUND_PROPOSITION_REF");
-    let producer_ref = required_env("SENSIBLAW_BOUND_PRODUCER_REF");
-    let hypothesis_ref = required_env("SENSIBLAW_BOUND_HYPOTHESIS_REF");
+    let (receipt_path, docx_path, output_path) =
+        cli_paths("cullen-citation-review-queue-v03.json");
+    let inputs = load_and_validate_cullen_inputs(&receipt_path, &docx_path, &output_path)
+        .expect("validate retained governed HCA judgment receipt and DOCX");
 
-    let docx_bytes = fs::read(&docx_path).expect("read retained official judgment DOCX");
+    let docx_bytes = fs::read(&inputs.docx_path).expect("read retained official judgment DOCX");
     let judgment = extract_docx_canonical_judgment(&docx_bytes)
         .expect("materialize body plus footnote judgment observer");
     let footnotes = judgment
@@ -135,8 +128,8 @@ fn main() {
     let refined_sha256 = format!("sha256:{:x}", Sha256::digest(refined_text.as_bytes()));
 
     let candidates = extract_judgment_citation_candidates_with_footnotes_and_anchors(
-        &document_ref,
-        &source_revision_ref,
+        &inputs.document_ref,
+        &inputs.source_revision_ref,
         &refined_sha256,
         &judgment.body.text,
         &footnotes,
@@ -193,13 +186,13 @@ fn main() {
             "  \"candidates\": [\n    {}\n  ]\n",
             "}}\n"
         ),
-        json_escape(&residual_ref),
-        json_escape(&proposition_ref),
-        json_escape(&producer_ref),
-        json_escape(&hypothesis_ref),
-        json_escape(&document_ref),
-        json_escape(&source_revision_ref),
-        json_escape(&body_only_text_sha256),
+        json_escape(&inputs.residual_ref),
+        json_escape(&inputs.proposition_ref),
+        json_escape(&inputs.producer_ref),
+        json_escape(&inputs.hypothesis_ref),
+        json_escape(&inputs.document_ref),
+        json_escape(&inputs.source_revision_ref),
+        json_escape(&inputs.body_only_canonical_text_sha256),
         json_escape(&refined_sha256),
         judgment.body.paragraph_count,
         footnotes.len(),
@@ -210,16 +203,29 @@ fn main() {
         body,
     );
 
-    if let Some(parent) = output_path.parent() {
+    let parsed: serde_json::Value =
+        serde_json::from_str(&receipt).expect("self-validate review queue JSON");
+    assert_eq!(parsed["schema_version"], "sl.judgment_citation_review_queue.v0_3");
+    assert_eq!(parsed["authority"], CANDIDATE_ONLY_AUTHORITY);
+    assert_eq!(parsed["network_requests"], 0);
+    assert_eq!(parsed["candidate_count"], candidates.len());
+    assert_eq!(parsed["anchored_footnote_candidate_count"], anchored_footnote_candidate_count);
+    assert_eq!(parsed["candidate_extraction_claimed_semantic_correspondence"], false);
+    assert_eq!(parsed["candidate_extraction_claimed_citation_treatment"], false);
+    assert_eq!(parsed["candidate_extraction_claimed_current_authority"], false);
+    assert_eq!(parsed["anchor_observation_claimed_residual_payment"], false);
+
+    if let Some(parent) = inputs.output_path.parent() {
         fs::create_dir_all(parent).expect("create review queue directory");
     }
-    fs::write(&output_path, receipt).expect("write citation review queue");
+    fs::write(&inputs.output_path, receipt).expect("write citation review queue");
     println!(
-        "cullen_review_queue={} candidates={} footnotes={} anchors={} anchored_footnote_candidates={} network=0 authority=experimental_candidate_only",
-        output_path.display(),
+        "cullen_review_queue={} candidates={} footnotes={} anchors={} anchored_footnote_candidates={} network=0 authority={}",
+        inputs.output_path.display(),
         candidates.len(),
         footnotes.len(),
         anchors.len(),
         anchored_footnote_candidate_count,
+        CANDIDATE_ONLY_AUTHORITY,
     );
 }
