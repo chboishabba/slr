@@ -96,7 +96,7 @@ fn main() {
 
     let receipt = format!(
         concat!(
-            "{\n",
+            "{{\n",
             "  \"schema_version\": \"sl.governed_legal_acquisition.v0_1\",\n",
             "  \"runtime_head\": \"{}\",\n",
             "  \"authority\": \"experimental_candidate_only\",\n",
@@ -106,11 +106,11 @@ fn main() {
             "  \"proposition_ref\": \"{}\",\n",
             "  \"medium_neutral_citation\": \"{}\",\n",
             "  \"explicit_reference\": \"{}\",\n",
-            "  \"first_run\": {\"network_requests\": 1, \"locally_ingested\": true, \"bytes_digest\": \"{}\", \"source_revision_ref\": \"{}\"},\n",
-            "  \"replay_run\": {\"network_requests\": 0, \"resolution\": \"Persisted\"},\n",
+            "  \"first_run\": {{\"network_requests\": 1, \"locally_ingested\": true, \"bytes_digest\": \"{}\", \"source_revision_ref\": \"{}\"}},\n",
+            "  \"replay_run\": {{\"network_requests\": 0, \"resolution\": \"Persisted\"}},\n",
             "  \"search_claimed_semantic_payment\": false,\n",
             "  \"acquisition_claimed_authority_receipt\": false\n",
-            "}\n"
+            "}}\n"
         ),
         json_escape(&runtime_head),
         json_escape(&source_identity),

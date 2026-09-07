@@ -16,7 +16,7 @@ for needle in (
     "handoff_locally_ingested_authority",
     "NotLocallyIngested",
     "NonCandidateAuthority",
-    "world.append_source",
+    ".append_source(record)",
     "acquisition_handoff_is_semantic_payment",
 ):
     if needle not in acq:

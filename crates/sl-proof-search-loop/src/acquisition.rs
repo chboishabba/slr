@@ -17,6 +17,8 @@ pub enum AcquisitionHandoffError {
     WorldExtension(WorldExtensionError),
 }
 
+// The explicit arguments mirror the persisted acquisition-to-world receipt ABI.
+#[allow(clippy::too_many_arguments)]
 pub fn handoff_locally_ingested_authority(
     world: &mut ResearchWorldSnapshot,
     acquisition: &LocalIngestionReceipt,
