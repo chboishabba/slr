@@ -9,6 +9,8 @@ rust-version.workspace = true
 sensiblaw-proof-search-scheduler = { path = "../sl-proof-search-scheduler" }
 sensiblaw-evidential-reopen = { path = "../sl-evidential-reopen" }
 sensiblaw-governed-legal-provider = { path = "../sl-governed-legal-provider" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 sha2 = "0.10"
 xml-rs = "0.8"
 zip = { version = "0.6", default-features = false, features = ["deflate"] }
