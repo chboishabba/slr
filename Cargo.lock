@@ -70,6 +70,9 @@ dependencies = [
 [[package]]
 name = "sensiblaw-source-handoff"
 version = "0.1.0"
+dependencies = [
+ "sensiblaw-evidential-reopen",
+]
 
 [[package]]
 name = "sensiblaw-stream"
