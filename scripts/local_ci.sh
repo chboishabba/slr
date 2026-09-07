@@ -41,5 +41,9 @@ cargo run -p sensiblaw-proof-search-scheduler --example offline_pabai
 cargo run -p sensiblaw-proof-search-loop --example offline_pabai_loop
 cargo run -p sensiblaw-proof-search-loop --example offline_research_engine_v01
 cargo run -p sensiblaw-proof-search-loop --example offline_compounding_iteration_v02
+cargo run -p sensiblaw-proof-search-loop --example offline_current_treatment_iteration_v03
+
+echo '== online readiness preflight =='
+cargo run -p sensiblaw-proof-search-loop --example online_readiness_preflight
 
 echo 'LOCAL CI PASS'
