@@ -21,11 +21,15 @@ def main() -> None:
         raise SystemExit(f"unexpected authority: {data.get('authority')!r}")
     if not data.get("runtime_head"):
         raise SystemExit("runtime_head must be pinned")
-    if data.get("provider") != "AustLII":
-        raise SystemExit("first governed live fixture must be AustLII")
+    if data.get("provider") != "HighCourtAustralia":
+        raise SystemExit("first governed live fixture must use the official High Court provider")
+    if data.get("provider_access_status") != "Available":
+        raise SystemExit("live provider must report Available before the receipt can validate")
     for field in ("source_identity_ref", "proposition_ref", "medium_neutral_citation", "explicit_reference"):
         if not data.get(field):
             raise SystemExit(f"missing receipt field: {field}")
+    if not str(data["explicit_reference"]).startswith("https://www.hcourt.gov.au/"):
+        raise SystemExit("official HCA receipt must retain an hcourt.gov.au reference")
 
     first = data.get("first_run") or {}
     replay = data.get("replay_run") or {}
@@ -47,8 +51,8 @@ def main() -> None:
         raise SystemExit("acquisition receipt cannot become legal authority")
 
     print(
-        "governed live legal receipt PASS "
-        f"head={data['runtime_head']} first_network=1 replay_network=0"
+        "governed official-source receipt PASS "
+        f"head={data['runtime_head']} provider=HighCourtAustralia first_network=1 replay_network=0"
     )
 
 
