@@ -70,7 +70,9 @@ pub fn extract_docx_canonical_text(bytes: &[u8]) -> Result<CanonicalDocxText, Do
     document_xml_to_canonical_text(&xml)
 }
 
+#[allow(dead_code)]
 pub const fn docx_text_materialization_is_semantic_payment() -> bool { false }
+#[allow(dead_code)]
 pub const fn docx_text_materialization_is_legal_authority() -> bool { false }
 
 #[cfg(test)]

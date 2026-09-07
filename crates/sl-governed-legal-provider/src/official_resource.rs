@@ -72,7 +72,9 @@ pub fn preferred_hca_judgment_resource(
         .or_else(|| resources.iter().find(|resource| resource.kind == JudgmentResourceKind::Pdf))
 }
 
+#[allow(dead_code)]
 pub const fn resource_discovery_is_semantic_payment() -> bool { false }
+#[allow(dead_code)]
 pub const fn resource_discovery_is_legal_authority() -> bool { false }
 
 #[cfg(test)]
