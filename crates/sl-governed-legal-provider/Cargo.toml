@@ -10,4 +10,5 @@ default = []
 live-network = ["dep:ureq"]
 
 [dependencies]
+sha2 = "0.10"
 ureq = { version = "2.10", optional = true }
