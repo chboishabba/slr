@@ -12,6 +12,7 @@ fn main() {
         discover_hca_judgment_resources, preferred_hca_judgment_resource, JudgmentResourceKind,
     };
     use sensiblaw_governed_legal_provider::*;
+    use serde_json::Value;
     use sha2::{Digest, Sha256};
     use std::fs;
     use std::path::PathBuf;
@@ -25,6 +26,13 @@ fn main() {
             .replace('\t', "\\t")
     }
 
+    fn required_string<'a>(value: &'a Value, key: &str) -> &'a str {
+        value
+            .get(key)
+            .and_then(Value::as_str)
+            .unwrap_or_else(|| panic!("bound acquisition permit missing string field {key}"))
+    }
+
     if std::env::var("SENSIBLAW_LIVE_LEGAL_OPT_IN").ok().as_deref() != Some("1") {
         eprintln!("refusing live legal acquisition: set SENSIBLAW_LIVE_LEGAL_OPT_IN=1 explicitly");
         std::process::exit(2);
@@ -32,6 +40,55 @@ fn main() {
 
     let runtime_head = std::env::var("SENSIBLAW_RUNTIME_HEAD")
         .expect("SENSIBLAW_RUNTIME_HEAD must pin the exact git head for a live receipt");
+    let bound_plan_path = PathBuf::from(
+        std::env::var("SENSIBLAW_BOUND_ACQUISITION_PLAN")
+            .unwrap_or_else(|_| "/tmp/sensiblaw-live-legal/residual-bound-acquisition-v01.json".into()),
+    );
+    let bound_plan_bytes = fs::read(&bound_plan_path)
+        .expect("read residual-bound acquisition permit produced by proof-search engine");
+    let bound_plan: Value = serde_json::from_slice(&bound_plan_bytes)
+        .expect("parse residual-bound acquisition permit JSON");
+    assert_eq!(
+        required_string(&bound_plan, "schema_version"),
+        "sl.residual_bound_authority_demand.v0_1"
+    );
+    assert_eq!(required_string(&bound_plan, "authority"), RECEIPT_AUTHORITY);
+    assert_eq!(
+        bound_plan
+            .get("source_route_pays_scheduled_gap")
+            .and_then(Value::as_bool),
+        Some(true)
+    );
+    assert_eq!(
+        bound_plan
+            .get("source_route_uses_scheduled_producer")
+            .and_then(Value::as_bool),
+        Some(true)
+    );
+    assert_eq!(
+        bound_plan
+            .get("acquisition_claimed_semantic_payment")
+            .and_then(Value::as_bool),
+        Some(false)
+    );
+    assert_eq!(
+        bound_plan
+            .get("acquisition_claimed_consumer_closure")
+            .and_then(Value::as_bool),
+        Some(false)
+    );
+
+    let residual_ref = required_string(&bound_plan, "residual_ref").to_string();
+    let proposition_ref = required_string(&bound_plan, "proposition_ref").to_string();
+    let scheduled_producer_ref =
+        required_string(&bound_plan, "scheduled_producer_ref").to_string();
+    let hypothesis_ref = required_string(&bound_plan, "hypothesis_ref").to_string();
+    let bound_source_identity_ref =
+        required_string(&bound_plan, "source_identity_ref").to_string();
+    let bound_citation = required_string(&bound_plan, "medium_neutral_citation").to_string();
+    assert_eq!(bound_citation, "[2026] HCA 19");
+    assert_eq!(bound_plan.get("jurisdiction_ref").and_then(Value::as_str), Some("AU"));
+
     let landing_path = PathBuf::from(
         std::env::var("SENSIBLAW_HCA_LANDING_HTML")
             .unwrap_or_else(|_| "/tmp/sensiblaw-live-legal/authority.html".into()),
@@ -70,11 +127,11 @@ fn main() {
     let digest = format!("sha256:{:x}", Sha256::digest(&fetched.bytes));
     let artifact_path = output_dir.join("judgment.docx");
     fs::write(&artifact_path, &fetched.bytes).expect("persist HCA judgment DOCX locally");
-    let source_identity = "document:hca:[2026]-HCA-19:docx".to_string();
+    let document_source_identity = "document:hca:[2026]-HCA-19:docx".to_string();
     let source_revision = format!("source-revision:{digest}");
     let ingested = mark_locally_ingested(
         &fetched,
-        source_identity.clone(),
+        document_source_identity.clone(),
         source_revision.clone(),
         digest.clone(),
     );
@@ -82,14 +139,15 @@ fn main() {
 
     let materialized = extract_docx_canonical_text(&fetched.bytes)
         .expect("materialize official HCA DOCX into canonical local text");
-    let canonical_text_digest = format!("sha256:{:x}", Sha256::digest(materialized.text.as_bytes()));
+    let canonical_text_digest =
+        format!("sha256:{:x}", Sha256::digest(materialized.text.as_bytes()));
     let canonical_text_path = output_dir.join("judgment.txt");
     fs::write(&canonical_text_path, materialized.text.as_bytes())
         .expect("persist canonical HCA judgment text locally");
 
     let replay_context = ResolutionContext {
         persisted: vec![PersistedAuthorityReceipt {
-            source_identity_ref: source_identity.clone(),
+            source_identity_ref: document_source_identity.clone(),
             source_revision_ref: source_revision.clone(),
             jurisdiction_ref: "AU".into(),
             compile_eligible: true,
@@ -99,10 +157,10 @@ fn main() {
     let replay_demand = KnownAuthorityDemand {
         demand_ref: "live-smoke:official-hca-judgment-docx".into(),
         jurisdiction_ref: "AU".into(),
-        source_identity_ref: source_identity.clone(),
-        medium_neutral_citation: Some("[2026] HCA 19".into()),
+        source_identity_ref: document_source_identity.clone(),
+        medium_neutral_citation: Some(bound_citation.clone()),
         explicit_austlii_ref: None,
-        proposition_ref: Some("prop:cullen-positive-operational-duty".into()),
+        proposition_ref: Some(proposition_ref.clone()),
         use_intent: PropositionUseIntent::SourceProposition,
         treatment_intent: CitationTreatmentIntent::None,
     };
@@ -116,8 +174,9 @@ fn main() {
             "  \"runtime_head\": \"{}\",\n",
             "  \"authority\": \"experimental_candidate_only\",\n",
             "  \"provider\": \"HighCourtAustralia\",\n",
-            "  \"source_identity_ref\": \"{}\",\n",
-            "  \"medium_neutral_citation\": \"[2026] HCA 19\",\n",
+            "  \"binding\": {{\"residual_ref\": \"{}\", \"proposition_ref\": \"{}\", \"scheduled_producer_ref\": \"{}\", \"hypothesis_ref\": \"{}\", \"source_identity_ref\": \"{}\", \"source_route_pays_scheduled_gap\": true, \"source_route_uses_scheduled_producer\": true}},\n",
+            "  \"document_source_identity_ref\": \"{}\",\n",
+            "  \"medium_neutral_citation\": \"{}\",\n",
             "  \"landing_page_network_requests\": 0,\n",
             "  \"resource_discovery_network_requests\": 0,\n",
             "  \"document_kind\": \"Docx\",\n",
@@ -127,11 +186,18 @@ fn main() {
             "  \"replay_run\": {{\"network_requests\": 0, \"resolution\": \"Persisted\"}},\n",
             "  \"document_fetch_claimed_semantic_payment\": false,\n",
             "  \"document_fetch_claimed_legal_authority\": false,\n",
-            "  \"canonical_text_claimed_semantic_payment\": false\n",
+            "  \"canonical_text_claimed_semantic_payment\": false,\n",
+            "  \"acquisition_claimed_consumer_closure\": false\n",
             "}}\n"
         ),
         json_escape(&runtime_head),
-        json_escape(&source_identity),
+        json_escape(&residual_ref),
+        json_escape(&proposition_ref),
+        json_escape(&scheduled_producer_ref),
+        json_escape(&hypothesis_ref),
+        json_escape(&bound_source_identity_ref),
+        json_escape(&document_source_identity),
+        json_escape(&bound_citation),
         json_escape(&preferred.reference),
         json_escape(&digest),
         json_escape(&source_revision),
@@ -142,7 +208,9 @@ fn main() {
     fs::write(&receipt_path, receipt).expect("write official judgment acquisition receipt");
 
     println!(
-        "provider=HighCourtAustralia document=Docx landing_network=0 document_network=1 replay_network=0 paragraphs={} text_digest={} receipt={} authority={}",
+        "provider=HighCourtAustralia residual={} producer={} document=Docx landing_network=0 document_network=1 replay_network=0 paragraphs={} text_digest={} receipt={} authority={}",
+        residual_ref,
+        scheduled_producer_ref,
         materialized.paragraph_count,
         canonical_text_digest,
         receipt_path.display(),
