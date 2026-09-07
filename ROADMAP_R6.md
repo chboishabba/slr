@@ -1,46 +1,76 @@
-# SensibLaw Rust R6 governed-online tranche
+# SensibLaw Rust R6/R7 governed Australian research tranche
 
-Rust remains the primary implementation track. Agda mirrors the runtime contracts and does not expand the execution surface independently.
+Rust remains the primary implementation track. Agda mirrors the runtime contracts and observed receipts; it does not expand the execution surface independently.
 
-## Implemented
+## Achieved experimentally
 
-- R6a known-authority resolver: persisted/local -> explicit AustLII -> JADE exact MNC -> deterministic MNC-to-AustLII -> bounded AustLII search -> unresolved.
-- R6b deterministic AustLII SINO lowering and explicit-document fetch boundary.
-- R6c JADE exact/search/citation-neighbourhood planning boundary.
-- R6d bounded citation-follow governance: 4-second minimum legal-host pacing, burst 1, max depth 1, max new documents 5, explicit network budget, cache/persisted-first, no scheduler HTTP.
-- R6e code path for first governed fetch -> local ingestion -> immutable source revision -> same-demand persisted replay with zero network.
-- Live HTTP is feature-gated behind `live-network` and additionally requires explicit `SENSIBLAW_LIVE_LEGAL_OPT_IN=1`.
-- Local CI compiles the live feature but never executes network.
+- Governed official HCA acquisition with explicit operator opt-in.
+- First-run official landing fetch = 1 request; persisted replay = 0.
+- Official HCA DOCX resource discovery from persisted landing state = 0 requests.
+- Full Cullen DOCX acquisition = 1 request; persisted replay = 0.
+- Deterministic DOCX -> canonical body text materialization with immutable carrier/text digests.
+- Residual-bound acquisition permit for `residual:cullen-positive-operational-act` / `prop:cullen-positive-operational-duty`.
+- Body-only citation observer v0.1 inadequacy observed: one self-citation candidate.
+- Body + material-footnote citation observer v0.2 observed at Rust head `00bb9957ace2d3c2ea7d6104ad5cab100dd29369`:
+  - network requests = 0;
+  - material footnotes = 163;
+  - citation candidates = 190;
+  - footnote candidates = 189;
+  - Mallonland `(2024) 98 ALJR 956` and `418 ALR 639` recovered at `#footnote-90`;
+  - every occurrence remains unreviewed and `experimental_candidate_only`.
 
-## Deterministic live acceptance receipt
+## Active introspective refinement: anchored citation observer v0.3
 
-The opt-in smoke writes `sl.governed_legal_acquisition.v0_1` containing:
-
-- exact runtime git head;
-- provider/source/proposition/MNC/explicit-reference identity;
-- first-run network request count (=1);
-- SHA256 identity of acquired bytes;
-- immutable local source revision;
-- local-ingestion receipt;
-- same-demand replay network request count (=0);
-- candidate-only authority boundary;
-- explicit false claims for semantic payment and legal authority.
-
-Run only after local CI passes:
-
-```bash
-export SENSIBLAW_LIVE_LEGAL_OPT_IN=1
-scripts/run_live_legal_smoke.sh
-```
-
-## Current wall
-
-Before the opt-in smoke is actually executed and its JSON receipt retained, `LiveProviderFixtureMissing` remains true. Production governed-online status additionally requires the matching exact-head Agda/kernel receipt.
-
-Thus the expected readiness transition is:
+The v0.2 observer solved citation identity but exposed the next missing coordinate:
 
 ```text
-OfflineOnly
-  -- successful bounded live receipt --> ExperimentalLiveAcquisitionReady
-  -- exact-head Agda/kernel receipt --> ProductionGovernedOnlineReady
+footnote citation identity != body proposition that invoked that footnote
 ```
+
+The v0.3 source path therefore preserves the exact WordprocessingML relation:
+
+```text
+body paragraph
+  -> w:footnoteReference/@w:id
+  -> footnote body
+  -> citation occurrence
+```
+
+Each footnote citation candidate can now retain:
+
+- exact footnote locator;
+- anchor body-paragraph locator(s);
+- anchor body-paragraph text(s);
+- immutable source revision and refined observer digest.
+
+This is observation provenance only:
+
+```text
+anchor != residual payment
+anchor != proposition correspondence
+anchor != CitationUse
+anchor != current authority
+```
+
+The calibration target is source-grounded Cullen material around the positive-act/omission distinction. The v0.3 verifier requires Robinson `[2018] AC 736` and Modbury `(2000) 205 CLR 254` to be anchored to body context containing `positive acts in creating risk` before residual-specific review is scheduled.
+
+## Next deterministic gate
+
+Run:
+
+```bash
+scripts/local_ci.sh
+python3 scripts/run_local_cullen_review_queue.py
+```
+
+The second command is zero-network and writes:
+
+```text
+/tmp/sensiblaw-live-legal/cullen-citation-review-queue-v03.json
+```
+
+Do not broaden citation extraction merely because more authorities exist. After v0.3 is observed, the next task is to shortlist only anchored occurrences that bear on the exact live residual and send those through the existing explicit locator-bound review gate.
+
+## Production boundary
+
+Experimental online acquisition is achieved. Production promotion still requires exact-current-head execution receipts where required plus matching Agda/kernel certification. Local Rust CI and runtime observation remain distinct from Agda kernel proof.
