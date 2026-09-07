@@ -33,6 +33,7 @@ python3 scripts/verify_canonical_judgment_pnf_contract.py
 python3 scripts/verify_residual_bound_acquisition_contract.py
 python3 scripts/verify_judgment_candidate_extraction_contract.py
 python3 scripts/verify_judgment_review_gate_contract.py
+python3 scripts/verify_live_cullen_review_queue_contract.py
 
 echo '== live receipt lineage (no network) =='
 python3 scripts/verify_live_receipt_lineage.py \
@@ -69,7 +70,8 @@ python3 -m py_compile \
   scripts/verify_live_hca_judgment_receipt.py \
   scripts/verify_live_receipt_lineage.py \
   scripts/run_local_cullen_review_queue.py \
-  scripts/verify_live_cullen_review_queue.py
+  scripts/verify_live_cullen_review_queue.py \
+  scripts/verify_live_cullen_review_queue_contract.py
 
 echo '== offline fixtures =='
 cargo run -p sensiblaw-proof-search-scheduler --example offline_pabai
