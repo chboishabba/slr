@@ -9,6 +9,7 @@ use sensiblaw_proof_search_loop::judgment_candidates::{
 use sensiblaw_proof_search_loop::live_artifact::{
     cli_paths, load_and_validate_cullen_inputs, CANDIDATE_ONLY_AUTHORITY,
 };
+use sensiblaw_proof_search_loop::live_artifact_validation::validate_cullen_review_queue_values;
 use sha2::{Digest, Sha256};
 use std::fs;
 
@@ -146,6 +147,16 @@ fn main() {
                 && !candidate.anchor_paragraph_locator_refs.is_empty()
         })
         .count();
+
+    validate_cullen_review_queue_values(
+        &inputs.body_only_canonical_text_sha256,
+        &refined_sha256,
+        &inputs.source_revision_ref,
+        footnotes.len(),
+        anchors.len(),
+        &candidates,
+    )
+    .expect("validate typed Cullen review queue observations");
 
     let body = candidates
         .iter()
