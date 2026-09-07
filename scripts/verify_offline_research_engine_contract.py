@@ -11,6 +11,7 @@ FILES = [
     BASE / "query.rs",
     BASE / "local.rs",
     BASE / "reasoning.rs",
+    BASE / "transition.rs",
     BASE / "world.rs",
     BASE / "receipt.rs",
 ]
@@ -40,9 +41,15 @@ required = [
     "pub struct PropositionReasoningEdge",
     "pub enum ReasoningRole",
     "pub enum ConditionKind",
+    "pub struct ResidualAssessment",
+    "pub fn apply_assessments",
+    "ClosedCandidate",
+    "BudgetExhausted",
     "pub struct SourceRevisionRecord",
     "SourceRevisionRewriteAttempt",
     'pub const ITERATION_SCHEMA: &str = "sl.proof_search_iteration.v0_1"',
+    'pub const FRONTIER_ITERATION_SCHEMA_V02: &str = "sl.proof_search_frontier_iteration.v0_2"',
+    "pub fn build_frontier_iteration_receipt_v02",
     'authority_boundary: "experimental_candidate_only"',
 ]
 missing = [needle for needle in required if needle not in text]
@@ -66,6 +73,7 @@ for forbidden in [
 
 planner = (BASE / "planner.rs").read_text(encoding="utf-8")
 engine = (BASE / "engine.rs").read_text(encoding="utf-8")
+transition = (BASE / "transition.rs").read_text(encoding="utf-8")
 if "target_proposition_ref: hypothesis.target_proposition_ref.clone()" not in planner:
     raise SystemExit("query synthesis lost exact target-proposition identity")
 if "network_requests: 0" not in planner:
@@ -76,6 +84,10 @@ if "passages.is_empty()" not in engine:
     raise SystemExit("whole-frontier local plan lost explicit local-hit gating")
 if "expected_residual_reduction" not in engine:
     raise SystemExit("whole-frontier planner lost declared proof-reduction calibration")
+if 'assessment_authority != "experimental_candidate_only"' not in transition:
+    raise SystemExit("frontier transition can accept authority-promoting assessments")
+if "ResearchTermination::ClosedCandidate" not in transition:
+    raise SystemExit("frontier transition lost candidate-only closed state")
 
 fixture = (ROOT / "crates" / "sl-proof-search-loop" / "examples" / "offline_research_engine_v01.rs").read_text(encoding="utf-8")
 if "network_requests: 0" not in fixture:
