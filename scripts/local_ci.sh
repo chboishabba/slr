@@ -14,6 +14,7 @@ cargo build --release --workspace
 
 echo '== live-provider feature compile (no network execution) =='
 cargo check -p sensiblaw-governed-legal-provider --features live-network --example live_austlii_smoke
+cargo check -p sensiblaw-governed-legal-provider --features live-network --example live_hca_judgment_docx_smoke
 
 echo '== source contracts =='
 python3 scripts/verify_source_contract.py
@@ -53,6 +54,7 @@ python3 -m py_compile \
   scripts/verify_official_acquisition_handoff_contract.py \
   scripts/verify_hca_resource_discovery_contract.py \
   scripts/verify_live_legal_receipt.py \
+  scripts/verify_live_hca_judgment_receipt.py \
   scripts/verify_live_receipt_lineage.py
 
 echo '== offline fixtures =='
@@ -71,7 +73,7 @@ cargo run -p sensiblaw-proof-search-loop --example online_readiness_preflight
 
 echo 'NOTE: bounded official HCA landing acquisition has been validated experimentally.'
 echo '      Resource discovery is zero-network and prefers the official DOCX for PNF.'
-echo '      The retained live receipt is pinned to 9c3007...; the no-network lineage'
-echo '      audit bridges provider runtime source to locally validated bb6de85... only.'
+echo '      The next opt-in step is scripts/run_live_hca_judgment_smoke.sh, which reuses'
+echo '      the persisted landing page and spends at most one request on the DOCX.'
 echo '      Exact-current-head live execution and Agda/kernel receipts remain separate.'
 echo 'LOCAL CI PASS'
