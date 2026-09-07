@@ -29,6 +29,7 @@ python3 scripts/verify_official_acquisition_handoff_contract.py
 python3 scripts/verify_hca_resource_discovery_contract.py
 python3 scripts/verify_docx_text_materialization_contract.py
 python3 scripts/verify_canonical_judgment_pnf_contract.py
+python3 scripts/verify_residual_bound_acquisition_contract.py
 
 echo '== live receipt lineage (no network) =='
 python3 scripts/verify_live_receipt_lineage.py \
@@ -57,6 +58,7 @@ python3 -m py_compile \
   scripts/verify_hca_resource_discovery_contract.py \
   scripts/verify_docx_text_materialization_contract.py \
   scripts/verify_canonical_judgment_pnf_contract.py \
+  scripts/verify_residual_bound_acquisition_contract.py \
   scripts/verify_live_legal_receipt.py \
   scripts/verify_live_hca_judgment_receipt.py \
   scripts/verify_live_receipt_lineage.py
@@ -72,6 +74,7 @@ cargo run -p sensiblaw-governed-legal-provider --example offline_replay_fixture
 cargo run -p sensiblaw-governed-legal-provider --example hca_landing_resource_discovery
 cargo run -p sensiblaw-governed-legal-provider --example docx_text_materialization
 cargo run -p sensiblaw-proof-search-loop --example canonical_judgment_pnf_bridge
+cargo run -p sensiblaw-proof-search-loop --example residual_bound_hca_acquisition
 cargo run -p sensiblaw-proof-search-loop --example official_acquisition_compounding
 
 echo '== online readiness preflight =='
@@ -80,6 +83,7 @@ cargo run -p sensiblaw-proof-search-loop --example online_readiness_preflight
 echo 'NOTE: bounded official HCA landing acquisition has been validated experimentally.'
 echo '      Resource discovery is zero-network and prefers the official DOCX for PNF.'
 echo '      DOCX -> canonical text -> existing PNF bridge is validated offline before live use.'
+echo '      Governed research acquisition must bind to the exact open residual/proposition/producer.'
 echo '      The next opt-in step is scripts/run_live_hca_judgment_smoke.sh, which reuses'
 echo '      the persisted landing page and spends at most one request on the DOCX.'
 echo '      Exact-current-head live execution and Agda/kernel receipts remain separate.'
