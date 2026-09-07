@@ -4,8 +4,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 BASE = ROOT / "crates" / "sl-proof-search-loop" / "src"
 FILES = [
+    BASE / "engine.rs",
     BASE / "frontier.rs",
     BASE / "hypothesis.rs",
+    BASE / "planner.rs",
     BASE / "query.rs",
     BASE / "local.rs",
     BASE / "reasoning.rs",
@@ -22,9 +24,18 @@ required = [
     "Defeater",
     "Comparator",
     "Contradiction",
+    "AuthorityTreatment",
+    "TerminologyExpansion",
     "pub enum QueryExpr",
     "pub fn compile_austlii",
     "pub fn compile_local",
+    "pub struct QueryLexicalContext",
+    "pub fn synthesize_queries",
+    "pub fn execute_local_candidates",
+    "pnf-or-consumer-explicit-lexical-context",
+    "pub struct DeclaredResearchValue",
+    "pub fn plan_local_frontier_research",
+    "expected_residual_reduction",
     "pub struct LocalIndex",
     "pub struct PropositionReasoningEdge",
     "pub enum ReasoningRole",
@@ -53,7 +64,21 @@ for forbidden in [
     if forbidden in text:
         raise SystemExit(f"offline research engine acquired forbidden capability: {forbidden}")
 
-if "network_requests: 0" not in (ROOT / "crates" / "sl-proof-search-loop" / "examples" / "offline_research_engine_v01.rs").read_text(encoding="utf-8"):
+planner = (BASE / "planner.rs").read_text(encoding="utf-8")
+engine = (BASE / "engine.rs").read_text(encoding="utf-8")
+if "target_proposition_ref: hypothesis.target_proposition_ref.clone()" not in planner:
+    raise SystemExit("query synthesis lost exact target-proposition identity")
+if "network_requests: 0" not in planner:
+    raise SystemExit("local query execution no longer pins zero network requests")
+if "MissingDeclaredValue" not in engine:
+    raise SystemExit("whole-frontier planner may infer proof value from retrieval hits")
+if "passages.is_empty()" not in engine:
+    raise SystemExit("whole-frontier local plan lost explicit local-hit gating")
+if "expected_residual_reduction" not in engine:
+    raise SystemExit("whole-frontier planner lost declared proof-reduction calibration")
+
+fixture = (ROOT / "crates" / "sl-proof-search-loop" / "examples" / "offline_research_engine_v01.rs").read_text(encoding="utf-8")
+if "network_requests: 0" not in fixture:
     raise SystemExit("offline research engine fixture lost zero-network receipt")
 
 print("offline research engine v0.1 contract PASS")
