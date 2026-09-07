@@ -21,7 +21,19 @@ required = {
     "bounded citation depth": "max_depth: 1",
     "bounded new documents": "max_new_documents: 5",
     "known authority resolver": "resolve_known_authority",
+    "whole resolution candidates": "resolution_candidates",
     "persisted first": "ResolutionStage::Persisted",
+    "OALC exact MNC": "lookup_oalc_exact_mnc",
+    "OALC provider": "LegalProvider::Oalc",
+    "official HCA provider": "LegalProvider::HighCourtAustralia",
+    "official FCA provider": "LegalProvider::FederalCourtAustralia",
+    "official HCA calibration": "official_hca_known_reference",
+    "official FCA calibration": "official_fca_known_reference",
+    "provider availability": "ProviderAccessStatus",
+    "403 policy classification": "PolicyBlocked",
+    "TLS classification": "TlsInvalid",
+    "provider failure not evidence": "provider_failure_is_negative_legal_evidence",
+    "AustLII sanctioned mode": "AustliiAccessMode",
     "AustLII SINO": "AUSTLII_SINO_ENDPOINT",
     "deterministic MNC lowering": "deterministic_mnc_to_austlii",
     "JADE search": "jade_search_url",
@@ -30,6 +42,7 @@ required = {
     "explicit operator opt in": "OperatorOptInRequired",
     "request budget": "RequestBudgetExceeded",
     "candidate authority": "experimental_candidate_only",
+    "search returns references": "SearchReferenceReceipt",
     "local ingestion seam": "mark_locally_ingested",
 }
 for label, needle in required.items():
@@ -44,8 +57,9 @@ if 'sha2 = ' not in cargo:
     raise SystemExit("live acquisition receipts must retain SHA256 bytes identity")
 
 for needle in (
-    "first_network_requests=1 replay_network_requests=0",
+    "provider=HighCourtAustralia first_network_requests=1 replay_network_requests=0",
     "ResolutionStage::Persisted",
+    "ResolutionStage::OfficialHighCourt",
     "mark_locally_ingested",
 ):
     if needle not in replay:
@@ -56,8 +70,9 @@ for needle in (
     "SENSIBLAW_RUNTIME_HEAD",
     "max_network_requests: 1",
     "max_new_documents: 1",
-    "deterministic_mnc_to_austlii",
-    "fetch_austlii",
+    "official_hca_known_reference",
+    "fetch_hca",
+    "HighCourtAustralia",
     "Sha256::digest",
     "sl.governed_legal_acquisition.v0_1",
     "replay_run",
@@ -78,6 +93,7 @@ for needle in (
 for needle in (
     'SCHEMA = "sl.governed_legal_acquisition.v0_1"',
     'AUTHORITY = "experimental_candidate_only"',
+    'data.get("provider") != "HighCourtAustralia"',
     'first.get("network_requests") != 1',
     'replay.get("network_requests") != 0',
     'replay.get("resolution") != "Persisted"',
@@ -85,14 +101,11 @@ for needle in (
     if needle not in validator:
         raise SystemExit(f"live receipt validator contract lost: {needle}")
 
-# The proof scheduler itself must remain network-free. Live transport belongs
-# only in the governed provider crate.
 scheduler = (ROOT / "crates/sl-proof-search-scheduler/src/lib.rs").read_text(encoding="utf-8")
 for forbidden in ("ureq", "reqwest", "TcpStream", "std::net", "hyper::"):
     if forbidden in scheduler:
         raise SystemExit(f"scheduler acquired network capability: {forbidden}")
 
-# Search/fetch still do not grant semantic/legal authority.
 for forbidden in ("semantic_authority: true", "legal_authority: true", "publish(", "auto_admit"):
     if forbidden in lib:
         raise SystemExit(f"forbidden authority shortcut in provider crate: {forbidden}")
