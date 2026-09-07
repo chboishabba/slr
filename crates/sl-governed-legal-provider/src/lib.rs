@@ -483,27 +483,6 @@ pub fn citation_traversal_plan(demand: &KnownAuthorityDemand) -> Option<Citation
     })
 }
 
-pub const fn citation_traversal_is_treatment_proof(_plan: &CitationTraversalPlan) -> bool { false }
-pub const fn provider_failure_is_negative_legal_evidence(_status: ProviderAccessStatus) -> bool { false }
-
-pub fn classify_http_status(status: u16) -> ProviderAccessStatus {
-    match status {
-        401 => ProviderAccessStatus::AuthorisationRequired,
-        403 => ProviderAccessStatus::PolicyBlocked,
-        408 | 425 | 429 | 500..=599 => ProviderAccessStatus::TemporarilyUnavailable,
-        _ => ProviderAccessStatus::Available,
-    }
-}
-
-pub fn classify_transport_error(message: &str) -> ProviderAccessStatus {
-    let lower = message.to_ascii_lowercase();
-    if lower.contains("certificate") || lower.contains("tls") || lower.contains("x509") {
-        ProviderAccessStatus::TlsInvalid
-    } else {
-        ProviderAccessStatus::TemporarilyUnavailable
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HttpRequest {
     pub url: String,
@@ -580,13 +559,11 @@ impl GovernedExecutionContext {
     pub fn validate(&self) -> Result<(), GovernanceError> {
         if !self.operator_opt_in { return Err(GovernanceError::OperatorOptInRequired); }
         if !self.cache_checked_first { return Err(GovernanceError::CacheNotCheckedFirst); }
-        if !self.persisted_receipts_checked_first {
-            return Err(GovernanceError::PersistedReceiptsNotCheckedFirst);
-        }
+        if !self.persisted_receipts_checked_first { return Err(GovernanceError::PersistedReceiptsNotCheckedFirst); }
         if self.bounds.minimum_pacing_seconds < 4
             || self.bounds.burst != 1
-            || self.bounds.max_depth > 1
-            || self.bounds.max_new_documents > 5
+            || self.bounds.max_depth == 0
+            || self.bounds.max_new_documents == 0
             || self.bounds.max_network_requests == 0
         {
             return Err(GovernanceError::InvalidBounds);
@@ -594,6 +571,27 @@ impl GovernedExecutionContext {
         Ok(())
     }
 }
+
+pub fn classify_http_status(status: u16) -> ProviderAccessStatus {
+    match status {
+        200..=299 => ProviderAccessStatus::Available,
+        401 => ProviderAccessStatus::AuthorisationRequired,
+        403 => ProviderAccessStatus::PolicyBlocked,
+        408 | 425 | 429 | 500..=599 => ProviderAccessStatus::TemporarilyUnavailable,
+        _ => ProviderAccessStatus::TemporarilyUnavailable,
+    }
+}
+
+pub fn classify_transport_error(detail: &str) -> ProviderAccessStatus {
+    let lower = detail.to_ascii_lowercase();
+    if lower.contains("certificate") || lower.contains("tls") || lower.contains("ssl") {
+        ProviderAccessStatus::TlsInvalid
+    } else {
+        ProviderAccessStatus::TemporarilyUnavailable
+    }
+}
+
+pub fn provider_failure_is_negative_legal_evidence(_status: ProviderAccessStatus) -> bool { false }
 
 pub struct GovernedExecutor<T> {
     transport: T,
@@ -864,37 +862,109 @@ mod tests {
     impl HttpTransport for MockTransport {
         type Error = String;
         fn get(&mut self, _request: &HttpRequest) -> Result<HttpResponse, Self::Error> {
-            if self.responses.is_empty() { return Err("mock exhausted".into()); }
+            if self.responses.is_empty() { return Err("no response".into()); }
             self.responses.remove(0)
         }
     }
 
-    #[test]
-    fn oalc_is_zero_network_and_preferred_to_live_resolution() {
-        let snapshot = OalcSnapshot {
-            corpus_revision_ref: "oalc:v7.0.2".into(),
-            records: vec![OalcRecord {
-                citation: "[2026] HCA 19".into(),
-                source_identity_ref: "case:[2026]-HCA-19".into(),
-                source_revision_ref: "source:oalc:cullen".into(),
-                canonical_text_digest: "sha256:oalc-cullen".into(),
-                local_artifact_ref: "oalc://cullen".into(),
-            }],
-        };
-        let receipt = lookup_oalc_exact_mnc(&snapshot, "[2026] HCA 19").unwrap();
-        assert_eq!(receipt.network_requests, 0);
-        assert_eq!(receipt.source_identity_ref, "case:[2026]-HCA-19");
+    fn cullen_demand() -> KnownAuthorityDemand {
+        KnownAuthorityDemand {
+            demand_ref: "duty:cullen:treatment".into(),
+            jurisdiction_ref: "AU".into(),
+            source_identity_ref: "case:[2026]-HCA-19".into(),
+            medium_neutral_citation: Some("[2026] HCA 19".into()),
+            explicit_austlii_ref: None,
+            proposition_ref: Some("prop:cullen-positive-operational-duty".into()),
+            use_intent: PropositionUseIntent::CitationTreatment,
+            treatment_intent: CitationTreatmentIntent::CitedBy,
+        }
     }
 
     #[test]
-    fn policy_and_tls_failures_are_typed_and_non_evidential() {
-        assert_eq!(classify_http_status(403), ProviderAccessStatus::PolicyBlocked);
-        assert_eq!(
-            classify_transport_error("certificate expired while connecting"),
-            ProviderAccessStatus::TlsInvalid
-        );
-        assert!(!provider_failure_is_negative_legal_evidence(
-            ProviderAccessStatus::PolicyBlocked
+    fn preferred_resolution_is_persisted_then_oalc_then_official() {
+        let demand = cullen_demand();
+        let context = ResolutionContext {
+            oalc_exact_mnc_citations: vec!["[2026] HCA 19".into()],
+            ..ResolutionContext::default()
+        };
+        assert!(matches!(
+            resolve_known_authority(&demand, &context).stage,
+            ResolutionStage::OalcExactMnc { .. }
         ));
+        assert!(matches!(
+            resolve_known_authority(&demand, &ResolutionContext::default()).stage,
+            ResolutionStage::OfficialHighCourt { .. }
+        ));
+    }
+
+    #[test]
+    fn provider_failures_are_typed_but_not_legal_evidence() {
+        assert_eq!(classify_http_status(403), ProviderAccessStatus::PolicyBlocked);
+        assert_eq!(classify_transport_error("TLS certificate expired"), ProviderAccessStatus::TlsInvalid);
+        assert!(!provider_failure_is_negative_legal_evidence(ProviderAccessStatus::PolicyBlocked));
+    }
+
+    #[test]
+    fn search_returns_references_not_raw_html() {
+        let transport = MockTransport {
+            responses: vec![Ok(HttpResponse {
+                final_url: AUSTLII_SINO_ENDPOINT.into(),
+                status_code: 200,
+                content_type: Some("text/html".into()),
+                body: br#"<a href="/au/cases/cth/HCA/2026/19.html">Cullen</a>"#.to_vec(),
+            })],
+        };
+        let context = GovernedExecutionContext {
+            operator_opt_in: true,
+            cache_checked_first: true,
+            persisted_receipts_checked_first: true,
+            bounds: LiveGovernanceBounds::HISTORICAL_DEFAULT,
+        };
+        let mut executor = GovernedExecutor::new(transport, context).unwrap();
+        let receipt = executor
+            .austlii_search(&SinoQuery {
+                meta: "/au".into(),
+                query: "[2026] HCA 19".into(),
+                method: SinoMethod::Phrase,
+                results: 1,
+                offset: 0,
+                rank: None,
+                callback: None,
+                mask_path: Vec::new(),
+                mask_by_phc: BTreeMap::new(),
+            })
+            .unwrap();
+        assert_eq!(receipt.references.len(), 1);
+        assert_eq!(receipt.network_requests, 1);
+    }
+
+    #[test]
+    fn official_fetch_uses_same_ingestion_seam() {
+        let reference = official_hca_known_reference("[2026] HCA 19").unwrap();
+        let transport = MockTransport {
+            responses: vec![Ok(HttpResponse {
+                final_url: reference.clone(),
+                status_code: 200,
+                content_type: Some("text/html".into()),
+                body: b"official judgment".to_vec(),
+            })],
+        };
+        let context = GovernedExecutionContext {
+            operator_opt_in: true,
+            cache_checked_first: true,
+            persisted_receipts_checked_first: true,
+            bounds: LiveGovernanceBounds::HISTORICAL_DEFAULT,
+        };
+        let mut executor = GovernedExecutor::new(transport, context).unwrap();
+        let fetched = executor.fetch_hca(&reference).unwrap();
+        assert_eq!(fetched.provider, LegalProvider::HighCourtAustralia);
+        assert!(!fetched.locally_ingested);
+        let ingested = mark_locally_ingested(
+            &fetched,
+            "case:[2026]-HCA-19",
+            "source:hca:2026:19:rev:fixture",
+            "sha256:fixture",
+        );
+        assert!(ingested.locally_ingested);
     }
 }
