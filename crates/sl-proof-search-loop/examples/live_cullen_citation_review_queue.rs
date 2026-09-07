@@ -3,8 +3,8 @@ mod docx_text;
 
 use docx_text::extract_docx_canonical_judgment;
 use sensiblaw_proof_search_loop::judgment_candidates::{
-    extract_judgment_citation_candidates_with_footnotes, CitationOccurrenceCandidate,
-    LexicalTreatmentHint,
+    extract_judgment_citation_candidates_with_footnotes_and_anchors,
+    CitationOccurrenceCandidate, FootnoteAnchorObservation, LexicalTreatmentHint,
 };
 use sha2::{Digest, Sha256};
 use std::fs;
@@ -17,6 +17,14 @@ fn json_escape(value: &str) -> String {
         .replace('\n', "\\n")
         .replace('\r', "\\r")
         .replace('\t', "\\t")
+}
+
+fn json_string_array(values: &[String]) -> String {
+    values
+        .iter()
+        .map(|value| format!("\"{}\"", json_escape(value)))
+        .collect::<Vec<_>>()
+        .join(",")
 }
 
 fn hint_name(hint: LexicalTreatmentHint) -> &'static str {
@@ -55,6 +63,8 @@ fn candidate_json(candidate: &CitationOccurrenceCandidate) -> String {
             "\"reported_paragraph_label\":{},",
             "\"citation_text\":\"{}\",",
             "\"paragraph_text\":\"{}\",",
+            "\"anchor_paragraph_locator_refs\":[{}],",
+            "\"anchor_paragraph_texts\":[{}],",
             "\"lexical_treatment_hints\":[{}],",
             "\"reviewed\":false,",
             "\"candidate_only\":true",
@@ -68,6 +78,8 @@ fn candidate_json(candidate: &CitationOccurrenceCandidate) -> String {
         label,
         json_escape(&candidate.citation_text),
         json_escape(&candidate.paragraph_text),
+        json_string_array(&candidate.anchor_paragraph_locator_refs),
+        json_string_array(&candidate.anchor_paragraph_texts),
         hints,
     )
 }
@@ -109,16 +121,39 @@ fn main() {
         .iter()
         .map(|footnote| (footnote.footnote_id.clone(), footnote.text.clone()))
         .collect::<Vec<_>>();
+    let anchors = judgment
+        .body_paragraphs
+        .iter()
+        .flat_map(|paragraph| {
+            paragraph.footnote_ids.iter().map(|footnote_id| FootnoteAnchorObservation {
+                footnote_id: footnote_id.clone(),
+                paragraph_ordinal: paragraph.paragraph_ordinal,
+                paragraph_text: paragraph.text.clone(),
+            })
+        })
+        .collect::<Vec<_>>();
     let refined_text = refined_observer_text(&judgment.body.text, &footnotes);
     let refined_sha256 = format!("sha256:{:x}", Sha256::digest(refined_text.as_bytes()));
 
-    let candidates = extract_judgment_citation_candidates_with_footnotes(
+    let candidates = extract_judgment_citation_candidates_with_footnotes_and_anchors(
         &document_ref,
         &source_revision_ref,
         &refined_sha256,
         &judgment.body.text,
         &footnotes,
+        &anchors,
     );
+    let footnote_candidate_count = candidates
+        .iter()
+        .filter(|candidate| candidate.paragraph_locator_ref.contains("#footnote-"))
+        .count();
+    let anchored_footnote_candidate_count = candidates
+        .iter()
+        .filter(|candidate| {
+            candidate.paragraph_locator_ref.contains("#footnote-")
+                && !candidate.anchor_paragraph_locator_refs.is_empty()
+        })
+        .count();
 
     let body = candidates
         .iter()
@@ -128,7 +163,7 @@ fn main() {
     let receipt = format!(
         concat!(
             "{{\n",
-            "  \"schema_version\": \"sl.judgment_citation_review_queue.v0_2\",\n",
+            "  \"schema_version\": \"sl.judgment_citation_review_queue.v0_3\",\n",
             "  \"authority\": \"experimental_candidate_only\",\n",
             "  \"network_requests\": 0,\n",
             "  \"binding\": {{",
@@ -143,14 +178,19 @@ fn main() {
             "  \"canonical_text_sha256\": \"{}\",\n",
             "  \"observer_refinement\": {{",
             "\"body_footnotes_preserved\":true,",
+            "\"body_footnote_anchors_preserved\":true,",
             "\"body_paragraph_count\":{},",
-            "\"footnote_count\":{}",
+            "\"footnote_count\":{},",
+            "\"footnote_anchor_count\":{}",
             "}},\n",
             "  \"candidate_count\": {},\n",
+            "  \"footnote_candidate_count\": {},\n",
+            "  \"anchored_footnote_candidate_count\": {},\n",
             "  \"all_candidates_reviewed\": false,\n",
             "  \"candidate_extraction_claimed_semantic_correspondence\": false,\n",
             "  \"candidate_extraction_claimed_citation_treatment\": false,\n",
             "  \"candidate_extraction_claimed_current_authority\": false,\n",
+            "  \"anchor_observation_claimed_residual_payment\": false,\n",
             "  \"candidates\": [\n    {}\n  ]\n",
             "}}\n"
         ),
@@ -164,7 +204,10 @@ fn main() {
         json_escape(&refined_sha256),
         judgment.body.paragraph_count,
         footnotes.len(),
+        anchors.len(),
         candidates.len(),
+        footnote_candidate_count,
+        anchored_footnote_candidate_count,
         body,
     );
 
@@ -173,9 +216,11 @@ fn main() {
     }
     fs::write(&output_path, receipt).expect("write citation review queue");
     println!(
-        "cullen_review_queue={} candidates={} footnotes={} network=0 authority=experimental_candidate_only",
+        "cullen_review_queue={} candidates={} footnotes={} anchors={} anchored_footnote_candidates={} network=0 authority=experimental_candidate_only",
         output_path.display(),
         candidates.len(),
         footnotes.len(),
+        anchors.len(),
+        anchored_footnote_candidate_count,
     );
 }
