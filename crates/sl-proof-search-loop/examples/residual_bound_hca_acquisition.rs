@@ -4,6 +4,17 @@ use sensiblaw_governed_legal_provider::{
 use sensiblaw_proof_search_loop::bound_acquisition::bind_authority_demand;
 use sensiblaw_proof_search_loop::frontier::{ProofResidual, ResidualStatus};
 use sensiblaw_proof_search_loop::hypothesis::{family_for_residual, SearchHypothesisKind};
+use std::fs;
+use std::path::PathBuf;
+
+fn json_escape(value: &str) -> String {
+    value
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n")
+        .replace('\r', "\\r")
+        .replace('\t', "\\t")
+}
 
 fn main() {
     let residual = ProofResidual {
@@ -39,8 +50,48 @@ fn main() {
     assert!(!bound.acquisition_is_semantic_payment());
     assert!(!bound.acquisition_closes_consumer());
 
+    let output_path = PathBuf::from(
+        std::env::var("SENSIBLAW_BOUND_ACQUISITION_PLAN")
+            .unwrap_or_else(|_| "/tmp/sensiblaw-live-legal/residual-bound-acquisition-v01.json".into()),
+    );
+    if let Some(parent) = output_path.parent() {
+        fs::create_dir_all(parent).expect("create bound acquisition permit directory");
+    }
+    let citation = bound
+        .demand
+        .medium_neutral_citation
+        .as_deref()
+        .expect("bounded HCA fixture carries exact MNC");
+    let permit = format!(
+        concat!(
+            "{{\n",
+            "  \"schema_version\": \"sl.residual_bound_authority_demand.v0_1\",\n",
+            "  \"authority\": \"experimental_candidate_only\",\n",
+            "  \"residual_ref\": \"{}\",\n",
+            "  \"proposition_ref\": \"{}\",\n",
+            "  \"scheduled_producer_ref\": \"{}\",\n",
+            "  \"hypothesis_ref\": \"{}\",\n",
+            "  \"jurisdiction_ref\": \"AU\",\n",
+            "  \"source_identity_ref\": \"{}\",\n",
+            "  \"medium_neutral_citation\": \"{}\",\n",
+            "  \"source_route_pays_scheduled_gap\": true,\n",
+            "  \"source_route_uses_scheduled_producer\": true,\n",
+            "  \"acquisition_claimed_semantic_payment\": false,\n",
+            "  \"acquisition_claimed_consumer_closure\": false\n",
+            "}}\n"
+        ),
+        json_escape(&bound.residual_ref),
+        json_escape(&bound.proposition_ref),
+        json_escape(&bound.scheduled_producer_ref),
+        json_escape(&bound.hypothesis_ref),
+        json_escape(&bound.demand.source_identity_ref),
+        json_escape(citation),
+    );
+    fs::write(&output_path, permit).expect("write deterministic residual-bound acquisition permit");
+
     println!(
-        "residual={} proposition={} producer={} hypothesis={} source={} authority={} semantic_payment=false consumer_closed=false",
+        "permit={} residual={} proposition={} producer={} hypothesis={} source={} authority={} semantic_payment=false consumer_closed=false",
+        output_path.display(),
         bound.residual_ref,
         bound.proposition_ref,
         bound.scheduled_producer_ref,
