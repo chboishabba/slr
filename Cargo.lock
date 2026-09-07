@@ -11,6 +11,10 @@ name = "sensiblaw-core"
 version = "0.1.0"
 
 [[package]]
+name = "sensiblaw-evidential-reopen"
+version = "0.1.0"
+
+[[package]]
 name = "sensiblaw-expanded-cert"
 version = "0.1.0"
 dependencies = [
