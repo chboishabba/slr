@@ -9,6 +9,13 @@ SCHEMA = "sl.governed_official_judgment_acquisition.v0_1"
 AUTHORITY = "experimental_candidate_only"
 
 
+def require_nonempty_string(obj: dict, key: str) -> str:
+    value = obj.get(key)
+    if not isinstance(value, str) or not value:
+        raise SystemExit(f"missing non-empty string: {key}")
+    return value
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("receipt", type=Path)
@@ -21,8 +28,21 @@ def main() -> None:
         raise SystemExit(f"unexpected authority: {data.get('authority')!r}")
     if data.get("provider") != "HighCourtAustralia":
         raise SystemExit("official judgment fixture must use HighCourtAustralia")
+
+    binding = data.get("binding") or {}
+    residual_ref = require_nonempty_string(binding, "residual_ref")
+    proposition_ref = require_nonempty_string(binding, "proposition_ref")
+    scheduled_producer_ref = require_nonempty_string(binding, "scheduled_producer_ref")
+    hypothesis_ref = require_nonempty_string(binding, "hypothesis_ref")
+    require_nonempty_string(binding, "source_identity_ref")
+    if binding.get("source_route_pays_scheduled_gap") is not True:
+        raise SystemExit("source route must be bound to the scheduled residual gap")
+    if binding.get("source_route_uses_scheduled_producer") is not True:
+        raise SystemExit("source route must use the scheduled producer")
+
     if data.get("medium_neutral_citation") != "[2026] HCA 19":
         raise SystemExit("unexpected HCA judgment calibration")
+    require_nonempty_string(data, "document_source_identity_ref")
     if data.get("landing_page_network_requests") != 0:
         raise SystemExit("landing page must be reused locally without a new request")
     if data.get("resource_discovery_network_requests") != 0:
@@ -55,11 +75,14 @@ def main() -> None:
         raise SystemExit("document acquisition cannot claim legal authority")
     if data.get("canonical_text_claimed_semantic_payment") is not False:
         raise SystemExit("canonical text materialization cannot claim semantic payment")
+    if data.get("acquisition_claimed_consumer_closure") is not False:
+        raise SystemExit("bound acquisition cannot claim consumer closure")
 
     print(
         "official HCA judgment acquisition receipt PASS "
-        f"head={data['runtime_head']} landing=0 document=1 replay=0 "
-        f"paragraphs={canonical['paragraph_count']}"
+        f"head={data['runtime_head']} residual={residual_ref} proposition={proposition_ref} "
+        f"producer={scheduled_producer_ref} hypothesis={hypothesis_ref} "
+        f"landing=0 document=1 replay=0 paragraphs={canonical['paragraph_count']}"
     )
 
 
