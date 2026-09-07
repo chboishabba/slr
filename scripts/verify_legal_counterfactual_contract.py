@@ -4,10 +4,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 COUNTERFACTUAL = ROOT / "crates" / "sl-legal-counterfactual" / "src" / "lib.rs"
 FOLLOW = ROOT / "crates" / "sl-legal-follow-plan" / "src" / "lib.rs"
+EVIDENTIAL = ROOT / "crates" / "sl-evidential-reopen" / "src" / "lib.rs"
 WORKSPACE = ROOT / "Cargo.toml"
 
 counterfactual = COUNTERFACTUAL.read_text(encoding="utf-8")
 follow = FOLLOW.read_text(encoding="utf-8")
+evidential = EVIDENTIAL.read_text(encoding="utf-8")
 workspace = WORKSPACE.read_text(encoding="utf-8")
 
 required_counterfactual = [
@@ -48,14 +50,32 @@ required_follow = [
     "typed_plan_selects_only_compatible_persisted_revision",
 ]
 
+required_evidential = [
+    "pub struct EvidentialBridgeReceipt",
+    "parser_observation_is_semantic_authority: false",
+    "semantic_correspondence_required: true",
+    "pub struct ReviewedCorrespondenceReceipt",
+    "world_truth_claimed: false",
+    "legal_holding_claimed: false",
+    "pub struct SourceCoordinate",
+    "pub struct ConsumerFibreKey",
+    "pub struct ReverseDependency",
+    "pub fn sparse_wake",
+    "pub struct ConsumerResidualContract",
+    "pub fn dependencies_for",
+    "missing_reverse_dependency_means_zero_work_not_negative_evidence",
+    "evidence_wakes_only_explicitly_dependent_consumer",
+]
+
 missing = [
     *(f"counterfactual:{needle}" for needle in required_counterfactual if needle not in counterfactual),
     *(f"follow:{needle}" for needle in required_follow if needle not in follow),
+    *(f"evidential:{needle}" for needle in required_evidential if needle not in evidential),
 ]
 if missing:
     raise SystemExit(f"legal counterfactual contract missing: {missing}")
 
-for crate_name in ["sl-legal-counterfactual", "sl-legal-follow-plan"]:
+for crate_name in ["sl-legal-counterfactual", "sl-legal-follow-plan", "sl-evidential-reopen"]:
     if f'"crates/{crate_name}"' not in workspace:
         raise SystemExit(f"workspace missing {crate_name}")
 
@@ -89,10 +109,25 @@ for forbidden in forbidden_follow:
     if forbidden in follow:
         raise SystemExit(f"legal-follow planner acquired forbidden execution capability: {forbidden}")
 
+forbidden_evidential = [
+    "reqwest",
+    "ureq",
+    "hyper::",
+    "TcpStream",
+    "postgres",
+    "sqlx",
+    "publish(",
+    "auto_admit",
+    "automatic_admission",
+]
+for forbidden in forbidden_evidential:
+    if forbidden in evidential:
+        raise SystemExit(f"evidential/reopen layer acquired forbidden execution capability: {forbidden}")
+
 # The source-plan compiler is allowed to emit a demand only from producer kinds
 # that actually need source/authority work. Scope, liability, remedy, factual
 # comparison and physical-model residuals must stay on their native lanes.
 if "RequiredProducer::LegalSourceResolver | RequiredProducer::AuthorityResolver" not in follow:
     raise SystemExit("legal-follow broadening gate missing exact source/authority producer restriction")
 
-print("legal counterfactual + source-follow contract PASS")
+print("legal counterfactual + source-follow + evidential reopening contract PASS")
