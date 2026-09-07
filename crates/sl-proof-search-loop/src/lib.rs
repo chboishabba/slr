@@ -12,6 +12,7 @@ pub mod planner;
 pub mod query;
 pub mod reasoning;
 pub mod receipt;
+pub mod transition;
 pub mod world;
 
 #[path = "legacy.rs"]
