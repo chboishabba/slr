@@ -1,6 +1,4 @@
-use sensiblaw_evidential_reopen::{
-    EvidentialBridgeReceipt, ReviewedCorrespondenceReceipt,
-};
+use sensiblaw_evidential_reopen::{EvidentialBridgeReceipt, ReviewedCorrespondenceReceipt};
 use sensiblaw_proof_search_loop::{
     assess_offline_result, reschedule_after_delta, AssessmentGrade, LocalArtifactReceipt,
 };
@@ -47,7 +45,7 @@ fn main() {
         "source:cullen:rev:1",
         3,
     );
-    let selected = schedule(&gap, &[first], SchedulerPolicy::default())
+    let selected = schedule(&gap, std::slice::from_ref(&first), SchedulerPolicy::default())
         .expect("persisted comparator should be selected");
 
     let artifact = LocalArtifactReceipt {
@@ -83,6 +81,7 @@ fn main() {
     let assessment = assess_offline_result(
         &gap,
         &selected,
+        &first,
         &artifact,
         &bridge,
         &correspondence,
