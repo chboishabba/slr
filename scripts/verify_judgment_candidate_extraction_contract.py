@@ -8,6 +8,12 @@ required = [
     "pub struct CitationOccurrenceCandidate",
     "pub enum LexicalTreatmentHint",
     "pub fn extract_judgment_citation_candidates",
+    "pub fn extract_judgment_citation_candidates_with_footnotes",
+    "extract_reported_citation_strings",
+    "#footnote-",
+    "(2024) 98 ALJR 956",
+    "418 ALR 639",
+    "[2018] AC 736",
     "paragraph_locator_ref",
     "reported_paragraph_label",
     "canonical_text_sha256",
@@ -17,6 +23,7 @@ required = [
     "citation_candidate_is_semantic_correspondence",
     "lexical_hint_is_citation_use",
     "citation_candidate_is_current_authority",
+    "footnote_citation_candidate_is_treatment",
 ]
 missing = [needle for needle in required if needle not in text]
 if missing:
