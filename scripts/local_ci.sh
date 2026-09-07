@@ -50,11 +50,13 @@ cargo run -p sensiblaw-proof-search-loop --example offline_pabai_loop
 cargo run -p sensiblaw-proof-search-loop --example offline_research_engine_v01
 cargo run -p sensiblaw-proof-search-loop --example offline_compounding_iteration_v02
 cargo run -p sensiblaw-proof-search-loop --example offline_current_treatment_iteration_v03
+cargo run -p sensiblaw-governed-legal-provider --example oalc_jsonl_index
 cargo run -p sensiblaw-governed-legal-provider --example offline_replay_fixture
 
 echo '== online readiness preflight =='
 cargo run -p sensiblaw-proof-search-loop --example online_readiness_preflight
 
 echo 'NOTE: live legal acquisition is opt-in and is not executed by CI.'
+echo '      First certification target is the official High Court source.'
 echo '      Run scripts/run_live_legal_smoke.sh explicitly when ready.'
 echo 'LOCAL CI PASS'
