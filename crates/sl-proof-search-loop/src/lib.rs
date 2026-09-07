@@ -3,9 +3,11 @@
 //! The validated single-gap return loop remains available through a preserved
 //! legacy module; the additional modules implement the Agda-aligned research
 //! engine around it. Governed provider acquisition rejoins the same spine only
-//! after local ingestion through `acquisition`.
+//! after local ingestion through `acquisition`, and live acquisition scheduling
+//! must first bind to the exact open proof residual through `bound_acquisition`.
 
 pub mod acquisition;
+pub mod bound_acquisition;
 pub mod engine;
 pub mod frontier;
 pub mod hypothesis;
