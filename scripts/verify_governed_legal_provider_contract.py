@@ -4,6 +4,8 @@ ROOT = Path(__file__).resolve().parents[1]
 LIB = ROOT / "crates/sl-governed-legal-provider/src/lib.rs"
 CARGO = ROOT / "crates/sl-governed-legal-provider/Cargo.toml"
 REPLAY = ROOT / "crates/sl-governed-legal-provider/examples/offline_replay_fixture.rs"
+OALC = ROOT / "crates/sl-governed-legal-provider/examples/oalc_jsonl_index.rs"
+OALC_FIXTURE = ROOT / "crates/sl-governed-legal-provider/fixtures/oalc-mini.jsonl"
 LIVE = ROOT / "crates/sl-governed-legal-provider/examples/live_austlii_smoke.rs"
 RUNNER = ROOT / "scripts/run_live_legal_smoke.sh"
 VALIDATOR = ROOT / "scripts/verify_live_legal_receipt.py"
@@ -11,6 +13,8 @@ VALIDATOR = ROOT / "scripts/verify_live_legal_receipt.py"
 lib = LIB.read_text(encoding="utf-8")
 cargo = CARGO.read_text(encoding="utf-8")
 replay = REPLAY.read_text(encoding="utf-8")
+oalc = OALC.read_text(encoding="utf-8")
+oalc_fixture = OALC_FIXTURE.read_text(encoding="utf-8")
 live = LIVE.read_text(encoding="utf-8")
 runner = RUNNER.read_text(encoding="utf-8")
 validator = VALIDATOR.read_text(encoding="utf-8")
@@ -49,12 +53,25 @@ for label, needle in required.items():
     if needle not in lib:
         raise SystemExit(f"missing governed-provider contract: {label}: {needle}")
 
-if 'live-network = ["dep:ureq"]' not in cargo:
-    raise SystemExit("live HTTP must remain behind the explicit live-network feature")
-if 'ureq = ' not in cargo or 'optional = true' not in cargo:
-    raise SystemExit("ureq transport must be optional")
-if 'sha2 = ' not in cargo:
-    raise SystemExit("live acquisition receipts must retain SHA256 bytes identity")
+for needle in ('serde = ', 'serde_json = ', 'sha2 = '):
+    if needle not in cargo:
+        raise SystemExit(f"missing OALC/receipt dependency: {needle}")
+if 'live-network = ["dep:ureq"]' not in cargo or 'ureq = ' not in cargo or 'optional = true' not in cargo:
+    raise SystemExit("live HTTP must remain optional behind the live-network feature")
+
+for needle in (
+    "BufReader",
+    "serde_json::from_str",
+    "Sha256::digest",
+    "extract_mnc",
+    "lookup_oalc_exact_mnc",
+    "cullen_network=0 pabai_network=0",
+):
+    if needle not in oalc:
+        raise SystemExit(f"OALC streaming index contract lost: {needle}")
+for needle in ('"version_id"', '"source"', '"citation"', '"text"', '[2026] HCA 19', '[2025] FCA 796'):
+    if needle not in oalc_fixture:
+        raise SystemExit(f"OALC fixture schema/calibration lost: {needle}")
 
 for needle in (
     "provider=HighCourtAustralia first_network_requests=1 replay_network_requests=0",
@@ -82,11 +99,7 @@ for needle in (
     if needle not in live:
         raise SystemExit(f"live smoke acquisition/receipt contract lost: {needle}")
 
-for needle in (
-    "git rev-parse HEAD",
-    "--features live-network",
-    "verify_live_legal_receipt.py",
-):
+for needle in ("git rev-parse HEAD", "--features live-network", "verify_live_legal_receipt.py"):
     if needle not in runner:
         raise SystemExit(f"explicit live runner contract lost: {needle}")
 
