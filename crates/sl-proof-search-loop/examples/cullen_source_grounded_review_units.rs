@@ -53,6 +53,7 @@ fn unit<'a>(units: &'a [CitationReviewUnit], citation: &str, paragraph: u64) -> 
         .unwrap_or_else(|| panic!("missing source-grounded review unit: {citation} @ {paragraph}"))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn decision(
     unit: &CitationReviewUnit,
     anchor: u64,
