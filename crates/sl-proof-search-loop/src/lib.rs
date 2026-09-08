@@ -8,6 +8,7 @@
 
 pub mod acquisition;
 pub mod bound_acquisition;
+pub mod cullen_premise_audit;
 pub mod engine;
 pub mod frontier;
 pub mod hypothesis;
