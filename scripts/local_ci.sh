@@ -18,6 +18,7 @@ cargo check -p sensiblaw-governed-legal-provider --features live-network --examp
 cargo check -p sensiblaw-proof-search-loop --example live_cullen_citation_review_queue
 cargo check -p sensiblaw-proof-search-loop --example live_cullen_residual_review_shortlist
 cargo check -p sensiblaw-proof-search-loop --example cullen_source_grounded_review_units
+cargo check -p sensiblaw-proof-search-loop --example cullen_premise_split_audit
 
 echo '== pre-existing source contracts =='
 python3 scripts/verify_source_contract.py
@@ -61,6 +62,7 @@ cargo run -p sensiblaw-proof-search-loop --example judgment_citation_candidates
 cargo run -p sensiblaw-proof-search-loop --example reviewed_judgment_edge
 cargo run -p sensiblaw-proof-search-loop --example official_acquisition_compounding
 cargo run -p sensiblaw-proof-search-loop --example cullen_source_grounded_review_units
+cargo run -p sensiblaw-proof-search-loop --example cullen_premise_split_audit
 
 echo '== online readiness preflight =='
 cargo run -p sensiblaw-proof-search-loop --example online_readiness_preflight
@@ -81,6 +83,7 @@ fi
 echo 'NOTE: PR #13 governed-online/R7 additions are Rust-native.'
 echo '      Python invoked above is pre-existing repository machinery from the PR base,'
 echo '      not part of the governed-online runtime or its new validation semantics.'
+echo '      Cullen premise audit now separates police-function context from statutory-power invocation.'
 echo '      Experimental online acquisition is already achieved; exact-current-head live'
 echo '      execution and Agda/kernel certification remain separate production gates.'
 echo 'LOCAL CI PASS'
