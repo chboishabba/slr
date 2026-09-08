@@ -21,19 +21,25 @@ fn main() {
         search_returns_references_pinned: true,
         fetch_returns_bytes_pinned: true,
         parser_only_after_local_ingestion_pinned: true,
-        live_provider_adapter_implemented: false,
-        live_provider_fixture_validated: false,
+        live_provider_adapter_implemented: true,
+        // A bounded official HCA acquisition succeeded and replayed locally with
+        // zero network. The receipt is pinned to 9c3007..., while bb6de85...
+        // locally validates the repaired branch. The separate lineage audit
+        // certifies that the governed provider runtime source itself did not
+        // change across those heads.
+        live_provider_fixture_validated: true,
+        live_receipt_lineage_validated: true,
+        exact_head_live_execution_receipt: false,
         exact_head_agda_kernel_receipt: false,
     };
 
     let state = readiness(current);
     let remaining = blockers(current);
-    assert_eq!(state, OnlineReadiness::OfflineOnly);
+    assert_eq!(state, OnlineReadiness::ExperimentalLiveAcquisitionReady);
     assert_eq!(
         remaining,
         vec![
-            OnlineReadinessBlocker::LiveProviderAdapterMissing,
-            OnlineReadinessBlocker::LiveProviderFixtureMissing,
+            OnlineReadinessBlocker::ExactHeadLiveExecutionReceiptMissing,
             OnlineReadinessBlocker::ExactHeadAgdaKernelReceiptMissing,
         ]
     );
