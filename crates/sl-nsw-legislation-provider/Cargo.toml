@@ -5,6 +5,10 @@ edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
+[features]
+default = []
+live-network = ["sensiblaw-governed-legal-provider/live-network"]
+
 [dependencies]
 sensiblaw-governed-legal-provider = { path = "../sl-governed-legal-provider" }
 sha2 = "0.10"
