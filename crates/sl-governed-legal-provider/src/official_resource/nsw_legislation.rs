@@ -6,10 +6,13 @@
 //! retained artifact carrying explicit evidence that the source revision was
 //! in force on the demanded date.
 
+use crate::transport::{HttpRequest, HttpResponse};
 use crate::KnownAuthorityDemand;
 
 pub const NSW_LEGISLATION_PROVIDER_ID: &str = "provider:official-nsw-legislation";
 pub const NSW_LEGISLATION_RECEIPT_AUTHORITY: &str = "experimental_candidate_only";
+pub const NSW_LEGISLATION_ORIGIN: &str = "https://legislation.nsw.gov.au";
+pub const NSW_LEGISLATION_UA: &str = "SensibLaw/0.1 governed-nsw-legislation-provider";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NSWLegislationProvider {
@@ -29,6 +32,8 @@ pub struct HistoricalLegislationDemand {
     pub demand_ref: String,
     pub jurisdiction_ref: String,
     pub act_identity_ref: String,
+    /// Stable NSW legislation document id, e.g. `act-2002-022`.
+    pub official_document_id: String,
     pub requested_locator: String,
     pub in_force_on: String,
     pub proposition_ref: String,
@@ -46,12 +51,27 @@ pub struct HistoricalVersionEvidence {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OfficialPointInTimeFetchCandidate {
+    pub demand_ref: String,
+    pub official_document_id: String,
+    pub requested_date: String,
+    pub request_reference: String,
+    pub final_reference: String,
+    pub content_type: Option<String>,
+    pub bytes: Vec<u8>,
+    pub network_requests: u64,
+    pub retained: bool,
+    pub receipt_authority: &'static str,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ImmutableLegislationArtifact {
     pub provider: NSWLegislationProvider,
     pub act_identity_ref: String,
     pub source_identity_ref: String,
     pub source_revision_ref: String,
     pub jurisdiction_ref: String,
+    pub official_document_id: String,
     pub locator: String,
     pub source_date_ref: String,
     pub canonical_text_digest: String,
@@ -67,6 +87,7 @@ pub struct HistoricalLegislationReceipt {
     pub source_identity_ref: String,
     pub source_revision_ref: String,
     pub jurisdiction_ref: String,
+    pub official_document_id: String,
     pub locator: String,
     pub in_force_on: String,
     pub canonical_text_digest: String,
@@ -85,9 +106,15 @@ pub enum HistoricalLegislationError {
     DemandPropositionMismatch,
     ActIdentityMismatch,
     SourceIdentityMismatch,
+    DocumentIdMismatch,
     LocatorMismatch,
     HistoricalDateMismatch,
     InvalidHistoricalDate,
+    InvalidDocumentId,
+    InvalidOfficialReference,
+    UnexpectedHttpStatus,
+    UnexpectedContentType,
+    EmptyOfficialResponse,
     MutableArtifact,
     MissingRevision,
     MissingDigest,
@@ -106,6 +133,12 @@ fn looks_like_iso_date(value: &str) -> bool {
         && bytes[8..10].iter().all(u8::is_ascii_digit)
 }
 
+fn looks_like_nsw_document_id(value: &str) -> bool {
+    !value.is_empty()
+        && value.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
+        && (value.starts_with("act-") || value.starts_with("epi-") || value.starts_with("sl-"))
+}
+
 impl HistoricalLegislationDemand {
     pub fn validate(&self) -> Result<(), HistoricalLegislationError> {
         if self.jurisdiction_ref != "AU-NSW" {
@@ -114,8 +147,84 @@ impl HistoricalLegislationDemand {
         if !looks_like_iso_date(&self.in_force_on) {
             return Err(HistoricalLegislationError::InvalidHistoricalDate);
         }
+        if !looks_like_nsw_document_id(&self.official_document_id) {
+            return Err(HistoricalLegislationError::InvalidDocumentId);
+        }
         Ok(())
     }
+}
+
+/// NSW Parliamentary Counsel documents this point-in-time XML shape for all
+/// historical versions in the In Force/Repealed collections:
+/// `/view/html/status/YYYY-MM-DD/id/xml`.
+pub fn official_point_in_time_xml_reference(
+    demand: &HistoricalLegislationDemand,
+) -> Result<String, HistoricalLegislationError> {
+    demand.validate()?;
+    Ok(format!(
+        "{NSW_LEGISLATION_ORIGIN}/view/html/inforce/{}/{}/xml",
+        demand.in_force_on, demand.official_document_id
+    ))
+}
+
+/// Construct the exact request for the existing governed HTTP executor. This
+/// function does not itself perform I/O or bypass provider governance.
+pub fn official_point_in_time_xml_request(
+    demand: &HistoricalLegislationDemand,
+) -> Result<HttpRequest, HistoricalLegislationError> {
+    Ok(HttpRequest {
+        url: official_point_in_time_xml_reference(demand)?,
+        user_agent: NSW_LEGISLATION_UA.into(),
+        referer: Some(NSW_LEGISLATION_ORIGIN.into()),
+        timeout_seconds: 45,
+    })
+}
+
+pub fn is_official_nsw_legislation_reference(reference: &str) -> bool {
+    reference == NSW_LEGISLATION_ORIGIN
+        || reference.starts_with("https://legislation.nsw.gov.au/")
+}
+
+/// Validate bytes returned by governed transport. This creates a fetch
+/// candidate only. The bytes must still be retained, digested and admitted as
+/// an immutable historical artifact before parser/compile eligibility.
+pub fn validate_official_point_in_time_response(
+    demand: &HistoricalLegislationDemand,
+    request: &HttpRequest,
+    response: HttpResponse,
+) -> Result<OfficialPointInTimeFetchCandidate, HistoricalLegislationError> {
+    let expected = official_point_in_time_xml_reference(demand)?;
+    if request.url != expected || !is_official_nsw_legislation_reference(&response.final_url) {
+        return Err(HistoricalLegislationError::InvalidOfficialReference);
+    }
+    if response.status_code != 200 {
+        return Err(HistoricalLegislationError::UnexpectedHttpStatus);
+    }
+    if response.body.is_empty() {
+        return Err(HistoricalLegislationError::EmptyOfficialResponse);
+    }
+    if response
+        .content_type
+        .as_deref()
+        .is_some_and(|content_type| {
+            let lower = content_type.to_ascii_lowercase();
+            !lower.contains("xml") && !lower.contains("text/plain")
+        })
+    {
+        return Err(HistoricalLegislationError::UnexpectedContentType);
+    }
+    Ok(OfficialPointInTimeFetchCandidate {
+        demand_ref: demand.demand_ref.clone(),
+        official_document_id: demand.official_document_id.clone(),
+        requested_date: demand.in_force_on.clone(),
+        request_reference: request.url.clone(),
+        final_reference: response.final_url,
+        content_type: response.content_type,
+        bytes: response.body,
+        network_requests: 1,
+        retained: false,
+        receipt_authority: NSW_LEGISLATION_RECEIPT_AUTHORITY,
+    })
 }
 
 /// Bind the provider-neutral authority demand to the legislation-specific
@@ -159,6 +268,9 @@ pub fn admit_historical_legislation_artifact(
     if artifact.jurisdiction_ref != demand.jurisdiction_ref {
         return Err(HistoricalLegislationError::WrongJurisdiction);
     }
+    if artifact.official_document_id != demand.official_document_id {
+        return Err(HistoricalLegislationError::DocumentIdMismatch);
+    }
     if artifact.locator != demand.requested_locator {
         return Err(HistoricalLegislationError::LocatorMismatch);
     }
@@ -189,6 +301,7 @@ pub fn admit_historical_legislation_artifact(
         source_identity_ref: artifact.source_identity_ref.clone(),
         source_revision_ref: artifact.source_revision_ref.clone(),
         jurisdiction_ref: artifact.jurisdiction_ref.clone(),
+        official_document_id: artifact.official_document_id.clone(),
         locator: artifact.locator.clone(),
         in_force_on: demand.in_force_on.clone(),
         canonical_text_digest: artifact.canonical_text_digest.clone(),
@@ -215,6 +328,7 @@ pub const fn current_consolidation_is_historical_proof() -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::transport::HttpResponse;
     use crate::{CitationTreatmentIntent, PropositionUseIntent};
 
     fn known() -> KnownAuthorityDemand {
@@ -235,6 +349,7 @@ mod tests {
             demand_ref: "demand:cullen:cla:s5b:2017".into(),
             jurisdiction_ref: "AU-NSW".into(),
             act_identity_ref: "act:NSW:Civil-Liability-Act-2002".into(),
+            official_document_id: "act-2002-022".into(),
             requested_locator: "s 5B".into(),
             in_force_on: "2017-01-26".into(),
             proposition_ref: "prop:NSW:CLA:s5B:definition".into(),
@@ -249,6 +364,7 @@ mod tests {
             source_identity_ref: "act:NSW:Civil-Liability-Act-2002".into(),
             source_revision_ref: "nsw-legislation:CLA-2002:2017-01-26:pit".into(),
             jurisdiction_ref: "AU-NSW".into(),
+            official_document_id: "act-2002-022".into(),
             locator: "s 5B".into(),
             source_date_ref: "2017-01-26".into(),
             canonical_text_digest: "sha256:fixture".into(),
@@ -256,11 +372,40 @@ mod tests {
             immutable: true,
             point_in_time_evidence: HistoricalVersionEvidence {
                 kind: HistoricalVersionEvidenceKind::OfficialPointInTimeVersion,
-                evidence_reference: "https://legislation.nsw.gov.au/pit/2017-01-26/...".into(),
-                evidence_scope: "official point-in-time version in force on 2017-01-26".into(),
+                evidence_reference: "https://legislation.nsw.gov.au/view/html/inforce/2017-01-26/act-2002-022/xml".into(),
+                evidence_scope: "official point-in-time version requested for 2017-01-26".into(),
                 evidence_digest: Some("sha256:evidence-fixture".into()),
             },
         }
+    }
+
+    #[test]
+    fn official_pit_request_uses_documented_nsw_historical_xml_shape() {
+        let request = official_point_in_time_xml_request(&demand()).unwrap();
+        assert_eq!(
+            request.url,
+            "https://legislation.nsw.gov.au/view/html/inforce/2017-01-26/act-2002-022/xml"
+        );
+        assert_eq!(request.referer.as_deref(), Some(NSW_LEGISLATION_ORIGIN));
+    }
+
+    #[test]
+    fn official_pit_response_is_fetch_candidate_not_retained_artifact() {
+        let request = official_point_in_time_xml_request(&demand()).unwrap();
+        let candidate = validate_official_point_in_time_response(
+            &demand(),
+            &request,
+            HttpResponse {
+                final_url: request.url.clone(),
+                status_code: 200,
+                content_type: Some("application/xml".into()),
+                body: b"<legislation/>".to_vec(),
+            },
+        )
+        .unwrap();
+        assert!(!candidate.retained);
+        assert_eq!(candidate.network_requests, 1);
+        assert!(!acquisition_is_semantic_payment());
     }
 
     #[test]
