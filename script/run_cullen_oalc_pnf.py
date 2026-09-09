@@ -11,6 +11,7 @@ Pipeline:
     -> source-preserving section slices
     -> python/spacy_stream.py
     -> sensiblaw-stream
+    -> typed section-receipt validation
 
 No parser/PNF output creates legal authority, historical applicability or Atomic
 case gates by itself.
@@ -178,8 +179,19 @@ def main() -> int:
         writer.writeheader()
         writer.writerows(slice_receipts)
 
+    validation_env = env.copy()
+    validation_env["SENSIBLAW_OALC_SECTION_RECEIPTS"] = str(out_receipts)
+    run(
+        [
+            "cargo", "run", "-q",
+            "-p", "sensiblaw-governed-legal-provider",
+            "--example", "oalc_cullen_section_receipt_validate",
+        ],
+        env=validation_env,
+    )
+
     print(
-        f"parsed {len(slice_receipts)} OALC statutory sections through spaCy/PNF; "
+        f"parsed and validated {len(slice_receipts)} OALC statutory sections through spaCy/PNF; "
         f"temporal_status=latest_known_only; receipts={out_receipts}"
     )
     return 0
