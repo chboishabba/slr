@@ -84,6 +84,7 @@ mod tests {
             demand_ref: "demand:cullen:cla:s5b:2017".into(),
             jurisdiction_ref: "AU-NSW".into(),
             act_identity_ref: "act:NSW:Civil-Liability-Act-2002".into(),
+            official_document_id: "act-2002-022".into(),
             requested_locator: "s 5B".into(),
             in_force_on: "2017-01-26".into(),
             proposition_ref: "prop:NSW:CLA:s5B:definition".into(),
@@ -96,6 +97,7 @@ mod tests {
         let welded = bind_residual_to_nsw_historical_legislation(&bound(), historical()).unwrap();
         assert_eq!(welded.residual_ref, "residual:cullen:cla:s5b:pit-source");
         assert_eq!(welded.historical.in_force_on, "2017-01-26");
+        assert_eq!(welded.historical.official_document_id, "act-2002-022");
         assert_eq!(
             welded.scheduled_producer_ref,
             "producer:official-point-in-time-legislation"
