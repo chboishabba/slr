@@ -1,18 +1,29 @@
 #![allow(dead_code)]
 
-//! OALC legislation input contract for the SensibLaw parser/PNF path.
+//! OALC legislation source contract for the SensibLaw LegalFollow -> provider
+//! -> parser/PNF path.
 //!
-//! This carrier is intentionally narrower than general OALC indexing. It says
-//! what must be supplied before a local OALC legislation document may be used
-//! as parser input: a local corpus path, an immutable/pinned corpus revision,
-//! an exact legislation record, retained text digest, and an explicit temporal
-//! coverage status.
+//! `corpus.jsonl` is NOT part of the public semantic/runtime contract. A local
+//! JSONL file may be used by an offline provider implementation, but ordinary
+//! LegalFollow operation asks for an exact OALC source and receives a retained
+//! document receipt.
 //!
-//! It does NOT claim historical equivalence, legal authority, semantic truth,
-//! applicability, or an Atomic gate.
+//! Public chain:
+//!   LegalFollow source demand
+//!     -> pinned OALC dataset selection
+//!     -> exact legislation resolution receipt
+//!     -> retained document receipt
+//!     -> section slice receipt
+//!     -> spaCy/PNF handoff.
+//!
+//! None of these receipts claims historical equivalence, legal authority,
+//! semantic truth, applicability, or an Atomic gate.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
+pub const OALC_DATASET_ID: &str = "isaacus/open-australian-legal-corpus";
+pub const OALC_CONFIG: &str = "corpus";
+pub const OALC_SPLIT: &str = "corpus";
 pub const OALC_PARSER_AUTHORITY: &str = "source_observation_only";
 pub const OALC_RECEIPT_AUTHORITY: &str = "experimental_candidate_only";
 
@@ -22,24 +33,39 @@ pub const CULLEN_VICARIOUS_CITATION: &str =
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OalcTemporalCoverage {
-    /// OALC NSW legislation is usable as the latest-known/current parser text,
-    /// but no historical equivalence is claimed for a past legal date.
+    /// OALC NSW legislation is usable as latest-known parser text, but no
+    /// historical equivalence is claimed for a past legal date.
     LatestKnownOnly,
-    /// A separate source receipt has independently paid historical equivalence.
+    /// A separate source receipt independently pays historical equivalence.
     HistoricallyVerified,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PinnedOalcCorpusInput {
-    pub corpus_jsonl_path: PathBuf,
+pub struct PinnedOalcDatasetSelection {
+    pub dataset_id: String,
+    pub config: String,
+    pub split: String,
     pub corpus_revision_ref: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OalcLegislationDemand {
+    pub demand_ref: String,
+    pub citation: String,
+    pub jurisdiction: String,
+    pub source: String,
+    pub document_type: String,
+    pub temporal_coverage_required: OalcTemporalCoverage,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum OalcInputError {
-    MissingCorpusPath,
     MissingRevision,
     MutableRevisionAlias,
+    WrongDataset,
+    WrongConfig,
+    WrongSplit,
+    WrongCitation,
     WrongSource,
     WrongJurisdiction,
     WrongDocumentType,
@@ -47,6 +73,7 @@ pub enum OalcInputError {
     EmptyText,
     EmptyDigest,
     MissingArtifact,
+    RevisionMismatch,
 }
 
 fn looks_mutable_revision_alias(value: &str) -> bool {
@@ -56,10 +83,16 @@ fn looks_mutable_revision_alias(value: &str) -> bool {
     )
 }
 
-impl PinnedOalcCorpusInput {
+impl PinnedOalcDatasetSelection {
     pub fn validate(&self) -> Result<(), OalcInputError> {
-        if self.corpus_jsonl_path.as_os_str().is_empty() {
-            return Err(OalcInputError::MissingCorpusPath);
+        if self.dataset_id != OALC_DATASET_ID {
+            return Err(OalcInputError::WrongDataset);
+        }
+        if self.config != OALC_CONFIG {
+            return Err(OalcInputError::WrongConfig);
+        }
+        if self.split != OALC_SPLIT {
+            return Err(OalcInputError::WrongSplit);
         }
         if self.corpus_revision_ref.trim().is_empty() {
             return Err(OalcInputError::MissingRevision);
@@ -71,8 +104,27 @@ impl PinnedOalcCorpusInput {
     }
 }
 
+impl OalcLegislationDemand {
+    pub fn validate(&self) -> Result<(), OalcInputError> {
+        if !validate_cullen_target_citation(&self.citation) {
+            return Err(OalcInputError::WrongCitation);
+        }
+        if self.source != "nsw_legislation" {
+            return Err(OalcInputError::WrongSource);
+        }
+        if self.jurisdiction != "new_south_wales" {
+            return Err(OalcInputError::WrongJurisdiction);
+        }
+        if self.document_type != "primary_legislation" {
+            return Err(OalcInputError::WrongDocumentType);
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct OalcLegislationDocumentReceipt {
+pub struct OalcResolvedDocumentReceipt {
+    pub demand_ref: String,
     pub citation: String,
     pub version_id: String,
     pub corpus_revision_ref: String,
@@ -82,18 +134,31 @@ pub struct OalcLegislationDocumentReceipt {
     pub canonical_text_digest: String,
     pub local_artifact_ref: PathBuf,
     pub temporal_coverage: OalcTemporalCoverage,
+    pub network_requests: u64,
     pub receipt_authority: &'static str,
 }
 
-impl OalcLegislationDocumentReceipt {
-    pub fn validate(&self) -> Result<(), OalcInputError> {
-        if self.source != "nsw_legislation" {
+impl OalcResolvedDocumentReceipt {
+    pub fn validate_against(
+        &self,
+        dataset: &PinnedOalcDatasetSelection,
+        demand: &OalcLegislationDemand,
+    ) -> Result<(), OalcInputError> {
+        dataset.validate()?;
+        demand.validate()?;
+        if self.demand_ref != demand.demand_ref || self.citation != demand.citation {
+            return Err(OalcInputError::WrongCitation);
+        }
+        if self.corpus_revision_ref != dataset.corpus_revision_ref {
+            return Err(OalcInputError::RevisionMismatch);
+        }
+        if self.source != demand.source {
             return Err(OalcInputError::WrongSource);
         }
-        if self.jurisdiction != "new_south_wales" {
+        if self.jurisdiction != demand.jurisdiction {
             return Err(OalcInputError::WrongJurisdiction);
         }
-        if self.document_type != "primary_legislation" {
+        if self.document_type != demand.document_type {
             return Err(OalcInputError::WrongDocumentType);
         }
         if self.version_id.trim().is_empty() {
@@ -115,6 +180,13 @@ impl OalcLegislationDocumentReceipt {
     pub const fn creates_legal_authority(&self) -> bool {
         false
     }
+}
+
+/// Optional offline implementation input. This is deliberately NOT required by
+/// LegalFollow or by the parser contract.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OfflineOalcJsonlBackend {
+    pub corpus_jsonl_path: PathBuf,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -155,20 +227,29 @@ pub fn validate_cullen_target_citation(citation: &str) -> bool {
     matches!(citation, CULLEN_CLA_CITATION | CULLEN_VICARIOUS_CITATION)
 }
 
-pub fn corpus_path_exists(input: &PinnedOalcCorpusInput) -> bool {
-    Path::new(&input.corpus_jsonl_path).is_file()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    fn pinned() -> PinnedOalcDatasetSelection {
+        PinnedOalcDatasetSelection {
+            dataset_id: OALC_DATASET_ID.into(),
+            config: OALC_CONFIG.into(),
+            split: OALC_SPLIT.into(),
+            corpus_revision_ref: "isaacus/open-australian-legal-corpus@deadbeef".into(),
+        }
+    }
+
+    #[test]
+    fn local_corpus_path_is_not_part_of_public_input_contract() {
+        let input = pinned();
+        assert!(input.validate().is_ok());
+    }
+
     #[test]
     fn mutable_revision_alias_is_rejected() {
-        let input = PinnedOalcCorpusInput {
-            corpus_jsonl_path: PathBuf::from("/data/oalc/corpus.jsonl"),
-            corpus_revision_ref: "latest".into(),
-        };
+        let mut input = pinned();
+        input.corpus_revision_ref = "latest".into();
         assert_eq!(input.validate(), Err(OalcInputError::MutableRevisionAlias));
     }
 
