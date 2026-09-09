@@ -1,0 +1,4 @@
+demand_ref	act_identity_ref	official_document_id	locator	in_force_on	expected_version_effective_from	proposition_ref	official_pit_xml
+ demand:cullen:cla:5A-5D:2017	act:NSW:Civil-Liability-Act-2002	act-2002-022	ss 5A-5D	2017-01-26	2015-07-01	prop:NSW:CLA:Part1A-negligence-structure	https://legislation.nsw.gov.au/view/html/inforce/2017-01-26/act-2002-022/xml
+ demand:cullen:cla:43A:2017	act:NSW:Civil-Liability-Act-2002	act-2002-022	s 43A	2017-01-26	2015-07-01	prop:NSW:CLA:s43A:special-statutory-power	https://legislation.nsw.gov.au/view/html/inforce/2017-01-26/act-2002-022/xml
+ demand:cullen:vicarious:6-8:2017	act:NSW:Law-Reform-Vicarious-Liability-Act-1983	act-1983-038	ss 6-8	2017-01-26	2014-12-01	prop:NSW:Vicarious:police-Crown-family	https://legislation.nsw.gov.au/view/html/inforce/2017-01-26/act-1983-038/xml
