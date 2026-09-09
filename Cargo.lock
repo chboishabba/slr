@@ -427,6 +427,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "sensiblaw-nsw-legislation-provider"
+version = "0.1.0"
+dependencies = [
+ "sensiblaw-governed-legal-provider",
+ "sha2",
+ "xml-rs",
+]
+
+[[package]]
 name = "sensiblaw-parity"
 version = "0.1.0"
 dependencies = [
@@ -439,6 +448,7 @@ version = "0.1.0"
 dependencies = [
  "sensiblaw-evidential-reopen",
  "sensiblaw-governed-legal-provider",
+ "sensiblaw-nsw-legislation-provider",
  "sensiblaw-proof-search-scheduler",
  "serde",
  "serde_json",
