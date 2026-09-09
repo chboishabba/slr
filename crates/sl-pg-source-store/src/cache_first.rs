@@ -32,6 +32,20 @@ pub struct CachedResolvedDocument {
     pub canonical_text: String,
 }
 
+#[derive(Debug)]
+pub enum CacheLookupError {
+    Postgres(postgres::Error),
+    InvalidTemporalCoverage(String),
+    InvalidResolutionPath(String),
+    InvalidCanonicalText(std::string::FromUtf8Error),
+}
+
+impl From<postgres::Error> for CacheLookupError {
+    fn from(value: postgres::Error) -> Self {
+        Self::Postgres(value)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct AcquiredSourceBundle {
     pub document: ResolvedExternalDocumentOwned,
@@ -134,6 +148,7 @@ pub enum CacheFirstResolution {
 
 #[derive(Debug)]
 pub enum CacheFirstError<E> {
+    Lookup(CacheLookupError),
     Store(SourceStoreError),
     Acquire(E),
     PersistenceVerificationMiss,
@@ -143,6 +158,104 @@ pub enum CacheFirstError<E> {
 impl<E> From<SourceStoreError> for CacheFirstError<E> {
     fn from(value: SourceStoreError) -> Self {
         Self::Store(value)
+    }
+}
+
+impl<E> From<CacheLookupError> for CacheFirstError<E> {
+    fn from(value: CacheLookupError) -> Self {
+        Self::Lookup(value)
+    }
+}
+
+impl PostgresSourceStore {
+    pub fn lookup_exact_source(
+        &mut self,
+        demand: &CacheLookupDemand<'_>,
+    ) -> Result<Option<CachedResolvedDocument>, CacheLookupError> {
+        let row = self.client.query_opt(
+            "SELECT
+                 revision.document_ref,
+                 revision.external_source_revision_ref,
+                 resolution.source_resolution_ref,
+                 revision.provider_ref,
+                 revision.dataset_ref,
+                 revision.dataset_revision_ref,
+                 revision.external_version_ref,
+                 revision.citation,
+                 revision.source_ref,
+                 revision.jurisdiction_ref,
+                 revision.document_type_ref,
+                 revision.temporal_coverage_ref,
+                 revision.resolution_path_ref,
+                 revision.source_url,
+                 canonical.payload
+             FROM evidence.external_source_resolution AS resolution
+             JOIN corpus.external_source_revision AS revision
+               ON revision.external_source_revision_ref = resolution.external_source_revision_ref
+             JOIN corpus.document AS document
+               ON document.document_ref = revision.document_ref
+             JOIN corpus.canonical_content AS canonical
+               ON canonical.canonical_ref = document.canonical_ref
+            WHERE resolution.demand_ref = $1
+              AND resolution.requested_citation = $2
+              AND resolution.requested_jurisdiction_ref = $3
+              AND resolution.requested_source_role_ref = $4
+              AND resolution.requested_authority_level_ref = $5
+              AND resolution.requested_temporal_ref IS NOT DISTINCT FROM $6
+              AND resolution.exact_demand_match = TRUE
+            ORDER BY resolution.created_at DESC
+            LIMIT 1",
+            &[
+                &demand.demand_ref,
+                &demand.citation,
+                &demand.jurisdiction_ref,
+                &demand.source_role_ref,
+                &demand.authority_level_ref,
+                &demand.temporal_ref,
+            ],
+        )?;
+
+        let Some(row) = row else {
+            return Ok(None);
+        };
+
+        let temporal_raw: String = row.get(11);
+        let temporal_coverage = match temporal_raw.as_str() {
+            "latest_known_only" => TemporalCoverage::LatestKnownOnly,
+            "historically_verified" => TemporalCoverage::HistoricallyVerified,
+            other => return Err(CacheLookupError::InvalidTemporalCoverage(other.to_owned())),
+        };
+
+        let path_raw: String = row.get(12);
+        let resolution_path = match path_raw.as_str() {
+            "filter_exact" => ResolutionPath::FilterExact,
+            "native_parquet_scan" => ResolutionPath::NativeParquetScan,
+            "offline_jsonl_replay" => ResolutionPath::OfflineJsonlReplay,
+            "revision_pinned_streaming_legacy" => ResolutionPath::RevisionPinnedStreamingLegacy,
+            other => return Err(CacheLookupError::InvalidResolutionPath(other.to_owned())),
+        };
+
+        let canonical_bytes: Vec<u8> = row.get(14);
+        let canonical_text = String::from_utf8(canonical_bytes)
+            .map_err(CacheLookupError::InvalidCanonicalText)?;
+
+        Ok(Some(CachedResolvedDocument {
+            document_ref: row.get(0),
+            external_source_revision_ref: row.get(1),
+            source_resolution_ref: row.get(2),
+            provider_ref: row.get(3),
+            dataset_ref: row.get(4),
+            dataset_revision_ref: row.get(5),
+            external_version_ref: row.get(6),
+            citation: row.get(7),
+            source_ref: row.get(8),
+            jurisdiction_ref: row.get(9),
+            document_type_ref: row.get(10),
+            temporal_coverage,
+            resolution_path,
+            source_url: row.get(13),
+            canonical_text,
+        }))
     }
 }
 
