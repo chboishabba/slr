@@ -2,8 +2,10 @@
 mod oalc_legislation_contract;
 
 use oalc_legislation_contract::{
-    OalcLegislationDocumentReceipt, OalcTemporalCoverage, PinnedOalcCorpusInput,
-    CULLEN_CLA_CITATION, CULLEN_VICARIOUS_CITATION, OALC_RECEIPT_AUTHORITY,
+    OalcLegislationDemand, OalcResolvedDocumentReceipt, OalcTemporalCoverage,
+    OfflineOalcJsonlBackend, PinnedOalcDatasetSelection, CULLEN_CLA_CITATION,
+    CULLEN_VICARIOUS_CITATION, OALC_CONFIG, OALC_DATASET_ID, OALC_RECEIPT_AUTHORITY,
+    OALC_SPLIT,
 };
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
@@ -63,11 +65,23 @@ fn tsv(value: &str) -> String {
     value.replace(['\t', '\r', '\n'], " ")
 }
 
+fn demand(citation: &str) -> OalcLegislationDemand {
+    OalcLegislationDemand {
+        demand_ref: format!("offline:oalc:{citation}"),
+        citation: citation.into(),
+        jurisdiction: "new_south_wales".into(),
+        source: "nsw_legislation".into(),
+        document_type: "primary_legislation".into(),
+        temporal_coverage_required: OalcTemporalCoverage::LatestKnownOnly,
+    }
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let jsonl = PathBuf::from(
-        env::var("SENSIBLAW_OALC_JSONL")
-            .unwrap_or_else(|_| "corpus.jsonl".to_string()),
-    );
+    let backend = OfflineOalcJsonlBackend {
+        corpus_jsonl_path: PathBuf::from(
+            env::var("SENSIBLAW_OALC_JSONL").unwrap_or_else(|_| "corpus.jsonl".to_string()),
+        ),
+    };
     let corpus_revision = env::var("SENSIBLAW_OALC_REVISION")
         .unwrap_or_else(|_| "oalc:revision-unset".to_string());
     let output_dir = PathBuf::from(
@@ -75,18 +89,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .unwrap_or_else(|_| "artifacts/oalc/cullen-governing-law".to_string()),
     );
 
-    let corpus_input = PinnedOalcCorpusInput {
-        corpus_jsonl_path: jsonl.clone(),
+    let dataset = PinnedOalcDatasetSelection {
+        dataset_id: OALC_DATASET_ID.into(),
+        config: OALC_CONFIG.into(),
+        split: OALC_SPLIT.into(),
         corpus_revision_ref: corpus_revision.clone(),
     };
-    corpus_input
+    dataset
         .validate()
-        .map_err(|err| format!("invalid pinned OALC corpus input: {err:?}"))?;
-    if !oalc_legislation_contract::corpus_path_exists(&corpus_input) {
-        return Err(format!("OALC corpus.jsonl does not exist: {}", jsonl.display()).into());
+        .map_err(|err| format!("invalid pinned OALC dataset selection: {err:?}"))?;
+    if !backend.corpus_jsonl_path.is_file() {
+        return Err(format!(
+            "offline OALC JSONL backend missing: {}",
+            backend.corpus_jsonl_path.display()
+        )
+        .into());
     }
 
-    let reader = BufReader::new(File::open(&jsonl)?);
+    let reader = BufReader::new(File::open(&backend.corpus_jsonl_path)?);
     let mut found = BTreeMap::<String, OalcJsonLine>::new();
 
     for (index, line) in reader.lines().enumerate() {
@@ -99,16 +119,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if !TARGETS.contains(&record.citation.as_str()) {
             continue;
         }
-        if record.source != "nsw_legislation"
-            || record.jurisdiction != "new_south_wales"
-            || record.document_type != "primary_legislation"
-        {
-            return Err(format!(
-                "OALC target {} had unexpected source/type fibre: source={} jurisdiction={} type={}",
-                record.citation, record.source, record.jurisdiction, record.document_type
-            )
-            .into());
-        }
         if found.insert(record.citation.clone(), record).is_some() {
             return Err("duplicate exact OALC citation in selected corpus revision".into());
         }
@@ -116,7 +126,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     for target in TARGETS {
         if !found.contains_key(target) {
-            return Err(format!("OALC corpus missing exact target citation: {target}").into());
+            return Err(format!("offline OALC backend missing exact citation: {target}").into());
         }
     }
 
@@ -134,8 +144,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let artifact = output_dir.join(format!("{}.txt", slug(&record.citation)));
         readonly_write(&artifact, &record.text)?;
         let digest = sha256(record.text.as_bytes());
-
-        let document_receipt = OalcLegislationDocumentReceipt {
+        let source_demand = demand(target);
+        let document_receipt = OalcResolvedDocumentReceipt {
+            demand_ref: source_demand.demand_ref.clone(),
             citation: record.citation.clone(),
             version_id: record.version_id.clone(),
             corpus_revision_ref: corpus_revision.clone(),
@@ -145,13 +156,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             canonical_text_digest: digest.clone(),
             local_artifact_ref: artifact.clone(),
             temporal_coverage: OalcTemporalCoverage::LatestKnownOnly,
+            network_requests: 0,
             receipt_authority: OALC_RECEIPT_AUTHORITY,
         };
         document_receipt
-            .validate()
-            .map_err(|err| format!("invalid OALC legislation receipt for {target}: {err:?}"))?;
-        debug_assert!(!document_receipt.creates_historical_equivalence());
-        debug_assert!(!document_receipt.creates_legal_authority());
+            .validate_against(&dataset, &source_demand)
+            .map_err(|err| format!("invalid offline OALC receipt for {target}: {err:?}"))?;
 
         let row = [
             record.citation,
@@ -179,7 +189,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     fs::write(&receipt_path, receipt)?;
     println!(
-        "materialized 2 OALC NSW legislation documents; temporal_status=latest_known_only; network_requests=0; receipts={}",
+        "offline OALC backend materialized 2 NSW legislation documents; temporal_status=latest_known_only; network_requests=0; receipts={}",
         receipt_path.display()
     );
     Ok(())
