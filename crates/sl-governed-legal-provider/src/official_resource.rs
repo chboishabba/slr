@@ -6,6 +6,7 @@
 
 pub mod nsw_legislation;
 pub mod nsw_legislation_execution;
+pub mod nsw_legislation_parser;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum JudgmentResourceKind {
