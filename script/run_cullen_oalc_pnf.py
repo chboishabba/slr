@@ -45,12 +45,20 @@ def run(cmd: list[str], *, env: dict[str, str] | None = None, stdin=None, stdout
 
 def section_spans(text: str) -> dict[str, tuple[int, int]]:
     matches = list(SECTION_HEADING.finditer(text))
-    spans: dict[str, tuple[int, int]] = {}
+    occurrences: dict[str, list[tuple[int, int]]] = {}
     for i, match in enumerate(matches):
         section = match.group(1)
         start = match.start()
         end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
-        spans.setdefault(section, (start, end))
+        occurrences.setdefault(section, []).append((start, end))
+
+    spans: dict[str, tuple[int, int]] = {}
+    for section, candidates in occurrences.items():
+        if len(candidates) != 1:
+            # Ambiguity is preserved as a source/parser residual. Never choose
+            # the first matching heading merely because its number fits.
+            continue
+        spans[section] = candidates[0]
     return spans
 
 
@@ -111,8 +119,8 @@ def main() -> int:
         for section in sections:
             if section not in spans:
                 raise RuntimeError(
-                    f"could not locate section {section} in OALC text for {citation}; "
-                    "do not guess the section boundary"
+                    f"could not uniquely locate section {section} in OALC text for {citation}; "
+                    "preserve as section-boundary residual rather than guessing"
                 )
             start, end = spans[section]
             section_text = text[start:end].rstrip() + "\n"
