@@ -40,6 +40,8 @@ pub enum SourceStoreError {
     Postgres(#[from] postgres::Error),
     #[error("migration 181 OALC persistence tables are not installed")]
     Migration181Missing,
+    #[error("only exact LegalFollow/provider matches may be persisted as source resolutions")]
+    NonExactDemandMatch,
     #[error("invalid source slice {locator_ref}: [{start_char},{end_char}) for document length {document_len}")]
     InvalidSlice {
         locator_ref: String,
@@ -207,6 +209,9 @@ impl PostgresSourceStore {
         slices: &[SourceSlice<'_>],
     ) -> Result<PersistedSourceRefs, SourceStoreError> {
         self.ensure_schema_ready()?;
+        if !resolution.exact_demand_match {
+            return Err(SourceStoreError::NonExactDemandMatch);
+        }
         validate_slices(document.canonical_text, slices)?;
 
         let mut tx = self.client.transaction()?;
@@ -481,12 +486,13 @@ mod tests {
 
     #[test]
     fn slice_validation_rejects_non_boundaries_and_out_of_range() {
+        let digest = "00".repeat(32);
         let bad = SourceSlice {
             locator_ref: "s5B",
             start_char: 0,
             end_char: 100,
             projection_ref: "source-preserving",
-            slice_sha256_hex: &"00".repeat(32),
+            slice_sha256_hex: &digest,
             parser_authority_ref: "source_observation_only",
         };
         assert!(validate_slices("short", &[bad]).is_err());
