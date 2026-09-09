@@ -6,9 +6,8 @@
 //! historical legislation demand -> governed provider acquisition.
 
 use crate::bound_acquisition::ResidualBoundAuthorityDemand;
-use sensiblaw_governed_legal_provider::official_resource::nsw_legislation::{
-    bind_known_authority_to_historical_legislation, HistoricalLegislationDemand,
-    HistoricalLegislationError,
+use sensiblaw_nsw_legislation_provider::{
+    bind_known_authority_demand, HistoricalLegislationDemand, HistoricalLegislationError,
 };
 
 pub const HISTORICAL_LEGISLATION_BINDING_AUTHORITY: &str = "experimental_candidate_only";
@@ -37,8 +36,7 @@ pub fn bind_residual_to_nsw_historical_legislation(
     bound: &ResidualBoundAuthorityDemand,
     historical: HistoricalLegislationDemand,
 ) -> Result<ResidualBoundHistoricalLegislationDemand, HistoricalLegislationError> {
-    let historical =
-        bind_known_authority_to_historical_legislation(&bound.demand, historical)?;
+    let historical = bind_known_authority_demand(&bound.demand, historical)?;
 
     Ok(ResidualBoundHistoricalLegislationDemand {
         residual_ref: bound.residual_ref.clone(),
@@ -87,6 +85,7 @@ mod tests {
             official_document_id: "act-2002-022".into(),
             requested_locator: "s 5B".into(),
             in_force_on: "2017-01-26".into(),
+            expected_version_effective_from: Some("2015-07-01".into()),
             proposition_ref: "prop:NSW:CLA:s5B:definition".into(),
             source_identity_ref: "act:NSW:Civil-Liability-Act-2002".into(),
         }
@@ -97,6 +96,10 @@ mod tests {
         let welded = bind_residual_to_nsw_historical_legislation(&bound(), historical()).unwrap();
         assert_eq!(welded.residual_ref, "residual:cullen:cla:s5b:pit-source");
         assert_eq!(welded.historical.in_force_on, "2017-01-26");
+        assert_eq!(
+            welded.historical.expected_version_effective_from.as_deref(),
+            Some("2015-07-01")
+        );
         assert_eq!(welded.historical.official_document_id, "act-2002-022");
         assert_eq!(
             welded.scheduled_producer_ref,
