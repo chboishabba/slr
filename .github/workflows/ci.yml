@@ -19,6 +19,8 @@ jobs:
         run: cargo test --workspace
       - name: Offline proof-search fixture
         run: cargo run -p sensiblaw-proof-search-scheduler --example offline_pabai
+      - name: Cullen atomic attribution fixture
+        run: cargo run -p sensiblaw-atomic-attribution --example cullen_atomic
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Source-contract checks
