@@ -56,7 +56,7 @@ fn readonly_write(path: &Path, text: &str) -> Result<(), Box<dyn std::error::Err
 }
 
 fn tsv(value: &str) -> String {
-    value.replace('\t', " ").replace('\r', " ").replace('\n', " ")
+    value.replace(['\t', '\r', '\n'], " ")
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
