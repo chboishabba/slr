@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 //! OALC legislation input contract for the SensibLaw parser/PNF path.
 //!
 //! This carrier is intentionally narrower than general OALC indexing. It says
