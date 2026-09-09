@@ -1,20 +1,19 @@
 #!/usr/bin/env python3
-"""Materialise OALC Cullen governing legislation and run section slices through spaCy/PNF.
+"""Resolve Cullen governing legislation through LegalFollow/OALC and run PNF.
 
-OALC is the operational default corpus. Its NSW legislation documents are typed
-`latest_known_only`; this runner therefore does not claim that the materialised
-text is the exact 2017-01-26 point-in-time consolidation.
-
-Pipeline:
-  local OALC corpus.jsonl
-    -> exact two-document materialisation
-    -> source-preserving section slices
+Public pipeline:
+  LegalFollow exact legislation demand
+    -> governed OALC provider
+    -> two retained latest-known legislation documents
+    -> eight source-preserving section slices
     -> python/spacy_stream.py
     -> sensiblaw-stream
     -> typed section-receipt validation
 
-No parser/PNF output creates legal authority, historical applicability or Atomic
-case gates by itself.
+No local corpus.jsonl or manually supplied OALC revision is required. The live
+OALC provider pins the dataset revision observed at resolution and records it in
+the retained document receipts. `latest_known_only` does not establish historical
+2017 equivalence, legal authority, applicability, or an Atomic gate.
 """
 from __future__ import annotations
 
@@ -56,8 +55,8 @@ def section_spans(text: str) -> dict[str, tuple[int, int]]:
     spans: dict[str, tuple[int, int]] = {}
     for section, candidates in occurrences.items():
         if len(candidates) != 1:
-            # Ambiguity is preserved as a source/parser residual. Never choose
-            # the first matching heading merely because its number fits.
+            # Ambiguity remains a source/parser residual. Never choose the first
+            # matching heading merely because its section number fits.
             continue
         spans[section] = candidates[0]
     return spans
@@ -70,11 +69,16 @@ def load_receipts(path: Path) -> dict[str, dict[str, str]]:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--oalc-jsonl", required=True, help="local OALC corpus.jsonl")
-    ap.add_argument("--oalc-revision", required=True, help="pinned OALC revision/tag/digest")
+    ap.add_argument(
+        "--operator-opt-in",
+        action="store_true",
+        help="explicitly permit the bounded governed OALC network resolution",
+    )
     ap.add_argument("--output-dir", default="artifacts/oalc/cullen-governing-law")
     ap.add_argument("--spacy-model", default="en_core_web_sm")
     ns = ap.parse_args()
+    if not ns.operator_opt_in:
+        ap.error("--operator-opt-in is required for governed OALC resolution")
 
     root = Path(__file__).resolve().parents[1]
     output = root / ns.output_dir
@@ -86,15 +90,15 @@ def main() -> int:
         directory.mkdir(parents=True, exist_ok=True)
 
     env = os.environ.copy()
-    env["SENSIBLAW_OALC_JSONL"] = str(Path(ns.oalc_jsonl).resolve())
-    env["SENSIBLAW_OALC_REVISION"] = ns.oalc_revision
     env["SENSIBLAW_OALC_OUTPUT"] = str(materialised)
 
     run(
         [
             "cargo", "run", "-q",
             "-p", "sensiblaw-governed-legal-provider",
-            "--example", "oalc_cullen_legislation_materialize",
+            "--features", "live-network",
+            "--example", "live_oalc_cullen_legal_follow",
+            "--", "--operator-opt-in",
         ],
         env=env,
     )
@@ -191,7 +195,7 @@ def main() -> int:
     )
 
     print(
-        f"parsed and validated {len(slice_receipts)} OALC statutory sections through spaCy/PNF; "
+        f"LegalFollow/OALC parsed and validated {len(slice_receipts)} statutory sections through spaCy/PNF; "
         f"temporal_status=latest_known_only; receipts={out_receipts}"
     )
     return 0
