@@ -54,7 +54,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     fn provider_error(context: &str, err: impl std::fmt::Debug) -> io::Error {
-        io::Error::new(io::ErrorKind::Other, format!("{context}: {err:?}"))
+        io::Error::other(format!("{context}: {err:?}"))
     }
 
     fn value_after(args: &[String], flag: &str) -> Option<String> {
