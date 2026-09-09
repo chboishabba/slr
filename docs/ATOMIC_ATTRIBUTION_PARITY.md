@@ -16,6 +16,7 @@ source artifact/span
   -> repository evaluation lineage
   -> atomic gate (-1 / 0 / +1)
   -> finite same-case registry
+  -> consumer-relative acquisition admission
   -> separately governed promotion
 ```
 
@@ -93,15 +94,47 @@ s 43A special-statutory-power engagement                 -1
 vicarious-liability family recognised                    +1
 ```
 
+The reviewable fixture is `fixtures/cullen_atomic_attribution_v0_1.tsv`. It pins the definition source, exact locator/role, outcome-evidence source, and provenance stages for all five atoms.
+
 This is a parity fixture for already reviewed source/Agda conclusions. It is not a claim that the current parser independently discovers those five legal atoms from raw judgment text.
 
 The two `-1` coordinates retain different proposition identities and different legal meanings. The `+1` vicarious-family coordinate does not repair the failed breach atom.
 
+## Consumer-relative acquisition
+
+`priority` reuses the existing `sensiblaw-proof-search-scheduler`; it does not create another planner.
+
+An unresolved source coordinate is first classified as:
+
+```text
+AcquireForLiveConsumer
+DeferForCounterfactualConsumer
+BlockedDownstream
+OptionalEnrichment
+```
+
+A `BlockedDownstream` demand must name a registered `FailsThisAtom` blocker. Only `AcquireForLiveConsumer` becomes a scheduler `ProofGap`.
+
+The Cullen regression uses the same unresolved s 8(a)/(b) vicarious-liability subroute twice:
+
+- actual no-liability disposition: blocked downstream by registered s 5B(1)(c) failure;
+- explicit counterfactual "if the police tort existed, which s 8 route applies?": live source-acquisition gap.
+
+Thus `unresolved != acquire now`, and a coordinate can be deferred for one consumer while live for another.
+
 ## Promotion
 
-The repository already owns `sensiblaw_core::PromotionReceipt`. Atomic attribution should consume that canonical receipt rather than invent a second promotion authority. The remaining parity weld is to bind its source span/policy/reviewer identity to the exact atomic registry entry and provenance transition.
+Atomic attribution reuses the canonical `sensiblaw_core::PromotionReceipt`; there is no second promotion authority type.
 
-Until that weld is complete, registration and source attribution remain non-promoting.
+`AtomicPromotionWeld` adds only the missing atom/context/provenance identity and exact admitted-source weld. Promotion succeeds only when:
+
+- the target atom exists in the exact case registry;
+- the stated prior provenance stage matches the registered evaluation stage;
+- the core receipt has `PromotionStatus::Promoted`;
+- the core receipt source span equals the admitted/source anchor span;
+- policy and reviewer/resolver references are present.
+
+The promotion receipt does not change the atomic gate and does not manufacture legal authority, applicability, violation or liability.
 
 ## Validation target
 
@@ -109,6 +142,7 @@ The focused runtime target is:
 
 ```sh
 cargo test -p sensiblaw-atomic-attribution
+cargo run -p sensiblaw-atomic-attribution --example cullen_atomic
 cargo clippy -p sensiblaw-atomic-attribution --all-targets -- -D warnings
 ```
 
