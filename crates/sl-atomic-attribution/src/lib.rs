@@ -11,6 +11,7 @@
 
 pub mod admission;
 pub mod priority;
+pub mod rule;
 
 use std::collections::BTreeMap;
 
