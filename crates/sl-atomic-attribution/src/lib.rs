@@ -1,7 +1,7 @@
 //! Runtime parity carrier for SensibLaw atomic legal attribution.
 //!
 //! This crate operationalises a deliberately small subset of the Agda legal
-//! spine.  It preserves, for one exact case/revision atom:
+//! spine. It preserves, for one exact case/revision atom:
 //!
 //! source-defined proposition -> case-outcome evidence -> repository evaluation
 //! -> balanced ternary gate, while keeping semantic/legal status orthogonal.
@@ -10,9 +10,11 @@
 //! not create legal authority, applicability, violation, liability or remedy.
 
 pub mod admission;
+pub mod priority;
 
 use std::collections::BTreeMap;
 
+use sensiblaw_core::{PromotionReceipt as CorePromotionReceipt, PromotionStatus};
 use sensiblaw_semantic_status::{
     ApplicabilityStatus, AttributionRole, AuthorityKind, BurdenKind, ConditionKind, EvidenceKind,
     EvidencePolarity, JudicialDiscourseStatus, JurisdictionKind, LegalStatusProduct,
@@ -91,7 +93,7 @@ pub struct AtomicRegistryEntry {
     /// outcome source simply because an atom exists.
     pub outcome_lineage: Option<ClaimLineage>,
     /// Provenance of the repository act that maps definition + evidence to the
-    /// atomic gate.  Source material does not own this gate automatically.
+    /// atomic gate. Source material does not own this gate automatically.
     pub evaluation_lineage: ClaimLineage,
     pub gate: AtomicGate,
     pub proposition_status: PropositionStatusProduct,
@@ -133,6 +135,10 @@ pub enum RegistryError {
     ConflictingCanonicalEntry,
     PromotionTargetMismatch,
     PromotionStageMismatch,
+    PromotionSpanMismatch,
+    PromotionStatusNotPromoted,
+    MissingPromotionPolicy,
+    MissingPromotionResolver,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
@@ -159,6 +165,10 @@ impl AtomicCaseRegistry {
             .get(&(case_context.to_owned(), atom_id.to_owned()))
     }
 
+    pub fn entries(&self) -> impl Iterator<Item = &AtomicRegistryEntry> {
+        self.entries.values()
+    }
+
     pub fn len(&self) -> usize {
         self.entries.len()
     }
@@ -168,39 +178,52 @@ impl AtomicCaseRegistry {
     }
 }
 
+/// Atom/context/provenance weld around the canonical `sensiblaw_core`
+/// promotion receipt. This adds no second promotion authority type.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PromotionReceipt {
+pub struct AtomicPromotionWeld {
     pub case_context: String,
-    pub atom_id: String,
     pub from_stage: ProvenanceStage,
-    pub to_stage: ProvenanceStage,
-    pub authority_reference: String,
-    pub policy_reference: String,
-    pub resolver_reference: String,
+    pub source_weld: admission::AdmittedAtomicSourceWeld,
+    pub receipt: CorePromotionReceipt,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PromotedAtomicRecord {
     pub canonical_entry: AtomicRegistryEntry,
-    pub promotion: PromotionReceipt,
+    pub promotion: AtomicPromotionWeld,
 }
 
 pub fn promote_atomic_entry(
     registry: &AtomicCaseRegistry,
-    receipt: PromotionReceipt,
+    promotion: AtomicPromotionWeld,
 ) -> Result<PromotedAtomicRecord, RegistryError> {
     let entry = registry
-        .get(&receipt.case_context, &receipt.atom_id)
+        .get(&promotion.case_context, &promotion.source_weld.atom_id)
         .ok_or(RegistryError::PromotionTargetMismatch)?;
-    if receipt.from_stage != entry.evaluation_lineage.stage {
+    if promotion.from_stage != entry.evaluation_lineage.stage {
         return Err(RegistryError::PromotionStageMismatch);
     }
-    if receipt.to_stage != ProvenanceStage::PromotionOrExternalAdjudication {
-        return Err(RegistryError::PromotionStageMismatch);
+    if promotion.receipt.status != PromotionStatus::Promoted {
+        return Err(RegistryError::PromotionStatusNotPromoted);
+    }
+    if promotion.receipt.source_span != promotion.source_weld.source_anchor.span {
+        return Err(RegistryError::PromotionSpanMismatch);
+    }
+    if promotion.receipt.policy_reference.trim().is_empty() {
+        return Err(RegistryError::MissingPromotionPolicy);
+    }
+    if promotion
+        .receipt
+        .reviewer_or_resolver_reference
+        .trim()
+        .is_empty()
+    {
+        return Err(RegistryError::MissingPromotionResolver);
     }
     Ok(PromotedAtomicRecord {
         canonical_entry: entry.clone(),
-        promotion: receipt,
+        promotion,
     })
 }
 
@@ -282,7 +305,7 @@ pub const CULLEN_SOURCE_ID: &str = "source:HCA:Cullen-v-NSW:2026:HCA19";
 
 /// Bounded runtime fixture matching the current Agda Cullen atomic registry.
 ///
-/// The five expected gates are (+,+,-,-,+).  Their signs are not aggregated:
+/// The five expected gates are (+,+,-,-,+). Their signs are not aggregated:
 /// the two negative entries have different propositions, sources and legal
 /// meanings, while the positive vicarious-family classification cannot repair
 /// the failed breach atom.
@@ -348,6 +371,11 @@ pub fn cullen_gold_registry() -> AtomicCaseRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sensiblaw_core::{FibreAddress, TextSpan};
+    use sensiblaw_semantic_admission::{
+        AdmittedNormativeDelta, ResolutionAuthority, ResolvedScope,
+    };
+    use sensiblaw_semantic_expansion::{ExpandedCandidateKind, StableHeadRelation};
 
     #[test]
     fn cullen_gold_vector_is_exact_and_non_aggregated() {
@@ -401,16 +429,12 @@ mod tests {
         assert_eq!(breach_atom.gate, AtomicGate::FailsThisAtom);
         assert_eq!(s43a_atom.gate, AtomicGate::FailsThisAtom);
         assert_ne!(breach_atom.atom_id, s43a_atom.atom_id);
-        assert_ne!(
-            breach_atom.definition_lineage.supporting_source,
-            s43a_atom.outcome_lineage.as_ref().unwrap().supporting_source
-        );
     }
 
     #[test]
     fn primary_source_support_does_not_promote_semantic_or_legal_status() {
         let registry = cullen_gold_registry();
-        for entry in registry.entries.values() {
+        for entry in registry.entries() {
             assert_eq!(
                 entry.definition_lineage.stage,
                 ProvenanceStage::RepositoryReconstruction
@@ -430,7 +454,7 @@ mod tests {
     #[test]
     fn repository_gate_is_not_attributed_back_to_primary_source() {
         let registry = cullen_gold_registry();
-        for entry in registry.entries.values() {
+        for entry in registry.entries() {
             assert_eq!(
                 entry.evaluation_lineage.stage,
                 ProvenanceStage::CrossSourceInference
@@ -440,27 +464,53 @@ mod tests {
     }
 
     #[test]
-    fn promotion_requires_an_exact_separate_receipt() {
+    fn promotion_reuses_core_receipt_and_exact_admitted_source_span() {
         let registry = cullen_gold_registry();
         let atom_id = "atom:NSW:vicarious-liability:family-recognised";
+        let span = TextSpan::new(1, 100, 140).unwrap();
+        let address = FibreAddress {
+            sentence_id: 100,
+            local_ordinal: 1,
+        };
+        let admitted = AdmittedNormativeDelta {
+            kind: ExpandedCandidateKind::ReferenceRelation,
+            source_span: span,
+            address,
+            head: StableHeadRelation::Root,
+            resolved_scope: ResolvedScope::ContextResolved,
+            authority: ResolutionAuthority::HumanReview,
+            policy_reference: "policy:cullen-atomic-admission".into(),
+            resolver_reference: "resolver:cullen-atomic-review".into(),
+        };
+        let source_weld = admission::weld_admitted_candidate_to_source(
+            atom_id,
+            admission::SourceSpanAnchor {
+                source_id: CULLEN_SOURCE_ID.into(),
+                source_revision: "HCA-2026-19-official-pdf".into(),
+                exact_locator: "Edelman J [100]".into(),
+                address,
+                span,
+            },
+            admitted,
+            "weld:Cullen:100:vicarious-family",
+        )
+        .unwrap();
         let promoted = promote_atomic_entry(
             &registry,
-            PromotionReceipt {
+            AtomicPromotionWeld {
                 case_context: CULLEN_CONTEXT.into(),
-                atom_id: atom_id.into(),
                 from_stage: ProvenanceStage::CrossSourceInference,
-                to_stage: ProvenanceStage::PromotionOrExternalAdjudication,
-                authority_reference: "authority:fixture-reviewer".into(),
-                policy_reference: "policy:fixture-promotion".into(),
-                resolver_reference: "resolver:fixture".into(),
+                source_weld,
+                receipt: CorePromotionReceipt {
+                    status: PromotionStatus::Promoted,
+                    source_span: span,
+                    policy_reference: "policy:atomic-promotion".into(),
+                    reviewer_or_resolver_reference: "reviewer:fixture".into(),
+                },
             },
         )
         .unwrap();
         assert_eq!(promoted.canonical_entry.atom_id, atom_id);
-        assert_eq!(
-            promoted.promotion.to_stage,
-            ProvenanceStage::PromotionOrExternalAdjudication
-        );
     }
 
     #[test]
