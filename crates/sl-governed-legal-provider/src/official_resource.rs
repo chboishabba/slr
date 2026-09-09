@@ -4,10 +4,6 @@
 //! official landing-page HTML into typed document references; it does not parse
 //! holdings, propositions, treatment, authority, applicability or truth.
 
-pub mod nsw_legislation;
-pub mod nsw_legislation_execution;
-pub mod nsw_legislation_parser;
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum JudgmentResourceKind {
     Docx,
