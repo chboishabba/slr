@@ -16,3 +16,6 @@ sha2 = "0.10"
 ureq = { version = "2.10", optional = true }
 xml-rs = "0.8"
 zip = { version = "0.6", default-features = false, features = ["deflate"] }
+
+[dev-dependencies]
+sensiblaw-legal-follow-plan = { path = "../sl-legal-follow-plan" }
