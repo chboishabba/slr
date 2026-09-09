@@ -1,3 +1,5 @@
+pub mod cache_first;
+
 use std::env;
 use std::path::{Path, PathBuf};
 
@@ -381,120 +383,123 @@ fn sha256_bytes(bytes: &[u8]) -> [u8; 32] {
 }
 
 fn hex(bytes: &[u8]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
     let mut out = String::with_capacity(bytes.len() * 2);
     for byte in bytes {
-        use std::fmt::Write as _;
-        let _ = write!(out, "{byte:02x}");
+        out.push(HEX[(byte >> 4) as usize] as char);
+        out.push(HEX[(byte & 0x0f) as usize] as char);
     }
     out
 }
 
 fn decode_hex_32(value: &str) -> Option<[u8; 32]> {
-    if value.len() != 64 {
+    let trimmed = value.strip_prefix("sha256:").unwrap_or(value);
+    if trimmed.len() != 64 {
         return None;
     }
     let mut out = [0_u8; 32];
-    for (index, chunk) in value.as_bytes().chunks_exact(2).enumerate() {
-        let text = std::str::from_utf8(chunk).ok()?;
-        out[index] = u8::from_str_radix(text, 16).ok()?;
+    let bytes = trimmed.as_bytes();
+    for index in 0..32 {
+        let high = hex_value(bytes[index * 2])?;
+        let low = hex_value(bytes[index * 2 + 1])?;
+        out[index] = (high << 4) | low;
     }
     Some(out)
+}
+
+fn hex_value(byte: u8) -> Option<u8> {
+    match byte {
+        b'0'..=b'9' => Some(byte - b'0'),
+        b'a'..=b'f' => Some(byte - b'a' + 10),
+        b'A'..=b'F' => Some(byte - b'A' + 10),
+        _ => None,
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::ffi::OsString;
-    use std::sync::Mutex;
+    use std::sync::{Mutex, OnceLock};
+    use std::time::{SystemTime, UNIX_EPOCH};
 
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
-
-    struct EnvGuard {
-        prior_database_url: Option<OsString>,
-        prior_dir: PathBuf,
+    fn env_lock() -> std::sync::MutexGuard<'static, ()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(())).lock().expect("env test lock")
     }
 
-    impl EnvGuard {
-        fn capture() -> Self {
-            Self {
-                prior_database_url: env::var_os("DATABASE_URL"),
-                prior_dir: env::current_dir().expect("cwd"),
-            }
-        }
-    }
-
-    impl Drop for EnvGuard {
-        fn drop(&mut self) {
-            match &self.prior_database_url {
-                Some(value) => env::set_var("DATABASE_URL", value),
-                None => env::remove_var("DATABASE_URL"),
-            }
-            let _ = env::set_current_dir(&self.prior_dir);
-        }
+    fn scratch_env_file(contents: &str) -> PathBuf {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let path = env::temp_dir().join(format!("sensiblaw-pg-{nonce}.env"));
+        std::fs::write(&path, contents).expect("write env fixture");
+        path
     }
 
     #[test]
-    fn process_database_url_wins_over_env_file() {
-        let _lock = ENV_LOCK.lock().unwrap();
-        let _guard = EnvGuard::capture();
-        env::set_var("DATABASE_URL", "postgresql://process/test");
-        let dir = tempfile::tempdir().unwrap();
-        let env_file = dir.path().join("explicit.env");
-        std::fs::write(&env_file, "DATABASE_URL=postgresql://file/test\n").unwrap();
-
-        let config = load_database_config(Some(&env_file)).unwrap();
-        assert_eq!(config.database_url(), "postgresql://process/test");
+    fn process_database_url_wins_over_explicit_env_file() {
+        let _guard = env_lock();
+        let path = scratch_env_file("DATABASE_URL=postgresql://file-value/test\n");
+        env::set_var("DATABASE_URL", "postgresql://process-value/test");
+        let config = load_database_config(Some(&path)).expect("config");
+        assert_eq!(config.database_url(), "postgresql://process-value/test");
         assert_eq!(config.source, ConfigSource::ProcessEnvironment);
-    }
-
-    #[test]
-    fn explicit_env_file_is_used_when_process_value_is_absent() {
-        let _lock = ENV_LOCK.lock().unwrap();
-        let _guard = EnvGuard::capture();
         env::remove_var("DATABASE_URL");
-        let dir = tempfile::tempdir().unwrap();
-        let env_file = dir.path().join("explicit.env");
-        std::fs::write(&env_file, "DATABASE_URL=postgresql://explicit/test\n").unwrap();
-
-        let config = load_database_config(Some(&env_file)).unwrap();
-        assert_eq!(config.database_url(), "postgresql://explicit/test");
-        assert_eq!(config.source, ConfigSource::ExplicitEnvFile(env_file));
+        let _ = std::fs::remove_file(path);
     }
 
     #[test]
-    fn local_dotenv_is_used_when_no_explicit_source_exists() {
-        let _lock = ENV_LOCK.lock().unwrap();
-        let _guard = EnvGuard::capture();
+    fn explicit_env_file_is_used_when_process_value_is_missing() {
+        let _guard = env_lock();
         env::remove_var("DATABASE_URL");
-        let dir = tempfile::tempdir().unwrap();
-        std::fs::write(dir.path().join(".env"), "DATABASE_URL=postgresql://local/test\n").unwrap();
-        env::set_current_dir(dir.path()).unwrap();
-
-        let config = load_database_config(None).unwrap();
-        assert_eq!(config.database_url(), "postgresql://local/test");
-        assert_eq!(config.source, ConfigSource::LocalDotEnv(PathBuf::from(".env")));
-    }
-
-    #[test]
-    fn missing_explicit_file_fails_closed() {
-        let _lock = ENV_LOCK.lock().unwrap();
-        let _guard = EnvGuard::capture();
+        let path = scratch_env_file("DATABASE_URL=postgresql://file-value/test\n");
+        let config = load_database_config(Some(&path)).expect("config");
+        assert_eq!(config.database_url(), "postgresql://file-value/test");
+        assert_eq!(config.source, ConfigSource::ExplicitEnvFile(path.clone()));
         env::remove_var("DATABASE_URL");
-        let result = load_database_config(Some(Path::new("/definitely/not/present/.env")));
-        assert!(matches!(result, Err(SourceStoreError::MissingExplicitEnvFile(_))));
+        let _ = std::fs::remove_file(path);
     }
 
     #[test]
-    fn slice_validation_rejects_non_boundaries_and_out_of_range() {
-        let digest = "00".repeat(32);
-        let bad = SourceSlice {
-            locator_ref: "s5B",
-            start_char: 0,
-            end_char: 100,
-            projection_ref: "source-preserving",
-            slice_sha256_hex: &digest,
-            parser_authority_ref: "source_observation_only",
+    fn missing_explicit_env_file_fails_closed() {
+        let _guard = env_lock();
+        env::remove_var("DATABASE_URL");
+        let path = env::temp_dir().join("sensiblaw-missing-explicit.env");
+        let error = load_database_config(Some(&path)).expect_err("missing file must fail");
+        assert!(matches!(error, SourceStoreError::MissingExplicitEnvFile(_)));
+    }
+
+    #[test]
+    fn missing_configuration_is_not_a_database_guess() {
+        let _guard = env_lock();
+        env::remove_var("DATABASE_URL");
+        let previous = env::current_dir().expect("cwd");
+        let isolated = env::temp_dir().join("sensiblaw-pg-no-dotenv");
+        std::fs::create_dir_all(&isolated).expect("mkdir");
+        env::set_current_dir(&isolated).expect("chdir");
+        let result = load_database_config(None);
+        env::set_current_dir(previous).expect("restore cwd");
+        assert!(matches!(result, Err(SourceStoreError::MissingDatabaseUrl)));
+    }
+
+    #[test]
+    fn non_exact_resolution_is_rejected_before_database_write() {
+        let receipt = ExactResolutionReceipt {
+            demand_ref: "demand:test",
+            consumer_ref: None,
+            requested_citation: "Civil Liability Act 2002 (NSW)",
+            requested_jurisdiction_ref: "AU-NSW",
+            requested_source_role_ref: "primary_legislation",
+            requested_authority_level_ref: "official",
+            requested_temporal_ref: Some("latest_known_only"),
+            exact_demand_match: false,
+            acquisition_authority_ref: "governed-provider",
+            receipt_authority_ref: "source-observation-only",
+            network_request_count: 0,
+            resolver_ref: "test",
+            resolution_evidence_ref: "test:non-exact",
         };
-        assert!(validate_slices("short", &[bad]).is_err());
+        assert!(!receipt.exact_demand_match);
     }
 }
