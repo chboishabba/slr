@@ -8,3 +8,4 @@ rust-version.workspace = true
 [dependencies]
 sensiblaw-governed-legal-provider = { path = "../sl-governed-legal-provider" }
 sha2 = "0.10"
+xml-rs = "0.8"
