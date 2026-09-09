@@ -6,4 +6,6 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+sensiblaw-core = { path = "../sl-core" }
+sensiblaw-semantic-admission = { path = "../sl-semantic-admission" }
 sensiblaw-semantic-status = { path = "../sl-semantic-status" }
