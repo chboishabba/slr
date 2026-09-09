@@ -5,6 +5,7 @@
 //! holdings, propositions, treatment, authority, applicability or truth.
 
 pub mod nsw_legislation;
+pub mod nsw_legislation_execution;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum JudgmentResourceKind {
