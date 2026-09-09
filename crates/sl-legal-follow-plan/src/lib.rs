@@ -1,15 +1,15 @@
 //! Typed legal-source planning for SensibLaw.
 //!
-//! This crate mirrors the established SensibLaw rule that legal-follow is an
-//! acquisition backend, not a semantic classifier. It never fetches a URL.
-//! It compiles a typed demand into either:
-//! - a persisted compatible source selection;
-//! - a missing-context residual; or
-//! - an acquisition-required residual.
+//! LegalFollow is an acquisition planner, not a semantic classifier and not a
+//! network client. It compiles legal residuals into exact source work. Provider
+//! adapters satisfy that work and return retained source receipts.
 //!
 //! Missing sources are work, never negative legal evidence.
 
 use sensiblaw_legal_counterfactual::{producer_for, CounterfactualResidual, RequiredProducer};
+
+pub const OALC_PROVIDER_PROFILE: &str = "provider:oalc";
+pub const OALC_DATASET_ID: &str = "isaacus/open-australian-legal-corpus";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum PlanState {
@@ -68,6 +68,72 @@ impl LegalSourceDemand {
         }
         slots
     }
+}
+
+/// Exact provider-facing source request emitted from an already-admitted
+/// LegalFollow plan. Storage layout is intentionally absent: no corpus.jsonl
+/// path is part of the demand.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExactLegislationSourceDemand {
+    pub demand_ref: String,
+    pub origin_ref: String,
+    pub jurisdiction_ref: String,
+    pub citation: String,
+    pub source_role: SourceRole,
+    pub authority_level: AuthorityLevel,
+    pub provider_profile_ref: String,
+    pub dataset_ref: String,
+    pub requested_temporal_ref: Option<String>,
+    pub authority: &'static str,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ExactLegislationDemandError {
+    NotAcquisitionReady,
+    WrongSourceRole,
+    WrongAuthorityLevel,
+    ProviderNotAdmitted,
+    EmptyCitation,
+}
+
+pub fn exact_oalc_legislation_demand(
+    plan: &LegalSourcePlan,
+    origin_ref: impl Into<String>,
+    citation: impl Into<String>,
+) -> Result<ExactLegislationSourceDemand, ExactLegislationDemandError> {
+    if !matches!(plan.state, PlanState::BlockedAcquisitionRequired | PlanState::ReadyPersisted) {
+        return Err(ExactLegislationDemandError::NotAcquisitionReady);
+    }
+    let Some(jurisdiction_ref) = plan.jurisdiction_ref.clone() else {
+        return Err(ExactLegislationDemandError::NotAcquisitionReady);
+    };
+    if !plan.source_roles.contains(&SourceRole::PrimaryLegislation) {
+        return Err(ExactLegislationDemandError::WrongSourceRole);
+    }
+    if !plan.authority_levels.contains(&AuthorityLevel::Official) {
+        return Err(ExactLegislationDemandError::WrongAuthorityLevel);
+    }
+    if !plan.provider_profile_refs.is_empty()
+        && !plan.provider_profile_refs.iter().any(|p| p == OALC_PROVIDER_PROFILE)
+    {
+        return Err(ExactLegislationDemandError::ProviderNotAdmitted);
+    }
+    let citation = citation.into();
+    if citation.trim().is_empty() {
+        return Err(ExactLegislationDemandError::EmptyCitation);
+    }
+    Ok(ExactLegislationSourceDemand {
+        demand_ref: plan.demand_ref.clone(),
+        origin_ref: origin_ref.into(),
+        jurisdiction_ref,
+        citation,
+        source_role: SourceRole::PrimaryLegislation,
+        authority_level: AuthorityLevel::Official,
+        provider_profile_ref: OALC_PROVIDER_PROFILE.into(),
+        dataset_ref: OALC_DATASET_ID.into(),
+        requested_temporal_ref: plan.temporal_refs.first().cloned(),
+        authority: "acquisition_plan_only",
+    })
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -169,10 +235,8 @@ pub fn plan_legal_sources(
     }
 }
 
-/// Compile only those counterfactual residuals whose producer is genuinely a
-/// legal-source/authority resolver into a legal-source demand. Other residuals
-/// remain on their native producer lane rather than being broadened into web
-/// search.
+/// Compile only residuals whose producer is genuinely a legal-source/authority
+/// resolver into LegalFollow work. Other residuals remain on their native lane.
 pub fn demand_from_counterfactual_residual(
     demand_ref: impl Into<String>,
     origin_ref: impl Into<String>,
@@ -303,5 +367,31 @@ mod tests {
         assert_eq!(demand.authority_levels, vec![AuthorityLevel::Official]);
         assert!(demand.source_roles.contains(&SourceRole::PrimaryCaseLaw));
         assert!(demand.source_roles.contains(&SourceRole::PrimaryLegislation));
+    }
+
+    #[test]
+    fn exact_oalc_legislation_demand_has_no_storage_path() {
+        let source_demand = LegalSourceDemand {
+            demand_ref: "d:oalc:cla".into(),
+            origin_ref: "consumer:cullen".into(),
+            jurisdiction_ref: Some("AU-NSW".into()),
+            source_roles: vec![SourceRole::PrimaryLegislation],
+            authority_levels: vec![AuthorityLevel::Official],
+            provider_profile_refs: vec![OALC_PROVIDER_PROFILE.into()],
+            requested_facets: vec!["legislation.text".into()],
+            temporal_refs: vec!["latest_known_only".into()],
+            provenance_refs: vec!["consumer:cullen".into()],
+            priority: 100,
+        };
+        let plan = plan_legal_sources(&source_demand, &[]);
+        let exact = exact_oalc_legislation_demand(
+            &plan,
+            "consumer:cullen",
+            "Civil Liability Act 2002 (NSW)",
+        )
+        .expect("OALC exact legislation demand should compile");
+        assert_eq!(exact.dataset_ref, OALC_DATASET_ID);
+        assert_eq!(exact.provider_profile_ref, OALC_PROVIDER_PROFILE);
+        assert_eq!(exact.authority, "acquisition_plan_only");
     }
 }
