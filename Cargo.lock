@@ -7,6 +7,7 @@ name = "sensiblaw-atomic-attribution"
 version = "0.1.0"
 dependencies = [
  "sensiblaw-core",
+ "sensiblaw-proof-search-scheduler",
  "sensiblaw-semantic-admission",
  "sensiblaw-semantic-expansion",
  "sensiblaw-semantic-status",
