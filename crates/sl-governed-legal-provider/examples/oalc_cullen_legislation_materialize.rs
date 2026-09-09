@@ -1,3 +1,10 @@
+#[path = "../src/oalc_legislation_contract.rs"]
+mod oalc_legislation_contract;
+
+use oalc_legislation_contract::{
+    OalcLegislationDocumentReceipt, OalcTemporalCoverage, PinnedOalcCorpusInput,
+    CULLEN_CLA_CITATION, CULLEN_VICARIOUS_CITATION, OALC_RECEIPT_AUTHORITY,
+};
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
@@ -7,10 +14,7 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 
-const TARGETS: [&str; 2] = [
-    "Civil Liability Act 2002 (NSW)",
-    "Law Reform (Vicarious Liability) Act 1983 (NSW)",
-];
+const TARGETS: [&str; 2] = [CULLEN_CLA_CITATION, CULLEN_VICARIOUS_CITATION];
 
 #[derive(Debug, Deserialize)]
 struct OalcJsonLine {
@@ -71,6 +75,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .unwrap_or_else(|_| "artifacts/oalc/cullen-governing-law".to_string()),
     );
 
+    let corpus_input = PinnedOalcCorpusInput {
+        corpus_jsonl_path: jsonl.clone(),
+        corpus_revision_ref: corpus_revision.clone(),
+    };
+    corpus_input
+        .validate()
+        .map_err(|err| format!("invalid pinned OALC corpus input: {err:?}"))?;
+    if !oalc_legislation_contract::corpus_path_exists(&corpus_input) {
+        return Err(format!("OALC corpus.jsonl does not exist: {}", jsonl.display()).into());
+    }
+
     let reader = BufReader::new(File::open(&jsonl)?);
     let mut found = BTreeMap::<String, OalcJsonLine>::new();
 
@@ -119,6 +134,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let artifact = output_dir.join(format!("{}.txt", slug(&record.citation)));
         readonly_write(&artifact, &record.text)?;
         let digest = sha256(record.text.as_bytes());
+
+        let document_receipt = OalcLegislationDocumentReceipt {
+            citation: record.citation.clone(),
+            version_id: record.version_id.clone(),
+            corpus_revision_ref: corpus_revision.clone(),
+            source: record.source.clone(),
+            jurisdiction: record.jurisdiction.clone(),
+            document_type: record.document_type.clone(),
+            canonical_text_digest: digest.clone(),
+            local_artifact_ref: artifact.clone(),
+            temporal_coverage: OalcTemporalCoverage::LatestKnownOnly,
+            receipt_authority: OALC_RECEIPT_AUTHORITY,
+        };
+        document_receipt
+            .validate()
+            .map_err(|err| format!("invalid OALC legislation receipt for {target}: {err:?}"))?;
+        debug_assert!(!document_receipt.creates_historical_equivalence());
+        debug_assert!(!document_receipt.creates_legal_authority());
+
         let row = [
             record.citation,
             record.version_id,
@@ -133,7 +167,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             artifact.to_string_lossy().into_owned(),
             "latest_known_only".to_string(),
             "0".to_string(),
-            "experimental_candidate_only".to_string(),
+            OALC_RECEIPT_AUTHORITY.to_string(),
         ]
         .iter()
         .map(|value| tsv(value))
