@@ -11,6 +11,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     use std::collections::BTreeMap;
     use std::env;
     use std::fs;
+    use std::io;
     use std::path::{Path, PathBuf};
     use std::thread;
     use std::time::Duration;
@@ -50,6 +51,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 source_identity_ref: self.act_identity_ref.clone(),
             }
         }
+    }
+
+    fn provider_error(context: &str, err: impl std::fmt::Debug) -> io::Error {
+        io::Error::new(io::ErrorKind::Other, format!("{context}: {err:?}"))
     }
 
     fn value_after(args: &[String], flag: &str) -> Option<String> {
@@ -97,7 +102,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     fn tsv_cell(value: &str) -> String {
-        value.replace(['\t', '\r', '\n'], " ")
+        value
+            .chars()
+            .map(|ch| if matches!(ch, '\t' | '\r' | '\n') { ' ' } else { ch })
+            .collect()
     }
 
     fn receipt_row(receipt: &HistoricalLegislationReceipt) -> String {
@@ -124,7 +132,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let args = env::args().collect::<Vec<_>>();
-    if !args.iter().any(|arg| arg == "--operator-opt-in") {
+    let dry_run = args.iter().any(|arg| arg == "--dry-run");
+    if !dry_run && !args.iter().any(|arg| arg == "--operator-opt-in") {
         return Err(
             "explicit operator consent required: pass --operator-opt-in to permit live NSW Legislation requests"
                 .into(),
@@ -143,7 +152,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let rows = load_manifest(&manifest)?;
     let mut groups: BTreeMap<(String, String), Vec<Row>> = BTreeMap::new();
     for row in rows {
-        let expected = official_pit_xml_reference(&row.demand())?;
+        let expected = official_pit_xml_reference(&row.demand())
+            .map_err(|err| provider_error("manifest PIT reference", err))?;
         if expected != row.official_pit_xml {
             return Err(format!(
                 "manifest official PIT URL mismatch for {}: expected {}, got {}",
@@ -165,6 +175,47 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .into());
     }
 
+    for ((document_id, in_force_on), group) in &groups {
+        let canonical = group.first().ok_or("empty deduplicated PIT group")?;
+        for row in group {
+            if row.act_identity_ref != canonical.act_identity_ref
+                || row.official_document_id != canonical.official_document_id
+                || row.in_force_on != canonical.in_force_on
+                || row.expected_version_effective_from
+                    != canonical.expected_version_effective_from
+                || row.official_pit_xml != canonical.official_pit_xml
+            {
+                return Err(format!(
+                    "deduplicated PIT group mixes incompatible source revisions: {} / {}",
+                    document_id, in_force_on
+                )
+                .into());
+            }
+        }
+    }
+
+    if dry_run {
+        println!(
+            "dry-run OK: {} manifest demands deduplicate to exactly {} official NSW PIT XML requests",
+            groups.values().map(Vec::len).sum::<usize>(),
+            groups.len()
+        );
+        for ((document_id, in_force_on), group) in groups {
+            println!(
+                "{} @ {} -> {} locator receipt(s): {}",
+                document_id,
+                in_force_on,
+                group.len(),
+                group
+                    .iter()
+                    .map(|row| row.locator.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+        }
+        return Ok(());
+    }
+
     let context = GovernedExecutionContext {
         operator_opt_in: true,
         cache_checked_first: true,
@@ -177,7 +228,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             max_network_requests: 2,
         },
     };
-    context.validate().map_err(|err| format!("governance: {err:?}"))?;
+    context
+        .validate()
+        .map_err(|err| provider_error("governance", err))?;
 
     fs::create_dir_all(output_dir.join("raw"))?;
     fs::create_dir_all(output_dir.join("receipts"))?;
@@ -195,22 +248,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         let canonical = group.first().ok_or("empty deduplicated PIT group")?;
-        for row in &group {
-            if row.act_identity_ref != canonical.act_identity_ref
-                || row.official_document_id != canonical.official_document_id
-                || row.in_force_on != canonical.in_force_on
-                || row.expected_version_effective_from
-                    != canonical.expected_version_effective_from
-                || row.official_pit_xml != canonical.official_pit_xml
-            {
-                return Err(format!(
-                    "deduplicated PIT group mixes incompatible source revisions: {} / {}",
-                    document_id, in_force_on
-                )
-                .into());
-            }
-        }
-
         let fetch_demand = canonical.demand();
         eprintln!(
             "governed NSW PIT fetch {}/2: {} @ {}",
@@ -218,13 +255,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             document_id,
             in_force_on
         );
-        let candidate = fetch_official_pit_xml(&mut transport, &context, &fetch_demand)?;
+        let candidate = fetch_official_pit_xml(&mut transport, &context, &fetch_demand)
+            .map_err(|err| provider_error("official PIT fetch", err))?;
         network_requests += candidate.network_requests;
 
         let raw_path = output_dir
             .join("raw")
             .join(format!("{}_{}.xml", document_id, in_force_on));
-        let retained = retain_official_fetch_candidate(&fetch_demand, &candidate, &raw_path)?;
+        let retained = retain_official_fetch_candidate(&fetch_demand, &candidate, &raw_path)
+            .map_err(|err| provider_error("retain PIT XML", err))?;
 
         // One full-document PIT fetch can support multiple locator-specific demands.
         // The retained bytes/revision remain identical; each demand receives its
@@ -237,7 +276,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             locator_artifact.locator = demand.requested_locator.clone();
             locator_artifact.version_effective_from =
                 demand.expected_version_effective_from.clone();
-            emitted.push(admit_historical_artifact(&demand, &locator_artifact)?);
+            emitted.push(
+                admit_historical_artifact(&demand, &locator_artifact)
+                    .map_err(|err| provider_error("admit historical artifact", err))?,
+            );
         }
     }
 
@@ -271,8 +313,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     fs::write(&receipt_path, receipt_tsv)?;
 
     println!(
-        "retained {} official NSW PIT XML revisions; emitted {} locator-scoped historical receipts; network_requests={}; receipts={}",
-        2,
+        "retained 2 official NSW PIT XML revisions; emitted {} locator-scoped historical receipts; network_requests={}; receipts={}",
         emitted.len(),
         network_requests,
         receipt_path.display()
