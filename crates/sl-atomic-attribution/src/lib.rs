@@ -9,6 +9,8 @@
 //! It does not implement the universal legal-rule theorem algebra and it does
 //! not create legal authority, applicability, violation, liability or remedy.
 
+pub mod admission;
+
 use std::collections::BTreeMap;
 
 use sensiblaw_semantic_status::{
