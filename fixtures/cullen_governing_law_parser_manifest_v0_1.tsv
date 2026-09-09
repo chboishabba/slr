@@ -1,0 +1,4 @@
+source_key	act_id	point_in_time	locator	local_text_path	parser_revision_id	temporal_status	expected_atom_refs
+cla_5a_5b_5c_5d	Civil Liability Act 2002 No 22 (NSW)	2017-01-26	ss 5A-5D	fixtures/source_text/cullen/cla_2017-01-26_ss5a-5d.txt	2017012601	point_in_time_source_required	atom:NSW:CLA:s5B1a:risk-foreseeable;atom:NSW:CLA:s5B1b:risk-not-insignificant;atom:NSW:CLA:s5B1c:reasonable-person-would-take-proposed-precautions
+cla_43a	Civil Liability Act 2002 No 22 (NSW)	2017-01-26	s 43A	fixtures/source_text/cullen/cla_2017-01-26_s43a.txt	2017012602	point_in_time_source_required	atom:NSW:CLA:s43A:liability-based-on-special-statutory-power
+vicarious_6_8	Law Reform (Vicarious Liability) Act 1983 No 38 (NSW)	2017-01-26	ss 6, 8	fixtures/source_text/cullen/vicarious_2017-01-26_ss6_8.txt	2017012603	point_in_time_source_required	atom:NSW:vicarious-liability:family-recognised
