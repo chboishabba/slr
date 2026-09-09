@@ -11,6 +11,7 @@ pub mod bound_acquisition;
 pub mod cullen_premise_audit;
 pub mod engine;
 pub mod frontier;
+pub mod historical_legislation;
 pub mod hypothesis;
 pub mod judgment_candidates;
 pub mod judgment_pnf;
