@@ -3,6 +3,13 @@
 version = 4
 
 [[package]]
+name = "sensiblaw-atomic-attribution"
+version = "0.1.0"
+dependencies = [
+ "sensiblaw-semantic-status",
+]
+
+[[package]]
 name = "sensiblaw-bench"
 version = "0.1.0"
 
