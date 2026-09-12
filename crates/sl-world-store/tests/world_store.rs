@@ -1,8 +1,9 @@
 use sensiblaw_world_store::{
-    copy_target_for_kind, latest_frontier_sql, parse_world_record_line, records_from_round_values,
-    WorldRecordKind,
+    copy_target_for_kind, frontier_gap_sql, frontier_obligation_sql, latest_iteration_sql,
+    parse_world_record_line, records_from_round_values, stream_ndjson_records, WorldRecordKind,
 };
 use serde_json::json;
+use std::io::{BufReader, Cursor};
 
 #[test]
 fn parses_compact_pnf_record_without_promoting_truth() {
@@ -38,14 +39,31 @@ fn maps_record_kinds_to_append_only_staging_targets() {
 }
 
 #[test]
-fn latest_frontier_query_is_iteration_scoped_and_read_only() {
-    let sql = latest_frontier_sql();
-    assert!(sql.contains("MAX(iteration_index)"));
-    assert!(sql.contains("slr_world_gap"));
-    assert!(sql.contains("slr_world_obligation"));
-    let upper = sql.to_ascii_uppercase();
-    assert!(!upper.contains("UPDATE "));
-    assert!(!upper.contains("DELETE "));
+fn frontier_queries_are_iteration_scoped_streamable_and_read_only() {
+    assert!(latest_iteration_sql().contains("MAX(iteration_index)"));
+    for sql in [frontier_gap_sql(), frontier_obligation_sql()] {
+        assert!(sql.contains("iteration_index=$1"));
+        let upper = sql.to_ascii_uppercase();
+        assert!(!upper.contains("UPDATE "));
+        assert!(!upper.contains("DELETE "));
+        assert!(!upper.contains("ORDER BY"));
+        assert!(!upper.contains("UNION"));
+    }
+}
+
+#[test]
+fn ndjson_projection_is_record_streaming_not_whole_input_buffering() {
+    let first = r#"{"kind":"world_atom","id":"atom:1","payload":{"candidate_only":true,"semantic_promotion":false}}"#;
+    let bad = "{not-json}";
+    let input = format!("{first}\n{bad}\n");
+    let reader = BufReader::new(Cursor::new(input.into_bytes()));
+    let mut seen = Vec::new();
+    let result = stream_ndjson_records(reader, |record| {
+        seen.push(record.id);
+        Ok(())
+    });
+    assert!(result.is_err());
+    assert_eq!(seen, vec!["atom:1"]);
 }
 
 #[test]
