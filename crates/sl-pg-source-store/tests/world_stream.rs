@@ -1,6 +1,8 @@
 use sensiblaw_pg_source_store::world_stream::{
-    copy_target_for_kind, latest_frontier_sql, parse_world_record_line, WorldRecordKind,
+    copy_target_for_kind, latest_frontier_sql, parse_world_record_line, records_from_round_values,
+    WorldRecordKind,
 };
+use serde_json::json;
 
 #[test]
 fn parses_compact_pnf_record_without_promoting_truth() {
@@ -52,4 +54,33 @@ fn database_storage_does_not_become_semantic_authority() {
     let record = parse_world_record_line(line).expect("world atom record");
     assert_eq!(record.payload["postgres_persistence_is_semantic_authority"], false);
     assert_eq!(record.payload["semantic_promotion"], false);
+}
+
+#[test]
+fn projects_existing_round_artifacts_without_python_row_building() {
+    let article = json!({
+        "article_manifestations": [{
+            "qid": "Q207", "language": "en", "revision_id": 456,
+            "manifestation_kind": "wikipedia-revision-text", "source_text_sha256": "abc"
+        }],
+        "pnf_candidates": [{
+            "claim_candidate_id": "pnf-candidate:1", "document_ref": "wiki:Q207:en:456",
+            "candidate_only": true, "semantic_promotion": false
+        }]
+    });
+    let closure = json!({
+        "canonical_atoms": [{"atom_id":"atom:1","kind":"pnf-candidate","document_ref":"wiki:Q207:en:456"}],
+        "gaps": [{"surface_id":"Q207:fr","missing_atom_ids":["atom:1"]}],
+        "acquisition_obligations": [{"obligation_id":"obl:1","obligation_kind":"follow-related-qid"}]
+    });
+    let plan = json!({"selected_route_actions":[{"action_id":"Q207:P279:Q5"}]});
+    let iteration = json!({"iteration_index":4,"candidate_only":true,"semantic_promotion":false});
+    let records = records_from_round_values(&article, &closure, &plan, &iteration).expect("round records");
+    assert_eq!(records.iter().filter(|r| r.kind == WorldRecordKind::SourceManifestation).count(), 1);
+    assert_eq!(records.iter().filter(|r| r.kind == WorldRecordKind::PnfCandidate).count(), 1);
+    assert_eq!(records.iter().filter(|r| r.kind == WorldRecordKind::WorldAtom).count(), 1);
+    assert_eq!(records.iter().filter(|r| r.kind == WorldRecordKind::Gap).count(), 1);
+    assert_eq!(records.iter().filter(|r| r.kind == WorldRecordKind::Obligation).count(), 1);
+    assert_eq!(records.iter().filter(|r| r.kind == WorldRecordKind::RouteAction).count(), 1);
+    assert_eq!(records.iter().filter(|r| r.kind == WorldRecordKind::Iteration).count(), 1);
 }
