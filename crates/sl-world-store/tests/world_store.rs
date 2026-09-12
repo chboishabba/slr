@@ -1,45 +1,64 @@
 use sensiblaw_world_store::{
-    copy_target_for_kind, frontier_gap_sql, frontier_obligation_sql, latest_iteration_sql,
-    parse_world_record_line, records_from_round_values, stream_ndjson_records, WorldRecordKind,
+    copy_target_for_kind, decode_record, encode_record, frontier_gap_sql, frontier_obligation_sql,
+    latest_iteration_sql, WireRecord, WorldRecordKind, WIRE_MAGIC, WIRE_VERSION,
 };
-use serde_json::json;
-use std::io::{BufReader, Cursor};
+use std::io::Cursor;
 
 #[test]
-fn parses_compact_pnf_record_without_promoting_truth() {
-    let line = r#"{"kind":"pnf_candidate","id":"pnf-candidate:abc","source_manifestation_id":"wiki:Q207:en:456","payload":{"claim_truth_promoted":false,"candidate_only":true}}"#;
-    let record = parse_world_record_line(line).expect("compact record");
-    assert_eq!(record.kind, WorldRecordKind::PnfCandidate);
-    assert_eq!(record.id, "pnf-candidate:abc");
-    assert_eq!(record.source_manifestation_id.as_deref(), Some("wiki:Q207:en:456"));
-    assert_eq!(record.payload["claim_truth_promoted"], false);
-    assert_eq!(record.payload["candidate_only"], true);
+fn binary_wire_round_trip_preserves_core_coordinates() {
+    let record = WireRecord {
+        kind: WorldRecordKind::PnfCandidate,
+        id: "pnf-candidate:abc".into(),
+        iteration_index: Some(4),
+        aux1: Some("wiki:Q207:en:456".into()),
+        payload: vec![1, 2, 3, 4, 5],
+    };
+    let mut bytes = Vec::new();
+    encode_record(&mut bytes, &record).expect("encode");
+    assert_eq!(&bytes[..4], &WIRE_MAGIC);
+    assert_eq!(u16::from_le_bytes([bytes[4], bytes[5]]), WIRE_VERSION);
+    let decoded = decode_record(&mut Cursor::new(bytes)).expect("decode").expect("record");
+    assert_eq!(decoded, record);
 }
 
 #[test]
-fn maps_record_kinds_to_append_only_staging_targets() {
+fn binary_wire_is_incremental_not_whole_stream_buffered() {
+    let first = WireRecord { kind: WorldRecordKind::WorldAtom, id: "atom:1".into(), iteration_index: Some(4), aux1: None, payload: vec![7,8,9] };
+    let second = WireRecord { kind: WorldRecordKind::Gap, id: "gap:1".into(), iteration_index: Some(4), aux1: Some("Q207:fr".into()), payload: vec![10,11] };
+    let mut bytes = Vec::new();
+    encode_record(&mut bytes, &first).unwrap();
+    encode_record(&mut bytes, &second).unwrap();
+    let mut cursor = Cursor::new(bytes);
+    assert_eq!(decode_record(&mut cursor).unwrap().unwrap(), first);
+    assert_eq!(decode_record(&mut cursor).unwrap().unwrap(), second);
+    assert!(decode_record(&mut cursor).unwrap().is_none());
+}
+
+#[test]
+fn maps_record_kinds_to_v2_append_only_binary_targets() {
     let cases = [
-        (WorldRecordKind::SourceManifestation, "slr_world_source_manifestation"),
-        (WorldRecordKind::PnfCandidate, "slr_world_pnf_candidate"),
-        (WorldRecordKind::WorldAtom, "slr_world_atom"),
-        (WorldRecordKind::Gap, "slr_world_gap"),
-        (WorldRecordKind::Obligation, "slr_world_obligation"),
-        (WorldRecordKind::RouteAction, "slr_world_route_action"),
-        (WorldRecordKind::Iteration, "slr_world_iteration"),
+        (WorldRecordKind::SourceManifestation, "slr_world_v2_source_manifestation"),
+        (WorldRecordKind::PnfCandidate, "slr_world_v2_pnf_candidate"),
+        (WorldRecordKind::WorldAtom, "slr_world_v2_atom"),
+        (WorldRecordKind::Gap, "slr_world_v2_gap"),
+        (WorldRecordKind::Obligation, "slr_world_v2_obligation"),
+        (WorldRecordKind::RouteAction, "slr_world_v2_route_action"),
+        (WorldRecordKind::Iteration, "slr_world_v2_iteration"),
     ];
     for (kind, table) in cases {
         let target = copy_target_for_kind(kind);
         assert_eq!(target.final_table, table);
-        assert_eq!(target.staging_table, "slr_world_stage_record");
+        assert_eq!(target.staging_table, "slr_world_v2_stage_record");
         assert!(target.merge_sql.contains("ON CONFLICT"));
         assert!(target.merge_sql.contains("DO NOTHING"));
         assert!(!target.merge_sql.contains("DO UPDATE"));
         assert!(!target.merge_sql.contains("DELETE"));
+        assert!(!target.merge_sql.contains("JSON"));
     }
 }
 
 #[test]
-fn frontier_queries_are_iteration_scoped_streamable_and_read_only() {
+fn frontier_queries_are_iteration_scoped_streamable_binary_and_read_only() {
     assert!(latest_iteration_sql().contains("MAX(iteration_index)"));
     for sql in [frontier_gap_sql(), frontier_obligation_sql()] {
         assert!(sql.contains("iteration_index=$1"));
@@ -48,51 +67,13 @@ fn frontier_queries_are_iteration_scoped_streamable_and_read_only() {
         assert!(!upper.contains("DELETE "));
         assert!(!upper.contains("ORDER BY"));
         assert!(!upper.contains("UNION"));
+        assert!(!upper.contains("JSON"));
     }
 }
 
 #[test]
-fn ndjson_projection_is_record_streaming_not_whole_input_buffering() {
-    let first = r#"{"kind":"world_atom","id":"atom:1","payload":{"candidate_only":true,"semantic_promotion":false}}"#;
-    let bad = "{not-json}";
-    let input = format!("{first}\n{bad}\n");
-    let reader = BufReader::new(Cursor::new(input.into_bytes()));
-    let mut seen = Vec::new();
-    let result = stream_ndjson_records(reader, |record| {
-        seen.push(record.id);
-        Ok(())
-    });
-    assert!(result.is_err());
-    assert_eq!(seen, vec!["atom:1"]);
-}
-
-#[test]
-fn projects_round_artifacts_in_rust() {
-    let article = json!({
-        "article_manifestations": [{"qid":"Q207","language":"en","revision_id":456,"manifestation_kind":"wikipedia-revision-text","source_text_sha256":"abc"}],
-        "pnf_candidates": [{"claim_candidate_id":"pnf-candidate:1","document_ref":"wiki:Q207:en:456","candidate_only":true,"semantic_promotion":false}]
-    });
-    let closure = json!({
-        "canonical_atoms": [{"atom_id":"atom:1","kind":"pnf-candidate","document_ref":"wiki:Q207:en:456"}],
-        "gaps": [{"surface_id":"Q207:fr","missing_atom_ids":["atom:1"]}],
-        "acquisition_obligations": [{"obligation_id":"obl:1","obligation_kind":"follow-related-qid"}]
-    });
-    let plan = json!({"selected_route_actions":[{"action_id":"Q207:P279:Q5"}]});
-    let iteration = json!({"iteration_index":4,"candidate_only":true,"semantic_promotion":false});
-    let records = records_from_round_values(&article, &closure, &plan, &iteration).expect("round records");
-    for kind in [
-        WorldRecordKind::SourceManifestation, WorldRecordKind::PnfCandidate,
-        WorldRecordKind::WorldAtom, WorldRecordKind::Gap, WorldRecordKind::Obligation,
-        WorldRecordKind::RouteAction, WorldRecordKind::Iteration,
-    ] {
-        assert_eq!(records.iter().filter(|r| r.kind == kind).count(), 1, "{kind:?}");
-    }
-}
-
-#[test]
-fn storage_never_promotes_semantic_authority() {
-    let line = r#"{"kind":"world_atom","id":"atom:1","payload":{"postgres_persistence_is_semantic_authority":false,"semantic_promotion":false}}"#;
-    let record = parse_world_record_line(line).expect("world atom");
-    assert_eq!(record.payload["postgres_persistence_is_semantic_authority"], false);
-    assert_eq!(record.payload["semantic_promotion"], false);
+fn storage_transport_has_no_json_contract() {
+    let cargo = std::fs::read_to_string("crates/sl-world-store/Cargo.toml").expect("Cargo.toml");
+    assert!(!cargo.contains("serde_json"));
+    assert!(!cargo.contains("regex"));
 }
