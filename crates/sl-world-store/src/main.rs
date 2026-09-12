@@ -1,6 +1,6 @@
 use std::env;
 use std::fs::File;
-use std::io::{self, BufReader};
+use std::io::{self, BufReader, BufWriter, Write};
 use std::path::PathBuf;
 
 use sensiblaw_world_store::{load_database_config, records_from_round_files, WorldStore};
@@ -37,14 +37,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let receipt = if let Some(path) = arg_value(&args, "--input") {
                 store.ingest_ndjson(BufReader::new(File::open(path)?))?
             } else {
-                store.ingest_ndjson(BufReader::new(io::stdin()))?
+                store.ingest_ndjson(BufReader::new(io::stdin().lock()))?
             };
             println!("{}", serde_json::to_string(&receipt)?);
         }
         "frontier" => {
-            for row in store.latest_frontier()? {
-                println!("{}", serde_json::to_string(&row)?);
-            }
+            let stdout = io::stdout();
+            let mut out = BufWriter::new(stdout.lock());
+            let rows = store.write_latest_frontier(&mut out)?;
+            out.flush()?;
+            eprintln!(
+                "SLR_WORLD_FRONTIER_STREAM_RECEIPT rows={} buffered_full_frontier=false candidate_only=true semantic_promotion=false",
+                rows
+            );
         }
         _ => {
             eprintln!("usage: sensiblaw-world-store <ingest-round|ingest-ndjson|frontier> [--env-file .env] ...");
