@@ -26,6 +26,8 @@ fn token(shape: DependencyShape, ordinal: u32, head: u32, orth: &str, lemma: &st
         shape,
         orth: orth.into(),
         lemma: lemma.into(),
+        head_orth: "signed".into(),
+        head_lemma: "sign".into(),
     }
 }
 
