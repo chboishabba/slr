@@ -1,6 +1,6 @@
 use sensiblaw_world_store::{
-    copy_target_for_kind, decode_record, encode_record, frontier_gap_sql, frontier_obligation_sql,
-    latest_iteration_sql, WireRecord, WorldRecordKind, WIRE_MAGIC, WIRE_VERSION,
+    decode_record, encode_record, frontier_gap_sql, frontier_obligation_sql,
+    latest_iteration_sql, world_schema_sql, WireRecord, WorldRecordKind, WIRE_MAGIC, WIRE_VERSION,
 };
 use std::io::Cursor;
 
@@ -35,26 +35,24 @@ fn binary_wire_is_incremental_not_whole_stream_buffered() {
 }
 
 #[test]
-fn maps_record_kinds_to_v2_append_only_binary_targets() {
-    let cases = [
-        (WorldRecordKind::SourceManifestation, "slr_world_v2_source_manifestation"),
-        (WorldRecordKind::PnfCandidate, "slr_world_v2_pnf_candidate"),
-        (WorldRecordKind::WorldAtom, "slr_world_v2_atom"),
-        (WorldRecordKind::Gap, "slr_world_v2_gap"),
-        (WorldRecordKind::Obligation, "slr_world_v2_obligation"),
-        (WorldRecordKind::RouteAction, "slr_world_v2_route_action"),
-        (WorldRecordKind::Iteration, "slr_world_v2_iteration"),
-    ];
-    for (kind, table) in cases {
-        let target = copy_target_for_kind(kind);
-        assert_eq!(target.final_table, table);
-        assert_eq!(target.staging_table, "slr_world_v2_stage_record");
-        assert!(target.merge_sql.contains("ON CONFLICT"));
-        assert!(target.merge_sql.contains("DO NOTHING"));
-        assert!(!target.merge_sql.contains("DO UPDATE"));
-        assert!(!target.merge_sql.contains("DELETE"));
-        assert!(!target.merge_sql.contains("JSON"));
+fn v2_schema_is_append_only_binary_storage() {
+    let sql = world_schema_sql();
+    for table in [
+        "slr_world_v2_source_manifestation",
+        "slr_world_v2_pnf_candidate",
+        "slr_world_v2_atom",
+        "slr_world_v2_gap",
+        "slr_world_v2_obligation",
+        "slr_world_v2_route_action",
+        "slr_world_v2_iteration",
+    ] {
+        assert!(sql.contains(table), "missing {table}");
     }
+    let upper = sql.to_ascii_uppercase();
+    assert!(upper.contains("BYTEA"));
+    assert!(!upper.contains("JSON"));
+    assert!(!upper.contains("UPDATE "));
+    assert!(!upper.contains("DELETE "));
 }
 
 #[test]
@@ -72,7 +70,7 @@ fn frontier_queries_are_iteration_scoped_streamable_binary_and_read_only() {
 }
 
 #[test]
-fn storage_transport_has_no_json_contract() {
+fn storage_transport_has_no_json_or_regex_contract() {
     let cargo = std::fs::read_to_string("crates/sl-world-store/Cargo.toml").expect("Cargo.toml");
     assert!(!cargo.contains("serde_json"));
     assert!(!cargo.contains("regex"));
