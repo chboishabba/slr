@@ -817,6 +817,14 @@ name = "sensiblaw-core"
 version = "0.1.0"
 
 [[package]]
+name = "sensiblaw-evidence-payment"
+version = "0.1.0"
+dependencies = [
+ "sensiblaw-world-store",
+ "thiserror",
+]
+
+[[package]]
 name = "sensiblaw-evidential-reopen"
 version = "0.1.0"
 
@@ -903,6 +911,22 @@ name = "sensiblaw-proof-search-scheduler"
 version = "0.1.0"
 dependencies = [
  "sensiblaw-legal-follow-plan",
+]
+
+[[package]]
+name = "sensiblaw-residual-planner"
+version = "0.1.0"
+dependencies = [
+ "sensiblaw-world-store",
+ "thiserror",
+]
+
+[[package]]
+name = "sensiblaw-route-selector"
+version = "0.1.0"
+dependencies = [
+ "sensiblaw-world-store",
+ "thiserror",
 ]
 
 [[package]]
