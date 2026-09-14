@@ -213,7 +213,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -686,6 +686,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "quick-xml"
+version = "0.37.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "331e97a1af0bf59823e6eadffe373d7b27f485be8748f71471c662c1f269b7fb"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
 name = "quote"
 version = "1.0.47"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -750,7 +759,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -809,7 +818,7 @@ name = "sensiblaw-consumer-residual"
 version = "0.1.0"
 dependencies = [
  "sensiblaw-world-store",
- "thiserror",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -821,7 +830,7 @@ name = "sensiblaw-evidence-payment"
 version = "0.1.0"
 dependencies = [
  "sensiblaw-world-store",
- "thiserror",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -888,7 +897,7 @@ dependencies = [
  "postgres",
  "sha2 0.10.9",
  "tempfile",
- "thiserror",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -918,7 +927,7 @@ name = "sensiblaw-residual-planner"
 version = "0.1.0"
 dependencies = [
  "sensiblaw-world-store",
- "thiserror",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -926,7 +935,7 @@ name = "sensiblaw-route-selector"
 version = "0.1.0"
 dependencies = [
  "sensiblaw-world-store",
- "thiserror",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -961,12 +970,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "sensiblaw-wikimedia-candidate-provider"
+version = "0.1.0"
+dependencies = [
+ "quick-xml",
+ "sensiblaw-route-selector",
+ "thiserror 2.0.20",
+ "ureq",
+]
+
+[[package]]
 name = "sensiblaw-world-compiler"
 version = "0.1.0"
 dependencies = [
  "sensiblaw-world-store",
  "sha2 0.10.9",
- "thiserror",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -976,7 +995,7 @@ dependencies = [
  "dotenvy",
  "postgres",
  "tempfile",
- "thiserror",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -1150,7 +1169,7 @@ dependencies = [
  "getrandom 0.4.3",
  "once_cell",
  "rustix",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1159,7 +1178,16 @@ version = "1.0.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6aaf5339b578ea85b50e080feb250a3e8ae8cfcdff9a461c9ec2904bc923f52"
 dependencies = [
- "thiserror-impl",
+ "thiserror-impl 1.0.69",
+]
+
+[[package]]
+name = "thiserror"
+version = "2.0.20"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ec86235f5fcc2a73650310756d2ac5b138a5780bbbdfae3eeccec992c435ba4f"
+dependencies = [
+ "thiserror-impl 2.0.20",
 ]
 
 [[package]]
@@ -1171,6 +1199,17 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "thiserror-impl"
+version = "2.0.20"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bc04cd3e1236dd4a98afca4569f2deb3f120e5422a4023be2cb683f8486292af"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 3.0.5",
 ]
 
 [[package]]
