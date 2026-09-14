@@ -66,6 +66,7 @@ pub enum WorldRecordKind {
     RouteAction = 6,
     Iteration = 7,
     Payment = 8,
+    Review = 9,
 }
 impl WorldRecordKind {
     pub fn from_u8(value: u8) -> Result<Self, WorldStoreError> {
@@ -78,6 +79,7 @@ impl WorldRecordKind {
             6 => Ok(Self::RouteAction),
             7 => Ok(Self::Iteration),
             8 => Ok(Self::Payment),
+            9 => Ok(Self::Review),
             _ => Err(WorldStoreError::InvalidRecord(format!("unknown kind {value}"))),
         }
     }
@@ -167,7 +169,8 @@ const MERGE_OBLIGATION: &str = "INSERT INTO slr_world_v2_obligation (obligation_
 const MERGE_ROUTE: &str = "INSERT INTO slr_world_v2_route_action (action_id,iteration_index,payload) SELECT record_id,iteration_index,payload FROM slr_world_v2_stage_record WHERE kind=6 AND iteration_index IS NOT NULL ON CONFLICT (action_id,iteration_index) DO NOTHING";
 const MERGE_ITERATION: &str = "INSERT INTO slr_world_v2_iteration (iteration_index,payload) SELECT iteration_index,payload FROM slr_world_v2_stage_record WHERE kind=7 AND iteration_index IS NOT NULL ON CONFLICT (iteration_index) DO NOTHING";
 const MERGE_PAYMENT: &str = "INSERT INTO slr_world_v2_payment (payment_id,iteration_index,target_residual_id,payload) SELECT record_id,iteration_index,COALESCE(aux1,''),payload FROM slr_world_v2_stage_record WHERE kind=8 AND iteration_index IS NOT NULL ON CONFLICT (payment_id,iteration_index) DO NOTHING";
-const MERGES: [&str; 8] = [MERGE_SOURCE, MERGE_PNF, MERGE_ATOM, MERGE_GAP, MERGE_OBLIGATION, MERGE_ROUTE, MERGE_ITERATION, MERGE_PAYMENT];
+const MERGE_REVIEW: &str = "INSERT INTO slr_world_v2_review (review_id,iteration_index,evidence_reference,payload) SELECT record_id,iteration_index,COALESCE(aux1,''),payload FROM slr_world_v2_stage_record WHERE kind=9 AND iteration_index IS NOT NULL ON CONFLICT (review_id,iteration_index) DO NOTHING";
+const MERGES: [&str; 9] = [MERGE_SOURCE, MERGE_PNF, MERGE_ATOM, MERGE_GAP, MERGE_OBLIGATION, MERGE_ROUTE, MERGE_ITERATION, MERGE_PAYMENT, MERGE_REVIEW];
 
 pub fn world_schema_sql() -> &'static str { r#"
 CREATE TABLE IF NOT EXISTS slr_world_v2_source_manifestation (source_manifestation_id TEXT PRIMARY KEY,payload BYTEA NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT now());
@@ -178,9 +181,11 @@ CREATE TABLE IF NOT EXISTS slr_world_v2_obligation (obligation_id TEXT NOT NULL,
 CREATE TABLE IF NOT EXISTS slr_world_v2_route_action (action_id TEXT NOT NULL,iteration_index BIGINT NOT NULL,payload BYTEA NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT now(),PRIMARY KEY(action_id,iteration_index));
 CREATE TABLE IF NOT EXISTS slr_world_v2_iteration (iteration_index BIGINT PRIMARY KEY,payload BYTEA NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT now());
 CREATE TABLE IF NOT EXISTS slr_world_v2_payment (payment_id TEXT NOT NULL,iteration_index BIGINT NOT NULL,target_residual_id TEXT NOT NULL,payload BYTEA NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT now(),PRIMARY KEY(payment_id,iteration_index));
+CREATE TABLE IF NOT EXISTS slr_world_v2_review (review_id TEXT NOT NULL,iteration_index BIGINT NOT NULL,evidence_reference TEXT NOT NULL,payload BYTEA NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT now(),PRIMARY KEY(review_id,iteration_index));
 CREATE INDEX IF NOT EXISTS slr_world_v2_payment_target_iteration_idx ON slr_world_v2_payment (target_residual_id,iteration_index);
 CREATE INDEX IF NOT EXISTS slr_world_v2_gap_identity_iteration_idx ON slr_world_v2_gap (gap_id,iteration_index);
 CREATE INDEX IF NOT EXISTS slr_world_v2_obligation_identity_iteration_idx ON slr_world_v2_obligation (obligation_id,iteration_index);
+CREATE INDEX IF NOT EXISTS slr_world_v2_review_evidence_iteration_idx ON slr_world_v2_review (evidence_reference,iteration_index);
 "# }
 fn stage_sql() -> &'static str { "CREATE TEMP TABLE slr_world_v2_stage_record (kind SMALLINT NOT NULL,record_id TEXT NOT NULL,iteration_index BIGINT,aux1 TEXT,payload BYTEA NOT NULL) ON COMMIT DROP" }
 
@@ -222,7 +227,6 @@ WHERE o.iteration_index <= $1
   )
 "# }
 
-// Compatibility aliases now expose the active, append-only derived frontier.
 pub fn frontier_gap_sql() -> &'static str { active_frontier_gap_sql() }
 pub fn frontier_obligation_sql() -> &'static str { active_frontier_obligation_sql() }
 
