@@ -5,7 +5,8 @@ use std::path::PathBuf;
 
 use sensiblaw_consumer_residual::{
     compile_consumer_residual_stream, decode_consumer_spec, encode_consumer_spec,
-    ConsumerRequirement, ConsumerSpec, FragmentKind, RequirementScope,
+    ConsumerRequirement, ConsumerSpec, EvidenceCoordinateKind, FragmentKind, RequirementNeed,
+    RequirementScope, CONSUMER_VERSION,
 };
 
 fn arg_value(args: &[String], key: &str) -> Option<String> {
@@ -48,42 +49,67 @@ fn fragment_kind(value: &str) -> FragmentKind {
     }
 }
 
+fn evidence_kind(value: &str) -> EvidenceCoordinateKind {
+    match value {
+        "source-identity" => EvidenceCoordinateKind::SourceIdentity,
+        "same-object" => EvidenceCoordinateKind::SameObject,
+        "authority" => EvidenceCoordinateKind::Authority,
+        "mechanism" => EvidenceCoordinateKind::Mechanism,
+        "quantification" => EvidenceCoordinateKind::Quantification,
+        "probability" => EvidenceCoordinateKind::Probability,
+        "counterfactual" => EvidenceCoordinateKind::Counterfactual,
+        "instrument-comparison" => EvidenceCoordinateKind::InstrumentComparison,
+        "incidence" => EvidenceCoordinateKind::Incidence,
+        "classification" => EvidenceCoordinateKind::Classification,
+        _ => panic!("unknown evidence coordinate kind: {value}"),
+    }
+}
+
+fn scope(value: &str) -> RequirementScope {
+    if value == "any" {
+        RequirementScope::AnySource
+    } else if let Some(source) = value.strip_prefix("source=") {
+        if source.is_empty() {
+            panic!("source scope requires a source manifestation ID");
+        }
+        RequirementScope::SourceManifestation(source.to_owned())
+    } else {
+        panic!("scope must be any or source=<source-manifestation-id>");
+    }
+}
+
 fn requirements(args: &[String]) -> Vec<ConsumerRequirement> {
     let mut result = Vec::new();
     let mut index = 0;
     while index < args.len() {
-        if args[index] != "--requirement" {
-            index += 1;
-            continue;
-        }
-        let requirement_id = args
-            .get(index + 1)
-            .unwrap_or_else(|| panic!("--requirement needs ID, fragment, and scope"));
-        let fragment = args
-            .get(index + 2)
-            .unwrap_or_else(|| panic!("--requirement needs ID, fragment, and scope"));
-        let scope = args
-            .get(index + 3)
-            .unwrap_or_else(|| panic!("--requirement needs ID, fragment, and scope"));
-        let scope = if scope == "any" {
-            RequirementScope::AnySource
-        } else if let Some(source) = scope.strip_prefix("source=") {
-            if source.is_empty() {
-                panic!("source scope requires a source manifestation ID");
+        match args[index].as_str() {
+            "--requirement" => {
+                let requirement_id = args.get(index + 1).unwrap_or_else(|| panic!("--requirement needs ID, fragment, and scope"));
+                let fragment = args.get(index + 2).unwrap_or_else(|| panic!("--requirement needs ID, fragment, and scope"));
+                let scope_value = args.get(index + 3).unwrap_or_else(|| panic!("--requirement needs ID, fragment, and scope"));
+                result.push(ConsumerRequirement {
+                    requirement_id: requirement_id.to_owned(),
+                    need: RequirementNeed::PnfFragment(fragment_kind(fragment)),
+                    scope: scope(scope_value),
+                });
+                index += 4;
             }
-            RequirementScope::SourceManifestation(source.to_owned())
-        } else {
-            panic!("scope must be any or source=<source-manifestation-id>");
-        };
-        result.push(ConsumerRequirement {
-            requirement_id: requirement_id.to_owned(),
-            fragment: fragment_kind(fragment),
-            scope,
-        });
-        index += 4;
+            "--evidence-requirement" => {
+                let requirement_id = args.get(index + 1).unwrap_or_else(|| panic!("--evidence-requirement needs ID, coordinate, and scope"));
+                let kind = args.get(index + 2).unwrap_or_else(|| panic!("--evidence-requirement needs ID, coordinate, and scope"));
+                let scope_value = args.get(index + 3).unwrap_or_else(|| panic!("--evidence-requirement needs ID, coordinate, and scope"));
+                result.push(ConsumerRequirement {
+                    requirement_id: requirement_id.to_owned(),
+                    need: RequirementNeed::EvidenceCoordinate(evidence_kind(kind)),
+                    scope: scope(scope_value),
+                });
+                index += 4;
+            }
+            _ => index += 1,
+        }
     }
     if result.is_empty() {
-        panic!("at least one --requirement is required");
+        panic!("at least one --requirement or --evidence-requirement is required");
     }
     result
 }
@@ -103,7 +129,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             encode_consumer_spec(&mut output, &spec)?;
             output.flush()?;
             eprintln!(
-                "SLR_CONSUMER_SPEC_BINARY_RECEIPT requirements={} binary_wire=true json_transport=false regex_parser=false",
+                "SLR_CONSUMER_SPEC_BINARY_RECEIPT consumer_wire_version={} requirements={} binary_wire=true json_transport=false regex_parser=false",
+                CONSUMER_VERSION,
                 spec.requirements.len(),
             );
         }
@@ -117,8 +144,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let spec = decode_consumer_spec(&mut consumer_reader)?;
             let mut world_reader = BufReader::new(File::open(world_path)?);
             let mut output = BufWriter::new(File::create(output_path)?);
-            let receipt =
-                compile_consumer_residual_stream(&mut world_reader, &spec, &mut output, iteration)?;
+            let receipt = compile_consumer_residual_stream(&mut world_reader, &spec, &mut output, iteration)?;
             output.flush()?;
             eprintln!(
                 "SLR_CONSUMER_RESIDUAL_RECEIPT requirements_total={} requirements_paid={} requirements_unpaid={} gaps_emitted={} obligations_emitted={} payments_emitted={} candidate_only={} semantic_promotion={} append_only_contraction=true",
@@ -133,7 +159,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             );
         }
         _ => {
-            eprintln!("usage: sensiblaw-consumer-residual encode --consumer-id ID --surface-id ID --requirement ID fragment any|source=MANIFEST --output consumer.slrc");
+            eprintln!("usage: sensiblaw-consumer-residual encode --consumer-id ID --surface-id ID [--requirement ID fragment any|source=MANIFEST] [--evidence-requirement ID coordinate any|source=MANIFEST] --output consumer.slrc");
             eprintln!("   or: sensiblaw-consumer-residual compile --world world.slrw --consumer consumer.slrc --output residual-world.slrw --iteration N");
             std::process::exit(2);
         }
