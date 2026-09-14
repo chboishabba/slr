@@ -1,0 +1,332 @@
+use std::io::{ErrorKind, Read, Write};
+
+use sensiblaw_world_store::{decode_record, encode_record, WireRecord, WorldRecordKind};
+use thiserror::Error;
+
+pub const CONSUMER_MAGIC: [u8; 4] = *b"SLRC";
+pub const CONSUMER_VERSION: u16 = 1;
+const MAX_TEXT_BYTES: usize = 4 << 20;
+const MAX_REQUIREMENTS: usize = 1 << 20;
+
+#[derive(Debug, Error)]
+pub enum ResidualError {
+    #[error("io error: {0}")]
+    Io(#[from] std::io::Error),
+    #[error("world wire error: {0}")]
+    WorldWire(#[from] sensiblaw_world_store::WorldStoreError),
+    #[error("invalid consumer specification: {0}")]
+    InvalidConsumer(String),
+}
+
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FragmentKind {
+    Actor = 1,
+    Patient = 2,
+    Property = 3,
+    Relation = 4,
+    Conjunction = 5,
+    Negation = 6,
+    Modality = 7,
+    Quantifier = 8,
+    Temporal = 9,
+    ContentClause = 10,
+    ClauseAttachment = 11,
+    Unresolved = 12,
+}
+
+impl FragmentKind {
+    pub fn from_u8(value: u8) -> Result<Self, ResidualError> {
+        match value {
+            1 => Ok(Self::Actor),
+            2 => Ok(Self::Patient),
+            3 => Ok(Self::Property),
+            4 => Ok(Self::Relation),
+            5 => Ok(Self::Conjunction),
+            6 => Ok(Self::Negation),
+            7 => Ok(Self::Modality),
+            8 => Ok(Self::Quantifier),
+            9 => Ok(Self::Temporal),
+            10 => Ok(Self::ContentClause),
+            11 => Ok(Self::ClauseAttachment),
+            12 => Ok(Self::Unresolved),
+            _ => Err(ResidualError::InvalidConsumer(format!("unknown fragment kind {value}"))),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RequirementScope {
+    AnySource,
+    SourceManifestation(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConsumerRequirement {
+    pub requirement_id: String,
+    pub fragment: FragmentKind,
+    pub scope: RequirementScope,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConsumerSpec {
+    pub consumer_id: String,
+    pub surface_id: String,
+    pub requirements: Vec<ConsumerRequirement>,
+}
+
+fn write_u32<W: Write>(writer: &mut W, value: u32) -> Result<(), ResidualError> {
+    writer.write_all(&value.to_le_bytes())?;
+    Ok(())
+}
+
+fn write_text<W: Write>(writer: &mut W, value: &str) -> Result<(), ResidualError> {
+    if value.len() > MAX_TEXT_BYTES {
+        return Err(ResidualError::InvalidConsumer("text field too large".into()));
+    }
+    write_u32(writer, value.len() as u32)?;
+    writer.write_all(value.as_bytes())?;
+    Ok(())
+}
+
+fn read_u32<R: Read>(reader: &mut R) -> Result<u32, ResidualError> {
+    let mut buf = [0u8; 4];
+    reader.read_exact(&mut buf)?;
+    Ok(u32::from_le_bytes(buf))
+}
+
+fn read_text<R: Read>(reader: &mut R) -> Result<String, ResidualError> {
+    let len = read_u32(reader)? as usize;
+    if len > MAX_TEXT_BYTES {
+        return Err(ResidualError::InvalidConsumer("declared text field too large".into()));
+    }
+    let mut bytes = vec![0u8; len];
+    reader.read_exact(&mut bytes)?;
+    String::from_utf8(bytes).map_err(|_| ResidualError::InvalidConsumer("text is not UTF-8".into()))
+}
+
+pub fn encode_consumer_spec<W: Write>(writer: &mut W, spec: &ConsumerSpec) -> Result<(), ResidualError> {
+    if spec.consumer_id.is_empty() || spec.surface_id.is_empty() {
+        return Err(ResidualError::InvalidConsumer("consumer and surface identifiers must be non-empty".into()));
+    }
+    if spec.requirements.len() > MAX_REQUIREMENTS {
+        return Err(ResidualError::InvalidConsumer("too many requirements".into()));
+    }
+    writer.write_all(&CONSUMER_MAGIC)?;
+    writer.write_all(&CONSUMER_VERSION.to_le_bytes())?;
+    write_text(writer, &spec.consumer_id)?;
+    write_text(writer, &spec.surface_id)?;
+    write_u32(writer, spec.requirements.len() as u32)?;
+    for requirement in &spec.requirements {
+        if requirement.requirement_id.is_empty() {
+            return Err(ResidualError::InvalidConsumer("requirement identifier must be non-empty".into()));
+        }
+        write_text(writer, &requirement.requirement_id)?;
+        writer.write_all(&[requirement.fragment as u8])?;
+        match &requirement.scope {
+            RequirementScope::AnySource => writer.write_all(&[0])?,
+            RequirementScope::SourceManifestation(source) => {
+                writer.write_all(&[1])?;
+                write_text(writer, source)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+pub fn decode_consumer_spec<R: Read>(reader: &mut R) -> Result<ConsumerSpec, ResidualError> {
+    let mut magic = [0u8; 4];
+    reader.read_exact(&mut magic)?;
+    if magic != CONSUMER_MAGIC {
+        return Err(ResidualError::InvalidConsumer("bad consumer magic".into()));
+    }
+    let mut version = [0u8; 2];
+    reader.read_exact(&mut version)?;
+    if u16::from_le_bytes(version) != CONSUMER_VERSION {
+        return Err(ResidualError::InvalidConsumer("unsupported consumer version".into()));
+    }
+    let consumer_id = read_text(reader)?;
+    let surface_id = read_text(reader)?;
+    if consumer_id.is_empty() || surface_id.is_empty() {
+        return Err(ResidualError::InvalidConsumer("consumer and surface identifiers must be non-empty".into()));
+    }
+    let count = read_u32(reader)? as usize;
+    if count > MAX_REQUIREMENTS {
+        return Err(ResidualError::InvalidConsumer("too many requirements".into()));
+    }
+    let mut requirements = Vec::with_capacity(count);
+    for _ in 0..count {
+        let requirement_id = read_text(reader)?;
+        let mut fragment = [0u8; 1];
+        reader.read_exact(&mut fragment)?;
+        let fragment = FragmentKind::from_u8(fragment[0])?;
+        let mut scope = [0u8; 1];
+        reader.read_exact(&mut scope)?;
+        let scope = match scope[0] {
+            0 => RequirementScope::AnySource,
+            1 => RequirementScope::SourceManifestation(read_text(reader)?),
+            other => return Err(ResidualError::InvalidConsumer(format!("unknown requirement scope {other}"))),
+        };
+        requirements.push(ConsumerRequirement { requirement_id, fragment, scope });
+    }
+    Ok(ConsumerSpec { consumer_id, surface_id, requirements })
+}
+
+fn pnf_fragment(record: &WireRecord) -> Option<FragmentKind> {
+    if record.kind != WorldRecordKind::PnfCandidate || record.payload.len() < 8 {
+        return None;
+    }
+    if &record.payload[..4] != b"PNF1" {
+        return None;
+    }
+    if record.payload[6] != 1 || record.payload[7] != 0 {
+        return None;
+    }
+    FragmentKind::from_u8(record.payload[4]).ok()
+}
+
+fn scope_matches(scope: &RequirementScope, source: Option<&str>) -> bool {
+    match scope {
+        RequirementScope::AnySource => true,
+        RequirementScope::SourceManifestation(expected) => source == Some(expected.as_str()),
+    }
+}
+
+fn residual_body(
+    magic: &[u8; 4],
+    fragment: FragmentKind,
+    consumer_id: &str,
+    requirement_id: &str,
+    scope: &RequirementScope,
+) -> Result<Vec<u8>, ResidualError> {
+    let mut body = Vec::new();
+    body.extend_from_slice(magic);
+    body.push(fragment as u8);
+    body.push(1); // candidate-only
+    body.push(0); // semantic promotion false
+    write_text(&mut body, consumer_id)?;
+    write_text(&mut body, requirement_id)?;
+    match scope {
+        RequirementScope::AnySource => body.push(0),
+        RequirementScope::SourceManifestation(source) => {
+            body.push(1);
+            write_text(&mut body, source)?;
+        }
+    }
+    Ok(body)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ResidualReceipt {
+    pub requirements_total: u64,
+    pub requirements_paid: u64,
+    pub requirements_unpaid: u64,
+    pub gaps_emitted: u64,
+    pub obligations_emitted: u64,
+    pub candidate_only: bool,
+    pub semantic_promotion: bool,
+}
+
+pub fn compile_consumer_residual_stream<R: Read, W: Write>(
+    world_reader: &mut R,
+    spec: &ConsumerSpec,
+    writer: &mut W,
+    iteration_index: i64,
+) -> Result<ResidualReceipt, ResidualError> {
+    let mut paid = vec![false; spec.requirements.len()];
+
+    loop {
+        match decode_record(world_reader) {
+            Ok(Some(record)) => {
+                if let Some(fragment) = pnf_fragment(&record) {
+                    for (index, requirement) in spec.requirements.iter().enumerate() {
+                        if !paid[index]
+                            && fragment == requirement.fragment
+                            && scope_matches(&requirement.scope, record.aux1.as_deref())
+                        {
+                            paid[index] = true;
+                        }
+                    }
+                }
+                encode_record(writer, &record)?;
+            }
+            Ok(None) => break,
+            Err(error) => return Err(error.into()),
+        }
+    }
+
+    let mut gaps = 0u64;
+    let mut obligations = 0u64;
+    for (index, requirement) in spec.requirements.iter().enumerate() {
+        if paid[index] {
+            continue;
+        }
+        let gap_id = format!("gap:{}:{}", spec.consumer_id, requirement.requirement_id);
+        let gap_body = residual_body(
+            b"GAP1",
+            requirement.fragment,
+            &spec.consumer_id,
+            &requirement.requirement_id,
+            &requirement.scope,
+        )?;
+        encode_record(
+            writer,
+            &WireRecord {
+                kind: WorldRecordKind::Gap,
+                id: gap_id,
+                iteration_index: Some(iteration_index),
+                aux1: Some(spec.surface_id.clone()),
+                payload: gap_body,
+            },
+        )?;
+        gaps += 1;
+
+        let obligation_id = format!("obligation:{}:{}", spec.consumer_id, requirement.requirement_id);
+        let obligation_body = residual_body(
+            b"OBL1",
+            requirement.fragment,
+            &spec.consumer_id,
+            &requirement.requirement_id,
+            &requirement.scope,
+        )?;
+        encode_record(
+            writer,
+            &WireRecord {
+                kind: WorldRecordKind::Obligation,
+                id: obligation_id,
+                iteration_index: Some(iteration_index),
+                aux1: Some("need-fragment-kind".into()),
+                payload: obligation_body,
+            },
+        )?;
+        obligations += 1;
+    }
+
+    let paid_count = paid.iter().filter(|value| **value).count() as u64;
+    let total = spec.requirements.len() as u64;
+    Ok(ResidualReceipt {
+        requirements_total: total,
+        requirements_paid: paid_count,
+        requirements_unpaid: total - paid_count,
+        gaps_emitted: gaps,
+        obligations_emitted: obligations,
+        candidate_only: true,
+        semantic_promotion: false,
+    })
+}
+
+pub fn read_consumer_spec_file<R: Read>(mut reader: R) -> Result<ConsumerSpec, ResidualError> {
+    decode_consumer_spec(&mut reader)
+}
+
+pub fn read_to_end_exact<R: Read>(reader: &mut R, buffer: &mut Vec<u8>) -> Result<(), ResidualError> {
+    loop {
+        let mut chunk = [0u8; 8192];
+        match reader.read(&mut chunk) {
+            Ok(0) => return Ok(()),
+            Ok(n) => buffer.extend_from_slice(&chunk[..n]),
+            Err(error) if error.kind() == ErrorKind::Interrupted => continue,
+            Err(error) => return Err(error.into()),
+        }
+    }
+}
