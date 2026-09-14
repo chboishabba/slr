@@ -22,19 +22,24 @@ fn binary_wire_round_trip_preserves_core_coordinates() {
 }
 
 #[test]
-fn payment_receipt_is_a_first_class_binary_world_record() {
-    let record = WireRecord {
-        kind: WorldRecordKind::Payment,
-        id: "payment:gap:consumer:test:need-actor:5".into(),
-        iteration_index: Some(5),
-        aux1: Some("gap:consumer:test:need-actor".into()),
-        payload: b"PAY1".to_vec(),
-    };
-    let mut bytes = Vec::new();
-    encode_record(&mut bytes, &record).unwrap();
-    let decoded = decode_record(&mut Cursor::new(bytes)).unwrap().unwrap();
-    assert_eq!(decoded, record);
-    assert_eq!(decoded.kind as u8, 8);
+fn payment_and_review_are_first_class_binary_world_records() {
+    for (kind, expected_tag, id, aux, magic) in [
+        (WorldRecordKind::Payment, 8u8, "payment:test", "gap:test", b"PAY2".as_slice()),
+        (WorldRecordKind::Review, 9u8, "review:test", "evidence:test", b"RVW1".as_slice()),
+    ] {
+        let record = WireRecord {
+            kind,
+            id: id.into(),
+            iteration_index: Some(5),
+            aux1: Some(aux.into()),
+            payload: magic.to_vec(),
+        };
+        let mut bytes = Vec::new();
+        encode_record(&mut bytes, &record).unwrap();
+        let decoded = decode_record(&mut Cursor::new(bytes)).unwrap().unwrap();
+        assert_eq!(decoded, record);
+        assert_eq!(decoded.kind as u8, expected_tag);
+    }
 }
 
 #[test]
@@ -62,10 +67,12 @@ fn v2_schema_is_append_only_binary_storage() {
         "slr_world_v2_route_action",
         "slr_world_v2_iteration",
         "slr_world_v2_payment",
+        "slr_world_v2_review",
     ] {
         assert!(sql.contains(table), "missing {table}");
     }
     assert!(sql.contains("target_residual_id"));
+    assert!(sql.contains("evidence_reference"));
     let upper = sql.to_ascii_uppercase();
     assert!(upper.contains("BYTEA"));
     assert!(!upper.contains("JSON"));
