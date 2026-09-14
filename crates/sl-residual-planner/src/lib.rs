@@ -21,6 +21,12 @@ pub enum ProducerFamily {
     ArticleSemantic = 1,
     RevisionTemporal = 2,
     ParserRepair = 3,
+    IdentitySource = 4,
+    AuthoritySource = 5,
+    MechanismEvidence = 6,
+    MeasurementEvidence = 7,
+    ComparatorEvidence = 8,
+    ClassificationEvidence = 9,
 }
 
 impl ProducerFamily {
@@ -29,13 +35,26 @@ impl ProducerFamily {
             Self::ArticleSemantic => "article-semantic",
             Self::RevisionTemporal => "revision-temporal",
             Self::ParserRepair => "parser-repair",
+            Self::IdentitySource => "identity-source",
+            Self::AuthoritySource => "authority-source",
+            Self::MechanismEvidence => "mechanism-evidence",
+            Self::MeasurementEvidence => "measurement-evidence",
+            Self::ComparatorEvidence => "comparator-evidence",
+            Self::ClassificationEvidence => "classification-evidence",
         }
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum NeedClass {
+    PnfFragment,
+    EvidenceCoordinate,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct ObligationCoordinate {
-    fragment: u8,
+    need_class: NeedClass,
+    need_tag: u8,
     consumer_id: String,
     requirement_id: String,
     scope_tag: u8,
@@ -48,6 +67,18 @@ fn producer_for_fragment(fragment: u8) -> Result<ProducerFamily, PlannerError> {
         9 => Ok(ProducerFamily::RevisionTemporal),
         12 => Ok(ProducerFamily::ParserRepair),
         other => Err(PlannerError::InvalidObligation(format!("unknown fragment kind {other}"))),
+    }
+}
+
+fn producer_for_evidence(kind: u8) -> Result<ProducerFamily, PlannerError> {
+    match kind {
+        1 | 2 => Ok(ProducerFamily::IdentitySource),
+        3 => Ok(ProducerFamily::AuthoritySource),
+        4 => Ok(ProducerFamily::MechanismEvidence),
+        5 | 6 | 9 => Ok(ProducerFamily::MeasurementEvidence),
+        7 | 8 => Ok(ProducerFamily::ComparatorEvidence),
+        10 => Ok(ProducerFamily::ClassificationEvidence),
+        other => Err(PlannerError::InvalidObligation(format!("unknown evidence coordinate kind {other}"))),
     }
 }
 
@@ -85,10 +116,17 @@ fn parse_obligation(record: &WireRecord) -> Result<Option<ObligationCoordinate>,
     if record.kind != WorldRecordKind::Obligation {
         return Ok(None);
     }
-    if record.payload.len() < 8 || &record.payload[..4] != b"OBL1" {
-        return Err(PlannerError::InvalidObligation("obligation payload is not OBL1".into()));
+    if record.payload.len() < 8 {
+        return Err(PlannerError::InvalidObligation("obligation payload too short".into()));
     }
-    let fragment = record.payload[4];
+    let need_class = if &record.payload[..4] == b"OBL1" {
+        NeedClass::PnfFragment
+    } else if &record.payload[..4] == b"OBL2" {
+        NeedClass::EvidenceCoordinate
+    } else {
+        return Err(PlannerError::InvalidObligation("obligation payload is not OBL1/OBL2".into()));
+    };
+    let need_tag = record.payload[4];
     if record.payload[5] != 1 || record.payload[6] != 0 {
         return Err(PlannerError::InvalidObligation(
             "obligation must remain candidate-only and non-promoting".into(),
@@ -105,7 +143,8 @@ fn parse_obligation(record: &WireRecord) -> Result<Option<ObligationCoordinate>,
         other => return Err(PlannerError::InvalidObligation(format!("unknown scope tag {other}"))),
     };
     Ok(Some(ObligationCoordinate {
-        fragment,
+        need_class,
+        need_tag,
         consumer_id,
         requirement_id,
         scope_tag: scope[0],
@@ -121,9 +160,13 @@ fn route_body(
     let mut body = Vec::new();
     body.extend_from_slice(b"RTA1");
     body.push(producer as u8);
-    body.push(coordinate.fragment);
-    body.push(1); // candidate-only
-    body.push(0); // semantic promotion false
+    body.push(coordinate.need_tag);
+    body.push(1);
+    body.push(0);
+    body.push(match coordinate.need_class {
+        NeedClass::PnfFragment => 1,
+        NeedClass::EvidenceCoordinate => 2,
+    });
     write_text(&mut body, obligation_id)?;
     write_text(&mut body, &coordinate.consumer_id)?;
     write_text(&mut body, &coordinate.requirement_id)?;
@@ -155,7 +198,10 @@ pub fn plan_active_frontier_stream<R: Read, W: Write>(
             continue;
         };
         obligations_seen += 1;
-        let producer = producer_for_fragment(coordinate.fragment)?;
+        let producer = match coordinate.need_class {
+            NeedClass::PnfFragment => producer_for_fragment(coordinate.need_tag)?,
+            NeedClass::EvidenceCoordinate => producer_for_evidence(coordinate.need_tag)?,
+        };
         let body = route_body(producer, &record.id, &coordinate)?;
         encode_record(
             writer,
