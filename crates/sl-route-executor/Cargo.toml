@@ -12,3 +12,4 @@ scraper = "0.20"
 sha2 = "0.10"
 thiserror = "2"
 ureq = { version = "2.12", default-features = false, features = ["tls"] }
+url = "2"
