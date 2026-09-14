@@ -121,12 +121,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 compile_consumer_residual_stream(&mut world_reader, &spec, &mut output, iteration)?;
             output.flush()?;
             eprintln!(
-                "SLR_CONSUMER_RESIDUAL_RECEIPT requirements_total={} requirements_paid={} requirements_unpaid={} gaps_emitted={} obligations_emitted={} candidate_only={} semantic_promotion={}",
+                "SLR_CONSUMER_RESIDUAL_RECEIPT requirements_total={} requirements_paid={} requirements_unpaid={} gaps_emitted={} obligations_emitted={} payments_emitted={} candidate_only={} semantic_promotion={} append_only_contraction=true",
                 receipt.requirements_total,
                 receipt.requirements_paid,
                 receipt.requirements_unpaid,
                 receipt.gaps_emitted,
                 receipt.obligations_emitted,
+                receipt.payments_emitted,
                 receipt.candidate_only,
                 receipt.semantic_promotion,
             );
