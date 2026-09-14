@@ -55,6 +55,7 @@ pub fn load_database_config(explicit_env_file: Option<&Path>) -> Result<Database
     Err(WorldStoreError::MissingDatabaseUrl)
 }
 
+#[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WorldRecordKind {
     SourceManifestation = 1,
@@ -64,6 +65,7 @@ pub enum WorldRecordKind {
     Obligation = 5,
     RouteAction = 6,
     Iteration = 7,
+    Payment = 8,
 }
 impl WorldRecordKind {
     pub fn from_u8(value: u8) -> Result<Self, WorldStoreError> {
@@ -75,6 +77,7 @@ impl WorldRecordKind {
             5 => Ok(Self::Obligation),
             6 => Ok(Self::RouteAction),
             7 => Ok(Self::Iteration),
+            8 => Ok(Self::Payment),
             _ => Err(WorldStoreError::InvalidRecord(format!("unknown kind {value}"))),
         }
     }
@@ -163,7 +166,8 @@ const MERGE_GAP: &str = "INSERT INTO slr_world_v2_gap (gap_id,iteration_index,su
 const MERGE_OBLIGATION: &str = "INSERT INTO slr_world_v2_obligation (obligation_id,iteration_index,obligation_kind,payload) SELECT record_id,iteration_index,COALESCE(aux1,''),payload FROM slr_world_v2_stage_record WHERE kind=5 AND iteration_index IS NOT NULL ON CONFLICT (obligation_id,iteration_index) DO NOTHING";
 const MERGE_ROUTE: &str = "INSERT INTO slr_world_v2_route_action (action_id,iteration_index,payload) SELECT record_id,iteration_index,payload FROM slr_world_v2_stage_record WHERE kind=6 AND iteration_index IS NOT NULL ON CONFLICT (action_id,iteration_index) DO NOTHING";
 const MERGE_ITERATION: &str = "INSERT INTO slr_world_v2_iteration (iteration_index,payload) SELECT iteration_index,payload FROM slr_world_v2_stage_record WHERE kind=7 AND iteration_index IS NOT NULL ON CONFLICT (iteration_index) DO NOTHING";
-const MERGES: [&str; 7] = [MERGE_SOURCE, MERGE_PNF, MERGE_ATOM, MERGE_GAP, MERGE_OBLIGATION, MERGE_ROUTE, MERGE_ITERATION];
+const MERGE_PAYMENT: &str = "INSERT INTO slr_world_v2_payment (payment_id,iteration_index,target_residual_id,payload) SELECT record_id,iteration_index,COALESCE(aux1,''),payload FROM slr_world_v2_stage_record WHERE kind=8 AND iteration_index IS NOT NULL ON CONFLICT (payment_id,iteration_index) DO NOTHING";
+const MERGES: [&str; 8] = [MERGE_SOURCE, MERGE_PNF, MERGE_ATOM, MERGE_GAP, MERGE_OBLIGATION, MERGE_ROUTE, MERGE_ITERATION, MERGE_PAYMENT];
 
 pub fn world_schema_sql() -> &'static str { r#"
 CREATE TABLE IF NOT EXISTS slr_world_v2_source_manifestation (source_manifestation_id TEXT PRIMARY KEY,payload BYTEA NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT now());
@@ -173,12 +177,54 @@ CREATE TABLE IF NOT EXISTS slr_world_v2_gap (gap_id TEXT NOT NULL,iteration_inde
 CREATE TABLE IF NOT EXISTS slr_world_v2_obligation (obligation_id TEXT NOT NULL,iteration_index BIGINT NOT NULL,obligation_kind TEXT NOT NULL DEFAULT '',payload BYTEA NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT now(),PRIMARY KEY(obligation_id,iteration_index));
 CREATE TABLE IF NOT EXISTS slr_world_v2_route_action (action_id TEXT NOT NULL,iteration_index BIGINT NOT NULL,payload BYTEA NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT now(),PRIMARY KEY(action_id,iteration_index));
 CREATE TABLE IF NOT EXISTS slr_world_v2_iteration (iteration_index BIGINT PRIMARY KEY,payload BYTEA NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT now());
+CREATE TABLE IF NOT EXISTS slr_world_v2_payment (payment_id TEXT NOT NULL,iteration_index BIGINT NOT NULL,target_residual_id TEXT NOT NULL,payload BYTEA NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT now(),PRIMARY KEY(payment_id,iteration_index));
+CREATE INDEX IF NOT EXISTS slr_world_v2_payment_target_iteration_idx ON slr_world_v2_payment (target_residual_id,iteration_index);
+CREATE INDEX IF NOT EXISTS slr_world_v2_gap_identity_iteration_idx ON slr_world_v2_gap (gap_id,iteration_index);
+CREATE INDEX IF NOT EXISTS slr_world_v2_obligation_identity_iteration_idx ON slr_world_v2_obligation (obligation_id,iteration_index);
 "# }
 fn stage_sql() -> &'static str { "CREATE TEMP TABLE slr_world_v2_stage_record (kind SMALLINT NOT NULL,record_id TEXT NOT NULL,iteration_index BIGINT,aux1 TEXT,payload BYTEA NOT NULL) ON COMMIT DROP" }
 
 pub fn latest_iteration_sql() -> &'static str { "SELECT MAX(iteration_index) FROM slr_world_v2_iteration" }
-pub fn frontier_gap_sql() -> &'static str { "SELECT gap_id,iteration_index,NULLIF(surface_id,''),payload FROM slr_world_v2_gap WHERE iteration_index=$1" }
-pub fn frontier_obligation_sql() -> &'static str { "SELECT obligation_id,iteration_index,NULLIF(obligation_kind,''),payload FROM slr_world_v2_obligation WHERE iteration_index=$1" }
+
+pub fn active_frontier_gap_sql() -> &'static str { r#"
+SELECT g.gap_id,g.iteration_index,NULLIF(g.surface_id,''),g.payload
+FROM slr_world_v2_gap g
+WHERE g.iteration_index <= $1
+  AND NOT EXISTS (
+    SELECT 1 FROM slr_world_v2_gap newer
+    WHERE newer.gap_id = g.gap_id
+      AND newer.iteration_index > g.iteration_index
+      AND newer.iteration_index <= $1
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM slr_world_v2_payment p
+    WHERE p.target_residual_id = g.gap_id
+      AND p.iteration_index >= g.iteration_index
+      AND p.iteration_index <= $1
+  )
+"# }
+
+pub fn active_frontier_obligation_sql() -> &'static str { r#"
+SELECT o.obligation_id,o.iteration_index,NULLIF(o.obligation_kind,''),o.payload
+FROM slr_world_v2_obligation o
+WHERE o.iteration_index <= $1
+  AND NOT EXISTS (
+    SELECT 1 FROM slr_world_v2_obligation newer
+    WHERE newer.obligation_id = o.obligation_id
+      AND newer.iteration_index > o.iteration_index
+      AND newer.iteration_index <= $1
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM slr_world_v2_payment p
+    WHERE p.target_residual_id = o.obligation_id
+      AND p.iteration_index >= o.iteration_index
+      AND p.iteration_index <= $1
+  )
+"# }
+
+// Compatibility aliases now expose the active, append-only derived frontier.
+pub fn frontier_gap_sql() -> &'static str { active_frontier_gap_sql() }
+pub fn frontier_obligation_sql() -> &'static str { active_frontier_obligation_sql() }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct IngestReceipt {
@@ -237,7 +283,7 @@ impl WorldStore {
         };
         let mut count = 0;
         {
-            let mut rows = self.client.query_raw(frontier_gap_sql(), [&iteration_index])?;
+            let mut rows = self.client.query_raw(active_frontier_gap_sql(), [&iteration_index])?;
             while let Some(row) = rows.next()? {
                 let record = frontier_row(WorldRecordKind::Gap, row)?;
                 encode_record(writer, &record)?;
@@ -246,7 +292,7 @@ impl WorldStore {
             }
         }
         {
-            let mut rows = self.client.query_raw(frontier_obligation_sql(), [&iteration_index])?;
+            let mut rows = self.client.query_raw(active_frontier_obligation_sql(), [&iteration_index])?;
             while let Some(row) = rows.next()? {
                 let record = frontier_row(WorldRecordKind::Obligation, row)?;
                 encode_record(writer, &record)?;
