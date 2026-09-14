@@ -216,6 +216,18 @@ fn residual_body(
     Ok(body)
 }
 
+fn payment_body(
+    fragment: FragmentKind,
+    consumer_id: &str,
+    requirement_id: &str,
+    target_residual_id: &str,
+    scope: &RequirementScope,
+) -> Result<Vec<u8>, ResidualError> {
+    let mut body = residual_body(b"PAY1", fragment, consumer_id, requirement_id, scope)?;
+    write_text(&mut body, target_residual_id)?;
+    Ok(body)
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ResidualReceipt {
     pub requirements_total: u64,
@@ -223,6 +235,7 @@ pub struct ResidualReceipt {
     pub requirements_unpaid: u64,
     pub gaps_emitted: u64,
     pub obligations_emitted: u64,
+    pub payments_emitted: u64,
     pub candidate_only: bool,
     pub semantic_promotion: bool,
 }
@@ -257,11 +270,42 @@ pub fn compile_consumer_residual_stream<R: Read, W: Write>(
 
     let mut gaps = 0u64;
     let mut obligations = 0u64;
+    let mut payments = 0u64;
     for (index, requirement) in spec.requirements.iter().enumerate() {
+        let gap_id = format!("gap:{}:{}", spec.consumer_id, requirement.requirement_id);
+        let obligation_id = format!("obligation:{}:{}", spec.consumer_id, requirement.requirement_id);
+
         if paid[index] {
+            for (target_kind, target_residual_id) in [
+                ("gap", gap_id.as_str()),
+                ("obligation", obligation_id.as_str()),
+            ] {
+                let payment_id = format!(
+                    "payment:{}:{}:{}:{}",
+                    target_kind, spec.consumer_id, requirement.requirement_id, iteration_index
+                );
+                let body = payment_body(
+                    requirement.fragment,
+                    &spec.consumer_id,
+                    &requirement.requirement_id,
+                    target_residual_id,
+                    &requirement.scope,
+                )?;
+                encode_record(
+                    writer,
+                    &WireRecord {
+                        kind: WorldRecordKind::Payment,
+                        id: payment_id,
+                        iteration_index: Some(iteration_index),
+                        aux1: Some(target_residual_id.to_string()),
+                        payload: body,
+                    },
+                )?;
+                payments += 1;
+            }
             continue;
         }
-        let gap_id = format!("gap:{}:{}", spec.consumer_id, requirement.requirement_id);
+
         let gap_body = residual_body(
             b"GAP1",
             requirement.fragment,
@@ -281,7 +325,6 @@ pub fn compile_consumer_residual_stream<R: Read, W: Write>(
         )?;
         gaps += 1;
 
-        let obligation_id = format!("obligation:{}:{}", spec.consumer_id, requirement.requirement_id);
         let obligation_body = residual_body(
             b"OBL1",
             requirement.fragment,
@@ -310,6 +353,7 @@ pub fn compile_consumer_residual_stream<R: Read, W: Write>(
         requirements_unpaid: total - paid_count,
         gaps_emitted: gaps,
         obligations_emitted: obligations,
+        payments_emitted: payments,
         candidate_only: true,
         semantic_promotion: false,
     })
