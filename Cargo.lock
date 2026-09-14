@@ -805,6 +805,14 @@ name = "sensiblaw-bench"
 version = "0.1.0"
 
 [[package]]
+name = "sensiblaw-consumer-residual"
+version = "0.1.0"
+dependencies = [
+ "sensiblaw-world-store",
+ "thiserror",
+]
+
+[[package]]
 name = "sensiblaw-core"
 version = "0.1.0"
 
