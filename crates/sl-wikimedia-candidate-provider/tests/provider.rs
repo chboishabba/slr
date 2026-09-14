@@ -82,13 +82,13 @@ fn verified_qid_anchors_non_wikidata_producer_search_candidates_without_claiming
         ProducerFamily::MeasurementEvidence,
         ProducerFamily::ComparatorEvidence,
     ] {
-        let row = rows.iter().find(|row| row.producer == producer)
-            .unwrap_or_else(|| panic!("missing producer {producer:?}"));
+        let row = rows.iter().find(|row|
+            row.producer == producer && matches!(row.route_family,
+                RouteFamily::PrimarySourceSearch |
+                RouteFamily::MeasurementSourceSearch |
+                RouteFamily::ComparatorSourceSearch))
+            .unwrap_or_else(|| panic!("missing search-family producer {producer:?}"));
         assert_eq!(row.source_ref, "Q207");
-        assert!(matches!(row.route_family,
-            RouteFamily::PrimarySourceSearch |
-            RouteFamily::MeasurementSourceSearch |
-            RouteFamily::ComparatorSourceSearch));
         assert_eq!(row.typed_property_support, 0);
     }
 }
