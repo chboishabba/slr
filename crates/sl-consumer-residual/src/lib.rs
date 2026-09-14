@@ -4,9 +4,12 @@ use sensiblaw_world_store::{decode_record, encode_record, WireRecord, WorldRecor
 use thiserror::Error;
 
 pub const CONSUMER_MAGIC: [u8; 4] = *b"SLRC";
-pub const CONSUMER_VERSION: u16 = 1;
+pub const CONSUMER_VERSION: u16 = 2;
+const LEGACY_CONSUMER_VERSION: u16 = 1;
 const MAX_TEXT_BYTES: usize = 4 << 20;
 const MAX_REQUIREMENTS: usize = 1 << 20;
+const NEED_PNF_FRAGMENT: u8 = 1;
+const NEED_EVIDENCE_COORDINATE: u8 = 2;
 
 #[derive(Debug, Error)]
 pub enum ResidualError {
@@ -55,6 +58,61 @@ impl FragmentKind {
     }
 }
 
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EvidenceCoordinateKind {
+    SourceIdentity = 1,
+    SameObject = 2,
+    Authority = 3,
+    Mechanism = 4,
+    Quantification = 5,
+    Probability = 6,
+    Counterfactual = 7,
+    InstrumentComparison = 8,
+    Incidence = 9,
+    Classification = 10,
+}
+
+impl EvidenceCoordinateKind {
+    pub fn from_u8(value: u8) -> Result<Self, ResidualError> {
+        match value {
+            1 => Ok(Self::SourceIdentity),
+            2 => Ok(Self::SameObject),
+            3 => Ok(Self::Authority),
+            4 => Ok(Self::Mechanism),
+            5 => Ok(Self::Quantification),
+            6 => Ok(Self::Probability),
+            7 => Ok(Self::Counterfactual),
+            8 => Ok(Self::InstrumentComparison),
+            9 => Ok(Self::Incidence),
+            10 => Ok(Self::Classification),
+            _ => Err(ResidualError::InvalidConsumer(format!("unknown evidence coordinate kind {value}"))),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RequirementNeed {
+    PnfFragment(FragmentKind),
+    EvidenceCoordinate(EvidenceCoordinateKind),
+}
+
+impl RequirementNeed {
+    fn class_tag(self) -> u8 {
+        match self {
+            Self::PnfFragment(_) => NEED_PNF_FRAGMENT,
+            Self::EvidenceCoordinate(_) => NEED_EVIDENCE_COORDINATE,
+        }
+    }
+
+    fn value_tag(self) -> u8 {
+        match self {
+            Self::PnfFragment(value) => value as u8,
+            Self::EvidenceCoordinate(value) => value as u8,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RequirementScope {
     AnySource,
@@ -64,7 +122,7 @@ pub enum RequirementScope {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConsumerRequirement {
     pub requirement_id: String,
-    pub fragment: FragmentKind,
+    pub need: RequirementNeed,
     pub scope: RequirementScope,
 }
 
@@ -105,6 +163,27 @@ fn read_text<R: Read>(reader: &mut R) -> Result<String, ResidualError> {
     String::from_utf8(bytes).map_err(|_| ResidualError::InvalidConsumer("text is not UTF-8".into()))
 }
 
+fn write_scope<W: Write>(writer: &mut W, scope: &RequirementScope) -> Result<(), ResidualError> {
+    match scope {
+        RequirementScope::AnySource => writer.write_all(&[0])?,
+        RequirementScope::SourceManifestation(source) => {
+            writer.write_all(&[1])?;
+            write_text(writer, source)?;
+        }
+    }
+    Ok(())
+}
+
+fn read_scope<R: Read>(reader: &mut R) -> Result<RequirementScope, ResidualError> {
+    let mut scope = [0u8; 1];
+    reader.read_exact(&mut scope)?;
+    match scope[0] {
+        0 => Ok(RequirementScope::AnySource),
+        1 => Ok(RequirementScope::SourceManifestation(read_text(reader)?)),
+        other => Err(ResidualError::InvalidConsumer(format!("unknown requirement scope {other}"))),
+    }
+}
+
 pub fn encode_consumer_spec<W: Write>(writer: &mut W, spec: &ConsumerSpec) -> Result<(), ResidualError> {
     if spec.consumer_id.is_empty() || spec.surface_id.is_empty() {
         return Err(ResidualError::InvalidConsumer("consumer and surface identifiers must be non-empty".into()));
@@ -122,14 +201,8 @@ pub fn encode_consumer_spec<W: Write>(writer: &mut W, spec: &ConsumerSpec) -> Re
             return Err(ResidualError::InvalidConsumer("requirement identifier must be non-empty".into()));
         }
         write_text(writer, &requirement.requirement_id)?;
-        writer.write_all(&[requirement.fragment as u8])?;
-        match &requirement.scope {
-            RequirementScope::AnySource => writer.write_all(&[0])?,
-            RequirementScope::SourceManifestation(source) => {
-                writer.write_all(&[1])?;
-                write_text(writer, source)?;
-            }
-        }
+        writer.write_all(&[requirement.need.class_tag(), requirement.need.value_tag()])?;
+        write_scope(writer, &requirement.scope)?;
     }
     Ok(())
 }
@@ -140,10 +213,11 @@ pub fn decode_consumer_spec<R: Read>(reader: &mut R) -> Result<ConsumerSpec, Res
     if magic != CONSUMER_MAGIC {
         return Err(ResidualError::InvalidConsumer("bad consumer magic".into()));
     }
-    let mut version = [0u8; 2];
-    reader.read_exact(&mut version)?;
-    if u16::from_le_bytes(version) != CONSUMER_VERSION {
-        return Err(ResidualError::InvalidConsumer("unsupported consumer version".into()));
+    let mut version_bytes = [0u8; 2];
+    reader.read_exact(&mut version_bytes)?;
+    let version = u16::from_le_bytes(version_bytes);
+    if version != CONSUMER_VERSION && version != LEGACY_CONSUMER_VERSION {
+        return Err(ResidualError::InvalidConsumer(format!("unsupported consumer version {version}")));
     }
     let consumer_id = read_text(reader)?;
     let surface_id = read_text(reader)?;
@@ -157,17 +231,21 @@ pub fn decode_consumer_spec<R: Read>(reader: &mut R) -> Result<ConsumerSpec, Res
     let mut requirements = Vec::with_capacity(count);
     for _ in 0..count {
         let requirement_id = read_text(reader)?;
-        let mut fragment = [0u8; 1];
-        reader.read_exact(&mut fragment)?;
-        let fragment = FragmentKind::from_u8(fragment[0])?;
-        let mut scope = [0u8; 1];
-        reader.read_exact(&mut scope)?;
-        let scope = match scope[0] {
-            0 => RequirementScope::AnySource,
-            1 => RequirementScope::SourceManifestation(read_text(reader)?),
-            other => return Err(ResidualError::InvalidConsumer(format!("unknown requirement scope {other}"))),
+        let need = if version == LEGACY_CONSUMER_VERSION {
+            let mut fragment = [0u8; 1];
+            reader.read_exact(&mut fragment)?;
+            RequirementNeed::PnfFragment(FragmentKind::from_u8(fragment[0])?)
+        } else {
+            let mut tags = [0u8; 2];
+            reader.read_exact(&mut tags)?;
+            match tags[0] {
+                NEED_PNF_FRAGMENT => RequirementNeed::PnfFragment(FragmentKind::from_u8(tags[1])?),
+                NEED_EVIDENCE_COORDINATE => RequirementNeed::EvidenceCoordinate(EvidenceCoordinateKind::from_u8(tags[1])?),
+                other => return Err(ResidualError::InvalidConsumer(format!("unknown requirement class {other}"))),
+            }
         };
-        requirements.push(ConsumerRequirement { requirement_id, fragment, scope });
+        let scope = read_scope(reader)?;
+        requirements.push(ConsumerRequirement { requirement_id, need, scope });
     }
     Ok(ConsumerSpec { consumer_id, surface_id, requirements })
 }
@@ -192,27 +270,30 @@ fn scope_matches(scope: &RequirementScope, source: Option<&str>) -> bool {
     }
 }
 
+fn residual_magic(need: RequirementNeed, gap: bool) -> &'static [u8; 4] {
+    match (need, gap) {
+        (RequirementNeed::PnfFragment(_), true) => b"GAP1",
+        (RequirementNeed::PnfFragment(_), false) => b"OBL1",
+        (RequirementNeed::EvidenceCoordinate(_), true) => b"GAP2",
+        (RequirementNeed::EvidenceCoordinate(_), false) => b"OBL2",
+    }
+}
+
 fn residual_body(
     magic: &[u8; 4],
-    fragment: FragmentKind,
+    need: RequirementNeed,
     consumer_id: &str,
     requirement_id: &str,
     scope: &RequirementScope,
 ) -> Result<Vec<u8>, ResidualError> {
     let mut body = Vec::new();
     body.extend_from_slice(magic);
-    body.push(fragment as u8);
-    body.push(1); // candidate-only
-    body.push(0); // semantic promotion false
+    body.push(need.value_tag());
+    body.push(1);
+    body.push(0);
     write_text(&mut body, consumer_id)?;
     write_text(&mut body, requirement_id)?;
-    match scope {
-        RequirementScope::AnySource => body.push(0),
-        RequirementScope::SourceManifestation(source) => {
-            body.push(1);
-            write_text(&mut body, source)?;
-        }
-    }
+    write_scope(&mut body, scope)?;
     Ok(body)
 }
 
@@ -223,7 +304,13 @@ fn payment_body(
     target_residual_id: &str,
     scope: &RequirementScope,
 ) -> Result<Vec<u8>, ResidualError> {
-    let mut body = residual_body(b"PAY1", fragment, consumer_id, requirement_id, scope)?;
+    let mut body = residual_body(
+        b"PAY1",
+        RequirementNeed::PnfFragment(fragment),
+        consumer_id,
+        requirement_id,
+        scope,
+    )?;
     write_text(&mut body, target_residual_id)?;
     Ok(body)
 }
@@ -253,11 +340,15 @@ pub fn compile_consumer_residual_stream<R: Read, W: Write>(
             Ok(Some(record)) => {
                 if let Some(fragment) = pnf_fragment(&record) {
                     for (index, requirement) in spec.requirements.iter().enumerate() {
-                        if !paid[index]
-                            && fragment == requirement.fragment
-                            && scope_matches(&requirement.scope, record.aux1.as_deref())
-                        {
-                            paid[index] = true;
+                        if paid[index] {
+                            continue;
+                        }
+                        if let RequirementNeed::PnfFragment(required_fragment) = requirement.need {
+                            if fragment == required_fragment
+                                && scope_matches(&requirement.scope, record.aux1.as_deref())
+                            {
+                                paid[index] = true;
+                            }
                         }
                     }
                 }
@@ -276,6 +367,9 @@ pub fn compile_consumer_residual_stream<R: Read, W: Write>(
         let obligation_id = format!("obligation:{}:{}", spec.consumer_id, requirement.requirement_id);
 
         if paid[index] {
+            let RequirementNeed::PnfFragment(fragment) = requirement.need else {
+                return Err(ResidualError::InvalidConsumer("evidence coordinate cannot be paid implicitly by PNF".into()));
+            };
             for (target_kind, target_residual_id) in [
                 ("gap", gap_id.as_str()),
                 ("obligation", obligation_id.as_str()),
@@ -285,7 +379,7 @@ pub fn compile_consumer_residual_stream<R: Read, W: Write>(
                     target_kind, spec.consumer_id, requirement.requirement_id, iteration_index
                 );
                 let body = payment_body(
-                    requirement.fragment,
+                    fragment,
                     &spec.consumer_id,
                     &requirement.requirement_id,
                     target_residual_id,
@@ -307,8 +401,8 @@ pub fn compile_consumer_residual_stream<R: Read, W: Write>(
         }
 
         let gap_body = residual_body(
-            b"GAP1",
-            requirement.fragment,
+            residual_magic(requirement.need, true),
+            requirement.need,
             &spec.consumer_id,
             &requirement.requirement_id,
             &requirement.scope,
@@ -326,19 +420,23 @@ pub fn compile_consumer_residual_stream<R: Read, W: Write>(
         gaps += 1;
 
         let obligation_body = residual_body(
-            b"OBL1",
-            requirement.fragment,
+            residual_magic(requirement.need, false),
+            requirement.need,
             &spec.consumer_id,
             &requirement.requirement_id,
             &requirement.scope,
         )?;
+        let obligation_kind = match requirement.need {
+            RequirementNeed::PnfFragment(_) => "need-fragment-kind",
+            RequirementNeed::EvidenceCoordinate(_) => "need-evidence-coordinate",
+        };
         encode_record(
             writer,
             &WireRecord {
                 kind: WorldRecordKind::Obligation,
                 id: obligation_id,
                 iteration_index: Some(iteration_index),
-                aux1: Some("need-fragment-kind".into()),
+                aux1: Some(obligation_kind.into()),
                 payload: obligation_body,
             },
         )?;
