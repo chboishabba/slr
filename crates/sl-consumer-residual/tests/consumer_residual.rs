@@ -55,7 +55,7 @@ fn consumer_spec_round_trip_is_versioned_binary() {
 }
 
 #[test]
-fn observed_required_fragment_pays_consumer_requirement() {
+fn observed_required_fragment_emits_append_only_payment_receipts() {
     let world = world_with_pnf(FragmentKind::Actor, "wiki:Q207:en:456", 5);
     let spec = spec(ConsumerRequirement {
         requirement_id: "need-actor".into(),
@@ -64,7 +64,7 @@ fn observed_required_fragment_pays_consumer_requirement() {
     });
     let mut out = Vec::new();
     let receipt = compile_consumer_residual_stream(
-        &mut Cursor::new(world.clone()),
+        &mut Cursor::new(world),
         &spec,
         &mut out,
         5,
@@ -74,8 +74,22 @@ fn observed_required_fragment_pays_consumer_requirement() {
     assert_eq!(receipt.requirements_unpaid, 0);
     assert_eq!(receipt.gaps_emitted, 0);
     assert_eq!(receipt.obligations_emitted, 0);
-    assert_eq!(out, world);
+    assert_eq!(receipt.payments_emitted, 2);
     assert!(!receipt.semantic_promotion);
+
+    let mut cursor = Cursor::new(out);
+    let _original = decode_record(&mut cursor).unwrap().unwrap();
+    let gap_payment = decode_record(&mut cursor).unwrap().unwrap();
+    let obligation_payment = decode_record(&mut cursor).unwrap().unwrap();
+    assert_eq!(gap_payment.kind, WorldRecordKind::Payment);
+    assert_eq!(obligation_payment.kind, WorldRecordKind::Payment);
+    assert_eq!(gap_payment.aux1.as_deref(), Some("gap:consumer:test:need-actor"));
+    assert_eq!(obligation_payment.aux1.as_deref(), Some("obligation:consumer:test:need-actor"));
+    assert_eq!(&gap_payment.payload[..4], b"PAY1");
+    assert_eq!(&obligation_payment.payload[..4], b"PAY1");
+    assert_eq!(gap_payment.payload[4], FragmentKind::Actor as u8);
+    assert_eq!(gap_payment.payload[5], 1); // candidate-only
+    assert_eq!(gap_payment.payload[6], 0); // semantic promotion false
 }
 
 #[test]
@@ -98,6 +112,7 @@ fn unpaid_fragment_emits_gap_and_acquisition_obligation() {
     assert_eq!(receipt.requirements_unpaid, 1);
     assert_eq!(receipt.gaps_emitted, 1);
     assert_eq!(receipt.obligations_emitted, 1);
+    assert_eq!(receipt.payments_emitted, 0);
 
     let mut cursor = Cursor::new(out);
     let _original = decode_record(&mut cursor).unwrap().unwrap();
@@ -133,6 +148,7 @@ fn source_scoped_requirement_is_not_paid_by_other_source() {
     .unwrap();
     assert_eq!(receipt.requirements_paid, 0);
     assert_eq!(receipt.requirements_unpaid, 1);
+    assert_eq!(receipt.payments_emitted, 0);
 }
 
 #[test]
