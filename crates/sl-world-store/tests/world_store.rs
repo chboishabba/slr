@@ -1,5 +1,5 @@
 use sensiblaw_world_store::{
-    decode_record, encode_record, frontier_gap_sql, frontier_obligation_sql,
+    active_frontier_gap_sql, active_frontier_obligation_sql, decode_record, encode_record,
     latest_iteration_sql, world_schema_sql, WireRecord, WorldRecordKind, WIRE_MAGIC, WIRE_VERSION,
 };
 use std::io::Cursor;
@@ -19,6 +19,22 @@ fn binary_wire_round_trip_preserves_core_coordinates() {
     assert_eq!(u16::from_le_bytes([bytes[4], bytes[5]]), WIRE_VERSION);
     let decoded = decode_record(&mut Cursor::new(bytes)).expect("decode").expect("record");
     assert_eq!(decoded, record);
+}
+
+#[test]
+fn payment_receipt_is_a_first_class_binary_world_record() {
+    let record = WireRecord {
+        kind: WorldRecordKind::Payment,
+        id: "payment:gap:consumer:test:need-actor:5".into(),
+        iteration_index: Some(5),
+        aux1: Some("gap:consumer:test:need-actor".into()),
+        payload: b"PAY1".to_vec(),
+    };
+    let mut bytes = Vec::new();
+    encode_record(&mut bytes, &record).unwrap();
+    let decoded = decode_record(&mut Cursor::new(bytes)).unwrap().unwrap();
+    assert_eq!(decoded, record);
+    assert_eq!(decoded.kind as u8, 8);
 }
 
 #[test]
@@ -45,9 +61,11 @@ fn v2_schema_is_append_only_binary_storage() {
         "slr_world_v2_obligation",
         "slr_world_v2_route_action",
         "slr_world_v2_iteration",
+        "slr_world_v2_payment",
     ] {
         assert!(sql.contains(table), "missing {table}");
     }
+    assert!(sql.contains("target_residual_id"));
     let upper = sql.to_ascii_uppercase();
     assert!(upper.contains("BYTEA"));
     assert!(!upper.contains("JSON"));
@@ -56,14 +74,17 @@ fn v2_schema_is_append_only_binary_storage() {
 }
 
 #[test]
-fn frontier_queries_are_iteration_scoped_streamable_binary_and_read_only() {
+fn active_frontier_is_derived_without_deleting_historical_residuals() {
     assert!(latest_iteration_sql().contains("MAX(iteration_index)"));
-    for sql in [frontier_gap_sql(), frontier_obligation_sql()] {
-        assert!(sql.contains("iteration_index=$1"));
+    for sql in [active_frontier_gap_sql(), active_frontier_obligation_sql()] {
+        assert!(sql.contains("NOT EXISTS"));
+        assert!(sql.contains("slr_world_v2_payment"));
+        assert!(sql.contains("target_residual_id"));
+        assert!(sql.contains("p.iteration_index >="));
+        assert!(sql.contains("newer.iteration_index >"));
         let upper = sql.to_ascii_uppercase();
         assert!(!upper.contains("UPDATE "));
         assert!(!upper.contains("DELETE "));
-        assert!(!upper.contains("ORDER BY"));
         assert!(!upper.contains("UNION"));
         assert!(!upper.contains("JSON"));
     }
