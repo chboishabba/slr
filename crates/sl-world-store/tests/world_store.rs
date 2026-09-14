@@ -71,7 +71,10 @@ fn frontier_queries_are_iteration_scoped_streamable_binary_and_read_only() {
 
 #[test]
 fn storage_transport_has_no_json_or_regex_contract() {
-    let cargo = std::fs::read_to_string("crates/sl-world-store/Cargo.toml").expect("Cargo.toml");
+    let cargo = std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml"),
+    )
+    .expect("world-store Cargo.toml");
     assert!(!cargo.contains("serde_json"));
     assert!(!cargo.contains("regex"));
 }

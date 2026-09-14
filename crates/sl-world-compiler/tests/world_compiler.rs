@@ -106,7 +106,10 @@ fn unresolved_dependency_does_not_silently_promote_semantics() {
 
 #[test]
 fn compiler_source_has_no_json_or_regex_dependency() {
-    let cargo = std::fs::read_to_string("crates/sl-world-compiler/Cargo.toml").unwrap();
+    let cargo = std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml"),
+    )
+    .unwrap();
     assert!(!cargo.contains("serde_json"));
     assert!(!cargo.contains("regex"));
 }
