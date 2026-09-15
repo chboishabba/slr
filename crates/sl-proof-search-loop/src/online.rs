@@ -2,8 +2,10 @@
 //!
 //! This module does not perform network I/O. It distinguishes readiness to
 //! begin bounded experimental provider acquisition from readiness to treat the
-//! online path as production-governed. The latter additionally requires the
-//! exact-head Agda/kernel semantic receipt and provider execution receipts.
+//! online path as production-governed. A bounded live receipt may calibrate a
+//! later locally-validated head through an explicit no-network lineage audit
+//! when the governed provider runtime source is unchanged; this is not the same
+//! as claiming exact-head live execution or byte-for-byte build identity.
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct OnlineReadinessInputs {
@@ -26,6 +28,8 @@ pub struct OnlineReadinessInputs {
     pub parser_only_after_local_ingestion_pinned: bool,
     pub live_provider_adapter_implemented: bool,
     pub live_provider_fixture_validated: bool,
+    pub live_receipt_lineage_validated: bool,
+    pub exact_head_live_execution_receipt: bool,
     pub exact_head_agda_kernel_receipt: bool,
 }
 
@@ -42,6 +46,8 @@ pub enum OnlineReadinessBlocker {
     GovernanceContractIncomplete,
     LiveProviderAdapterMissing,
     LiveProviderFixtureMissing,
+    LiveReceiptLineageMissing,
+    ExactHeadLiveExecutionReceiptMissing,
     ExactHeadAgdaKernelReceiptMissing,
 }
 
@@ -78,6 +84,15 @@ pub fn blockers(inputs: OnlineReadinessInputs) -> Vec<OnlineReadinessBlocker> {
     if !inputs.live_provider_fixture_validated {
         out.push(OnlineReadinessBlocker::LiveProviderFixtureMissing);
     }
+    if inputs.live_provider_fixture_validated
+        && !inputs.exact_head_live_execution_receipt
+        && !inputs.live_receipt_lineage_validated
+    {
+        out.push(OnlineReadinessBlocker::LiveReceiptLineageMissing);
+    }
+    if !inputs.exact_head_live_execution_receipt {
+        out.push(OnlineReadinessBlocker::ExactHeadLiveExecutionReceiptMissing);
+    }
     if !inputs.exact_head_agda_kernel_receipt {
         out.push(OnlineReadinessBlocker::ExactHeadAgdaKernelReceiptMissing);
     }
@@ -86,17 +101,28 @@ pub fn blockers(inputs: OnlineReadinessInputs) -> Vec<OnlineReadinessBlocker> {
 
 pub fn readiness(inputs: OnlineReadinessInputs) -> OnlineReadiness {
     let bs = blockers(inputs);
-    let structural_blocked = bs.iter().any(|b| matches!(
-        b,
-        OnlineReadinessBlocker::OfflineResearchEngineIncomplete
-            | OnlineReadinessBlocker::GovernanceContractIncomplete
-            | OnlineReadinessBlocker::LiveProviderAdapterMissing
-            | OnlineReadinessBlocker::LiveProviderFixtureMissing
-    ));
-    if structural_blocked {
+    let experimental_blocked = bs.iter().any(|b| {
+        matches!(
+            b,
+            OnlineReadinessBlocker::OfflineResearchEngineIncomplete
+                | OnlineReadinessBlocker::GovernanceContractIncomplete
+                | OnlineReadinessBlocker::LiveProviderAdapterMissing
+                | OnlineReadinessBlocker::LiveProviderFixtureMissing
+                | OnlineReadinessBlocker::LiveReceiptLineageMissing
+        )
+    });
+    if experimental_blocked {
         return OnlineReadiness::OfflineOnly;
     }
-    if bs.contains(&OnlineReadinessBlocker::ExactHeadAgdaKernelReceiptMissing) {
+
+    let production_blocked = bs.iter().any(|b| {
+        matches!(
+            b,
+            OnlineReadinessBlocker::ExactHeadLiveExecutionReceiptMissing
+                | OnlineReadinessBlocker::ExactHeadAgdaKernelReceiptMissing
+        )
+    });
+    if production_blocked {
         return OnlineReadiness::ExperimentalLiveAcquisitionReady;
     }
     OnlineReadiness::ProductionGovernedOnlineReady
@@ -127,37 +153,46 @@ mod tests {
             parser_only_after_local_ingestion_pinned: true,
             live_provider_adapter_implemented: false,
             live_provider_fixture_validated: false,
+            live_receipt_lineage_validated: false,
+            exact_head_live_execution_receipt: false,
             exact_head_agda_kernel_receipt: false,
         }
     }
 
     #[test]
-    fn current_state_is_offline_only_until_live_adapter_and_fixture_exist() {
+    fn no_live_fixture_remains_offline_only() {
         let inputs = validated_offline();
         assert_eq!(readiness(inputs), OnlineReadiness::OfflineOnly);
-        assert_eq!(
-            blockers(inputs),
-            vec![
-                OnlineReadinessBlocker::LiveProviderAdapterMissing,
-                OnlineReadinessBlocker::LiveProviderFixtureMissing,
-                OnlineReadinessBlocker::ExactHeadAgdaKernelReceiptMissing,
-            ]
-        );
+        assert!(blockers(inputs).contains(&OnlineReadinessBlocker::LiveProviderFixtureMissing));
     }
 
     #[test]
-    fn agda_receipt_is_not_required_to_test_bounded_live_acquisition_experimentally() {
+    fn validated_fixture_plus_provider_source_lineage_is_experimental_ready() {
         let mut inputs = validated_offline();
         inputs.live_provider_adapter_implemented = true;
         inputs.live_provider_fixture_validated = true;
+        inputs.live_receipt_lineage_validated = true;
         assert_eq!(readiness(inputs), OnlineReadiness::ExperimentalLiveAcquisitionReady);
+        assert!(blockers(inputs).contains(&OnlineReadinessBlocker::ExactHeadLiveExecutionReceiptMissing));
+        assert!(blockers(inputs).contains(&OnlineReadinessBlocker::ExactHeadAgdaKernelReceiptMissing));
     }
 
     #[test]
-    fn production_online_requires_exact_head_agda_kernel_receipt() {
+    fn exact_head_live_receipt_does_not_need_lineage_bridge() {
         let mut inputs = validated_offline();
         inputs.live_provider_adapter_implemented = true;
         inputs.live_provider_fixture_validated = true;
+        inputs.exact_head_live_execution_receipt = true;
+        assert_eq!(readiness(inputs), OnlineReadiness::ExperimentalLiveAcquisitionReady);
+        assert!(!blockers(inputs).contains(&OnlineReadinessBlocker::LiveReceiptLineageMissing));
+    }
+
+    #[test]
+    fn production_online_requires_exact_head_live_and_agda_receipts() {
+        let mut inputs = validated_offline();
+        inputs.live_provider_adapter_implemented = true;
+        inputs.live_provider_fixture_validated = true;
+        inputs.exact_head_live_execution_receipt = true;
         inputs.exact_head_agda_kernel_receipt = true;
         assert_eq!(readiness(inputs), OnlineReadiness::ProductionGovernedOnlineReady);
     }
