@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use postgres::{Client, NoTls};
 use thiserror::Error;
 
-use crate::DatabaseConfig;
+use crate::{context_federation::CONTEXT_RECEIPT_SCHEMA_SQL, DatabaseConfig};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct LatentWorldBudget {
@@ -53,9 +53,14 @@ pub enum LatentWorldError {
 
 const NEIGHBOUR_SQL: &str = r#"
 WITH edge_source(from_ref, to_ref, relation_ref, provenance_ref) AS (
-    SELECT left_ref, right_ref, relation_type_ref,
-           concat('algebra.relation:', left_ref, ':', relation_type_ref, ':', right_ref)
-    FROM algebra.relation
+    SELECT relation.left_ref, relation.right_ref, relation.relation_type_ref,
+           COALESCE(
+               concat('context:', receipt.source_family_ref, ':', receipt.source_revision_ref),
+               concat('algebra.relation:', relation.left_ref, ':', relation.relation_type_ref, ':', relation.right_ref)
+           )
+    FROM algebra.relation AS relation
+    LEFT JOIN context.reviewed_relation_receipt AS receipt
+      ON receipt.relation_ref = relation.relation_ref
     UNION ALL
     SELECT dependent_ref, prerequisite_ref, 'execution:dependency',
            concat('execution.dependency:', dependent_ref, ':', prerequisite_ref)
@@ -129,6 +134,10 @@ pub fn load_latent_world_rows_with_budget(
     }
 
     let mut client = Client::connect(config.database_url(), NoTls)?;
+    // The receipt table is infrastructure only. Its boolean checks preserve
+    // the candidate-only firewall; traversal remains read-only after this
+    // idempotent schema guard.
+    client.batch_execute(CONTEXT_RECEIPT_SCHEMA_SQL)?;
     let mut visited_depths = BTreeMap::from([(seed_ref.to_owned(), 0_u32)]);
     let mut frontier = vec![seed_ref.to_owned()];
     let mut edge_keys: BTreeMap<(String, String, String), BTreeSet<String>> = BTreeMap::new();
@@ -238,12 +247,14 @@ pub fn load_latent_world_rows_with_budget(
         residual_refs: residual_refs.into_iter().collect(),
         edges: edge_keys
             .into_iter()
-            .map(|((from_ref, to_ref, relation_ref), provenance_refs)| LatentWorldEdgeRow {
-                from_ref,
-                to_ref,
-                relation_ref,
-                provenance_refs: provenance_refs.into_iter().collect(),
-            })
+            .map(
+                |((from_ref, to_ref, relation_ref), provenance_refs)| LatentWorldEdgeRow {
+                    from_ref,
+                    to_ref,
+                    relation_ref,
+                    provenance_refs: provenance_refs.into_iter().collect(),
+                },
+            )
             .collect(),
         creates_semantic_authority: false,
         applicability_promoted: false,
