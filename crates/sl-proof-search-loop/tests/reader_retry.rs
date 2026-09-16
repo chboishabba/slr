@@ -37,7 +37,7 @@ fn acquisition_or_world_extension_must_be_followed_by_re_evaluation() {
         )])
     })
     .unwrap();
-    assert!(matches!(outcome, ReaderRetryOutcome::StillDeferred { .. }));
+    assert!(matches!(&outcome, ReaderRetryOutcome::StillDeferred { .. }));
     assert!(outcome.re_evaluated());
     assert!(!outcome.acquisition_receipt_is_payment());
 }
