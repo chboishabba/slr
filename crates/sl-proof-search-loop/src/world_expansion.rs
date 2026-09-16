@@ -5,6 +5,7 @@
 //! candidate producer moves for one residual and accounts for explicitly
 //! reviewed, disambiguated, novel world-object admissions.
 
+use crate::frontier::ProofResidual;
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
 
@@ -167,17 +168,11 @@ fn candidate_order(left: &ExpansionCandidate, right: &ExpansionCandidate) -> Ord
         .then_with(|| left.candidate_ref.cmp(&right.candidate_ref))
 }
 
-/// Select one already-declared acquisition/discovery candidate for a residual.
-/// Expected residual contraction is primary. Residual-domain producer fit is a
-/// tie-break coordinate, so legal-first is legal-residual-first rather than a
-/// global OALC > Wikidata > Wikipedia ordering.
-#[must_use]
-pub fn select_expansion_candidate(
-    candidates: &[ExpansionCandidate],
+fn select_from<'a>(
+    candidates: impl Iterator<Item = &'a ExpansionCandidate>,
     minimum_expected_residual_contraction: u64,
-) -> Option<&ExpansionCandidate> {
+) -> Option<&'a ExpansionCandidate> {
     let mut eligible: Vec<&ExpansionCandidate> = candidates
-        .iter()
         .filter(|candidate| candidate.admissible)
         .filter(|candidate| candidate.expected_residual_contraction > 0)
         .filter(|candidate| {
@@ -186,6 +181,37 @@ pub fn select_expansion_candidate(
         .collect();
     eligible.sort_by(|left, right| candidate_order(left, right));
     eligible.first().copied()
+}
+
+/// Select one already-declared acquisition/discovery candidate. Expected
+/// residual contraction is primary. Residual-domain producer fit is a tie-break
+/// coordinate, so legal-first is legal-residual-first rather than a global
+/// OALC > Wikidata > Wikipedia ordering.
+#[must_use]
+pub fn select_expansion_candidate(
+    candidates: &[ExpansionCandidate],
+    minimum_expected_residual_contraction: u64,
+) -> Option<&ExpansionCandidate> {
+    select_from(candidates.iter(), minimum_expected_residual_contraction)
+}
+
+/// Bind expansion to the canonical open proof residual. Candidates for another
+/// residual, or candidates carrying a different typed residual class, cannot be
+/// selected by accident even if they have a larger score.
+#[must_use]
+pub fn select_for_proof_residual<'a>(
+    residual: &ProofResidual,
+    residual_class: ResidualClass,
+    candidates: &'a [ExpansionCandidate],
+    minimum_expected_residual_contraction: u64,
+) -> Option<&'a ExpansionCandidate> {
+    select_from(
+        candidates.iter().filter(|candidate| {
+            candidate.triggering_residual_ref == residual.residual_ref
+                && candidate.residual_class == residual_class
+        }),
+        minimum_expected_residual_contraction,
+    )
 }
 
 /// Account for an explicit review/disambiguation result. Reachability never
@@ -250,6 +276,7 @@ pub fn review_admission(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::frontier::{ProofResidual, ResidualStatus};
 
     fn candidate(
         candidate_ref: &str,
@@ -273,6 +300,19 @@ mod tests {
             expected_new_world_value: 5,
             acquisition_cost: 1,
             admissible: true,
+        }
+    }
+
+    fn proof_residual() -> ProofResidual {
+        ProofResidual {
+            residual_ref: "residual:mabo:test".into(),
+            proposition_ref: "mabo:proposition:radical-title-native-title".into(),
+            producer_class_ref: "producer:world-expansion".into(),
+            jurisdiction_ref: Some("AU".into()),
+            authority_requirement_ref: Some("primary-case".into()),
+            salience: 100,
+            dependency_refs: Vec::new(),
+            status: ResidualStatus::Open,
         }
     }
 
@@ -314,6 +354,33 @@ mod tests {
         );
         let selected = select_expansion_candidate(&[legal, identity], 1).unwrap();
         assert_eq!(selected.candidate_ref, "identity");
+    }
+
+    #[test]
+    fn exact_open_proof_residual_binds_candidate_selection() {
+        let matching = candidate(
+            "matching",
+            "source:mabo:hca:1992:23",
+            ResidualClass::Legal,
+            ProducerLane::GovernedLegal,
+            2,
+        );
+        let mut other = candidate(
+            "other",
+            "Q975866",
+            ResidualClass::Legal,
+            ProducerLane::WikidataIdentity,
+            99,
+        );
+        other.triggering_residual_ref = "residual:other".into();
+        let selected = select_for_proof_residual(
+            &proof_residual(),
+            ResidualClass::Legal,
+            &[other, matching],
+            1,
+        )
+        .unwrap();
+        assert_eq!(selected.candidate_ref, "matching");
     }
 
     #[test]
