@@ -1,13 +1,16 @@
 use sensiblaw_evidence_payment::{
-    evaluate_proposition_chain_payment, PropositionEvidenceObservation, PropositionProofRole,
-    PropositionRoleResidual,
+    evaluate_proposition_chain_payment, project_reader_payment, PropositionEvidenceObservation,
+    PropositionProofRole, PropositionRoleResidual,
 };
 use sensiblaw_pg_source_store::{
     load_database_config, load_mabo_proposition_rows, PropositionObservationRow,
 };
+use sensiblaw_reader_model::{ReaderDisposition, ReaderIntent};
 
 const PROPOSITION: &str = "mabo:proposition:radical-title-native-title";
 const SPAN: &str = "span:mabo:brennan:radical-title:no-automatic-beneficial-ownership";
+const SOURCE_REVISION: &str =
+    "source-revision:mabo:1992:hca:23:wikisource:page-39:rev-16058297:2026-06-29";
 
 fn observation(row: PropositionObservationRow) -> PropositionEvidenceObservation {
     PropositionEvidenceObservation {
@@ -30,7 +33,7 @@ fn residual(role: PropositionProofRole, suffix: &str) -> PropositionRoleResidual
 
 #[test]
 #[ignore = "requires the live PostgreSQL semantic persistence spine"]
-fn live_mabo_radical_title_rows_pay_bounded_why_without_truth_or_applicability() {
+fn live_mabo_radical_title_rows_reach_reader_abi_without_truth_or_applicability() {
     let config = load_database_config(None).expect("DATABASE_URL must identify the live PG store");
     let rows = load_mabo_proposition_rows(&config, PROPOSITION, SPAN)
         .expect("the materialised Mabo proposition coordinates must be readable");
@@ -49,16 +52,13 @@ fn live_mabo_radical_title_rows_pay_bounded_why_without_truth_or_applicability()
         .map(observation)
         .collect::<Vec<_>>();
 
-    // These are consumer-relative retained debts, not PostgreSQL facts. Their
-    // explicit presence is what lets a bounded explanation remain honest while
-    // those roles are unresolved.
     let residuals = vec![
         residual(PropositionProofRole::Qualifier, "qualifier-unpaid"),
         residual(PropositionProofRole::Defeater, "defeater-unpaid"),
         residual(PropositionProofRole::Comparator, "comparator-unpaid"),
     ];
 
-    let payment = evaluate_proposition_chain_payment(
+    let chain = evaluate_proposition_chain_payment(
         &rows.proposition_ref,
         &rows.required_span_ref,
         rows.exact_source_paid,
@@ -66,8 +66,21 @@ fn live_mabo_radical_title_rows_pay_bounded_why_without_truth_or_applicability()
         &residuals,
     );
 
-    assert!(payment.proposition_chain_paid);
-    assert!(payment.why_executable);
-    assert!(!payment.applicability_paid);
-    assert!(!payment.claim_truth_paid);
+    assert!(chain.proposition_chain_paid);
+    assert!(chain.why_executable);
+    assert!(!chain.applicability_paid);
+    assert!(!chain.claim_truth_paid);
+
+    let reader = project_reader_payment(&chain, SOURCE_REVISION, SPAN, &residuals)
+        .expect("paid live proposition chain must project into the portable Reader ABI");
+    assert!(!reader.applicability_paid());
+    assert!(!reader.claim_truth_paid());
+    assert!(matches!(
+        reader.resolve(ReaderIntent::OpenSource),
+        ReaderDisposition::ExecuteSource { .. }
+    ));
+    assert!(matches!(
+        reader.resolve(ReaderIntent::WhyClaim),
+        ReaderDisposition::ExecuteBoundedWhy(_)
+    ));
 }

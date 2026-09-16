@@ -6,5 +6,6 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+sensiblaw-reader-model = { path = "../sl-reader-model" }
 sensiblaw-world-store = { path = "../sl-world-store" }
 thiserror = "1"

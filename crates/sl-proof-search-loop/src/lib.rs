@@ -24,6 +24,7 @@ pub mod planner;
 pub mod provider;
 pub mod provider_access_policy;
 pub mod query;
+pub mod reader_retry;
 pub mod reasoning;
 pub mod receipt;
 pub mod residual_review_shortlist;

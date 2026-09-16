@@ -28,14 +28,12 @@ pub struct PropositionRows {
     pub observations: Vec<PropositionObservationRow>,
 }
 
-/// Load the persisted PNF + independent graph-span coordinates for the Mabo
-/// reader proposition.
+/// Load persisted PNF + independent graph-span coordinates for any proposition.
 ///
 /// The graph revision establishes the proposition/span relation. A returned PNF
 /// observation must independently retain that same span in its own provenance.
-/// That conjunction is the storage-side input required by the SLR support weld;
-/// this function itself does not pay support, applicability, or claim truth.
-pub fn load_mabo_proposition_rows(
+/// This function does not assign proof roles or pay applicability/truth.
+pub fn load_proposition_rows(
     config: &DatabaseConfig,
     proposition_ref: &str,
     required_span_ref: &str,
@@ -63,8 +61,6 @@ pub fn load_mabo_proposition_rows(
                  AND s.span_ref = $2
                 WHERE gr.subject_ref = $1
                   AND $2 = ANY(gr.source_span_refs)
-                  AND s.start_char IS NOT NULL
-                  AND s.end_char IS NOT NULL
                   AND s.start_char >= 0
                   AND s.start_char < s.end_char
                   AND s.end_char <= char_length(convert_from(c.payload, 'UTF8'))
@@ -100,9 +96,6 @@ pub fn load_mabo_proposition_rows(
         &[&proposition_ref, &required_span_ref],
     )?;
 
-    // A proposition may have more than one graph revision over the same build.
-    // Merge duplicate PNF observations while unioning only the independently
-    // persisted graph source-span coordinates.
     let mut observations_by_ref: BTreeMap<String, PropositionObservationRow> = BTreeMap::new();
     for row in observation_rows {
         let observation_ref: String = row.get(0);
@@ -132,4 +125,13 @@ pub fn load_mabo_proposition_rows(
         exact_source_paid,
         observations: observations_by_ref.into_values().collect(),
     })
+}
+
+/// Compatibility alias for the original flagship integration test.
+pub fn load_mabo_proposition_rows(
+    config: &DatabaseConfig,
+    proposition_ref: &str,
+    required_span_ref: &str,
+) -> Result<PropositionRows, SourceStoreError> {
+    load_proposition_rows(config, proposition_ref, required_span_ref)
 }

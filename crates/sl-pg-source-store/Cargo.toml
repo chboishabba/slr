@@ -13,4 +13,5 @@ thiserror = "1"
 
 [dev-dependencies]
 sensiblaw-evidence-payment = { path = "../sl-evidence-payment" }
+sensiblaw-reader-model = { path = "../sl-reader-model" }
 tempfile = "3"
