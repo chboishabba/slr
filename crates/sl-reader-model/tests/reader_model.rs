@@ -1,6 +1,6 @@
 use sensiblaw_reader_model::{
-    CoordinateCoverage, ExplanationCone, PropositionPayment, ReaderDisposition,
-    ReaderIntent, SemanticRef, SourcePayment, SpanRef,
+    CoordinateCoverage, ExplanationCone, PropositionPayment, ReaderDisposition, ReaderIntent,
+    SemanticRef, SourcePayment, SpanRef,
 };
 
 const PROPOSITION: &str = "mabo:proposition:radical-title-native-title";
