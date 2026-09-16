@@ -11,11 +11,11 @@ revision-pinned Mabo Wikidata provider became GREEN.
 P7a deterministic 100-hop traversal                 PAID
 P7b.0 reviewed-context persistence/provenance        PAID
 P7b.1 Wikidata revision-pinned candidate producer    PAID @ bbb155a
-P7b.2 Wikidata candidate -> explicit review gate     SOURCE-WRITTEN @ cc5adfe
-P7b.3 reviewed Wikidata -> live PG materialisation   UNPAID LIVE RECEIPT
+P7b.2 Wikidata candidate -> explicit review gate     PAID @ 9538eec/cc5adfe (5/5 tests green)
+P7b.3 reviewed Wikidata -> live PG materialisation   PAID LIVE RECEIPT (12 relations on TrueNAS PG)
 P7b.4 Wikipedia revision-pinned producer/review      UNPAID
 P7b.5 OALC exact-MNC producer/review                  UNPAID
-P7b.6 enriched live walker breadth receipt            BLOCKED on 3-5
+P7b.6 enriched live walker breadth receipt            BLOCKED on 4-5
 ```
 
 The Wikidata provider GREEN receipt supplied by the operator is:
@@ -83,38 +83,52 @@ persisted context relation != claim truth
 Therefore this P7b lane remains distinct from the Mabo `legal_ir` proposition
 support/materialisation lane used by Reader `Why?` payment.
 
-## Next live receipt
+## Observed live receipt (P7b.3)
 
-The next operator payment is not another provider implementation.  It is:
-
-1. select the desired candidate IDs from the revision-pinned Q1501525 SLRG;
-2. explicitly review those exact candidate coordinates;
-3. construct `ReviewedContextEdge` rows through the review gate;
-4. call `materialize_reviewed_context_edges(...)` against the live PG;
-5. rerun the unchanged 100-hop walker;
-6. report source-family coverage and graph size.
-
-Required receipt fields:
+Observed on TrueNAS PostgreSQL (`truenas.local:5432/sensiblaw_sparse_ready_20260818`):
 
 ```text
-wikidata revision
-wikidata candidates observed
-wikidata candidates reviewed
-wikidata edges persisted
-source family / source revision per edge
-candidate_only = true
-creates_semantic_authority = false
-applicability_promoted = false
-claim_truth_promoted = false
+wikidata revision: wikidata:Q1501525:oldid:2333409615
+wikidata candidates observed: 14 direct property candidates
+wikidata candidates reviewed: 12 (all bounded properties P1001, P710, P4884, P1594, P4006)
+wikidata candidates unreviewed/rejected: 2 (P31, P17 fail-closed)
+wikidata edges persisted into algebra.relation: 12
+receipt rows persisted into context.reviewed_relation_receipt: 12
+source family per edge: wikidata
+source revision per edge: wikidata:Q1501525:oldid:2333409615
+candidate_only: true
+creates_semantic_authority: false
+applicability_promoted: false
+claim_truth_promoted: false
 
-walker requested hops
-walker deepest observed hop
-walker nodes
-walker edges
-wikidata-provenanced edges
-legal_ir/proof edges
-context-only edges
-frontier exhausted / residuals
+Walker (seed = Q1501525):
+  requested hops: 100
+  deepest observed hop: 1
+  visited nodes: 13 (Q1501525 + 12 targets: Q408, Q1358798, Q4773043, Q3778295,
+                     Q267745, Q5226153, Q6261017, Q15527343, Q6832720, Q6851910,
+                     Q975866, Q36074)
+  edges: 12
+  wikidata-provenanced edges: 12
+  legal_ir/proof edges: 0
+  context-only edges: 12
+  frontier exhausted: true
+  residuals: []
+
+Walker (seed = mabo:proposition:radical-title-native-title):
+  requested hops: 100
+  deepest observed hop: 3
+  visited nodes: 11
+  edges: 11
+  wikidata-provenanced edges: 0
+  legal_ir/proof edges: 11
+  context-only edges: 0
+  frontier exhausted: true
+  residuals: []
+
+Persisted frontier broader from mabo proposition: false
+Explanation: Q1501525 context edges are currently persisted as a reviewed Wikidata cluster;
+no cross-source anchor edge between the legal_ir Mabo proposition and Q1501525 has been
+materialized yet (scheduled for Wikipedia/OALC federation in P7b.4-P7b.6).
 ```
 
 ## Broader roadmap consequence
