@@ -1,15 +1,23 @@
 use sensiblaw_pg_source_store::{
-    compile_spacy_tsv_candidate_factors, CandidatePnfRole, ExactSourceSpan,
+    CandidatePnfProducer, CandidatePnfRole, ExactSourceSpan, SpacyTsvAdapter,
 };
 
 const MABO_SPAN_REF: &str =
     "span:mabo:brennan:radical-title:no-automatic-beneficial-ownership";
 
+fn exact_mabo_span() -> ExactSourceSpan {
+    ExactSourceSpan {
+        span_ref: MABO_SPAN_REF.to_owned(),
+        start_char: 1530,
+        end_char: 1663,
+    }
+}
+
 #[test]
-fn spacy_observations_compile_through_rust_pnf_and_retain_exact_source_overlap() {
-    // A deliberately tiny source-addressed observation stream in the same TSV
-    // protocol emitted by python/spacy_stream.py.  The direct semantic mapping
-    // must be owned by the existing Rust compiler, not by this storage test.
+fn parser_neutral_candidate_producer_retains_exact_source_overlap() {
+    // TSV is deliberately only a temporary compatibility manifestation of the
+    // old spaCy stream.  The stable contract under test is CandidatePnfProducer
+    // -> typed candidate PNF; downstream review/payment must not depend on TSV.
     let tsv = concat!(
         "D\t1\n",
         "P\t0\n",
@@ -22,15 +30,12 @@ fn spacy_observations_compile_through_rust_pnf_and_retain_exact_source_overlap()
         "Q\t0\n",
         "M\tspacy_parse_ns=1\n",
     );
+    let exact = exact_mabo_span();
+    let producer = SpacyTsvAdapter::new(tsv);
 
-    let exact = ExactSourceSpan {
-        span_ref: MABO_SPAN_REF.to_owned(),
-        start_char: 1530,
-        end_char: 1663,
-    };
-
-    let batch = compile_spacy_tsv_candidate_factors(tsv, &exact)
-        .expect("valid spaCy observation TSV must compile through the Rust PNF candidate producer");
+    let batch = producer
+        .produce(&exact)
+        .expect("temporary spaCy TSV adapter must conform to the parser-neutral candidate-PNF ABI");
 
     assert_eq!(batch.exact_span_ref, MABO_SPAN_REF);
     assert!(!batch.candidates.is_empty());
@@ -49,15 +54,14 @@ fn spacy_observations_compile_through_rust_pnf_and_retain_exact_source_overlap()
         .iter()
         .any(|candidate| candidate.role == CandidatePnfRole::Patient));
 
-    // This tranche produces reviewable PNF candidates only.  It cannot pay the
-    // proposition chain, applicability, or truth before reviewed correspondence.
+    // Candidate production is representation-neutral and authority-free.
     assert!(!batch.proposition_support_paid);
     assert!(!batch.applicability_paid);
     assert!(!batch.claim_truth_paid);
 }
 
 #[test]
-fn non_overlapping_observations_cannot_become_mabo_review_candidates() {
+fn parser_adapter_cannot_promote_non_overlapping_input_into_review_candidates() {
     let tsv = concat!(
         "D\t1\n",
         "P\t0\n",
@@ -68,13 +72,10 @@ fn non_overlapping_observations_cannot_become_mabo_review_candidates() {
         "E\t0\n",
         "Q\t0\n",
     );
-    let exact = ExactSourceSpan {
-        span_ref: MABO_SPAN_REF.to_owned(),
-        start_char: 1530,
-        end_char: 1663,
-    };
+    let exact = exact_mabo_span();
+    let producer = SpacyTsvAdapter::new(tsv);
 
-    let batch = compile_spacy_tsv_candidate_factors(tsv, &exact).unwrap();
+    let batch = producer.produce(&exact).unwrap();
     assert!(batch.candidates.is_empty());
     assert!(!batch.proposition_support_paid);
 }
