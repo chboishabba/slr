@@ -1,4 +1,5 @@
 mod candidate_pnf;
+mod latent_world;
 mod legal_ir_materialization;
 mod proposition_rows;
 mod reviewed_pnf;
@@ -6,6 +7,9 @@ mod reviewed_pnf;
 pub use candidate_pnf::{
     CandidatePnfBatch, CandidatePnfError, CandidatePnfFactor, CandidatePnfProducer,
     CandidatePnfRole, ExactSourceSpan, SpacyTsvAdapter,
+};
+pub use latent_world::{
+    load_latent_world_rows, LatentWorldEdgeRow, LatentWorldError, LatentWorldRows,
 };
 pub use legal_ir_materialization::{
     materialize_reviewed_proposition_support, LegalIrMaterializationError,
