@@ -1,115 +1,201 @@
 # SLR roadmap: thin Mabo proof/explanation profile
 
 Date: 2026-09-15
+Updated: 2026-09-16
 
 ## Purpose
 
-Define the next legal flagship without turning SLR into a second legal-semantics engine.
+Define the next legal flagship around the current production split rather than the legacy Python/Svelte module graph.
+
+The active ownership rule is:
+
+```text
+DASHI/Agda = golden semantic / proof contract
+SLR/Rust   = production parser / residual / evidence-payment / recurrence engine
+PostgreSQL = sole active semantic persistence spine
+ITIR/Svelte + SensibLaw Python = legacy/reference and regression consumers unless a boundary is explicitly retained
+```
+
+Detached JSON is presentation/export only. It must not be re-ingested as semantic, world, source-follow, or evidence-payment authority.
 
 The profile is deliberately thin:
 
 ```text
-SensibLaw Mabo proof request
--> typed SLR consumer/residual requirements
--> existing bounded SLR recurrence
--> acquired/reviewed source refs + residual/payment deltas
--> SensibLaw Mabo proof specimen
+exact persisted source/span
+-> Rust SLR consumer-relative proposition payment
+-> bounded Why?/Explanation-Cone receipt
+-> projection to a human reader
 ```
 
-SLR owns cheap structural parsing, consumer-relative residual production, producer selection, bounded acquisition, recurrence, and provenance-preserving candidate evidence.
+SLR owns deterministic compilation, consumer-relative residual production, evidence-payment execution, bounded recurrence, and provenance-preserving runtime receipts.
 
-SensibLaw owns legal proposition identity, authority/application semantics, support/defeater/comparator roles, source-role review, admissibility, payment/promotion, and the human/legal explanation.
+DASHI owns the golden laws that say when those receipts are sufficient for the declared consumer query and which promotions remain impossible.
+
+PostgreSQL owns the durable source/revision/span and semantic-materialisation coordinates required by the runtime. The UI consumes typed results; it is not a semantic owner.
 
 ## Why Mabo remains the flagship
 
-The point is not to globally "prove Mabo". The first complete specimen should take one concrete proposition chain already represented in the Mabo work and close it end to end:
+The point is not to globally "prove Mabo". The first complete specimen should take one concrete proposition and cross every active layer:
 
 ```text
-literal argument
--> authority candidate
--> applicability
--> support + defeater + comparator
--> residual
--> selective/full-source reacquisition
--> review/payment
+judgment bytes
+-> PostgreSQL canonical source + exact span
+-> SLR PNF/proposition support
+-> independent source-span provenance weld
+-> support + qualifier/defeater/comparator coverage
+-> bounded Why? payment
 -> human-readable explanation
 ```
 
-That is a stronger architecture test than a large undirected corpus sweep because it proves that the algebra, parser, acquisition recurrence, source review, and explanation projection all refer to the same typed object.
-
-## Legal/public-interest user story
-
-The same profile should support more than lawyers.
-
-A concerned citizen, activist, CLC client, or self-represented litigant should be able to bring a more complete and interpretable argument to a lawyer/CLC rather than only a prose bundle. A public-interest/political-accountability user should be able to expose:
+The currently paid source coordinate is:
 
 ```text
-literal claim
-+ source
-+ applicable authority/rule
-+ factual predicate events
-+ supporting material
-+ contrary/limiting material
-+ unresolved residuals
-+ available next questions/acquisition paths
+mabo:proposition:radical-title-native-title
+span:mabo:brennan:radical-title:no-automatic-beneficial-ownership
 ```
 
-This is not automatic legal correctness or advice. It is a typed, provenance-preserving argument object that makes disagreement and incompleteness inspectable.
-
-## Production boundary
-
-Do not call a legacy Python Mabo legal-semantic runner from production SLR.
-
-Do not port Mabo legal semantics into Rust/SLR.
-
-The old SensibLaw Python machinery may remain a golden/reference fixture for regression and corpus-specific comparison.
-
-Production should eventually expose a thin runner such as:
+The exact-source path is already observed live:
 
 ```text
-run_slr_mabo_proof_graph.sh
+exact_authority_span_paid = true
+OpenSource                = execute
+Why                       = defer
+proposition_chain_paid     = false
+claim_truth_paid           = false
 ```
 
-whose only legal-specific responsibility is compiling an admitted SensibLaw proof request into existing SLR consumer/source-role constraints and returning typed evidence/provenance deltas.
+So source acquisition/payment is no longer the architectural frontier. Proposition-chain payment is.
 
-## Strict legal payment
+## Production proposition-payment contract
 
-Search results, encyclopedia prose, headnotes, snippets, and ontology candidates may route acquisition but cannot pay strict primary-authority obligations.
+The bounded explanation consumer is intentionally weaker than legal truth/applicability closure.
 
-Required rule:
+Support is mandatory and cannot be residualised away. It must retain:
 
 ```text
-primary-authority payment eligibility
--> verified full source
-+ exact source span
-+ admitted source role
-+ review/payment decision
+PNF observation
++ PNF revision identity
++ observation provenance containing the exact paid span
++ independent graph/source-span provenance containing the same exact span
+```
+
+Qualifier, defeater, and comparator coordinates may each be either:
+
+```text
+paid observation
+or
+explicit retained residual
+```
+
+This lets the reader open an honest bounded cone that says which limiting/contrary/comparison coordinates remain unresolved.
+
+The consumer gate is therefore approximately:
+
+```text
+WhyPaid =
+  ExactSourcePaid
+  && SupportPaid
+  && Covered(Qualifier)
+  && Covered(Defeater)
+  && Covered(Comparator)
+```
+
+where:
+
+```text
+Covered(role) = PaidObservation(role) || ExplicitResidual(role)
+```
+
+but:
+
+```text
+SupportPaid != ExplicitResidual(Support)
 ```
 
 Firewalls:
 
 ```text
-AcquiredAuthorityCandidate != ApplicableAuthority
-AcquiredSource != EvidencePayment
-SourceAgreement != IndependentAncestry
-SLRRouteSelection != LegalConclusion
-Defeater != Comparator != Support
-ExactCommonGround -> zero further acquisition for that exact residual
+ExactSourcePaid !=> PropositionChainPaid
+PNFParity !=> SourceProvenance
+BoundedWhyPaid !=> ApplicabilityPaid
+BoundedWhyPaid !=> ClaimTruthPaid
+ExplicitResidual !=> PropositionFalse
 ```
 
-## UI projection contract
+## Current TDD / formal state
 
-The runner must not emit a separate simplified UI graph. It returns typed research/proof deltas to SensibLaw. A single canonical Mabo proof specimen is then projected by the UI:
+### Rust SLR
+
+Draft PR #14:
 
 ```text
-SensibLaw Mabo proof specimen
--> Explain
--> Inspect
--> Source
--> Graph
+agent/mabo-radical-title-proposition-payment
 ```
 
-The default UI policy is:
+started as a RED contract and now includes the minimal typed Rust evaluator in:
+
+```text
+crates/sl-evidence-payment/tests/mabo_proposition_payment.rs
+```
+
+The intended tests require:
+
+1. exact source + provenance-welded support + explicit residuals for qualifier/defeater/comparator -> bounded Why paid;
+2. PNF support without independent graph/source-span provenance -> Why unpaid;
+3. exact source alone -> Why unpaid;
+4. a paid qualifier may replace its explicit residual without paying applicability/truth.
+
+The missing proposition-payment symbols were observed RED, then the focused contract passed 4/4, `cargo test --workspace --no-fail-fast` passed locally, and `cargo clippy --workspace --all-targets -- -D warnings` passed after small workspace lint repairs. The evaluator is intentionally read-side only: it consumes typed source/span and PNF coordinates, and does not add network I/O, JSON ingestion, UI code, applicability payment, or truth promotion.
+
+### DASHI/Agda
+
+Draft PR #963:
+
+```text
+agent/mabo-radical-title-proposition-chain-parity
+```
+
+adds:
+
+```text
+DASHI/Interop/MaboRadicalTitlePropositionChainPaymentExact.agda
+```
+
+as a successor to the kernel-certified exact-source owner.
+
+The owner formalises the bounded proposition payment and all non-promotion firewalls above. Its exact-head Agda kernel receipt is observed.
+
+## PostgreSQL boundary
+
+PostgreSQL remains the sole active semantic persistence spine.
+
+The relevant retained reference schema is the existing SensibLaw PostgreSQL design:
+
+```text
+legal_ir.semantic_build
+-> legal_ir.projection
+-> legal_ir.observation
+-> legal_ir.graph_revision
+```
+
+The production Rust implementation should query/consume equivalent typed PG coordinates, not ingest detached JSON or port Python dataclasses one-for-one.
+
+The legacy schema remains useful because it already identifies the required shapes:
+
+- PNF factor/revision refs;
+- structural signature and predicate;
+- role bindings;
+- qualifier/wrapper state;
+- provenance refs;
+- residual refs;
+- graph source-span refs;
+- jurisdiction/time/authorship/review state.
+
+Do not add a second proof-store schema merely to pay the Mabo reader consumer. Add a new schema only if the existing PG coordinates provably cannot represent a required production obligation.
+
+## UI / reader projection contract
+
+The human-facing rule remains:
 
 ```text
 argument-first
@@ -117,99 +203,133 @@ argument-first
 -> provenance-on-demand
 ```
 
-Progressive disclosure is an observation policy, not epistemic deletion.
+The UI is a projection consumer over the SLR/Agda payment state.
 
-```text
-hidden from current view
-!= discarded
-!= unavailable
-!= unsupported
-```
+A paid bounded `Why?` means only that the declared explanation cone is adequate to display. It does not mean the court's proposition is globally proven or applicable to a new user's facts.
 
-Every explanation-bearing claim must have a reversible path back to its proof/source coordinates.
-
-## Legal-term/context drill-in
-
-A selected legal term such as `estoppel` should support progressive context rather than a single global definition:
-
-```text
-term
--> quick lexical definition (for orientation)
--> Wikipedia/Wikidata context (navigation/identity only)
--> Australian legal construction in the selected corpus
--> situation-specific applicability/contingent arguments
-```
-
-The UI may show a short dictionary definition or encyclopedia lead first, but those do not become legal authority.
-
-A `Show contingent arguments` action may expose the corpus-relative derivation/applicability graph only on demand.
-
-## Wiki/Wikidata/source inspection
-
-Wiki/Wikidata are research/context surfaces, not default proof authority.
-
-The source trail should remain explicit:
-
-```text
-Wikipedia/Wikidata navigation
--> cited/follow candidate
--> acquired source
--> independent source-role review
--> possible payment
-```
-
-Keep the distinctions:
-
-```text
-QID identity
-!= source identity
-!= same-object evidence
-!= semantic equivalence
-!= authority
-```
-
-## Materialisation compatibility
-
-This profile inherits the consumer-adequate materialisation roadmap.
-
-The default explanation need not retain every authority/source byte locally. A skeletal corpus may support navigation and proof-graph structure while exact quotation/primary-authority audit triggers verified source reacquisition.
-
-```text
-Q_layExplanation may FactorsThrough explanation projection
-Q_primaryAuthorityAudit does not FactorsThrough explanation-only projection
-```
-
-## High-alpha implementation order
-
-Complete next:
-
-1. formal UI/projection parity owner: progressive disclosure is reversible and query-indexed;
-2. canonical Mabo proof-specimen contract in SensibLaw;
-3. thin SLR Mabo consumer-profile adapter over the existing recurrence;
-4. exact-source inspector coordinates and Wiki/Wikidata context drill-in;
-5. one flagship proposition chain with support/defeater/comparator/residual/explanation;
-6. Svelte `Explain <-> Inspect` projection over that same specimen.
-
-Defer:
-
-- a separate Mabo-only UI data model;
-- graph-first default presentation;
-- broad legal corpus crawling merely to make the graph look dense;
-- legacy Streamlit as the destination frontend;
-- Rust reimplementation of SensibLaw legal semantics.
-
-## Acceptance criterion
-
-A lay user should be able to answer:
+The reader should initially expose:
 
 ```text
 What changed?
-Why could the court reach that result?
-What authority/source supports this step?
-What limits or contradicts it?
-What is still unresolved?
+Why does this step follow here?
+What exact source supports it?
+What limits / contradicts / compares with it?
+What remains unresolved?
 ```
 
-without seeing the full proof graph unless requested.
+and reopen deeper PNF, source, Wiki/Wikidata, proof, and world-bucket detail only on demand.
 
-An expert should be able to reopen the same explanation into exact spans, provenance, authority/application coordinates, alternative readings, support/defeater/comparator edges, and residual/acquisition history.
+Wiki/Wikidata remain context/navigation coordinates:
+
+```text
+QID != applicability
+Wikipedia != legal authority
+context link != evidence payment
+```
+
+## World-bucket relation
+
+The 100-hop Mabo world bucket is now downstream/parallel substrate, not the next blocking proof task.
+
+The correct order is:
+
+```text
+exact source payment
+-> bounded proposition-chain payment
+-> live Why?/ProofCone
+-> larger latent Mabo world bucket
+-> selected Kant/eRDFa/IPFS publication fibre
+```
+
+The bucket can eventually supply a much larger latent world while the reader shows only a query-indexed local projection:
+
+```text
+available world >> displayed world
+```
+
+Publication still obeys:
+
+```text
+publish selected world != publish browsing history
+```
+
+and insertion into a global graph does not create truth, authority, applicability, or evidence payment.
+
+## High-alpha implementation order
+
+### P0 — Rust RED (paid)
+
+Run the exact PR #14 contract with a real Rust toolchain:
+
+```sh
+cargo test -p sensiblaw-evidence-payment --test mabo_proposition_payment
+```
+
+Observed RED: unresolved proposition-payment symbols / missing implementation.
+
+### P1 — minimal Rust GREEN (paid)
+
+Implement only the read-side proposition-payment evaluator needed by those tests, using typed inputs corresponding to retained PG/PNF/source-span coordinates. Do not add network I/O, UI code, JSON ingestion, or legal truth promotion.
+
+Observed: the focused contract passes 4/4, `cargo test --workspace --no-fail-fast` passes, and `cargo clippy --workspace --all-targets -- -D warnings` passes.
+
+The normal validation commands remain:
+
+```sh
+cargo test -p sensiblaw-evidence-payment --test mabo_proposition_payment
+cargo test --workspace
+cargo clippy --workspace --all-targets -- -D warnings
+```
+
+### P2 — Agda exact-head kernel receipt
+
+Kernel-check:
+
+```text
+DASHI/Interop/MaboRadicalTitlePropositionChainPaymentExact.agda
+```
+
+and update certification coordinates only from observed output.
+
+### P3 — live PG -> Rust SLR payment
+
+Bind the evaluator to the actual PG-backed PNF/source-span rows for the already-materialised Mabo radical-title coordinate and observe:
+
+```text
+OpenSource = execute
+Why        = executeBoundedWhy
+ApplicabilityPaid = false
+ClaimTruthPaid    = false
+```
+
+### P4 — human Explanation Cone
+
+Project that same typed payment into the reader so a normal user can click `Why?` and see the bounded support/limitation/comparator/residual structure with exact source reopening.
+
+### P5 — world growth / federation
+
+Use the proven proposition as a real semantic node in the bounded Mabo world walk, then later package only selected fibres through Kant/eRDFa/IPFS and query through Zelph.
+
+## Acceptance criterion
+
+The flagship is paid when one real proposition crosses:
+
+```text
+judgment bytes
+-> PostgreSQL
+-> exact source span
+-> SLR PNF/provenance payment
+-> Agda-valid bounded explanation contract
+-> Why? Execute
+-> human-readable Explanation Cone
+```
+
+while still preserving:
+
+```text
+bounded explanation != applicability
+bounded explanation != claim truth
+reader projection != semantic authority
+```
+
+That is the shortest end-to-end demonstration of the current SensibLaw/SLR/DASHI architecture.

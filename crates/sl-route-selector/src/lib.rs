@@ -97,7 +97,9 @@ pub fn encode_route_candidate<W:Write>(w:&mut W,row:&RouteCandidate)->Result<(),
 }
 
 pub fn decode_route_candidate<R:Read>(r:&mut R)->Result<Option<RouteCandidate>,RouteSelectorError>{
-    let mut magic=[0u8;4];if !read_exact_or_eof(r,&mut magic)?{return Ok(None)}if magic!=SLRG_MAGIC{return Err(RouteSelectorError::InvalidCandidate("bad SLRG magic".into()))}
+    let mut magic=[0u8;4];
+    if !read_exact_or_eof(r,&mut magic)?{return Ok(None)}
+    if magic!=SLRG_MAGIC{return Err(RouteSelectorError::InvalidCandidate("bad SLRG magic".into()))}
     let mut v=[0u8;2];r.read_exact(&mut v)?;if u16::from_le_bytes(v)!=SLRG_VERSION{return Err(RouteSelectorError::InvalidCandidate("unsupported SLRG version".into()))}
     let mut tags=[0u8;4];r.read_exact(&mut tags)?;if tags[2]!=1||tags[3]!=0{return Err(RouteSelectorError::InvalidCandidate("route candidate must be candidate-only and non-promoting".into()))}
     let producer=ProducerFamily::from_u8(tags[0])?;let route_family=RouteFamily::from_u8(tags[1])?;let candidate_id=read_text(r)?;let source_ref=read_text(r)?;let target_ref=read_text(r)?;let property_ref=read_text(r)?;
