@@ -1,7 +1,7 @@
 # SLR roadmap: thin Mabo proof/explanation profile
 
 Date: 2026-09-15
-Updated: 2026-09-16 — P3a legal-IR materialisation tranche
+Updated: 2026-09-16 — parser-neutral candidate-PNF / Dioxus production path
 
 ## Active ownership
 
@@ -15,19 +15,84 @@ SensibLaw Python    = reference + PostgreSQL regression surface
 ITIR/Svelte         = reference/regression prototype only
 ```
 
-Detached JSON is presentation/export only. It is not re-ingested as semantic,
-world, source-follow, or evidence-payment authority.
+Detached TSV and JSON are ingestion/export/transport manifestations only. They are
+not semantic identities and must not be re-ingested as world, source-follow, or
+evidence-payment authority.
 
-The production path is:
+The stable production path is:
 
 ```text
-judgment/source bytes
--> PostgreSQL canonical source + exact span
--> SLR reviewed PNF / legal_ir materialisation
--> SLR consumer-relative proposition payment
--> portable Rust Reader ABI
+PDF / HTML / XML / text / provider payload / legacy TSV / legacy JSON
+-> source/parser adapter
+-> typed CandidatePNF
+-> review/admission
+-> ReviewedPNFRevision
+-> PostgreSQL canonical semantic persistence
+-> PropositionEvidenceObservation
+-> SLR consumer-relative PropositionChainPayment
+-> portable Rust PropositionPayment / Reader ABI
 -> Dioxus human reader
 -> optional wgpu ProofCone/world projection
+```
+
+Stable semantic boundaries are typed Rust values plus canonical persisted
+coordinates:
+
+```text
+ExactSourceSpan
+-> CandidatePnfFactor
+-> ReviewedPnfFactorRevision
+-> PropositionEvidenceObservation
+-> PropositionChainPayment
+-> PropositionPayment
+```
+
+TSV and JSON do not appear in that chain.
+
+For native/full-stack Rust, pass typed values directly. If a browser/backend
+boundary needs serialization, the encoding is a transport manifestation of the
+typed ABI, not its definition:
+
+```text
+Reader ABI -> transport encoding -> Reader ABI
+```
+
+`serde_json(PropositionPayment)` is therefore acceptable transport; JSON fields
+do not define `PropositionPayment` semantics.
+
+## Candidate-PNF producer ABI
+
+P3a0 is parser-neutral:
+
+```rust
+trait CandidatePnfProducer {
+    fn produce(
+        &self,
+        source: &ExactSourceSpan,
+    ) -> Result<CandidatePnfBatch, CandidatePnfError>;
+}
+```
+
+Temporary/replaceable producers may include:
+
+```text
+SpacyTsvAdapter        compatibility/conformance only
+LegacyJsonAdapter      compatibility/conformance only
+PdfTextAdapter         source adapter
+NativeRustParser       preferred native producer when adequate
+ProviderAdapter        governed external producer
+```
+
+All terminate at the same typed candidate carrier. Removing TSV or JSON later
+must not affect review, persistence, payment, Dioxus, wgpu, or Agda.
+
+Firewalls:
+
+```text
+input/serialization representation != semantic identity
+CandidatePNF                    != ReviewedPNF
+ReviewedPNF                     != PropositionSupport
+transport encoding              != semantic authority
 ```
 
 ## Flagship coordinate
@@ -65,7 +130,7 @@ Support cannot be residualised. It requires:
 
 ```text
 exact source paid
-+ retained PNF observation
++ retained reviewed PNF observation
 + retained PNF revision identity
 + observation provenance containing exact span
 + independent graph revision containing the same exact span
@@ -160,19 +225,33 @@ Branch:
 agent/mabo-pg-proposition-weld-v1
 ```
 
-The read-side query already consumes persisted `legal_ir` rows without assigning
-reader proof roles. A live TrueNAS run compiled and failed at the intended
-semantic boundary because the four `legal_ir` materialisation tables contained
-zero rows.
+The read-side query consumes persisted `legal_ir` rows without assigning reader
+proof roles. A live TrueNAS run compiled and failed at the intended semantic
+boundary because the four `legal_ir` materialisation tables contained zero rows.
 
-P3 is therefore split:
+P3 is now refined without making any serialization format part of the semantic
+architecture:
 
 ```text
-P3a = SLR-owned legal_ir materialisation       <- current
-P3b = live PG rows -> PropositionPayment
+P3a0 = ExactSourceSpan -> parser-neutral CandidatePNF
+P3a1 = CandidatePNF + review/admission -> ReviewedPNFRevision
+P3a2 = ReviewedPNFRevision -> legal_ir persisted support
+P3b  = live legal_ir rows -> PropositionChainPayment
+P3c  = PropositionChainPayment -> PropositionPayment / Reader ABI
 ```
 
-P3a owner:
+Current RED contract:
+
+```text
+crates/sl-pg-source-store/tests/mabo_pnf_candidate_materialization.rs
+```
+
+It now tests the generic `CandidatePnfProducer` boundary. `SpacyTsvAdapter` is
+explicitly temporary and exists only to prove that an older parser manifestation
+can be converted into the canonical candidate carrier. Candidate output remains
+candidate-only and cannot pay support, applicability, or truth.
+
+P3a2 owner already source-written:
 
 ```text
 crates/sl-pg-source-store/src/legal_ir_materialization.rs
@@ -206,8 +285,28 @@ Operator entrypoint:
 crates/sl-pg-source-store/examples/materialize_mabo_radical_title_support.rs
 ```
 
-The entrypoint deliberately requires the reviewed PNF coordinates from the
-operator/environment rather than deriving them from source text.
+The entrypoint deliberately requires reviewed PNF coordinates from the
+operator/admission path rather than deriving them from source text.
+
+P3b read/payment boundary:
+
+`load_mabo_proposition_rows` reads only storage-owned coordinates: exact
+canonical source/span readiness, PNF observation identity/provenance, and an
+independent `legal_ir.graph_revision` source-span weld. It deliberately does
+not interpret PNF `role_bindings` as reader proof roles.
+
+Qualifier/defeater/comparator remain explicit consumer-relative SLR residual
+debts. The production storage crate does not evaluate proposition payment.
+
+Expected live result after one reviewed materialisation:
+
+```text
+exactSourcePaid       = true
+propositionChainPaid  = true
+whyExecutable         = true
+ApplicabilityPaid     = false
+ClaimTruthPaid        = false
+```
 
 ### DASHI #982 — legal-IR materialisation parity — CURRENT
 
@@ -223,13 +322,11 @@ Owner:
 DASHI/Interop/MaboRadicalTitleLegalIRMaterialisationExact.agda
 ```
 
-It reuses #963 and proves that persisted build/projection/observation rows pay
-support only when PNF revision identity, observation exact-span provenance, and
-independent graph exact-span provenance are all present. Missing any one leaves
-support unpaid. The canonical materialised receipt executes bounded Why while
-applicability and claim truth remain false.
-
-Source is written; the new file's focused Agda kernel receipt is not yet claimed.
+It reuses #963 and proves that persisted rows pay support only when PNF revision
+identity, observation exact-span provenance, and independent graph exact-span
+provenance are all present. Missing any one leaves support unpaid. The canonical
+materialised receipt executes bounded Why while applicability and claim truth
+remain false.
 
 ### Dioxus P5 — source-written, downstream of P3
 
@@ -252,7 +349,7 @@ Known source-written head:
 ```
 
 Dioxus consumes the SLR Reader ABI directly and fails closed while no live
-`PropositionPayment` is supplied. Do not add presentation work until P3b is
+`PropositionPayment` is supplied. Do not add presentation work until P3b/P3c are
 paid.
 
 ### wgpu P6 — NOT STARTED
@@ -294,60 +391,62 @@ judgment span.
 
 ## Legal-follow / hosted Australian legal corpus
 
-Use the existing governed `legal-follow` / acquisition architecture. Do not add a
-second provider planner.
-
-The hosted `isaacus/open-australian-legal-corpus` is a useful acquisition and
-retrieval producer for Australian legislation and decisions, including High
-Court material. Its dataset/source/version coordinates should be retained on
-source receipts and then admitted through the same revisioned PostgreSQL source
-path.
+Use the existing governed `legal-follow` / acquisition architecture. Do not add
+a second provider planner.
 
 ```text
 legal-follow residual
 -> existing governed provider plan
 -> local PG cache if available
--> hosted Australian legal corpus candidate
+-> governed provider candidate
 -> exact source/revision admission
 -> canonical PG materialisation
--> PNF / consumer payment
+-> CandidatePNF producer
+-> review/admission
+-> consumer payment
 ```
 
-Firewalls:
-
-```text
-HF corpus hit      != legal authority payment
-HF text            != proposition support
-QID identity       != legal applicability
-WrongType(tort) -> candidate QID(tort) is navigation/type context only
-Wikidata identity  != evidence payment
-```
-
-HF and Wikidata/QIDs may therefore improve follow/search/type navigation without
-becoming proof or legal authority.
+Provider or corpus hits improve acquisition/search but never pay legal authority
+or proposition support by themselves.
 
 ## High-alpha order
 
 ```text
-P0   exact source/span                         PAID
-P1   bounded SLR proposition calculus          PAID
-P2   Agda proposition-chain contract            PAID
-P4   portable Rust Reader ABI                   PAID
-P3a  SLR legal_ir materialisation               CURRENT
-P3b  live PG -> PropositionPayment              NEXT
-P5   live Dioxus Semantic Reader
-P6   ExplanationCone -> VisualIR -> wgpu
-P7   100-hop latent Mabo world
-P8   selected federation/publication fibre
+P0    exact source/span                                      PAID
+P1    bounded SLR proposition calculus                       PAID
+P2    Agda proposition-chain contract                         PAID
+P4    portable Rust Reader ABI                               PAID
+P3a0  parser-neutral exact-span CandidatePNF producer         RED contract current
+P3a1  reuse/find CandidatePNF -> reviewed revision admission  ARCHAEOLOGY NEXT
+P3a2  reviewed revision -> legal_ir support                   SOURCE-WRITTEN
+P3b   live PG -> PropositionChainPayment                      NEXT AFTER P3a
+P3c   chain payment -> PropositionPayment / Reader ABI        TINY WELD
+P5    live Dioxus Semantic Reader
+P6    ExplanationCone -> VisualIR -> wgpu
+P7    100-hop latent Mabo world
+P8    selected federation/publication fibre
 ```
 
 P3 and P4 were completed partly out of numeric order; the dependency graph, not
 phase numbering, is authoritative.
 
-## Immediate acceptance commands
+Do not deepen TSV or JSON infrastructure. They are compatibility adapters that
+should be removable without semantic consequences.
 
-First materialise one *reviewed* PNF support coordinate using the Rust example.
-Then rerun:
+## Immediate acceptance
+
+P3a0 acceptance is representation-neutral:
+
+```text
+ExactSourceSpan + CandidatePnfProducer
+-> typed candidate batch scoped to the exact span
+-> candidateOnly = true
+-> propositionSupportPaid = false
+-> applicabilityPaid = false
+-> claimTruthPaid = false
+```
+
+After a reviewed revision is admitted and materialised, rerun:
 
 ```sh
 cargo test -p sensiblaw-pg-source-store \
@@ -365,14 +464,6 @@ ApplicabilityPaid     = false
 ClaimTruthPaid        = false
 ```
 
-Focused Agda target:
-
-```sh
-agda -i . DASHI/Interop/MaboRadicalTitleLegalIRMaterialisationExact.agda
-```
-
-Do not mark P3a/P3b or DASHI #982 paid until those exact receipts are observed.
-
 ## End-to-end acceptance
 
 The flagship is paid when one real proposition crosses:
@@ -380,11 +471,11 @@ The flagship is paid when one real proposition crosses:
 ```text
 judgment bytes
 -> PostgreSQL exact source
--> reviewed PNF coordinate
+-> parser-neutral CandidatePNF
+-> reviewed PNF revision
 -> legal_ir materialisation
--> SLR proposition payment
--> Agda-valid bounded explanation contract
--> portable Rust Reader ABI
+-> SLR proposition-chain payment
+-> PropositionPayment / Reader ABI
 -> Dioxus Why? ExecuteBoundedWhy
 -> optional wgpu ProofCone
 ```
@@ -392,9 +483,12 @@ judgment bytes
 while preserving:
 
 ```text
-bounded explanation != applicability
-bounded explanation != claim truth
-reader projection    != semantic authority
-Dioxus event         != evidence payment
-wgpu render state    != semantic authority
+serialization/input representation != semantic identity
+CandidatePNF                     != ReviewedPNF
+ReviewedPNF                      != proposition support
+bounded explanation              != applicability
+bounded explanation              != claim truth
+reader projection                != semantic authority
+Dioxus event                     != evidence payment
+wgpu render state                != semantic authority
 ```
