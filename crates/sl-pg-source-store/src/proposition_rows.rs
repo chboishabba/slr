@@ -4,7 +4,7 @@ use postgres::{Client, NoTls};
 
 use crate::{DatabaseConfig, SourceStoreError};
 
-/// Storage-owned projection of one PNF observation.  The storage layer keeps
+/// Storage-owned projection of one PNF observation. The storage layer keeps
 /// observation provenance distinct from graph/source-span provenance; it does
 /// not decide whether the observation pays a semantic obligation.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -25,7 +25,7 @@ pub struct PropositionResidualRow {
     pub residual_ref: String,
 }
 
-/// Typed read projection for one proposition/span pair.  This is deliberately
+/// Typed read projection for one proposition/span pair. This is deliberately
 /// not a payment result: `sl-evidence-payment` remains the owner of payment.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PropositionRows {
@@ -36,13 +36,11 @@ pub struct PropositionRows {
     pub residuals: Vec<PropositionResidualRow>,
 }
 
-const RECOGNISED_ROLES: [&str; 4] = ["support", "qualifier", "defeater", "comparator"];
-
 /// Load the persisted PNF + independent graph-span coordinates for the Mabo
-/// reader proposition.  Unknown role bindings are ignored rather than guessed.
+/// reader proposition. Unknown role bindings are ignored rather than guessed.
 ///
 /// Exact-source readiness is checked against the canonical document and span
-/// bounds.  No result from this function pays proposition support,
+/// bounds. No result from this function pays proposition support,
 /// applicability, or claim truth.
 pub fn load_mabo_proposition_rows(
     config: &DatabaseConfig,
@@ -120,9 +118,9 @@ pub fn load_mabo_proposition_rows(
                   o.role_bindings ->> 'proposition_role',
                   o.role_bindings ->> 'reader_role',
                   o.role_bindings ->> 'role'
-              ) = ANY($3)
+              ) IN ('support', 'qualifier', 'defeater', 'comparator')
         "#,
-        &[&proposition_ref, &required_span_ref, &RECOGNISED_ROLES.as_slice()],
+        &[&proposition_ref, &required_span_ref],
     )?;
 
     // A proposition may have more than one graph revision over the same build.
@@ -152,7 +150,7 @@ pub fn load_mabo_proposition_rows(
         );
     }
 
-    // Residual roles remain explicit.  We accept only role-labelled residual
+    // Residual roles remain explicit. We accept only role-labelled residual
     // coordinates; an arbitrary projection residual is never promoted into a
     // qualifier/defeater/comparator debt by string similarity alone.
     let residual_rows = client.query(
