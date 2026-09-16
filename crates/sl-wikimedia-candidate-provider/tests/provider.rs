@@ -125,7 +125,10 @@ fn mabo_legal_properties_emit_candidate_only_typed_edges() {
             .iter()
             .filter(|row| row.property_ref == property)
             .collect();
-        assert!(!matches.is_empty(), "missing typed Mabo property {property}");
+        assert!(
+            !matches.is_empty(),
+            "missing typed Mabo property {property}"
+        );
         for row in matches {
             assert_eq!(row.route_family, RouteFamily::WikidataProperty);
             assert_eq!(row.source_ref, "Q1501525");
