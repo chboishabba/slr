@@ -1,10 +1,109 @@
+//! One reviewed residual-driven world-expansion step.
+//!
+//! This module is orchestration glue over the existing ProofFrontier and
+//! world_expansion controller. It does not infer residual classes from strings,
+//! perform acquisition, parse PNF, or grant proof/legal authority. The caller
+//! supplies an explicit PNF/world routing classification for one exact open
+//! residual, then this step selects the best already-declared candidate and
+//! accounts for the explicit review/disambiguation result.
+
+use crate::frontier::{ProofFrontier, ResidualStatus};
+use crate::world_expansion::{
+    review_admission, select_for_proof_residual, AdmissionReceipt, DisambiguationOutcome,
+    ExpansionCandidate, ProducerLane, ResidualClass, ReviewDecision, WorldExpansionLedger,
+    WorldExpansionPolicy,
+};
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResidualRouting {
+    pub residual_ref: String,
+    pub residual_class: ResidualClass,
+    pub routing_reason_ref: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorldExpansionStepReceipt {
+    pub residual_ref: String,
+    pub residual_class: ResidualClass,
+    pub routing_reason_ref: String,
+    pub selected_candidate_ref: String,
+    pub selected_object_ref: String,
+    pub selected_producer_lane: ProducerLane,
+    pub expected_residual_contraction: u64,
+    pub admission: AdmissionReceipt,
+    pub total_new_world_objects: usize,
+    pub target_novel_objects: usize,
+    pub target_complete: bool,
+    pub receipt_authority: &'static str,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WorldExpansionStepError {
+    ResidualNotFound,
+    ResidualNotOpen,
+    NoCandidateMeetsThreshold,
+}
+
+/// Execute one explicitly reviewed world-expansion step for one exact open
+/// residual. Cross-residual prioritisation stays with the existing frontier /
+/// Ibrahim policy; this function only binds a supplied routed residual to its
+/// candidate set and records the resulting admission.
+pub fn execute_reviewed_expansion_step(
+    frontier: &ProofFrontier,
+    routing: &ResidualRouting,
+    candidates: &[ExpansionCandidate],
+    ledger: &mut WorldExpansionLedger,
+    policy: WorldExpansionPolicy,
+    review_decision: ReviewDecision,
+    disambiguation_outcome: DisambiguationOutcome,
+) -> Result<WorldExpansionStepReceipt, WorldExpansionStepError> {
+    let residual = frontier
+        .residuals
+        .iter()
+        .find(|residual| residual.residual_ref == routing.residual_ref)
+        .ok_or(WorldExpansionStepError::ResidualNotFound)?;
+
+    if residual.status != ResidualStatus::Open {
+        return Err(WorldExpansionStepError::ResidualNotOpen);
+    }
+
+    let selected = select_for_proof_residual(
+        residual,
+        routing.residual_class,
+        candidates,
+        policy.minimum_expected_residual_contraction,
+    )
+    .ok_or(WorldExpansionStepError::NoCandidateMeetsThreshold)?;
+
+    let admission = review_admission(
+        ledger,
+        selected,
+        review_decision,
+        disambiguation_outcome,
+    );
+
+    Ok(WorldExpansionStepReceipt {
+        residual_ref: residual.residual_ref.clone(),
+        residual_class: routing.residual_class,
+        routing_reason_ref: routing.routing_reason_ref.clone(),
+        selected_candidate_ref: selected.candidate_ref.clone(),
+        selected_object_ref: selected.object_ref.clone(),
+        selected_producer_lane: selected.producer_lane,
+        expected_residual_contraction: selected.expected_residual_contraction,
+        admission,
+        total_new_world_objects: ledger.total_new_world_objects,
+        target_novel_objects: policy.target_novel_objects,
+        target_complete: policy.complete(ledger),
+        receipt_authority: "candidate_world_expansion_only",
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::frontier::{ProofFrontier, ProofResidual, ResidualStatus};
+    use crate::frontier::{ProofResidual, ResidualStatus};
     use crate::world_expansion::{
-        DisambiguationOutcome, ExpansionCandidate, KnowledgeObjectKind, ProducerLane,
-        ResidualClass, ReviewDecision, WorldExpansionLedger, mabo_world_expansion_policy,
+        KnowledgeObjectKind, mabo_world_expansion_policy,
     };
 
     fn frontier(status: ResidualStatus) -> ProofFrontier {
