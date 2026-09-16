@@ -1153,6 +1153,7 @@ version = "0.1.0"
 name = "sensiblaw-evidence-payment"
 version = "0.1.0"
 dependencies = [
+ "sensiblaw-reader-model",
  "sensiblaw-world-store",
  "thiserror 1.0.69",
 ]
@@ -1219,6 +1220,8 @@ version = "0.1.0"
 dependencies = [
  "dotenvy",
  "postgres",
+ "sensiblaw-evidence-payment",
+ "sensiblaw-reader-model",
  "sha2 0.10.9",
  "tempfile",
  "thiserror 1.0.69",
@@ -1232,6 +1235,7 @@ dependencies = [
  "sensiblaw-governed-legal-provider",
  "sensiblaw-nsw-legislation-provider",
  "sensiblaw-proof-search-scheduler",
+ "sensiblaw-reader-model",
  "serde",
  "serde_json",
  "sha2 0.10.9",
