@@ -9,7 +9,8 @@ pub use candidate_pnf::{
     CandidatePnfRole, ExactSourceSpan, SpacyTsvAdapter,
 };
 pub use latent_world::{
-    load_latent_world_rows, LatentWorldEdgeRow, LatentWorldError, LatentWorldRows,
+    load_latent_world_rows, load_latent_world_rows_with_budget, LatentWorldBudget,
+    LatentWorldEdgeRow, LatentWorldError, LatentWorldRows,
 };
 pub use legal_ir_materialization::{
     materialize_reviewed_proposition_support, LegalIrMaterializationError,

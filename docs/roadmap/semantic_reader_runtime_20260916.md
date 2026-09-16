@@ -1,18 +1,19 @@
 # Semantic Reader Rust production ledger — 2026-09-16
 
-This is the current successor ledger for the Rust production tranche requested
-against `docs/roadmap/mabo_proof_explanation_profile_20260915.md`.
-The parent roadmap remains the detailed provenance sheet for P0–P4/P3. This file
-tracks the cross-cutting runtime implementation added on top of SLR #17.
+This is the current SLR production-state ledger for the Semantic Reader path.
+The historical P0–P8 identifiers are retained for provenance, but the dependency
+graph below is authoritative.
 
-Updated: 2026-09-16 — live TrueNAS Mabo proposition weld paid; Dioxus P5 is the
-active production frontier.
+Updated: 2026-09-16 — the SLR reader-runtime substrate is paid through the live
+PostgreSQL weld, portable Reader ABI, bounded ExplanationCone runtime, and
+100-hop latent-world projection. The active product frontier has moved downstream
+to Dioxus, then wgpu.
 
-## Ownership (unchanged)
+## Production ownership
 
 ```text
 DASHI / Agda       golden semantic/proof contract
-SLR / Rust         production parse/residual/payment/recurrence/read ABI
+SLR / Rust         production parsing, residuals, payment, recurrence, typed read/runtime state
 PostgreSQL         sole active semantic persistence spine
 Dioxus / Rust      production reader + ordinary interaction surface
 wgpu / WGSL        accelerated graph/chart/proof/world rendering
@@ -20,11 +21,10 @@ SensibLaw Python   reference + PG regression
 ITIR / Svelte      reference/regression prototype only
 ```
 
-Production path:
+The production path is:
 
 ```text
 governed source providers / durable AU legal corpus
--> source bytes + provider/source-role provenance
 -> canonical PostgreSQL source/span
 -> CandidatePNF
 -> explicit review/admission
@@ -32,40 +32,38 @@ governed source providers / durable AU legal corpus
 -> legal_ir materialisation
 -> PropositionChainPayment
 -> PropositionPayment / Reader ABI
+-> bounded ExplanationCone / latent-world projection
 -> Dioxus
--> optional wgpu projection
+-> optional wgpu visual projection
 ```
 
-No JSON/TSV/Svelte/Python object is semantic identity in this path. A Hugging
-Face/downloaded AU legal corpus snapshot is likewise a governed acquisition or
-offline-replay provider, not semantic persistence and not legal authority by
-storage location alone.
+No JSON/TSV/Svelte/Python object is semantic identity in this path.
 
-## Latest PR / branch ledger
+## Current PR / owner ledger
 
 ```text
-SLR #13  governed Australian acquisition / anchored citations   DONOR ACQUISITION LANE
-SLR #14  bounded proposition calculus                            PAID
-SLR #15  portable Reader ABI                                    PAID
-SLR #17  live PG proposition weld / legal_ir materialiser       PAID LIVE ON TRUENAS
-SLR #18  Rust Semantic Reader runtime successor                 FOCUSED GREEN; LIVE WELD PAID
-DASHI #963 bounded proposition-chain parity                     PAID
-DASHI #982 legal_ir materialisation parity                      FORMAL PARENT
-Dioxus upstream #18 native Rust/backend mediation               MERGED P5 PARENT
-Dioxus agent/mabo-semantic-reader-v1                             SOURCE-WRITTEN / P5 ACTIVE
-wgpu ProofCone                                                   NOT STARTED / correctly downstream
+SLR #14  bounded proposition calculus                         PAID
+SLR #15  portable Rust Reader ABI                            PAID / CANONICAL ABI OWNER
+SLR #18  production Semantic Reader runtime                  PAID / CANONICAL PG->PAYMENT RUNTIME OWNER
+SLR #19  deterministic 100-hop latent-world projection       PAID / CANONICAL WORLD-PROJECTION OWNER
+DASHI #963 bounded proposition-chain parity                  PAID
+DASHI #982 legal_ir materialisation parity                   FORMAL PARENT
+Dioxus upstream #18 native Rust/backend mediation            MERGED CONSUMER PARENT
+Dioxus agent/mabo-semantic-reader-v1                         DOWNSTREAM P5 CONSUMER
+wgpu ProofCone                                                DOWNSTREAM P6 CONSUMER
 ```
 
-SLR #18 branch:
+The SLR production chain is therefore:
 
 ```text
-agent/semantic-reader-runtime-v1
+#15 Reader ABI
+-> #18 live PG/payment/runtime
+-> #19 latent-world projection
+-> Dioxus
+-> wgpu
 ```
 
-The live database receipt is now part of the current state, not a pending
-operator obligation.
-
-## Flagship coordinate
+## Flagship Mabo coordinate
 
 ```text
 proposition:
@@ -81,49 +79,103 @@ document:
   document:mabo:1992:hca:23:brennan:wikisource-page-39
 ```
 
-The live TrueNAS path has now crossed:
+The paid live path is:
 
 ```text
 existing Brennan span
 -> ReviewedPnfRevision
 -> ReviewedPropositionSupport
--> legal_ir.semantic_build
--> legal_ir.projection
--> legal_ir.observation
--> legal_ir.graph_revision
+-> legal_ir semantic materialisation
 -> PropositionChainPayment
 -> PropositionPayment / Reader ABI
+-> ExplanationCone / latent-world read projection
 ```
 
-Observed live result:
+Observed runtime semantics retain:
 
 ```text
 exactSourcePaid       = true
 propositionChainPaid  = true
-whyExecutable         = true
 OpenSource            = ExecuteSource
 Why                   = ExecuteBoundedWhy
 ApplicabilityPaid     = false
 ClaimTruthPaid        = false
 ```
 
-This pays the end-to-end P3 storage/payment/runtime weld without promoting the
-bounded explanation into applicability or claim truth.
+## SLR completion surface
+
+The reader-path responsibilities inside SLR are now:
+
+```text
+PG evidence
+-> bounded proposition payment
+-> portable Reader ABI
+-> bounded ExplanationCone/runtime projection
+-> latent-world projection
+```
+
+Current SLR state:
+
+```text
+S0 source/PG acquisition + canonical persistence       PAID
+S1 proposition payment calculus                        PAID
+S2 live PG -> payment runtime                          PAID
+S3 portable Reader ABI                                 PAID
+S4 bounded ExplanationCone/runtime projection          PAID
+S5 100-hop latent-world substrate                      PAID
+S6 stabilise/freeze production consumer boundary       ACTIVE SLR PRIORITY
+S7 publication/federation support                      ONLY WHEN P8 REQUIRES IT
+```
+
+This means P5/P6 are no longer SLR milestones:
+
+```text
+SLR terminates at typed semantic/runtime state.
+Dioxus owns P5.
+wgpu owns P6.
+```
+
+## S6 — production consumer-boundary freeze
+
+S6 is a stabilisation tranche, not a new semantics tranche.
+
+Completion criteria:
+
+```text
+#18 remains canonical PG -> proposition-payment/runtime owner
+#15 remains canonical portable Reader ABI owner
+#19 remains canonical latent-world projection owner
+Dioxus consumes those typed surfaces without copying payment logic
+applicability_paid remains non-promoted across every projection
+claim_truth_paid remains non-promoted across every projection
+no PostgreSQL DTO leaks into the Reader ABI
+no Dioxus/wgpu type leaks backward into SLR
+compatibility/regression tests pin these boundaries
+```
+
+Architectural firewall:
+
+```text
+storage row
+!= payment
+!= reader disposition
+!= latent-world projection
+!= visual representation
+```
+
+No new SLR PR should be opened merely because Dioxus or wgpu work is next.
+A new SLR tranche is justified only by one of:
+
+1. a real missing typed coordinate exposed by the Dioxus consumer;
+2. a regression/compatibility failure at the frozen consumer boundary;
+3. a P8 federation/publication producer that cannot be expressed by the current runtime state.
 
 ## Proposition-payment contract
 
-Support cannot be residualised. It requires:
-
-```text
-exact source paid
-+ retained reviewed PNF observation
-+ retained PNF revision identity
-+ observation provenance containing exact span
-+ independent graph revision containing the same exact span
-```
-
-Qualifier, defeater, and comparator may each be either a paid observation or an
-explicit retained residual for this bounded reader query.
+Support cannot be residualised. It requires exact source payment plus retained
+reviewed PNF identity/provenance and an independent graph-span weld.
+Qualifier, defeater, and comparator may each be paid or explicitly residualised
+for the bounded reader query.
 
 ```text
 WhyPaid =
@@ -134,7 +186,7 @@ WhyPaid =
   && Covered(Comparator)
 ```
 
-with:
+Firewalls remain:
 
 ```text
 SupportPaid != ExplicitResidual(Support)
@@ -143,82 +195,9 @@ BoundedWhyPaid != ClaimTruthPaid
 ExplicitResidual != PropositionFalse
 ```
 
-## P3 — live PG proposition weld — PAID
+## Adaptive Explanation Cone
 
-The completed recurrence is:
-
-```text
-P3a0 ExactSourceSpan -> parser-neutral CandidatePNF
-P3a1 CandidatePNF + explicit review/admission -> ReviewedPNFRevision
-P3a2 ReviewedPNFRevision -> legal_ir persisted support
-P3b  live legal_ir rows -> PropositionChainPayment
-P3c  PropositionChainPayment -> PropositionPayment / Reader ABI
-```
-
-### Reviewed PNF materialisation
-
-Rust owners:
-
-```text
-crates/sl-pg-source-store/src/candidate_pnf.rs
-crates/sl-pg-source-store/src/reviewed_pnf.rs
-crates/sl-pg-source-store/examples/materialize_mabo_reviewed_pnf.rs
-crates/sl-pg-source-store/src/legal_ir_materialization.rs
-crates/sl-pg-source-store/examples/materialize_mabo_radical_title_support.rs
-```
-
-The materialisation remains explicit and reviewed. There is no automatic
-`CandidatePnfBatch -> ReviewedPnfRevision` promotion.
-
-Live operator sequence used for the flagship coordinate:
-
-```text
-existing Brennan exact span
--> materialize_mabo_reviewed_pnf
--> materialize_mabo_radical_title_support
--> live proposition-weld test
-```
-
-The persisted semantic state remains candidate/reviewed support only; no
-applicability, holding, or claim-truth state is created by persistence.
-
-### Live PG -> SLR -> Reader ABI
-
-Runtime owners include:
-
-```text
-load_proposition_rows(...)
-load_mabo_proposition_rows(...)
-project_reader_payment(...)
-```
-
-The read projection consumes storage-owned exact-span, PNF identity/provenance,
-and independent graph-span coordinates. It does not reinterpret PNF
-`role_bindings` as reader proof roles.
-
-Qualifier/defeater/comparator remain consumer-relative SLR residual debts.
-
-Observed live TrueNAS receipt:
-
-```text
-cargo test -p sensiblaw-pg-source-store \
-  --test mabo_proposition_weld \
-  -- --ignored --nocapture
-
-1 passed; 0 failed
-```
-
-The test verifies the complete live path through both Reader dispositions while
-retaining:
-
-```text
-ApplicabilityPaid = false
-ClaimTruthPaid     = false
-```
-
-## Adaptive Explanation Cone — GREEN
-
-Owner:
+Canonical SLR owner:
 
 ```text
 crates/sl-reader-model/src/semantic_runtime.rs
@@ -232,23 +211,18 @@ Keep(x) = mandatory(x)
        || elucidatory_score(x) >= threshold
 ```
 
-The result is deterministic and bounded. Mandatory payment/provenance nodes are
-ordered before optional explanatory nodes. The runtime is proposition-generic and
-contains no Mabo-specific selection logic.
+The result is deterministic, bounded, proposition-generic, and downstream of
+payment. Mandatory payment/provenance coordinates precede optional explanatory
+coordinates.
 
-## Automatic acquisition/retry — GREEN
+## Automatic acquisition/retry
 
-Owner:
-
-```text
-crates/sl-proof-search-loop/src/reader_retry.rs
-```
+Canonical recurrence:
 
 ```text
 reader Defer(rho)
 -> ProofResidual / ProofFrontier
 -> existing hypothesis/provider/acquisition/world machinery
--> local AU corpus / governed provider lookup where admissible
 -> persistence/world extension
 -> mandatory reader re-evaluation
 -> Execute | Defer | Reject
@@ -260,218 +234,97 @@ Hard firewall:
 acquisition receipt != semantic payment
 ```
 
-## Context rabbit holes — SOURCE-WRITTEN
+## Latent world
 
-Portable Reader ABI types distinguish:
+The bounded/100-hop world is a read projection over existing persisted semantic
+relations, not a new semantic database.
 
-```text
-ExactSource       PrimaryAuthority
-Wikipedia         BackgroundContext
-Wikidata          IdentityOnly
-Historical        HistoricalContext
-SemanticFocus     SemanticProjection
-```
-
-All context links report:
+Canonical owner lineage:
 
 ```text
-createsEvidencePayment = false
-createsApplicability    = false
+#18 bounded latent-world read projection
+-> #19 deterministic 100-hop scale projection
 ```
 
-The known Mabo identity/context coordinates remain `Q1501525` and
-`wiki:en:Mabo_v_Queensland_(No_2)`; they do not replace the exact High Court
-source coordinate.
+The world projection retains explicit budgets, frontier/truncation residuals,
+visited refs, deterministic edges, and per-edge provenance. It never promotes
+applicability, claim truth, or semantic authority.
 
-## Latent Mabo world — LIVE GREEN READ PROJECTION
-
-Portable projection:
+## Current-state summary using historical P identifiers
 
 ```text
-bounded_neighbourhood(seed, nodes, edges, max_hops, max_nodes)
+P0    exact source/span                                    PAID
+P1    bounded SLR proposition calculus                     PAID
+P2    Agda proposition-chain contract                      PAID
+P3    live PG -> SLR proposition payment/runtime           PAID
+P4    portable Rust Reader ABI                             PAID
+P7    deterministic bounded/100-hop latent-world substrate PAID
+P5    Dioxus Semantic Reader                               DOWNSTREAM ACTIVE CONSUMER
+P6    wgpu VisualIR / ProofCone                            DOWNSTREAM AFTER P5
+P8    selected federation/publication fibre                LATER
 ```
 
-PG read owner:
+For current execution planning, read this as:
 
 ```text
-load_latent_world_rows(...)
+(P3 + P4 + P7) SLR production substrate paid
+-> P5 Dioxus
+-> P6 wgpu
+-> P8 selected publication/federation
 ```
 
-The PostgreSQL query traverses existing coordinates only:
+The historical numbering is provenance only; it is not a required execution
+order.
+
+## Implementation priority assessment
+
+### Priority 0 — freeze SLR consumer ABI
+
+Do now, but keep it small:
+
+- pin regression tests for `PropositionPayment`, `ReaderDisposition`,
+  `ExplanationCone`, and latent-world projection;
+- assert non-promotion of applicability/truth across every public projection;
+- assert storage DTOs do not appear in `sensiblaw-reader-model` public types;
+- assert Dioxus/wgpu dependencies are absent from the SLR runtime crates;
+- document the canonical owner PRs (#15/#18/#19) and compatibility expectations.
+
+This is the only proactive SLR implementation priority.
+
+### Priority 1 — follow the Dioxus consumer
+
+Do not add semantics pre-emptively. If P5 exposes a missing typed coordinate,
+add the smallest consumer-driven SLR extension and a regression proving why it
+is required.
+
+### Priority 2 — federation/publication only on demand
+
+P8 may require a new producer. Do not design it until the selected publication
+fibre names a concrete missing output from the frozen runtime state.
+
+### Explicitly not priorities
 
 ```text
-algebra.relation
-execution.dependency
-legal_ir.graph_revision
-legal_ir.semantic_build
-legal_ir.projection
-legal_ir.observation
-source spans / observation provenance / PNF refs / residual refs
+more Svelte/JS reader work
+another PG/world schema
+Dioxus-side payment logic
+wgpu-side semantic/payment logic
+new generic reader planner
+new proposition/payment ontology
 ```
 
-No new graph/world persistence schema was introduced. A 100-hop reader view is a
-bounded read projection of existing semantic state and cannot create semantic
-authority.
+## End-state criterion
 
-Observed live TrueNAS receipt:
+From the SLR perspective, the target state is now:
 
 ```text
-cargo test -p sensiblaw-pg-source-store \
-  --test latent_world_live \
-  -- --ignored --nocapture
-
-1 passed; 0 failed
+reader-runtime substrate complete;
+consumer ABI frozen;
+follow Dioxus;
+reopen SLR only on typed evidence.
 ```
 
-This means the former P7 storage/read-projection prerequisite is already paid.
-The remaining P7 work is product-scale population/exploration, not invention of
-a new world-store abstraction.
-
-## Remaining Mabo propositions — GENERIC REGISTRY SOURCE-WRITTEN
-
-`mabo_five_stage_registry()` mirrors the five bounded Agda reading roles:
-
-```text
-challenged premise
-historical input
-authority proposition
-immediate implication
-downstream application
-```
-
-Only the radical-title/native-title authority proposition currently carries the
-fully paid live source/support coordinate. The other stages retain explicit
-source/proof residuals until their own exact spans and reviewed proposition welds
-are persisted.
-
-## Generalisation beyond Mabo — GREEN BY CONSTRUCTION
-
-Core types remain proposition-generic:
-
-```text
-ReaderPropositionSpec
-SourceCoordinate
-AdaptiveConePolicy / ConeCandidate
-ContextBundle / ContextLink
-WorldNode / WorldEdge / ReaderWorldProjection
-ReaderIntent / ReaderDisposition / PropositionPayment
-```
-
-A non-Mabo research-paper fixture remains the regression that these APIs do not
-branch on Mabo identity.
-
-## Australian legal corpus / acquisition lane
-
-The existing Australian legal corpus work remains part of the acquisition plane,
-not a parallel semantic database.
-
-```text
-stable AU legal catalogue / governed provider candidate
--> retained provider/source-role provenance
--> canonical PostgreSQL document + revision + exact spans
--> CandidatePNF producer
--> review/admission
--> consumer payment
-```
-
-Provider/corpus presence never directly pays legal authority or proposition
-support:
-
-```text
-corpus membership       != authority
-HF publication/download != semantic payment
-AustLII availability    != official-source equivalence
-source agreement        != independent provenance
-acquisition receipt     != proposition support
-```
-
-## Current Pareto frontier
-
-```text
-P0    exact source/span                                      PAID
-P1    bounded SLR proposition calculus                       PAID
-P2    Agda proposition-chain contract                         PAID
-P4    portable Rust Reader ABI                               PAID
-P3a0  parser-neutral CandidatePNF producer                    PAID FOR FLAGSHIP
-P3a1  reviewed PNF admission/materialisation                  PAID FOR FLAGSHIP
-P3a2  reviewed revision -> legal_ir support                   PAID FOR FLAGSHIP
-P3b   live PG -> PropositionChainPayment                      PAID LIVE
-P3c   chain payment -> PropositionPayment / Reader ABI        PAID LIVE
-P5    live Dioxus Semantic Reader                             ACTIVE FRONTIER
-P6    ExplanationCone -> ProofConeVisualIR -> wgpu            NEXT AFTER P5
-P7    bounded 100-hop latent-world read projection            PAID LIVE
-      broader world population/exploration                    LATER SCALE-UP
-P8    selected federation/publication fibre                   LATER
-```
-
-The dependency graph, not the historical phase numbering, is authoritative.
-P7's read-projection primitive is already available and live-tested, so Dioxus
-may consume it after the primary reader path is proven without waiting for a new
-world persistence design.
-
-## Immediate next acceptance — P5 Dioxus
-
-The production frontier is now the already source-written Dioxus consumer:
-
-```text
-live PropositionPayment
--> Dioxus ReaderIntent
--> ReaderDisposition
--> ReaderViewState
-```
-
-Required flagship behavior:
-
-```text
-OpenSource -> ExecuteSource(exact revision/span)
-WhyClaim   -> ExecuteBoundedWhy(ExplanationCone)
-ApplicabilityPaid = false
-ClaimTruthPaid     = false
-```
-
-Dioxus must not recompute proposition payment and must not instantiate a fixture
-to make the screen appear complete.
-
-After the ordinary reader path is validated, proceed to:
-
-```text
-ExplanationCone
--> ProofConeVisualIR
--> wgpu/WGSL
-```
-
-wgpu remains a renderer/interaction backend over already-typed semantic state;
-rendered nodes, edges, picks, or layout state do not create semantic authority.
-
-## End-to-end flagship state
-
-Paid today:
-
-```text
-judgment bytes
--> PostgreSQL exact source/span
--> parser-neutral candidate PNF
--> reviewed PNF revision
--> legal_ir materialisation
--> SLR proposition-chain payment
--> PropositionPayment / Reader ABI
-```
-
-Next production receipt:
-
-```text
--> Dioxus Why? = ExecuteBoundedWhy
-```
-
-Then optional visual exploration:
-
-```text
--> ExplanationCone / bounded latent world
--> ProofConeVisualIR
--> wgpu
-```
-
-Hard firewalls remain:
+Hard firewalls:
 
 ```text
 serialization/input representation != semantic identity
