@@ -332,7 +332,8 @@ mod tests {
             ProducerLane::WikipediaContext,
             3,
         );
-        let selected = select_expansion_candidate(&[wiki, legal], 1).unwrap();
+        let candidates = [wiki, legal];
+        let selected = select_expansion_candidate(&candidates, 1).unwrap();
         assert_eq!(selected.candidate_ref, "legal");
     }
 
@@ -352,7 +353,8 @@ mod tests {
             ProducerLane::WikidataIdentity,
             4,
         );
-        let selected = select_expansion_candidate(&[legal, identity], 1).unwrap();
+        let candidates = [legal, identity];
+        let selected = select_expansion_candidate(&candidates, 1).unwrap();
         assert_eq!(selected.candidate_ref, "identity");
     }
 
@@ -373,10 +375,11 @@ mod tests {
             99,
         );
         other.triggering_residual_ref = "residual:other".into();
+        let candidates = [other, matching];
         let selected = select_for_proof_residual(
             &proof_residual(),
             ResidualClass::Legal,
-            &[other, matching],
+            &candidates,
             1,
         )
         .unwrap();
@@ -399,7 +402,8 @@ mod tests {
             ProducerLane::WikidataIdentity,
             2,
         );
-        let selected = select_expansion_candidate(&[wiki, qid], 1).unwrap();
+        let candidates = [wiki, qid];
+        let selected = select_expansion_candidate(&candidates, 1).unwrap();
         assert_eq!(selected.candidate_ref, "qid");
     }
 
@@ -419,7 +423,8 @@ mod tests {
             ProducerLane::WikipediaContext,
             2,
         );
-        let selected = select_expansion_candidate(&[qid, wiki], 1).unwrap();
+        let candidates = [qid, wiki];
+        let selected = select_expansion_candidate(&candidates, 1).unwrap();
         assert_eq!(selected.candidate_ref, "wiki");
     }
 
