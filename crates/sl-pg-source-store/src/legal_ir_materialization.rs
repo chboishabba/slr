@@ -330,9 +330,9 @@ fn require_exact_source(
     let Some(row) = row else {
         return Err(LegalIrMaterializationError::SourceCoordinateMismatch);
     };
-    let start: i64 = row.get(1);
-    let end: i64 = row.get(2);
-    let document_len: i64 = row.get(3);
+    let start: i32 = row.get(1);
+    let end: i32 = row.get(2);
+    let document_len: i32 = row.get(3);
     if start < 0 || start >= end || end > document_len {
         return Err(LegalIrMaterializationError::SourceCoordinateMismatch);
     }
