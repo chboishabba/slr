@@ -24,6 +24,9 @@ CREATE TABLE IF NOT EXISTS context.reviewed_relation_receipt (
 )
 "#;
 
+const MABO_WIKIDATA_QID: &str = "Q1501525";
+const MABO_WIKIDATA_REVISION_REF: &str = "wikidata:Q1501525:oldid:2333409615";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SourceFamily {
     Wikidata,
@@ -40,6 +43,12 @@ impl SourceFamily {
             Self::Oalc => "oalc",
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ContextReviewDecision {
+    NotReviewed,
+    Reviewed,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -70,10 +79,85 @@ pub struct ContextMaterializationReceipt {
 pub enum ContextFederationError {
     #[error("coordinate must not be empty: {0}")]
     EmptyCoordinate(&'static str),
+    #[error("candidate has not been explicitly reviewed: {0}")]
+    CandidateNotReviewed(String),
+    #[error("unsupported Mabo Wikidata revision: {0}")]
+    UnsupportedMaboWikidataRevision(String),
+    #[error("unsupported Mabo Wikidata property: {0}")]
+    UnsupportedMaboWikidataProperty(String),
+    #[error("Mabo Wikidata candidate coordinate mismatch: {0}")]
+    MaboWikidataCandidateMismatch(String),
     #[error("invalid sha256 hex: {0}")]
     InvalidHex(String),
     #[error("postgres error: {0}")]
     Postgres(#[from] postgres::Error),
+}
+
+fn mabo_wikidata_relation_type(property_ref: &str) -> Option<&'static str> {
+    match property_ref {
+        "P1001" => Some("context:wikidata:jurisdiction"),
+        "P710" => Some("context:wikidata:participant"),
+        "P4884" => Some("context:wikidata:court"),
+        "P1594" => Some("context:wikidata:judge"),
+        "P4006" => Some("context:wikidata:overrules"),
+        _ => None,
+    }
+}
+
+/// Convert one exact Mabo Wikidata property candidate into durable context only
+/// after an explicit review decision.
+///
+/// This function deliberately accepts primitive candidate coordinates rather
+/// than depending on the route-selector crate. Acquisition/SLRG decoding stays
+/// upstream; PostgreSQL persistence owns only the reviewed boundary artifact.
+/// `P4006` is therefore stored as an `overrules` context relation, but neither
+/// its upstream `AuthoritySource` producer family nor this review creates legal
+/// authority, applicability, proposition payment, or claim truth.
+pub fn review_mabo_wikidata_candidate(
+    source_revision_ref: impl Into<String>,
+    candidate_id: impl Into<String>,
+    source_ref: impl Into<String>,
+    target_ref: impl Into<String>,
+    property_ref: impl Into<String>,
+    review_decision: ContextReviewDecision,
+) -> Result<ReviewedContextEdge, ContextFederationError> {
+    let source_revision_ref = source_revision_ref.into();
+    let candidate_id = candidate_id.into();
+    let source_ref = source_ref.into();
+    let target_ref = target_ref.into();
+    let property_ref = property_ref.into();
+
+    if review_decision != ContextReviewDecision::Reviewed {
+        return Err(ContextFederationError::CandidateNotReviewed(candidate_id));
+    }
+    if source_revision_ref != MABO_WIKIDATA_REVISION_REF {
+        return Err(ContextFederationError::UnsupportedMaboWikidataRevision(
+            source_revision_ref,
+        ));
+    }
+    if source_ref != MABO_WIKIDATA_QID {
+        return Err(ContextFederationError::MaboWikidataCandidateMismatch(
+            format!("expected source {MABO_WIKIDATA_QID}, got {source_ref}"),
+        ));
+    }
+
+    let relation_type_ref = mabo_wikidata_relation_type(&property_ref).ok_or_else(|| {
+        ContextFederationError::UnsupportedMaboWikidataProperty(property_ref.clone())
+    })?;
+    let expected_candidate_id = format!("wikidata:{source_ref}:{property_ref}:{target_ref}");
+    if candidate_id != expected_candidate_id {
+        return Err(ContextFederationError::MaboWikidataCandidateMismatch(
+            format!("expected candidate id {expected_candidate_id}, got {candidate_id}"),
+        ));
+    }
+
+    reviewed_context_edge(
+        SourceFamily::Wikidata,
+        source_revision_ref,
+        source_ref,
+        target_ref,
+        relation_type_ref,
+    )
 }
 
 /// Build one reviewed, revision-pinned external context edge. Different source
