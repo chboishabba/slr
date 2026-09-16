@@ -1,4 +1,5 @@
-include!("reader_core.rs");
+mod reader_core;
+pub use reader_core::*;
 
 mod explanation_selection;
 mod mabo_context;
