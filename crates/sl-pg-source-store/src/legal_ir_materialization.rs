@@ -52,6 +52,8 @@ pub enum LegalIrMaterializationError {
     ObservationMissingExactSpan,
     #[error("the requested source revision/document/span is not an eligible persisted exact source")]
     SourceCoordinateMismatch,
+    #[error("the reviewed PNF factor/revision is not present on the declared PNF graph/document")]
+    PnfCoordinateMismatch,
     #[error("an existing legal_ir row conflicts with the requested materialisation: {0}")]
     ExistingRowConflict(&'static str),
 }
@@ -72,6 +74,7 @@ pub fn materialize_reviewed_proposition_support(
     let mut client = Client::connect(config.database_url(), NoTls)?;
     let mut tx = client.transaction()?;
     let canonical_text_ref = require_exact_source(&mut tx, support)?;
+    require_reviewed_pnf_coordinate(&mut tx, support)?;
 
     let build_ref = stable_ref(
         "legal-ir-build",
@@ -337,6 +340,40 @@ fn require_exact_source(
         return Err(LegalIrMaterializationError::SourceCoordinateMismatch);
     }
     Ok(row.get(0))
+}
+
+fn require_reviewed_pnf_coordinate(
+    tx: &mut Transaction<'_>,
+    support: &ReviewedPropositionSupport,
+) -> Result<(), LegalIrMaterializationError> {
+    let present: bool = tx
+        .query_one(
+            r#"
+            SELECT EXISTS (
+                SELECT 1
+                FROM algebra.factor_revision AS fr
+                JOIN pnf.graph_factor_revision AS gfr
+                  ON gfr.factor_revision_ref = fr.factor_revision_ref
+                JOIN pnf.graph AS g
+                  ON g.graph_ref = gfr.graph_ref
+                WHERE fr.factor_revision_ref = $1
+                  AND fr.factor_ref = $2
+                  AND g.graph_ref = $3
+                  AND g.document_ref = $4
+            )
+            "#,
+            &[
+                &support.pnf_revision_ref,
+                &support.pnf_factor_ref,
+                &support.refined_pnf_graph_ref,
+                &support.document_ref,
+            ],
+        )?
+        .get(0);
+    if !present {
+        return Err(LegalIrMaterializationError::PnfCoordinateMismatch);
+    }
+    Ok(())
 }
 
 fn verify_existing_rows(
