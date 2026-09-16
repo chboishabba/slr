@@ -1,17 +1,13 @@
 # SLR roadmap: thin Mabo proof/explanation profile
 
 Date: 2026-09-15
-Updated: 2026-09-16
+Updated: 2026-09-16 — P3a legal-IR materialisation tranche
 
-## Purpose
-
-Define the legal flagship around the active production split rather than the legacy Python/Svelte module graph.
-
-The active ownership rule is:
+## Active ownership
 
 ```text
 DASHI/Agda          = golden semantic / proof contract
-SLR/Rust            = production parser / residual / evidence-payment / recurrence engine
+SLR/Rust            = production parser / residual / payment / recurrence engine
 PostgreSQL          = sole active semantic persistence spine
 Dioxus/Rust         = production reader + ordinary interaction surface
 wgpu/WGSL           = production chart / graph / proof-cone / world visualisation backend
@@ -19,81 +15,64 @@ SensibLaw Python    = reference + PostgreSQL regression surface
 ITIR/Svelte         = reference/regression prototype only
 ```
 
-Detached JSON is presentation/export only. It must not be re-ingested as semantic, world, source-follow, or evidence-payment authority.
+Detached JSON is presentation/export only. It is not re-ingested as semantic,
+world, source-follow, or evidence-payment authority.
 
-The profile is deliberately thin:
-
-```text
-exact persisted source/span
--> Rust SLR consumer-relative proposition payment
--> portable typed Reader ABI
--> Dioxus human reader
--> optional wgpu proof/world projection
-```
-
-SLR owns deterministic compilation, consumer-relative residual production, evidence-payment execution, bounded recurrence, and provenance-preserving runtime receipts.
-
-DASHI owns the golden laws that say when those receipts are sufficient for the declared consumer query and which promotions remain impossible.
-
-PostgreSQL owns the durable source/revision/span and semantic-materialisation coordinates required by the runtime. Dioxus consumes typed results; it is not a semantic owner. wgpu consumes already-typed visual projections; it never creates evidence payment, applicability, or truth.
-
-## Why Mabo remains the flagship
-
-The point is not to globally "prove Mabo". The first complete specimen should take one concrete proposition and cross every active layer:
+The production path is:
 
 ```text
-judgment bytes
+judgment/source bytes
 -> PostgreSQL canonical source + exact span
--> SLR PNF/proposition support
--> independent source-span provenance weld
--> support + qualifier/defeater/comparator coverage
--> bounded Why? payment
--> typed Rust Reader ABI
--> Dioxus explanation
--> optional wgpu proof cone
+-> SLR reviewed PNF / legal_ir materialisation
+-> SLR consumer-relative proposition payment
+-> portable Rust Reader ABI
+-> Dioxus human reader
+-> optional wgpu ProofCone/world projection
 ```
 
-The currently paid source coordinate is:
+## Flagship coordinate
 
 ```text
-mabo:proposition:radical-title-native-title
-span:mabo:brennan:radical-title:no-automatic-beneficial-ownership
+proposition:
+  mabo:proposition:radical-title-native-title
+
+exact span:
+  span:mabo:brennan:radical-title:no-automatic-beneficial-ownership
+
+source revision:
+  source-revision:mabo:1992:hca:23:wikisource:page-39:rev-16058297:2026-06-29
+
+document:
+  document:mabo:1992:hca:23:brennan:wikisource-page-39
 ```
 
-The exact-source path is already observed live:
+Observed source payment remains:
 
 ```text
 exact_authority_span_paid = true
 OpenSource                = execute
-Why                       = defer
-proposition_chain_paid     = false
-claim_truth_paid           = false
+ApplicabilityPaid         = false
+ClaimTruthPaid            = false
 ```
 
-The bounded proposition-payment evaluator and its Agda parity owner are now toolchain-certified, so the remaining runtime frontier is no longer proposition calculus design. It is live PG -> typed SLR payment -> portable Reader ABI -> Dioxus.
+The live P3 test subsequently established the remaining persistence gap:
+`legal_ir.semantic_build`, `legal_ir.projection`, `legal_ir.observation`, and
+`legal_ir.graph_revision` were empty, so `Why` correctly remained unpaid.
 
-## Production proposition-payment contract
+## Proposition-payment contract
 
-The bounded explanation consumer is intentionally weaker than legal truth/applicability closure.
-
-Support is mandatory and cannot be residualised away. It must retain:
+Support cannot be residualised. It requires:
 
 ```text
-PNF observation
-+ PNF revision identity
-+ observation provenance containing the exact paid span
-+ independent graph/source-span provenance containing the same exact span
+exact source paid
++ retained PNF observation
++ retained PNF revision identity
++ observation provenance containing exact span
++ independent graph revision containing the same exact span
 ```
 
-Qualifier, defeater, and comparator coordinates may each be either:
-
-```text
-paid observation
-or
-explicit retained residual
-```
-
-The consumer gate is:
+Qualifier, defeater, and comparator may each be either a paid observation or an
+explicit retained residual for this bounded reader query.
 
 ```text
 WhyPaid =
@@ -104,267 +83,24 @@ WhyPaid =
   && Covered(Comparator)
 ```
 
-where:
+with:
 
 ```text
-Covered(role) = PaidObservation(role) || ExplicitResidual(role)
 SupportPaid != ExplicitResidual(Support)
+BoundedWhyPaid != ApplicabilityPaid
+BoundedWhyPaid != ClaimTruthPaid
+ExplicitResidual != PropositionFalse
 ```
 
-Firewalls:
+## Current PR / branch ledger
 
-```text
-ExactSourcePaid !=> PropositionChainPaid
-PNFParity !=> SourceProvenance
-BoundedWhyPaid !=> ApplicabilityPaid
-BoundedWhyPaid !=> ClaimTruthPaid
-ExplicitResidual !=> PropositionFalse
-```
+### SLR #14 — proposition calculus — PAID
 
-## Portable Rust Reader ABI
-
-The production UI must not reconstruct semantic payment from Dioxus state or from a serialized Svelte-shaped object.
-
-The retained Rust boundary is:
-
-```text
-PostgreSQL
--> SLR evidence/proposition state
--> sensiblaw-reader-model
--> Dioxus
-```
-
-The new `sensiblaw-reader-model` crate owns only portable reader contracts such as:
-
-```text
-SemanticRef
-SourceRevisionRef
-SpanRef
-ResidualRef
-ReaderIntent
-SourcePayment
-PropositionPayment
-CoordinateCoverage
-ExplanationCone
-ReaderDisposition
-```
-
-It must have no dependency on PostgreSQL, Dioxus, wgpu, SensibLaw Python, or Svelte.
-
-Dioxus may emit:
-
-```text
-OpenSource
-WhyClaim
-ExpandProofCone
-Back
-```
-
-but it must not construct or mutate payment coordinates.
-
-The central ownership firewall is:
-
-```text
-Dioxus event != ReaderIntent != SLR payment != PG evidence
-```
-
-and:
-
-```text
-wgpu visual object != semantic object
-GPU pick != semantic mutation
-rendered edge != evidence payment
-```
-
-## Current TDD / formal state
-
-### Rust SLR proposition payment
-
-Draft PR #14 on:
+Branch:
 
 ```text
 agent/mabo-radical-title-proposition-payment
 ```
-
-contains the typed evaluator and tests for:
-
-1. exact source + provenance-welded support + explicit residuals for qualifier/defeater/comparator -> bounded Why paid;
-2. PNF support without independent graph/source-span provenance -> Why unpaid;
-3. exact source alone -> Why unpaid;
-4. a paid qualifier may replace its explicit residual without paying applicability/truth.
-
-Observed validation:
-
-```text
-mabo_proposition_payment: 4/4 passed
-cargo test --workspace --no-fail-fast: passed
-cargo clippy --workspace --all-targets -- -D warnings: passed
-```
-
-### DASHI/Agda proposition-chain parity
-
-Draft PR #963 on:
-
-```text
-agent/mabo-radical-title-proposition-chain-parity
-```
-
-adds:
-
-```text
-DASHI/Interop/MaboRadicalTitlePropositionChainPaymentExact.agda
-```
-
-The owner formalises the bounded proposition payment and non-promotion firewalls. Its exact-head Agda kernel receipt is observed through the full focused dependency chain.
-
-### Rust Reader ABI
-
-Draft PR #15 on:
-
-```text
-agent/mabo-reader-abi-v1
-```
-
-is the RED-first successor. It currently contains only:
-
-```text
-crates/sl-reader-model/Cargo.toml
-crates/sl-reader-model/src/lib.rs   # intentionally empty RED surface
-crates/sl-reader-model/tests/reader_model.rs
-```
-
-The required RED command is:
-
-```sh
-cargo test -p sensiblaw-reader-model --test reader_model
-```
-
-Production ABI structs must not be implemented until that failure is observed. The current ChatGPT execution environment has no Cargo/Rust toolchain, and GitHub produced no workflow run for the PR head, so the RED receipt remains unpaid at this point.
-
-## PostgreSQL boundary
-
-PostgreSQL remains the sole active semantic persistence spine.
-
-The retained source/proof shapes remain the existing persisted coordinates; no second proof-store schema is introduced merely for the reader ABI.
-
-The live Mabo adapter must fail closed unless it can establish:
-
-```text
-exact persisted source/span
-+ PNF support observation
-+ observation provenance carrying exact span
-+ independent graph/source-span provenance carrying exact span
-+ qualifier/defeater/comparator paid-or-residual coverage
-```
-
-The resulting typed payment must still report:
-
-```text
-ApplicabilityPaid = false
-ClaimTruthPaid    = false
-```
-
-## Dioxus production reader
-
-The human-facing rule remains:
-
-```text
-argument-first
--> graph-second
--> provenance-on-demand
-```
-
-Dioxus is the production ordinary UI. It should initially expose:
-
-```text
-What changed?
-Why does this step follow here?
-What exact source supports it?
-What limits / contradicts / compares with it?
-What remains unresolved?
-```
-
-The Dioxus component consumes `ReaderDisposition`; it does not calculate evidence payment.
-
-For the focal proposition:
-
-```text
-OpenSource -> ExecuteSource(revision, span)
-WhyClaim   -> ExecuteBoundedWhy(cone) | Defer(residual)
-```
-
-Svelte remains useful only as a behavior/regression oracle while Dioxus reaches parity. It is not on the production critical path.
-
-## wgpu production visualisation
-
-All charting and interaction-heavy visualisation belongs on the wgpu side, including:
-
-```text
-ordinary charts
-timelines
-proof cones
-PNF graphs
-Sankey/hyperfabric
-100-hop latent Mabo world
-picking / brushing / zoom / animation
-GPU layout / culling / compute
-```
-
-Dioxus remains responsible for ordinary application chrome, forms, document panes, menus, textual source/provenance views, settings, and accessible controls.
-
-The first visual seam is renderer-neutral:
-
-```text
-ExplanationCone
--> ProofConeVisualIR
--> wgpu/WGSL
-```
-
-not:
-
-```text
-Dioxus component tree
--> semantic graph
-```
-
-## World-bucket relation
-
-The 100-hop Mabo world bucket is downstream/parallel substrate, not the blocking proof task.
-
-The revised order is:
-
-```text
-exact source payment
--> bounded proposition-chain payment
--> live PG typed payment
--> portable Rust Reader ABI
--> Dioxus live Why?/Explanation Cone
--> wgpu ProofCone / visualisation
--> larger latent Mabo world bucket
--> selected Kant/eRDFa/IPFS publication fibre
-```
-
-The bucket can eventually supply a much larger latent world while the reader shows only a query-indexed local projection:
-
-```text
-available world >> displayed world
-```
-
-Publication still obeys:
-
-```text
-publish selected world != publish browsing history
-```
-
-and insertion into a global graph does not create truth, authority, applicability, or evidence payment.
-
-## High-alpha implementation order
-
-### P0 — exact source payment (paid)
-
-One real Mabo judgment span is materialised through PG and executes `OpenSource` while leaving Why/applicability/truth unpaid.
-
-### P1 — bounded SLR proposition-payment gate (paid)
 
 Observed:
 
@@ -374,54 +110,283 @@ cargo test --workspace --no-fail-fast: passed
 cargo clippy --workspace --all-targets -- -D warnings: passed
 ```
 
-### P2 — Agda proposition-chain certification (paid)
+### DASHI #963 — proposition-chain parity — PAID
 
-`MaboRadicalTitlePropositionChainPaymentExact.agda` kernel-checks successfully.
-
-### P3 — live PG -> typed SLR proposition payment
-
-Bind the evaluator to the real persisted Mabo PNF/source-span rows and observe:
+Branch:
 
 ```text
-OpenSource        = execute
-Why               = executeBoundedWhy
-ApplicabilityPaid = false
-ClaimTruthPaid    = false
+agent/mabo-radical-title-proposition-chain-parity
 ```
 
-### P4 — portable Rust Reader ABI
+Head recorded after focused certification:
 
-Implement `sensiblaw-reader-model` only after the RED contract is observed. Project the live SLR payment into `ReaderDisposition` without adding transport, UI, PostgreSQL, or wgpu dependencies.
+```text
+9c3f59fbdf742e7fc474c98a929c3a1a9a9bdc01
+```
 
-### P5 — Dioxus Semantic Reader
+`MaboRadicalTitlePropositionChainPaymentExact.agda` kernel-checks and keeps
+bounded explanation separate from applicability and claim truth.
 
-Consume the Rust ABI in `chboishabba/solfunmeme-dioxus`. Dioxus emits semantic intents and renders dispositions; it cannot manufacture payment state.
+### SLR #15 — portable Rust Reader ABI — PAID
 
-### P6 — ProofCone VisualIR -> wgpu
+Branch:
 
-Project a paid `ExplanationCone` into renderer-neutral `ProofConeVisualIR`, then feed that to wgpu/WGSL. Ordinary charts migrate to the same wgpu-owned visualisation substrate over time; `dioxus-charts` is prototype/legacy, not target architecture.
+```text
+agent/mabo-reader-abi-v1
+```
 
-### P7 — world growth
+Head:
 
-Use the paid proposition as a real node in the bounded Mabo world walk and scale toward the 100-hop latent world.
+```text
+a05b13726087187e202dbefad1f7f79abd065767
+```
 
-### P8 — federation/publication
+Observed RED first with the eight missing reader types, then GREEN:
 
-Package selected fibres through Kant/eRDFa/IPFS and query through Zelph without publishing browsing history or promoting insertion into truth.
+```text
+cargo test -p sensiblaw-reader-model --test reader_model: 3 passed
+cargo test --workspace --no-fail-fast: passed
+cargo clippy --workspace --all-targets -- -D warnings: passed
+```
 
-## Acceptance criterion
+The ABI is Rust-only and has no PostgreSQL, Dioxus, wgpu, Python, Svelte, or
+transport authority.
 
-The flagship production path is paid when one real proposition crosses:
+### SLR #17 — live PG proposition weld — CURRENT
+
+Branch:
+
+```text
+agent/mabo-pg-proposition-weld-v1
+```
+
+The read-side query already consumes persisted `legal_ir` rows without assigning
+reader proof roles. A live TrueNAS run compiled and failed at the intended
+semantic boundary because the four `legal_ir` materialisation tables contained
+zero rows.
+
+P3 is therefore split:
+
+```text
+P3a = SLR-owned legal_ir materialisation       <- current
+P3b = live PG rows -> PropositionPayment
+```
+
+P3a owner:
+
+```text
+crates/sl-pg-source-store/src/legal_ir_materialization.rs
+```
+
+It persists one *reviewed* PNF support coordinate into the existing SensibLaw
+schema:
+
+```text
+legal_ir.semantic_build
+-> legal_ir.projection
+-> legal_ir.observation
+-> legal_ir.graph_revision
+```
+
+The materialiser:
+
+- validates the exact persisted source revision/document/span against canonical
+  PostgreSQL text;
+- requires explicit reviewed PNF build/graph/factor/revision coordinates;
+- requires observation provenance already containing the exact span;
+- retains the same span independently in `graph_revision.source_span_refs`;
+- uses candidate persistence state only;
+- creates no applicability, holding, claim truth, or reader authority;
+- is idempotent by deterministic identities and rejects conflicting existing
+  rows.
+
+Operator entrypoint:
+
+```text
+crates/sl-pg-source-store/examples/materialize_mabo_radical_title_support.rs
+```
+
+The entrypoint deliberately requires the reviewed PNF coordinates from the
+operator/environment rather than deriving them from source text.
+
+### DASHI #982 — legal-IR materialisation parity — CURRENT
+
+Branch:
+
+```text
+agent/mabo-legal-ir-materialisation-parity
+```
+
+Owner:
+
+```text
+DASHI/Interop/MaboRadicalTitleLegalIRMaterialisationExact.agda
+```
+
+It reuses #963 and proves that persisted build/projection/observation rows pay
+support only when PNF revision identity, observation exact-span provenance, and
+independent graph exact-span provenance are all present. Missing any one leaves
+support unpaid. The canonical materialised receipt executes bounded Why while
+applicability and claim truth remain false.
+
+Source is written; the new file's focused Agda kernel receipt is not yet claimed.
+
+### Dioxus P5 — source-written, downstream of P3
+
+Repository:
+
+```text
+chboishabba/solfunmeme-dioxus
+```
+
+Branch:
+
+```text
+agent/mabo-semantic-reader-v1
+```
+
+Known source-written head:
+
+```text
+5c2f6a4df1dd350657950bc4558e19eed0aac7d2
+```
+
+Dioxus consumes the SLR Reader ABI directly and fails closed while no live
+`PropositionPayment` is supplied. Do not add presentation work until P3b is
+paid.
+
+### wgpu P6 — NOT STARTED
+
+Correctly downstream:
+
+```text
+ExplanationCone -> ProofConeVisualIR -> wgpu/WGSL
+```
+
+wgpu renders already-typed projections. Rendered nodes/edges do not create
+semantic authority or evidence payment.
+
+## SensibLaw Python reference donors
+
+Production Rust reuses the contracts, not the Python object model.
+
+Existing reference donors include:
+
+```text
+database/postgres_migrations/015_legal_ir_federation.sql
+src/pnf/legal_semantic_build.py
+src/pnf/legal_adjunct.py
+src/pnf/legal_ir_projection_bridge.py
+src/storage/postgres/semantic_store.py
+```
+
+Key inherited rule:
+
+```text
+refined PNF = candidate semantic state
+Legal IR    = deterministic/materialised PNF projection
+legacy extraction = diagnostic witness only
+```
+
+The older Mabo proof-graph specimen remains a correspondence/regression donor;
+it is a repository-summary fixture and is not substituted for the exact Brennan
+judgment span.
+
+## Legal-follow / hosted Australian legal corpus
+
+Use the existing governed `legal-follow` / acquisition architecture. Do not add a
+second provider planner.
+
+The hosted `isaacus/open-australian-legal-corpus` is a useful acquisition and
+retrieval producer for Australian legislation and decisions, including High
+Court material. Its dataset/source/version coordinates should be retained on
+source receipts and then admitted through the same revisioned PostgreSQL source
+path.
+
+```text
+legal-follow residual
+-> existing governed provider plan
+-> local PG cache if available
+-> hosted Australian legal corpus candidate
+-> exact source/revision admission
+-> canonical PG materialisation
+-> PNF / consumer payment
+```
+
+Firewalls:
+
+```text
+HF corpus hit      != legal authority payment
+HF text            != proposition support
+QID identity       != legal applicability
+WrongType(tort) -> candidate QID(tort) is navigation/type context only
+Wikidata identity  != evidence payment
+```
+
+HF and Wikidata/QIDs may therefore improve follow/search/type navigation without
+becoming proof or legal authority.
+
+## High-alpha order
+
+```text
+P0   exact source/span                         PAID
+P1   bounded SLR proposition calculus          PAID
+P2   Agda proposition-chain contract            PAID
+P4   portable Rust Reader ABI                   PAID
+P3a  SLR legal_ir materialisation               CURRENT
+P3b  live PG -> PropositionPayment              NEXT
+P5   live Dioxus Semantic Reader
+P6   ExplanationCone -> VisualIR -> wgpu
+P7   100-hop latent Mabo world
+P8   selected federation/publication fibre
+```
+
+P3 and P4 were completed partly out of numeric order; the dependency graph, not
+phase numbering, is authoritative.
+
+## Immediate acceptance commands
+
+First materialise one *reviewed* PNF support coordinate using the Rust example.
+Then rerun:
+
+```sh
+cargo test -p sensiblaw-pg-source-store \
+  --test mabo_proposition_weld \
+  -- --ignored --nocapture
+```
+
+Required live result:
+
+```text
+exactSourcePaid       = true
+propositionChainPaid  = true
+whyExecutable         = true
+ApplicabilityPaid     = false
+ClaimTruthPaid        = false
+```
+
+Focused Agda target:
+
+```sh
+agda -i . DASHI/Interop/MaboRadicalTitleLegalIRMaterialisationExact.agda
+```
+
+Do not mark P3a/P3b or DASHI #982 paid until those exact receipts are observed.
+
+## End-to-end acceptance
+
+The flagship is paid when one real proposition crosses:
 
 ```text
 judgment bytes
--> PostgreSQL
--> exact source span
--> SLR PNF/provenance payment
+-> PostgreSQL exact source
+-> reviewed PNF coordinate
+-> legal_ir materialisation
+-> SLR proposition payment
 -> Agda-valid bounded explanation contract
--> typed Rust Reader ABI
+-> portable Rust Reader ABI
 -> Dioxus Why? ExecuteBoundedWhy
--> optional wgpu ProofCone projection
+-> optional wgpu ProofCone
 ```
 
 while preserving:
@@ -429,9 +394,7 @@ while preserving:
 ```text
 bounded explanation != applicability
 bounded explanation != claim truth
-reader projection != semantic authority
-Dioxus event != evidence payment
-wgpu render state != semantic authority
+reader projection    != semantic authority
+Dioxus event         != evidence payment
+wgpu render state    != semantic authority
 ```
-
-That is the shortest end-to-end demonstration of the current SensibLaw/SLR/DASHI/Dioxus/wgpu architecture.
