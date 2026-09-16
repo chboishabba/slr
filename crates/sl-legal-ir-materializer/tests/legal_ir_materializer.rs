@@ -130,3 +130,20 @@ fn materializer_dependencies_have_no_json_or_regex_contract() {
     assert!(!cargo.contains("serde_json"));
     assert!(!cargo.contains("regex"));
 }
+
+#[test]
+fn mabo_runner_consumes_admitted_slri_without_python_legal_semantics() {
+    let script = std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../scripts/run_slr_mabo_proof_graph.sh"),
+    )
+    .expect("Mabo runner");
+    assert!(script.contains("sensiblaw-legal-ir-materializer"));
+    assert!(script.contains("mabo:radical-title-native-title"));
+    assert!(script.contains("rev-16058297:2026-06-29"));
+    assert!(script.contains("proposition_truth_paid=false"));
+    assert!(script.contains("applicability_paid=false"));
+    assert!(!script.contains("python3"));
+    assert!(!script.contains("serde_json"));
+    assert!(!script.contains(".json"));
+}
