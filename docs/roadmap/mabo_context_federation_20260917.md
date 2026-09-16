@@ -16,7 +16,7 @@ P7b.2 Wikidata candidate -> explicit review gate      PAID @ 9538eec/cc5adfe (5/
 P7b.3 reviewed Wikidata -> live PG materialisation    PAID LIVE RECEIPT (12 relations on TrueNAS PG)
 P7b.4 Wikipedia revision/hash producer/review         UNPAID
 P7b.5 OALC exact legal producer/review                 UNPAID
-P7c Residual-Driven World Expansion Controller        SOURCE-WRITTEN @ f2e851e
+P7c Residual-Driven World Expansion Controller        PAID @ d3f15bf (65/65 tests green, 0 clippy warnings)
 P7d Mabo 100-Novel-Object Discovery Receipt           UNPAID LIVE RECEIPT
 ```
 
