@@ -20,7 +20,8 @@ ITIR / Svelte      reference/regression prototype only
 Production path:
 
 ```text
-source bytes
+governed source providers / durable AU legal corpus
+-> source bytes + provider/source-role provenance
 -> canonical PostgreSQL source/span
 -> CandidatePNF
 -> explicit review/admission
@@ -32,20 +33,24 @@ source bytes
 -> optional wgpu projection
 ```
 
-No JSON/TSV/Svelte/Python object is semantic identity in this path.
+No JSON/TSV/Svelte/Python object is semantic identity in this path. A Hugging
+Face/downloaded AU legal corpus snapshot is likewise a governed acquisition or
+offline-replay provider, not semantic persistence and not legal authority by
+storage location alone.
 
 ## Latest PR audit
 
 ```text
-SLR #14  bounded proposition calculus                        PAID
-SLR #15  portable Reader ABI                                PAID
-SLR #17  live PG proposition weld / legal_ir materialiser   PARENT / CURRENT P3
-SLR #18  Rust Semantic Reader runtime successor             SOURCE-WRITTEN
-DASHI #963 bounded proposition-chain parity                  PAID
-DASHI #982 legal_ir materialisation parity                   CURRENT FORMAL PARENT
-Dioxus upstream #18 native Rust/backend mediation            MERGED P5 PARENT
-Dioxus agent/mabo-semantic-reader-v1                         SOURCE-WRITTEN / downstream
-wgpu ProofCone                                               NOT STARTED / correctly downstream
+SLR #13  governed Australian acquisition / anchored citations   DONOR ACQUISITION LANE
+SLR #14  bounded proposition calculus                            PAID
+SLR #15  portable Reader ABI                                    PAID
+SLR #17  live PG proposition weld / legal_ir materialiser       PARENT / CURRENT P3
+SLR #18  Rust Semantic Reader runtime successor                 FOCUSED GREEN; LIVE WELD STANDBY
+DASHI #963 bounded proposition-chain parity                     PAID
+DASHI #982 legal_ir materialisation parity                      CURRENT FORMAL PARENT
+Dioxus upstream #18 native Rust/backend mediation               MERGED P5 PARENT
+Dioxus agent/mabo-semantic-reader-v1                             SOURCE-WRITTEN / downstream
+wgpu ProofCone                                                   NOT STARTED / correctly downstream
 ```
 
 SLR #18 branch:
@@ -53,11 +58,60 @@ SLR #18 branch:
 ```text
 agent/semantic-reader-runtime-v1
 base: agent/mabo-pg-proposition-weld-v1
+validated head: 816b5a870c130089003c6574b4e917bef3441c5c
 ```
+
+## Australian legal corpus / HF acquisition lane
+
+The existing Australian legal corpus work is part of the production acquisition
+plane and must remain available to the Semantic Reader retry loop. It is not a
+parallel semantic database.
+
+Intended role:
+
+```text
+stable AU legal catalogue / HF snapshot / bounded AustLII + official-source seeds
+-> governed source candidate or offline replay artefact
+-> retained provider/source-role provenance
+-> canonical PostgreSQL document + revision + exact spans
+-> PNF / reviewed semantic materialisation
+-> consumer-relative payment
+```
+
+The durable corpus includes the existing Australian/Commonwealth/Queensland and
+HCA-oriented legal tranches. Stable catalogue revisions should be built/restored
+by explicit acquisition workflows and read by ordinary CI/runtime code rather
+than being rebuilt opportunistically on every test run.
+
+Provider role remains explicit. In particular, AustLII/HF-hosted material may be
+a supporting or research-index manifestation while an official court/legislation
+source remains the controlling authority manifestation for a consumer that
+requires it. Therefore:
+
+```text
+corpus membership          != authority
+HF publication/download    != semantic payment
+AustLII availability       != official-source equivalence
+source agreement           != independent provenance
+acquisition receipt        != proposition support
+```
+
+The generic `ReaderDisposition::Defer -> ProofFrontier` recurrence in #18 should
+therefore consider the durable AU corpus/local catalogue before requesting live
+network acquisition. A locally available corpus hit can pay acquisition/locality
+debt, but semantic payment still requires the ordinary exact-span, review,
+provenance, and consumer gates.
+
+For the current Mabo radical-title proposition, the already-persisted exact
+Brennan source coordinate remains authoritative for `OpenSource`. The broader AU
+corpus is a donor for proposition neighbourhoods, comparators, qualifiers,
+defeaters, citation follow, and later Mabo-stage acquisition; it must not replace
+the exact source coordinate merely because the same text is present in a corpus
+snapshot.
 
 ## Requested Rust focus — exact status
 
-### 1. Materialise Mabo proof rows in PostgreSQL — SOURCE-WRITTEN, LIVE RECEIPT UNPAID
+### 1. Materialise Mabo proof rows in PostgreSQL — FOCUSED GREEN, LIVE REVIEWED SEED OUTSTANDING
 
 New Rust owners:
 
@@ -97,7 +151,18 @@ There is deliberately no automatic `CandidatePnfBatch -> ReviewedPnfRevision`
 promotion. Reviewed persistence still reports proposition support, applicability,
 and claim truth as false; support is paid only by the later consumer-relative weld.
 
-### 2. Live PG -> SLR -> PropositionPayment — SOURCE-WRITTEN, LIVE RECEIPT UNPAID
+Observed focused receipts on `816b5a8...`:
+
+```text
+mabo_pnf_candidate_materialization   2 passed
+reviewed_pnf_materialization         2 passed
+```
+
+The live TrueNAS database still lacks the reviewed Mabo PNF/legal_ir coordinate
+needed by the proposition weld. This is a seed/materialisation obligation, not a
+parser/runtime failure.
+
+### 2. Live PG -> SLR -> PropositionPayment — RUNTIME GREEN, LIVE MABO WELD STANDBY
 
 Changes:
 
@@ -111,7 +176,23 @@ The projector consumes the original typed `PropositionRoleResidual` values. It
 does not infer qualifier/defeater/comparator identity from the flattened
 `role_residual_refs` list.
 
-The inherited live TrueNAS test now continues through the Reader ABI and requires:
+Observed focused receipt:
+
+```text
+reader_payment_projection            2 passed
+```
+
+The live TrueNAS weld currently reaches the expected fail-closed state:
+
+```text
+exact Brennan source/span persisted  true
+legal_ir reviewed support rows       absent
+rows.exact_source_paid               false at proposition-weld query
+Why                                  not executable yet
+```
+
+After the reviewed Mabo PNF/support coordinate is materialised, the inherited
+live test must require:
 
 ```text
 exactSourcePaid      = true
@@ -122,7 +203,7 @@ ApplicabilityPaid    = false
 ClaimTruthPaid       = false
 ```
 
-### 6. Adaptive Explanation Cone — SOURCE-WRITTEN
+### 6. Adaptive Explanation Cone — GREEN
 
 Owner:
 
@@ -142,7 +223,14 @@ The result is deterministic and bounded. Mandatory payment/provenance nodes are
 ordered before optional explanatory nodes. The runtime is proposition-generic and
 contains no Mabo-specific selection logic.
 
-### 7. Automatic acquisition/retry — SOURCE-WRITTEN ADAPTER
+Observed receipts:
+
+```text
+semantic_runtime                     5 passed
+explanation_selection                1 passed
+```
+
+### 7. Automatic acquisition/retry — GREEN
 
 Owner:
 
@@ -157,6 +245,7 @@ planner/provider loop was added.
 reader Defer(rho)
 -> ProofResidual / ProofFrontier
 -> existing hypothesis/provider/acquisition/world machinery
+-> local AU corpus / governed provider lookup where admissible
 -> persistence/world extension
 -> mandatory reader re-evaluation
 -> Execute | Defer | Reject
@@ -166,6 +255,12 @@ Hard firewall:
 
 ```text
 acquisition receipt != semantic payment
+```
+
+Observed receipt:
+
+```text
+reader_retry                         2 passed
 ```
 
 ### 10. Context rabbit holes — SOURCE-WRITTEN
@@ -191,7 +286,7 @@ The known Mabo identity/context coordinates remain `Q1501525` and
 `wiki:en:Mabo_v_Queensland_(No_2)`; they do not replace the exact High Court
 source coordinate.
 
-### 13. 100-hop latent Mabo world — SOURCE-WRITTEN READ PROJECTION
+### 13. 100-hop latent Mabo world — LIVE GREEN READ PROJECTION
 
 Portable projection:
 
@@ -220,6 +315,12 @@ source spans / observation provenance / PNF refs / residual refs
 No new graph/world persistence schema was introduced. A 100-hop reader view is a
 projection of existing semantic state and cannot create semantic authority.
 
+Observed live TrueNAS receipt:
+
+```text
+latent_world_live  1 passed
+```
+
 ### 14. Remaining Mabo propositions — GENERIC REGISTRY SOURCE-WRITTEN
 
 `mabo_five_stage_registry()` mirrors the five bounded Agda reading roles:
@@ -237,7 +338,11 @@ carries a `SourceCoordinate::Paid`. The other four remain explicit source
 residuals until their own exact spans/reviewed proposition welds are persisted.
 This prevents the registry itself from manufacturing evidence.
 
-### 15. Generalise beyond Mabo — SOURCE-WRITTEN BY CONSTRUCTION
+The Australian legal corpus lane should be searched/replayed for these unpaid
+coordinates before unnecessary live acquisition, while preserving provider role,
+revision identity, source lineage, and exact-span requirements.
+
+### 15. Generalise beyond Mabo — GREEN BY CONSTRUCTION
 
 Core types are generic:
 
@@ -255,25 +360,42 @@ to ensure these APIs do not branch on Mabo identity.
 
 ## Validation status
 
-At this ledger revision the new #18 tranche is **source-written, not GREEN**.
-The execution container used for this implementation cannot resolve GitHub and
-there are no GitHub Actions runs on the exact #18 head. Do not upgrade this status
-until the real Rust toolchain observes the focused tests, workspace suite, Clippy,
-and live TrueNAS test.
+Focused/runtime validation on SLR #18 head `816b5a8...` is GREEN:
 
-Required focused checks:
-
-```sh
-cargo test -p sensiblaw-pg-source-store --test mabo_pnf_candidate_materialization
-cargo test -p sensiblaw-pg-source-store --test reviewed_pnf_materialization
-cargo test -p sensiblaw-evidence-payment --test reader_payment_projection
-cargo test -p sensiblaw-reader-model --test semantic_runtime
-cargo test -p sensiblaw-proof-search-loop --test reader_retry
-cargo test --workspace --no-fail-fast
-cargo clippy --workspace --all-targets -- -D warnings
+```text
+mabo_pnf_candidate_materialization   2 passed
+reviewed_pnf_materialization         2 passed
+reader_payment_projection            2 passed
+semantic_runtime                     5 passed
+explanation_selection                1 passed
+reader_retry                         2 passed
+cargo test --workspace --no-fail-fast    passed
+cargo clippy --workspace --all-targets -- -D warnings    passed
+latent_world_live                    1 passed (live TrueNAS)
 ```
 
-After an explicitly reviewed Mabo PNF coordinate is materialised:
+The remaining live receipt is deliberately narrow:
+
+```text
+mabo_proposition_weld                STANDBY
+reason: reviewed Mabo PNF / legal_ir support coordinate not yet persisted
+```
+
+Current live database observation:
+
+```text
+exact source revision/document/span  present
+legal_ir.semantic_build              0 relevant rows
+legal_ir.graph_revision              0 relevant rows
+legal_ir.projection                  0 relevant rows
+legal_ir.observation                 0 relevant rows
+```
+
+Therefore do not treat the failed live weld as a runtime regression. The next
+producer is the explicit reviewed Mabo PNF/materialisation step, followed by the
+same live weld test.
+
+Required final P3/P5 handoff receipt:
 
 ```sh
 cargo test -p sensiblaw-pg-source-store \
@@ -281,5 +403,24 @@ cargo test -p sensiblaw-pg-source-store \
   -- --ignored --nocapture
 ```
 
-That live receipt is the P3/P5 handoff gate. Dioxus should consume the resulting
-`PropositionPayment`; wgpu remains downstream of the resulting `ExplanationCone`.
+That receipt must cross:
+
+```text
+reviewed PNF seed
+-> legal_ir rows
+-> PropositionChainPayment
+-> PropositionPayment
+-> OpenSource = ExecuteSource
+-> Why = ExecuteBoundedWhy
+```
+
+while retaining:
+
+```text
+ApplicabilityPaid = false
+ClaimTruthPaid    = false
+```
+
+After that receipt, the production frontier moves to the already source-written
+Dioxus consumer. wgpu remains correctly downstream of the resulting
+`ExplanationCone` / future `ProofConeVisualIR`.
