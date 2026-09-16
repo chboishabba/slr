@@ -4,44 +4,37 @@ use postgres::{Client, NoTls};
 
 use crate::{DatabaseConfig, SourceStoreError};
 
-/// Storage-owned projection of one PNF observation. The storage layer keeps
-/// observation provenance distinct from graph/source-span provenance; it does
-/// not decide whether the observation pays a semantic obligation.
+/// Storage-owned projection of one PNF observation welded to an independently
+/// persisted proposition graph span. The storage layer does not assign the
+/// reader's qualifier/defeater/comparator roles or decide semantic payment.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PropositionObservationRow {
     pub observation_ref: String,
     pub pnf_factor_ref: String,
     pub pnf_revision_ref: String,
-    pub role_ref: String,
     pub observation_provenance_refs: Vec<String>,
     pub graph_source_span_refs: Vec<String>,
     pub residual_refs: Vec<String>,
 }
 
-/// Explicit reader-facing debt retained in PostgreSQL for a bounded proof role.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PropositionResidualRow {
-    pub role_ref: String,
-    pub residual_ref: String,
-}
-
 /// Typed read projection for one proposition/span pair. This is deliberately
-/// not a payment result: `sl-evidence-payment` remains the owner of payment.
+/// not a payment result: `sl-evidence-payment` remains the owner of payment and
+/// consumer-relative role debts are created above the persistence layer.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PropositionRows {
     pub proposition_ref: String,
     pub required_span_ref: String,
     pub exact_source_paid: bool,
     pub observations: Vec<PropositionObservationRow>,
-    pub residuals: Vec<PropositionResidualRow>,
 }
 
 /// Load the persisted PNF + independent graph-span coordinates for the Mabo
-/// reader proposition. Unknown role bindings are ignored rather than guessed.
+/// reader proposition.
 ///
-/// Exact-source readiness is checked against the canonical document and span
-/// bounds. No result from this function pays proposition support,
-/// applicability, or claim truth.
+/// The graph revision establishes the proposition/span relation. A returned PNF
+/// observation must independently retain that same span in its own provenance.
+/// That conjunction is the storage-side input required by the SLR support weld;
+/// this function itself does not pay support, applicability, or claim truth.
 pub fn load_mabo_proposition_rows(
     config: &DatabaseConfig,
     proposition_ref: &str,
@@ -92,12 +85,6 @@ pub fn load_mabo_proposition_rows(
         SELECT o.observation_ref,
                o.pnf_factor_ref,
                o.pnf_revision_ref,
-               COALESCE(
-                   o.role_bindings ->> 'proof_role',
-                   o.role_bindings ->> 'proposition_role',
-                   o.role_bindings ->> 'reader_role',
-                   o.role_bindings ->> 'role'
-               ) AS role_ref,
                o.provenance_refs,
                target_graph.source_span_refs,
                o.residual_refs
@@ -106,30 +93,20 @@ pub fn load_mabo_proposition_rows(
           ON p.build_ref = target_graph.build_ref
         JOIN legal_ir.observation AS o
           ON o.projection_ref = p.projection_ref
-        WHERE COALESCE(
-                  o.role_bindings ->> 'proposition_ref',
-                  o.role_bindings ->> 'subject_ref',
-                  o.role_bindings ->> 'semantic_ref',
-                  o.role_bindings ->> 'claim_ref',
-                  o.role_bindings ->> 'reader_proposition_ref'
-              ) = $1
-          AND COALESCE(
-                  o.role_bindings ->> 'proof_role',
-                  o.role_bindings ->> 'proposition_role',
-                  o.role_bindings ->> 'reader_role',
-                  o.role_bindings ->> 'role'
-              ) IN ('support', 'qualifier', 'defeater', 'comparator')
+        WHERE $2 = ANY(o.provenance_refs)
+          AND o.pnf_factor_ref <> ''
+          AND o.pnf_revision_ref <> ''
         "#,
         &[&proposition_ref, &required_span_ref],
     )?;
 
     // A proposition may have more than one graph revision over the same build.
-    // Merge exact duplicate semantic observations while unioning the independent
-    // graph source-span coordinates.
+    // Merge duplicate PNF observations while unioning only the independently
+    // persisted graph source-span coordinates.
     let mut observations_by_ref: BTreeMap<String, PropositionObservationRow> = BTreeMap::new();
     for row in observation_rows {
         let observation_ref: String = row.get(0);
-        let graph_source_span_refs: Vec<String> = row.get(5);
+        let graph_source_span_refs: Vec<String> = row.get(4);
         if let Some(existing) = observations_by_ref.get_mut(&observation_ref) {
             let mut spans: BTreeSet<String> = existing.graph_source_span_refs.drain(..).collect();
             spans.extend(graph_source_span_refs);
@@ -142,75 +119,17 @@ pub fn load_mabo_proposition_rows(
                 observation_ref,
                 pnf_factor_ref: row.get(1),
                 pnf_revision_ref: row.get(2),
-                role_ref: row.get(3),
-                observation_provenance_refs: row.get(4),
+                observation_provenance_refs: row.get(3),
                 graph_source_span_refs,
-                residual_refs: row.get(6),
+                residual_refs: row.get(5),
             },
         );
     }
-
-    // Residual roles remain explicit. We accept only role-labelled residual
-    // coordinates; an arbitrary projection residual is never promoted into a
-    // qualifier/defeater/comparator debt by string similarity alone.
-    let residual_rows = client.query(
-        r#"
-        WITH target_graph AS (
-            SELECT DISTINCT gr.build_ref
-            FROM legal_ir.graph_revision AS gr
-            WHERE gr.subject_ref = $1
-              AND $2 = ANY(gr.source_span_refs)
-        ), target_observation AS (
-            SELECT o.role_bindings
-            FROM target_graph
-            JOIN legal_ir.projection AS p
-              ON p.build_ref = target_graph.build_ref
-            JOIN legal_ir.observation AS o
-              ON o.projection_ref = p.projection_ref
-            WHERE COALESCE(
-                      o.role_bindings ->> 'proposition_ref',
-                      o.role_bindings ->> 'subject_ref',
-                      o.role_bindings ->> 'semantic_ref',
-                      o.role_bindings ->> 'claim_ref',
-                      o.role_bindings ->> 'reader_proposition_ref'
-                  ) = $1
-        )
-        SELECT role_ref, residual_ref
-        FROM target_observation
-        CROSS JOIN LATERAL (
-            VALUES
-              ('qualifier', COALESCE(
-                  role_bindings ->> 'qualifier_residual_ref',
-                  role_bindings #>> '{residual_roles,qualifier}'
-              )),
-              ('defeater', COALESCE(
-                  role_bindings ->> 'defeater_residual_ref',
-                  role_bindings #>> '{residual_roles,defeater}'
-              )),
-              ('comparator', COALESCE(
-                  role_bindings ->> 'comparator_residual_ref',
-                  role_bindings #>> '{residual_roles,comparator}'
-              ))
-        ) AS residual(role_ref, residual_ref)
-        WHERE residual_ref IS NOT NULL
-          AND residual_ref <> ''
-        "#,
-        &[&proposition_ref, &required_span_ref],
-    )?;
-
-    let residuals = residual_rows
-        .into_iter()
-        .map(|row| PropositionResidualRow {
-            role_ref: row.get(0),
-            residual_ref: row.get(1),
-        })
-        .collect::<Vec<_>>();
 
     Ok(PropositionRows {
         proposition_ref: proposition_ref.to_owned(),
         required_span_ref: required_span_ref.to_owned(),
         exact_source_paid,
         observations: observations_by_ref.into_values().collect(),
-        residuals,
     })
 }
