@@ -145,7 +145,7 @@ The intended tests require:
 3. exact source alone -> Why unpaid;
 4. a paid qualifier may replace its explicit residual without paying applicability/truth.
 
-The missing proposition-payment symbols were observed RED, then the focused contract passed 4/4 and `cargo test --workspace --no-fail-fast` passed locally. The evaluator is intentionally read-side only: it consumes typed source/span and PNF coordinates, and does not add network I/O, JSON ingestion, UI code, applicability payment, or truth promotion. Workspace Clippy remains blocked by pre-existing deny-warnings failures in `sl-route-selector` and `sl-world-compiler`, outside this evidence-payment change.
+The missing proposition-payment symbols were observed RED, then the focused contract passed 4/4, `cargo test --workspace --no-fail-fast` passed locally, and `cargo clippy --workspace --all-targets -- -D warnings` passed after small workspace lint repairs. The evaluator is intentionally read-side only: it consumes typed source/span and PNF coordinates, and does not add network I/O, JSON ingestion, UI code, applicability payment, or truth promotion.
 
 ### DASHI/Agda
 
@@ -271,7 +271,7 @@ Observed RED: unresolved proposition-payment symbols / missing implementation.
 
 Implement only the read-side proposition-payment evaluator needed by those tests, using typed inputs corresponding to retained PG/PNF/source-span coordinates. Do not add network I/O, UI code, JSON ingestion, or legal truth promotion.
 
-Observed: the focused contract passes 4/4 and `cargo test --workspace --no-fail-fast` passes. The remaining repository-wide Clippy gate is currently blocked by pre-existing lint-deny failures outside this tranche.
+Observed: the focused contract passes 4/4, `cargo test --workspace --no-fail-fast` passes, and `cargo clippy --workspace --all-targets -- -D warnings` passes.
 
 The normal validation commands remain:
 

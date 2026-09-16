@@ -333,7 +333,7 @@ fn persist_slice(
         &[&span_ref, &document_ref, &(slice.start_char as i32), &(slice.end_char as i32)],
     )?;
 
-    let actual = sha256_bytes(document_text[slice.start_char..slice.end_char].as_bytes());
+    let actual = sha256_bytes(&document_text.as_bytes()[slice.start_char..slice.end_char]);
     let expected = decode_hex_32(slice.slice_sha256_hex)
         .ok_or_else(|| SourceStoreError::SliceDigestMismatch(slice.locator_ref.to_owned()))?;
     if actual != expected {

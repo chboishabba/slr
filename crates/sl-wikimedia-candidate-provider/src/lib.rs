@@ -19,9 +19,13 @@ pub enum ProviderError {
     #[error("rdf/xml error: {0}")]
     Xml(#[from] quick_xml::Error),
     #[error("network error: {0}")]
-    Network(#[from] ureq::Error),
+    Network(Box<ureq::Error>),
     #[error("invalid provider input: {0}")]
     InvalidInput(String),
+}
+
+impl From<ureq::Error> for ProviderError {
+    fn from(error: ureq::Error) -> Self { Self::Network(Box::new(error)) }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

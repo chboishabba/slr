@@ -206,6 +206,7 @@ fn manifestation_body(qid:&str, language:&str, revision_ref:&str, source_sha256:
     let mut out=Vec::new(); out.extend_from_slice(b"SRC1"); write_text(&mut out,qid)?; write_text(&mut out,language)?; write_text(&mut out,revision_ref)?; out.extend_from_slice(source_sha256); out.push(1); out.push(0); Ok(out)
 }
 
+#[allow(clippy::too_many_arguments)] // This mirrors the fixed PNF1 binary body layout.
 fn pnf_body(fragment:FragmentKind, shape:DependencyShape, sentence_id:u64, local_ordinal:u32, head_ordinal:u32, start_char:u32, end_char:u32, orth:&str, lemma:&str, head_orth:&str, head_lemma:&str) -> Result<Vec<u8>,CompilerError> {
     let mut out=Vec::new(); out.extend_from_slice(b"PNF1"); out.push(fragment as u8); out.push(shape as u8); out.push(1); out.push(0);
     write_u64(&mut out,sentence_id)?; write_u32(&mut out,local_ordinal)?; write_u32(&mut out,head_ordinal)?; write_u32(&mut out,start_char)?; write_u32(&mut out,end_char)?;
