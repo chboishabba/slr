@@ -139,3 +139,75 @@ pub fn apply_review_to_active_frontier<R:Read,W:Write>(reader:&mut R,spec:&Evide
     }
     Ok(EvidencePaymentReceipt{target_obligation_found:true,reviews_emitted:1,payments_emitted:payments,claim_truth_promoted:false,semantic_authority_created:false})
 }
+
+/// Bounded reader-proof roles. They do not decide applicability or truth.
+#[derive(Debug,Clone,Copy,PartialEq,Eq)]
+pub enum PropositionProofRole { Support, Qualifier, Defeater, Comparator }
+
+/// PNF evidence retains its own provenance separately from the graph span weld.
+#[derive(Debug,Clone,PartialEq,Eq)]
+pub struct PropositionEvidenceObservation {
+    pub observation_ref:String,
+    pub pnf_factor_ref:String,
+    pub pnf_revision_ref:String,
+    pub role:PropositionProofRole,
+    pub observation_provenance_refs:Vec<String>,
+    pub graph_source_span_refs:Vec<String>,
+    pub residual_refs:Vec<String>,
+}
+
+/// An explicit, retained role debt may be shown in a bounded explanation.
+#[derive(Debug,Clone,PartialEq,Eq)]
+pub struct PropositionRoleResidual { pub role:PropositionProofRole,pub residual_ref:String }
+
+#[derive(Debug,Clone,PartialEq,Eq)]
+pub struct PropositionChainPayment {
+    pub proposition_ref:String,
+    pub exact_source_paid:bool,
+    pub support_observation_refs:Vec<String>,
+    pub qualifier_observation_refs:Vec<String>,
+    pub defeater_observation_refs:Vec<String>,
+    pub comparator_observation_refs:Vec<String>,
+    pub role_residual_refs:Vec<String>,
+    pub residual_refs:Vec<String>,
+    pub proposition_chain_paid:bool,
+    pub why_executable:bool,
+    pub applicability_paid:bool,
+    pub claim_truth_paid:bool,
+}
+
+fn welded(observation:&PropositionEvidenceObservation,span:&str)->bool{
+    observation.observation_provenance_refs.iter().any(|value|value==span)
+        && observation.graph_source_span_refs.iter().any(|value|value==span)
+}
+
+fn paid(role:PropositionProofRole,span:&str,observations:&[PropositionEvidenceObservation])->Vec<String>{
+    observations.iter().filter(|observation|observation.role==role && welded(observation,span)).map(|observation|observation.observation_ref.clone()).collect()
+}
+
+fn residualised(role:PropositionProofRole,residuals:&[PropositionRoleResidual])->bool{
+    residuals.iter().any(|residual|residual.role==role)
+}
+
+/// Evaluate the narrow Source + PNF + role-debt gate for a bounded Why cone.
+/// No result from this function pays applicability or claim truth.
+pub fn evaluate_proposition_chain_payment(proposition_ref:&str,required_span_ref:&str,exact_source_paid:bool,observations:&[PropositionEvidenceObservation],residuals:&[PropositionRoleResidual])->PropositionChainPayment{
+    let support_observation_refs=paid(PropositionProofRole::Support,required_span_ref,observations);
+    let qualifier_observation_refs=paid(PropositionProofRole::Qualifier,required_span_ref,observations);
+    let defeater_observation_refs=paid(PropositionProofRole::Defeater,required_span_ref,observations);
+    let comparator_observation_refs=paid(PropositionProofRole::Comparator,required_span_ref,observations);
+    let support_seen=observations.iter().any(|observation|observation.role==PropositionProofRole::Support);
+    let support_paid=!support_observation_refs.is_empty();
+    let qualifier_covered=!qualifier_observation_refs.is_empty() || residualised(PropositionProofRole::Qualifier,residuals);
+    let defeater_covered=!defeater_observation_refs.is_empty() || residualised(PropositionProofRole::Defeater,residuals);
+    let comparator_covered=!comparator_observation_refs.is_empty() || residualised(PropositionProofRole::Comparator,residuals);
+    let mut residual_refs=Vec::new();
+    if !exact_source_paid { residual_refs.push("reader-residual:exact-authority-span".into()); }
+    if !support_paid { residual_refs.push(if support_seen { "reader-residual:source-provenance-weld".into() } else { "reader-residual:proposition-support".into() }); }
+    for (covered,label) in [(qualifier_covered,"qualifier"),(defeater_covered,"defeater"),(comparator_covered,"comparator")] {
+        if !covered { residual_refs.push(format!("reader-residual:{label}")); }
+    }
+    let role_residual_refs=residuals.iter().filter(|residual|matches!(residual.role,PropositionProofRole::Qualifier|PropositionProofRole::Defeater|PropositionProofRole::Comparator)).map(|residual|residual.residual_ref.clone()).collect();
+    let proposition_chain_paid=exact_source_paid && support_paid && qualifier_covered && defeater_covered && comparator_covered;
+    PropositionChainPayment{proposition_ref:proposition_ref.into(),exact_source_paid,support_observation_refs,qualifier_observation_refs,defeater_observation_refs,comparator_observation_refs,role_residual_refs,residual_refs,proposition_chain_paid,why_executable:proposition_chain_paid,applicability_paid:false,claim_truth_paid:false}
+}

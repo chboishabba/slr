@@ -132,7 +132,7 @@ Draft PR #14:
 agent/mabo-radical-title-proposition-payment
 ```
 
-contains the RED contract only in:
+started as a RED contract and now includes the minimal typed Rust evaluator in:
 
 ```text
 crates/sl-evidence-payment/tests/mabo_proposition_payment.rs
@@ -145,7 +145,7 @@ The intended tests require:
 3. exact source alone -> Why unpaid;
 4. a paid qualifier may replace its explicit residual without paying applicability/truth.
 
-No Rust production implementation should be added until the RED test has actually been observed failing. The repository workflow declares `cargo test --workspace`, but no GitHub Actions run was created for the current PR/head and the current execution environment has no `cargo`/`rustc`. Runtime RED/GREEN is therefore unpaid.
+The missing proposition-payment symbols were observed RED, then the focused contract passed 4/4 and `cargo test --workspace --no-fail-fast` passed locally. The evaluator is intentionally read-side only: it consumes typed source/span and PNF coordinates, and does not add network I/O, JSON ingestion, UI code, applicability payment, or truth promotion. Workspace Clippy remains blocked by pre-existing deny-warnings failures in `sl-route-selector` and `sl-world-compiler`, outside this evidence-payment change.
 
 ### DASHI/Agda
 
@@ -163,7 +163,7 @@ DASHI/Interop/MaboRadicalTitlePropositionChainPaymentExact.agda
 
 as a successor to the kernel-certified exact-source owner.
 
-The source-written owner formalises the bounded proposition payment and all non-promotion firewalls above. Its new exact-head Agda kernel receipt remains unpaid until observed.
+The owner formalises the bounded proposition payment and all non-promotion firewalls above. Its exact-head Agda kernel receipt is observed.
 
 ## PostgreSQL boundary
 
@@ -257,7 +257,7 @@ and insertion into a global graph does not create truth, authority, applicabilit
 
 ## High-alpha implementation order
 
-### P0 — observe Rust RED
+### P0 — Rust RED (paid)
 
 Run the exact PR #14 contract with a real Rust toolchain:
 
@@ -265,13 +265,15 @@ Run the exact PR #14 contract with a real Rust toolchain:
 cargo test -p sensiblaw-evidence-payment --test mabo_proposition_payment
 ```
 
-Expected RED: unresolved proposition-payment symbols / missing implementation.
+Observed RED: unresolved proposition-payment symbols / missing implementation.
 
-### P1 — minimal Rust GREEN
+### P1 — minimal Rust GREEN (paid)
 
 Implement only the read-side proposition-payment evaluator needed by those tests, using typed inputs corresponding to retained PG/PNF/source-span coordinates. Do not add network I/O, UI code, JSON ingestion, or legal truth promotion.
 
-Then run:
+Observed: the focused contract passes 4/4 and `cargo test --workspace --no-fail-fast` passes. The remaining repository-wide Clippy gate is currently blocked by pre-existing lint-deny failures outside this tranche.
+
+The normal validation commands remain:
 
 ```sh
 cargo test -p sensiblaw-evidence-payment --test mabo_proposition_payment
