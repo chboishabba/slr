@@ -40,6 +40,7 @@ pub struct PreparedWorldExpansionCycle {
 pub enum RecurrentRunBlockerKind {
     ProviderUnavailable,
     IdentityReviewRequired,
+    ContextReviewRequired,
     WorldDiagnosisRequired,
     PersistenceBlocked,
     NoPreparedCycle,
