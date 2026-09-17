@@ -7,8 +7,8 @@ use sensiblaw_proof_search_loop::world_expansion::{
 use sensiblaw_proof_search_loop::world_expansion_reentry::PostAcquisitionWorldObservation;
 use sensiblaw_proof_search_loop::world_expansion_runner::{
     run_recurrent_world_expansion, PreparedWorldExpansionCycle, RecurrentRunBlocker,
-    RecurrentRunStopReason, WorldExpansionCycleSink, WorldExpansionCycleSource,
-    WorldExpansionRunnerConfig,
+    RecurrentRunBlockerKind, RecurrentRunStopReason, WorldExpansionCycleSink,
+    WorldExpansionCycleSource, WorldExpansionRunnerConfig,
 };
 use sensiblaw_proof_search_loop::world_expansion_session::{
     WorldExpansionCycleReceipt, WorldExpansionSession,
@@ -113,7 +113,12 @@ impl WorldExpansionCycleSource for TwoCycleSource {
         let cycle = match self.next {
             0 => prepared(0, Some("residual:mabo:r1")),
             1 => prepared(1, None),
-            _ => return Err(RecurrentRunBlocker::new("source:no-more-cycles")),
+            _ => {
+                return Err(RecurrentRunBlocker::new(
+                    RecurrentRunBlockerKind::NoPreparedCycle,
+                    "source:no-more-cycles",
+                ))
+            }
         };
         self.next += 1;
         Ok(cycle)
@@ -132,7 +137,10 @@ impl WorldExpansionCycleSink for RecordingSink {
         _receipt: &WorldExpansionCycleReceipt,
     ) -> Result<(), RecurrentRunBlocker> {
         if self.fail_after == Some(self.persisted) {
-            return Err(RecurrentRunBlocker::new("pg:lineage-write-blocked"));
+            return Err(RecurrentRunBlocker::new(
+                RecurrentRunBlockerKind::PersistenceBlocked,
+                "pg:lineage-write-blocked",
+            ));
         }
         self.persisted += 1;
         Ok(())
@@ -170,7 +178,7 @@ fn recurrent_runner_commits_only_after_sink_and_stops_on_frontier_exhaustion() {
 }
 
 #[test]
-fn sink_blocker_rolls_back_staged_cycle() {
+fn sink_blocker_rolls_back_staged_cycle_and_retains_blocker_kind() {
     let mut session = WorldExpansionSession::new(frontier(), mabo_world_expansion_policy());
     let mut source = TwoCycleSource { next: 0 };
     let mut sink = RecordingSink {
@@ -191,7 +199,10 @@ fn sink_blocker_rolls_back_staged_cycle() {
     assert_eq!(receipt.reviewed_objects, 0);
     assert_eq!(
         receipt.stop_reason,
-        RecurrentRunStopReason::Blocked("pg:lineage-write-blocked".into())
+        RecurrentRunStopReason::Blocked(RecurrentRunBlocker::new(
+            RecurrentRunBlockerKind::PersistenceBlocked,
+            "pg:lineage-write-blocked",
+        ))
     );
     assert_eq!(session.ledger.total_new_world_objects, 0);
     assert_eq!(session.frontier.frontier_ref, "frontier:mabo:0");
