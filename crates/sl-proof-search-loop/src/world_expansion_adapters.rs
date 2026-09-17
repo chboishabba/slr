@@ -1,3 +1,143 @@
+//! Typed producer-artifact adapters for residual-driven world expansion.
+//!
+//! These functions perform no acquisition, parsing, review, persistence, or
+//! semantic promotion. They only project already-governed producer artifacts
+//! into `ExpansionCandidate` while retaining the exact triggering residual and
+//! source-revision coordinates needed by the P7d controller.
+
+use crate::frontier::{ProofResidual, ResidualStatus};
+use crate::world_expansion::{
+    ExpansionCandidate, KnowledgeObjectKind, ProducerLane, ResidualClass,
+};
+use sensiblaw_governed_legal_provider::OalcLookupReceipt;
+use sensiblaw_route_executor::AcquiredSource;
+use sensiblaw_route_selector::{RouteCandidate, RouteFamily};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ExpansionScoring {
+    pub expected_residual_contraction: u64,
+    pub provenance_quality: u64,
+    pub same_object_confidence: u64,
+    pub expected_new_world_value: u64,
+    pub acquisition_cost: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExpansionAdapterError {
+    ResidualNotOpen,
+    WrongWikidataRoute,
+    WikipediaSourceNotCandidateOnly,
+    WikipediaSourcePromoted,
+}
+
+fn require_open(residual: &ProofResidual) -> Result<(), ExpansionAdapterError> {
+    if residual.status == ResidualStatus::Open {
+        Ok(())
+    } else {
+        Err(ExpansionAdapterError::ResidualNotOpen)
+    }
+}
+
+fn candidate(
+    residual: &ProofResidual,
+    residual_class: ResidualClass,
+    candidate_ref: String,
+    object_ref: String,
+    object_kind: KnowledgeObjectKind,
+    discovery_parent_ref: String,
+    producer_lane: ProducerLane,
+    source_revision_ref: Option<String>,
+    scoring: ExpansionScoring,
+) -> ExpansionCandidate {
+    ExpansionCandidate {
+        candidate_ref,
+        object_ref,
+        object_kind,
+        discovery_parent_ref,
+        triggering_residual_ref: residual.residual_ref.clone(),
+        residual_class,
+        producer_lane,
+        source_revision_ref,
+        expected_residual_contraction: scoring.expected_residual_contraction,
+        provenance_quality: scoring.provenance_quality,
+        same_object_confidence: scoring.same_object_confidence,
+        expected_new_world_value: scoring.expected_new_world_value,
+        acquisition_cost: scoring.acquisition_cost,
+        admissible: true,
+    }
+}
+
+pub fn from_oalc_lookup(
+    residual: &ProofResidual,
+    residual_class: ResidualClass,
+    discovery_parent_ref: &str,
+    receipt: &OalcLookupReceipt,
+    scoring: ExpansionScoring,
+) -> Result<ExpansionCandidate, ExpansionAdapterError> {
+    require_open(residual)?;
+    Ok(candidate(
+        residual,
+        residual_class,
+        format!("oalc:{}", receipt.source_revision_ref),
+        receipt.source_identity_ref.clone(),
+        KnowledgeObjectKind::PrimaryLegalSource,
+        discovery_parent_ref.to_owned(),
+        ProducerLane::GovernedLegal,
+        Some(receipt.source_revision_ref.clone()),
+        scoring,
+    ))
+}
+
+pub fn from_wikidata_route(
+    residual: &ProofResidual,
+    residual_class: ResidualClass,
+    source_revision_ref: &str,
+    route: &RouteCandidate,
+    scoring: ExpansionScoring,
+) -> Result<ExpansionCandidate, ExpansionAdapterError> {
+    require_open(residual)?;
+    if route.route_family != RouteFamily::WikidataProperty {
+        return Err(ExpansionAdapterError::WrongWikidataRoute);
+    }
+    Ok(candidate(
+        residual,
+        residual_class,
+        route.candidate_id.clone(),
+        route.target_ref.clone(),
+        KnowledgeObjectKind::Qid,
+        route.source_ref.clone(),
+        ProducerLane::WikidataIdentity,
+        Some(source_revision_ref.to_owned()),
+        scoring,
+    ))
+}
+
+pub fn from_wikipedia_source(
+    residual: &ProofResidual,
+    residual_class: ResidualClass,
+    source: &AcquiredSource,
+    scoring: ExpansionScoring,
+) -> Result<ExpansionCandidate, ExpansionAdapterError> {
+    require_open(residual)?;
+    if !source.candidate_only {
+        return Err(ExpansionAdapterError::WikipediaSourceNotCandidateOnly);
+    }
+    if source.semantic_promotion {
+        return Err(ExpansionAdapterError::WikipediaSourcePromoted);
+    }
+    Ok(candidate(
+        residual,
+        residual_class,
+        source.document_ref.clone(),
+        source.canonical_url.clone(),
+        KnowledgeObjectKind::Article,
+        source.source_ref.clone(),
+        ProducerLane::WikipediaContext,
+        Some(source.revision_ref.clone()),
+        scoring,
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
