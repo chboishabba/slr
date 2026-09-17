@@ -12,4 +12,5 @@ sensiblaw-pg-source-store = { path = "../sl-pg-source-store" }
 sensiblaw-reviewed-evidence-payment = { path = "../sl-reviewed-evidence-payment" }
 sensiblaw-route-selector = { path = "../sl-route-selector" }
 sensiblaw-wikimedia-candidate-provider = { path = "../sl-wikimedia-candidate-provider" }
+sensiblaw-world-store = { path = "../sl-world-store" }
 thiserror = "1"
