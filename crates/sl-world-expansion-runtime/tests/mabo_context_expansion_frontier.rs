@@ -1,12 +1,9 @@
-#[path = "../src/adaptive_campaign.rs"]
-mod adaptive_campaign;
-
 use std::collections::{BTreeMap, BTreeSet};
 
-use adaptive_campaign::{
+use sensiblaw_pg_source_store::{DiscoveryIdentityBaseline, LatentWorldEdgeRow, LatentWorldRows};
+use sensiblaw_world_expansion_runtime::adaptive_campaign::{
     diagnose_mabo_context_expansion_frontier, select_next_mabo_context_expansion,
 };
-use sensiblaw_pg_source_store::{DiscoveryIdentityBaseline, LatentWorldEdgeRow, LatentWorldRows};
 
 fn baseline() -> DiscoveryIdentityBaseline {
     DiscoveryIdentityBaseline {
