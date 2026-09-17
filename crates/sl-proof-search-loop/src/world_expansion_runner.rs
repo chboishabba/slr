@@ -78,6 +78,15 @@ pub struct RecurrentWorldExpansionReceipt {
     pub initial_novel_identity_classes: usize,
     pub final_novel_identity_classes: usize,
     pub target_novel_identity_classes: usize,
+    pub candidates_seen: usize,
+    pub candidates_rejected: usize,
+    pub duplicates_seen: usize,
+    pub identity_ambiguous: usize,
+    pub reviewed_objects: usize,
+    pub new_qids_admitted: usize,
+    pub new_articles_admitted: usize,
+    pub new_primary_legal_sources_admitted: usize,
+    pub new_other_world_objects_admitted: usize,
     pub final_frontier_ref: String,
     pub remaining_open_residual_refs: Vec<String>,
     pub lineage_receipts: usize,
@@ -102,11 +111,21 @@ fn receipt(
     cycles_committed: usize,
     stop_reason: RecurrentRunStopReason,
 ) -> RecurrentWorldExpansionReceipt {
+    let ledger = &session.ledger;
     RecurrentWorldExpansionReceipt {
         cycles_committed,
         initial_novel_identity_classes,
-        final_novel_identity_classes: session.ledger.total_new_world_objects,
+        final_novel_identity_classes: ledger.total_new_world_objects,
         target_novel_identity_classes: session.policy.target_novel_objects,
+        candidates_seen: ledger.candidates_seen,
+        candidates_rejected: ledger.candidates_rejected,
+        duplicates_seen: ledger.duplicates_seen,
+        identity_ambiguous: ledger.identity_ambiguous,
+        reviewed_objects: ledger.reviewed_objects,
+        new_qids_admitted: ledger.new_qids_admitted,
+        new_articles_admitted: ledger.new_articles_admitted,
+        new_primary_legal_sources_admitted: ledger.new_primary_legal_sources_admitted,
+        new_other_world_objects_admitted: ledger.new_other_world_objects_admitted,
         final_frontier_ref: session.frontier.frontier_ref.clone(),
         remaining_open_residual_refs: session
             .frontier
