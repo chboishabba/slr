@@ -1,5 +1,6 @@
 mod candidate_pnf;
 mod context_federation;
+mod discovery_identity_baseline;
 mod discovery_lineage;
 mod latent_world;
 mod legal_ir_materialization;
@@ -14,6 +15,10 @@ pub use context_federation::{
     materialize_reviewed_context_edges, review_mabo_wikidata_candidate, reviewed_context_edge,
     ContextFederationError, ContextMaterializationReceipt, ContextReviewDecision,
     ReviewedContextEdge, SourceFamily,
+};
+pub use discovery_identity_baseline::{
+    collapse_discovery_identity_baseline, load_discovery_identity_baseline,
+    DiscoveryIdentityBaseline, DiscoveryIdentityBaselineError, DiscoveryIdentityBaselineRow,
 };
 pub use discovery_lineage::{
     discovery_lineage_row, materialize_discovery_lineage, DiscoveryLineageError,
