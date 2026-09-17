@@ -4,9 +4,7 @@ use sensiblaw_pg_source_store::{DiscoveryIdentityBaseline, LatentWorldEdgeRow, L
 use sensiblaw_world_expansion_runtime::adaptive_campaign::{
     select_next_mabo_adaptive_decision, MaboAdaptiveDecision,
 };
-use sensiblaw_world_expansion_runtime::{
-    diagnose_mabo_context_world_identity, MaboConsumerDiagnosis,
-};
+use sensiblaw_world_expansion_runtime::diagnose_mabo_context_world_identity;
 
 fn baseline() -> DiscoveryIdentityBaseline {
     DiscoveryIdentityBaseline {
