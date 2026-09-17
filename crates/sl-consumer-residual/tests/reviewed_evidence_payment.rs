@@ -1,6 +1,6 @@
 use sensiblaw_consumer_residual::{
-    compile_consumer_residual_stream, compile_reviewed_evidence_payment, ConsumerRequirement,
-    ConsumerSpec, EvidenceCoordinateKind, RequirementNeed, RequirementScope,
+    compile_consumer_residual_stream_review_aware, compile_reviewed_evidence_payment,
+    ConsumerRequirement, ConsumerSpec, EvidenceCoordinateKind, RequirementNeed, RequirementScope,
     ReviewedEvidenceCoordinate,
 };
 use sensiblaw_world_store::{decode_record, WorldRecordKind};
@@ -71,7 +71,7 @@ fn reviewed_evidence_payment_makes_evidence_requirement_paid_on_next_frontier() 
     compile_reviewed_evidence_payment(&spec(), &review, &mut reviewed_world, 7).unwrap();
 
     let mut next = Vec::new();
-    let receipt = compile_consumer_residual_stream(
+    let receipt = compile_consumer_residual_stream_review_aware(
         &mut std::io::Cursor::new(reviewed_world),
         &spec(),
         &mut next,
