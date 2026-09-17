@@ -15,7 +15,7 @@ use sensiblaw_pg_source_store::{
     materialize_discovery_lineage, DatabaseConfig, DiscoveryIdentityBaseline,
     DiscoveryLineageInput, LatentWorldRows,
 };
-use sensiblaw_proof_search_loop::frontier::{ProofResidual, ResidualStatus};
+use sensiblaw_proof_search_loop::frontier::{ProofFrontier, ProofResidual, ResidualStatus};
 use sensiblaw_proof_search_loop::world_expansion::{
     ProducerLane, ResidualClass, WorldExpansionPolicy,
 };
@@ -196,6 +196,25 @@ pub fn diagnose_mabo_context_world_identity(
         creates_semantic_authority: false,
         applicability_promoted: false,
         claim_truth_promoted: false,
+    }
+}
+
+/// Project a diagnosis into the canonical proof-search frontier ABI. This does
+/// not add or satisfy residuals; it simply gives the existing Pareto/scheduler
+/// machinery the explicit consumer-indexed residuals diagnosed above.
+#[must_use]
+pub fn mabo_consumer_diagnosis_frontier(
+    diagnosis: &MaboConsumerDiagnosis,
+    frontier_ref: impl Into<String>,
+) -> ProofFrontier {
+    ProofFrontier {
+        consumer_ref: diagnosis.consumer_spec.consumer_id.clone(),
+        frontier_ref: frontier_ref.into(),
+        residuals: diagnosis.residuals.clone(),
+        satisfied_payment_refs: vec![],
+        contested_coordinate_refs: vec![],
+        authority_blocked_refs: vec![],
+        authority: "experimental_candidate_only",
     }
 }
 
