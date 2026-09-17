@@ -36,15 +36,27 @@ pub struct PreparedWorldExpansionCycle {
     pub observation: PostAcquisitionWorldObservation,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RecurrentRunBlockerKind {
+    ProviderUnavailable,
+    IdentityReviewRequired,
+    WorldDiagnosisRequired,
+    PersistenceBlocked,
+    NoPreparedCycle,
+    Other,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RecurrentRunBlocker {
+    pub kind: RecurrentRunBlockerKind,
     pub blocker_ref: String,
 }
 
 impl RecurrentRunBlocker {
     #[must_use]
-    pub fn new(blocker_ref: impl Into<String>) -> Self {
+    pub fn new(kind: RecurrentRunBlockerKind, blocker_ref: impl Into<String>) -> Self {
         Self {
+            kind,
             blocker_ref: blocker_ref.into(),
         }
     }
@@ -69,7 +81,7 @@ pub enum RecurrentRunStopReason {
     TargetComplete,
     FrontierExhausted,
     CycleBudgetExhausted,
-    Blocked(String),
+    Blocked(RecurrentRunBlocker),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -184,7 +196,7 @@ where
                     session,
                     initial_novel_identity_classes,
                     cycles_committed,
-                    RecurrentRunStopReason::Blocked(blocker.blocker_ref),
+                    RecurrentRunStopReason::Blocked(blocker),
                 ));
             }
         };
@@ -206,7 +218,7 @@ where
                 session,
                 initial_novel_identity_classes,
                 cycles_committed,
-                RecurrentRunStopReason::Blocked(blocker.blocker_ref),
+                RecurrentRunStopReason::Blocked(blocker),
             ));
         }
 
