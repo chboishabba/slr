@@ -11,6 +11,7 @@ pub mod bound_acquisition;
 pub mod cullen_premise_audit;
 pub mod engine;
 pub mod frontier;
+pub mod getter_observation;
 pub mod historical_legislation;
 pub mod hypothesis;
 pub mod judgment_candidates;
@@ -38,6 +39,7 @@ pub mod world_expansion_adapters;
 pub mod world_expansion_reentry;
 pub mod world_expansion_session;
 pub mod world_expansion_step;
+pub mod world_identity;
 
 #[path = "legacy.rs"]
 mod legacy;
