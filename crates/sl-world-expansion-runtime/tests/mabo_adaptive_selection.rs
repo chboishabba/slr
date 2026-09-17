@@ -1,8 +1,12 @@
+#[path = "../src/adaptive_campaign.rs"]
+mod adaptive_campaign;
+
+use adaptive_campaign::select_next_reviewed_mabo_gap;
 use sensiblaw_proof_search_loop::frontier::{ProofFrontier, ProofResidual, ResidualStatus};
 use sensiblaw_proof_search_loop::world_expansion::ResidualClass;
 use sensiblaw_world_expansion_runtime::{
-    select_next_reviewed_mabo_gap, MaboIdentityDiagnosisRow, MaboIdentityReviewAssignment,
-    MaboIdentityReviewPlan, MaboPlannedIdentityReview,
+    MaboIdentityDiagnosisRow, MaboIdentityReviewAssignment, MaboIdentityReviewPlan,
+    MaboPlannedIdentityReview,
 };
 
 fn row(representation: &str, residual: &str, relation_types: &[&str]) -> MaboIdentityDiagnosisRow {
