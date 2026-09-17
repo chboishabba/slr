@@ -1,3 +1,7 @@
+#[path = "../src/reviewed_campaign.rs"]
+mod reviewed_campaign;
+
+use reviewed_campaign::{parse_wikidata_revision_ref, prepare_reviewed_mabo_identity_cycle};
 use sensiblaw_consumer_residual::{
     ConsumerRequirement, ConsumerSpec, EvidenceCoordinateKind, RequirementNeed, RequirementScope,
 };
@@ -6,8 +10,8 @@ use sensiblaw_proof_search_loop::world_expansion::ResidualClass;
 use sensiblaw_route_selector::{ProducerFamily, RouteCandidate, RouteFamily};
 use sensiblaw_wikimedia_candidate_provider::entity_revision_receipt_from_rdf;
 use sensiblaw_world_expansion_runtime::{
-    parse_wikidata_revision_ref, prepare_reviewed_mabo_identity_cycle, MaboConsumerDiagnosis,
-    MaboIdentityDiagnosisRow, MaboIdentityReviewAssignment, MaboPlannedIdentityReview,
+    MaboConsumerDiagnosis, MaboIdentityDiagnosisRow, MaboIdentityReviewAssignment,
+    MaboPlannedIdentityReview,
 };
 
 fn diagnosis_row() -> MaboIdentityDiagnosisRow {
