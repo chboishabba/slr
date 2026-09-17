@@ -40,6 +40,15 @@ fn require_open(residual: &ProofResidual) -> Result<(), ExpansionAdapterError> {
     if residual.status == ResidualStatus::Open { Ok(()) } else { Err(ExpansionAdapterError::ResidualNotOpen) }
 }
 
+const fn supported_wikidata_property_producer(producer: ProducerFamily) -> bool {
+    matches!(
+        producer,
+        ProducerFamily::IdentitySource
+            | ProducerFamily::AuthoritySource
+            | ProducerFamily::ClassificationEvidence
+    )
+}
+
 #[allow(clippy::too_many_arguments)]
 fn candidate(
     residual: &ProofResidual,
@@ -105,7 +114,7 @@ pub fn from_wikidata_route(
     if route.route_family != RouteFamily::WikidataProperty {
         return Err(ExpansionAdapterError::WrongWikidataRoute);
     }
-    if route.producer != ProducerFamily::IdentitySource {
+    if !supported_wikidata_property_producer(route.producer) {
         return Err(ExpansionAdapterError::WrongWikidataProducer);
     }
     if !source.candidate_only {
@@ -225,7 +234,16 @@ mod tests {
     }
 
     #[test]
-    fn wikidata_receipt_must_match_source_and_identity_producer() {
+    fn authority_source_wikidata_property_remains_candidate_context() {
+        let route = route(ProducerFamily::AuthoritySource, RouteFamily::WikidataProperty, "Q1501525", "Q6851910", "P4006");
+        let source = acquired_wikidata("Q1501525");
+        let candidate = from_wikidata_route(&residual(ResidualStatus::Open), ResidualClass::Legal, &source, &route, scoring()).unwrap();
+        assert_eq!(candidate.object_ref, "Q6851910");
+        assert_eq!(candidate.producer_lane, ProducerLane::WikidataIdentity);
+    }
+
+    #[test]
+    fn wikidata_receipt_must_match_source_and_supported_producer() {
         let route = route(ProducerFamily::IdentitySource, RouteFamily::WikidataProperty, "Q1501525", "Q975866", "P710");
         assert_eq!(from_wikidata_route(&residual(ResidualStatus::Open), ResidualClass::Identity, &acquired_wikidata("Q1"), &route, scoring()), Err(ExpansionAdapterError::WikidataSourceMismatch));
         let wrong = route(ProducerFamily::ArticleSemantic, RouteFamily::WikidataProperty, "Q1501525", "Q975866", "P710");
