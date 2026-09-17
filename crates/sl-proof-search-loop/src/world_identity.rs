@@ -17,10 +17,9 @@ mod tests {
         );
 
         let mut registry = WorldIdentityRegistry::default();
-        assert_eq!(
-            registry.resolve(&qid, None).unwrap(),
-            WorldIdentityResolution::NewIdentityClass("world:mabo:person:eddie-mabo".into())
-        );
+        registry
+            .register_canonical("world:mabo:person:eddie-mabo", &qid)
+            .unwrap();
         assert_eq!(
             registry.resolve(&article, Some(&receipt)).unwrap(),
             WorldIdentityResolution::ExistingIdentityClass("world:mabo:person:eddie-mabo".into())
@@ -29,7 +28,18 @@ mod tests {
     }
 
     #[test]
-    fn alias_without_reviewed_same_object_receipt_fails_closed() {
+    fn unseen_representation_may_open_new_identity_class_without_guessing_aliases() {
+        let qid = RepresentationIdentity::new("Q1358798", RepresentationKind::Qid);
+        let mut registry = WorldIdentityRegistry::default();
+        assert_eq!(
+            registry.resolve(&qid, None).unwrap(),
+            WorldIdentityResolution::NewIdentityClass("Q1358798".into())
+        );
+        assert_eq!(registry.identity_class_count(), 1);
+    }
+
+    #[test]
+    fn alias_without_reviewed_same_object_receipt_fails_closed_when_canonical_class_is_claimed() {
         let qid = RepresentationIdentity::new("Q975866", RepresentationKind::Qid);
         let article = RepresentationIdentity::new(
             "https://en.wikipedia.org/wiki/Eddie_Mabo",
@@ -41,10 +51,8 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            registry.resolve(&article, None),
-            Err(WorldIdentityError::UnresolvedRepresentation(
-                "https://en.wikipedia.org/wiki/Eddie_Mabo".into()
-            ))
+            registry.attach_to_class("world:mabo:person:eddie-mabo", &article, None),
+            Err(WorldIdentityError::SameObjectReceiptRequired)
         );
     }
 
@@ -68,7 +76,11 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            registry.resolve(&article, Some(&receipt)),
+            registry.attach_to_class(
+                "world:mabo:person:eddie-mabo",
+                &article,
+                Some(&receipt),
+            ),
             Err(WorldIdentityError::SameObjectReceiptMismatch)
         );
     }
