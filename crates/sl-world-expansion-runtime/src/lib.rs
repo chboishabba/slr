@@ -5,6 +5,8 @@
 //! the consumer residual compiler retains gap/payment semantics, and this crate
 //! performs only the reviewed projections between those established surfaces.
 
+use std::io::Cursor;
+
 use sensiblaw_consumer_residual::{
     ConsumerSpec, EvidenceCoordinateKind, RequirementNeed, RequirementScope,
 };
@@ -13,16 +15,24 @@ use sensiblaw_pg_source_store::{
     DiscoveryLineageInput,
 };
 use sensiblaw_proof_search_loop::world_expansion::{ProducerLane, WorldExpansionPolicy};
-use sensiblaw_proof_search_loop::world_expansion_reentry::DiscoveryLineageReceipt;
+use sensiblaw_proof_search_loop::world_expansion_reentry::{
+    DiscoveryLineageReceipt, PostAcquisitionWorldObservation,
+};
 use sensiblaw_proof_search_loop::world_expansion_runner::{
     RecurrentRunBlocker, RecurrentRunBlockerKind, WorldExpansionCycleSink,
 };
-use sensiblaw_proof_search_loop::world_expansion_session::WorldExpansionCycleReceipt;
+use sensiblaw_proof_search_loop::world_expansion_session::{
+    WorldExpansionCycleReceipt, WorldExpansionSession,
+};
 use sensiblaw_proof_search_loop::world_identity_guard::IdentityCoherenceBaseline;
+use sensiblaw_proof_search_loop::world_known_identity_payment::{
+    reenter_known_identity_payment, KnownIdentityPaymentError, KnownIdentityPaymentReceipt,
+};
 use sensiblaw_proof_search_loop::world_observation::WorldObservation;
 use sensiblaw_reviewed_evidence_payment::{
     compile_reviewed_evidence_payment, ReviewedEvidenceCoordinate,
 };
+use sensiblaw_world_store::WorldStore;
 use thiserror::Error;
 
 pub const MABO_NOVEL_IDENTITY_TARGET: usize = 100;
@@ -41,6 +51,18 @@ pub enum WorldExpansionRuntimeError {
     EvidenceScopeMismatch,
     #[error("reviewed evidence payment failed: {0}")]
     ReviewedEvidencePayment(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum KnownIdentityPaymentRuntimeError {
+    Semantic(KnownIdentityPaymentError),
+    Persistence(RecurrentRunBlocker),
+}
+
+impl From<KnownIdentityPaymentError> for KnownIdentityPaymentRuntimeError {
+    fn from(value: KnownIdentityPaymentError) -> Self {
+        Self::Semantic(value)
+    }
 }
 
 #[must_use]
@@ -173,6 +195,64 @@ pub fn reviewed_observation_payment_stream(
     compile_reviewed_evidence_payment(spec, &reviewed, &mut bytes, iteration_index)
         .map_err(|error| WorldExpansionRuntimeError::ReviewedEvidencePayment(error.to_string()))?;
     Ok(bytes)
+}
+
+pub trait KnownIdentityPaymentSink {
+    fn persist_reviewed_payment(
+        &mut self,
+        wire: &[u8],
+    ) -> Result<(), RecurrentRunBlocker>;
+}
+
+pub fn apply_known_identity_payment_transaction<K>(
+    session: &mut WorldExpansionSession,
+    next_frontier_ref: impl Into<String>,
+    identity_class_ref: &str,
+    observation: &PostAcquisitionWorldObservation,
+    reviewed_payment_wire: &[u8],
+    sink: &mut K,
+) -> Result<KnownIdentityPaymentReceipt, KnownIdentityPaymentRuntimeError>
+where
+    K: KnownIdentityPaymentSink,
+{
+    let receipt = reenter_known_identity_payment(
+        session,
+        next_frontier_ref,
+        identity_class_ref,
+        observation,
+    )?;
+    sink.persist_reviewed_payment(reviewed_payment_wire)
+        .map_err(KnownIdentityPaymentRuntimeError::Persistence)?;
+    session.frontier = receipt.next_frontier.clone();
+    Ok(receipt)
+}
+
+pub struct WorldStoreReviewedPaymentSink {
+    store: WorldStore,
+}
+
+impl WorldStoreReviewedPaymentSink {
+    #[must_use]
+    pub fn new(store: WorldStore) -> Self {
+        Self { store }
+    }
+}
+
+impl KnownIdentityPaymentSink for WorldStoreReviewedPaymentSink {
+    fn persist_reviewed_payment(
+        &mut self,
+        wire: &[u8],
+    ) -> Result<(), RecurrentRunBlocker> {
+        self.store
+            .ingest_wire(Cursor::new(wire))
+            .map_err(|error| {
+                RecurrentRunBlocker::new(
+                    RecurrentRunBlockerKind::PersistenceBlocked,
+                    format!("world-store:reviewed-payment:{error}"),
+                )
+            })?;
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone)]
