@@ -2,8 +2,12 @@
 //!
 //! This crate is intentionally an integration layer: proof-search retains the
 //! semantic recurrence, `sl-pg-source-store` retains provider-neutral storage,
-//! and this crate performs the one-way projection between their receipt shapes.
+//! the consumer residual compiler retains gap/payment semantics, and this crate
+//! performs only the reviewed projections between those established surfaces.
 
+use sensiblaw_consumer_residual::{
+    ConsumerSpec, EvidenceCoordinateKind, RequirementNeed, RequirementScope,
+};
 use sensiblaw_pg_source_store::{
     materialize_discovery_lineage, DatabaseConfig, DiscoveryLineageInput,
 };
@@ -13,12 +17,26 @@ use sensiblaw_proof_search_loop::world_expansion_runner::{
     RecurrentRunBlocker, WorldExpansionCycleSink,
 };
 use sensiblaw_proof_search_loop::world_expansion_session::WorldExpansionCycleReceipt;
+use sensiblaw_proof_search_loop::world_observation::WorldObservation;
+use sensiblaw_reviewed_evidence_payment::{
+    compile_reviewed_evidence_payment, ReviewedEvidenceCoordinate,
+};
 use thiserror::Error;
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum WorldExpansionRuntimeError {
     #[error("reviewed identity class is required for durable recurrent lineage")]
     MissingIdentityClass,
+    #[error("world observation is invalid or promoting")]
+    InvalidWorldObservation,
+    #[error("consumer requirement is not present")]
+    RequirementNotFound,
+    #[error("explicit reviewed evidence coordinate does not match consumer requirement")]
+    EvidenceCoordinateMismatch,
+    #[error("world observation revision does not match consumer requirement scope")]
+    EvidenceScopeMismatch,
+    #[error("reviewed evidence payment failed: {0}")]
+    ReviewedEvidencePayment(String),
 }
 
 const fn producer_lane_ref(lane: ProducerLane) -> &'static str {
@@ -56,6 +74,69 @@ pub fn discovery_lineage_input(
         claim_truth_promoted: lineage.claim_truth_promoted,
         receipt_authority: lineage.receipt_authority.into(),
     })
+}
+
+pub fn reviewed_evidence_from_world_observation(
+    spec: &ConsumerSpec,
+    requirement_id: &str,
+    coordinate: EvidenceCoordinateKind,
+    review_ref: &str,
+    observation: &WorldObservation,
+) -> Result<ReviewedEvidenceCoordinate, WorldExpansionRuntimeError> {
+    observation
+        .validate()
+        .map_err(|_| WorldExpansionRuntimeError::InvalidWorldObservation)?;
+    let requirement = spec
+        .requirements
+        .iter()
+        .find(|requirement| requirement.requirement_id == requirement_id)
+        .ok_or(WorldExpansionRuntimeError::RequirementNotFound)?;
+    match requirement.need {
+        RequirementNeed::EvidenceCoordinate(required) if required == coordinate => {}
+        _ => return Err(WorldExpansionRuntimeError::EvidenceCoordinateMismatch),
+    }
+    match &requirement.scope {
+        RequirementScope::AnySource => {}
+        RequirementScope::SourceManifestation(expected)
+            if expected == &observation.source_revision_ref => {}
+        RequirementScope::SourceManifestation(_) => {
+            return Err(WorldExpansionRuntimeError::EvidenceScopeMismatch);
+        }
+    }
+
+    Ok(ReviewedEvidenceCoordinate {
+        review_ref: review_ref.to_owned(),
+        consumer_id: spec.consumer_id.clone(),
+        requirement_id: requirement_id.to_owned(),
+        coordinate,
+        source_ref: Some(observation.source_revision_ref.clone()),
+        evidence_ref: observation.request_ref.clone(),
+        candidate_only: true,
+        creates_semantic_authority: false,
+        applicability_promoted: false,
+        claim_truth_promoted: false,
+    })
+}
+
+pub fn reviewed_observation_payment_stream(
+    spec: &ConsumerSpec,
+    requirement_id: &str,
+    coordinate: EvidenceCoordinateKind,
+    review_ref: &str,
+    observation: &WorldObservation,
+    iteration_index: i64,
+) -> Result<Vec<u8>, WorldExpansionRuntimeError> {
+    let reviewed = reviewed_evidence_from_world_observation(
+        spec,
+        requirement_id,
+        coordinate,
+        review_ref,
+        observation,
+    )?;
+    let mut bytes = Vec::new();
+    compile_reviewed_evidence_payment(spec, &reviewed, &mut bytes, iteration_index)
+        .map_err(|error| WorldExpansionRuntimeError::ReviewedEvidencePayment(error.to_string()))?;
+    Ok(bytes)
 }
 
 #[derive(Debug, Clone)]
