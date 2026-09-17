@@ -31,14 +31,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             break;
         }
     }
-    let route = matched.ok_or("pinned Mabo P710 -> Q975866 route not present in provider output")?;
+    let route = matched.ok_or_else(|| {
+        std::io::Error::other("pinned Mabo P710 -> Q975866 route not present in provider output")
+    })?;
     let observation = wikidata_property_observation(
         "query:mabo:P710:Q975866",
         &acquired,
         &route,
         GetterBackend::SlrNative,
-    )?;
-    observation.validate().map_err(|error| format!("invalid observation: {error:?}"))?;
+    )
+    .map_err(|error| std::io::Error::other(format!("observation adapter: {error:?}")))?;
+    observation
+        .validate()
+        .map_err(|error| std::io::Error::other(format!("invalid observation: {error:?}")))?;
 
     println!("object_ref={}", observation.object_ref);
     println!("relation_ref={}", observation.relation_ref);
