@@ -20,8 +20,10 @@ pub use context_federation::{
     ContextMaterializationReceipt, ContextReviewDecision, ReviewedContextEdge, SourceFamily,
 };
 pub use discovery_identity_baseline::{
-    collapse_discovery_identity_baseline, load_discovery_identity_baseline,
-    DiscoveryIdentityBaseline, DiscoveryIdentityBaselineError, DiscoveryIdentityBaselineRow,
+    collapse_discovery_campaign_identity_classes, collapse_discovery_identity_baseline,
+    load_discovery_campaign_identity_classes, load_discovery_identity_baseline,
+    DiscoveryCampaignIdentityRow, DiscoveryIdentityBaseline, DiscoveryIdentityBaselineError,
+    DiscoveryIdentityBaselineRow,
 };
 pub use discovery_lineage::{
     discovery_lineage_row, materialize_discovery_lineage, DiscoveryLineageError,
