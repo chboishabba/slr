@@ -1,3 +1,173 @@
+use std::collections::{BTreeMap, BTreeSet};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum RepresentationKind {
+    Qid,
+    WikipediaArticle,
+    LegalSource,
+    Other,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct RepresentationIdentity {
+    pub representation_ref: String,
+    pub kind: RepresentationKind,
+}
+
+impl RepresentationIdentity {
+    #[must_use]
+    pub fn new(reference: impl Into<String>, kind: RepresentationKind) -> Self {
+        Self {
+            representation_ref: reference.into(),
+            kind,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SameObjectReceipt {
+    pub canonical_world_object_ref: String,
+    pub established_representation: RepresentationIdentity,
+    pub candidate_representation: RepresentationIdentity,
+    pub review_ref: String,
+    pub reviewed: bool,
+    pub creates_semantic_authority: bool,
+    pub creates_claim_truth: bool,
+}
+
+impl SameObjectReceipt {
+    #[must_use]
+    pub fn reviewed(
+        canonical_world_object_ref: impl Into<String>,
+        established_representation: RepresentationIdentity,
+        candidate_representation: RepresentationIdentity,
+        review_ref: impl Into<String>,
+    ) -> Self {
+        Self {
+            canonical_world_object_ref: canonical_world_object_ref.into(),
+            established_representation,
+            candidate_representation,
+            review_ref: review_ref.into(),
+            reviewed: true,
+            creates_semantic_authority: false,
+            creates_claim_truth: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum WorldIdentityResolution {
+    NewIdentityClass(String),
+    ExistingIdentityClass(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum WorldIdentityError {
+    EmptyCoordinate(&'static str),
+    CanonicalClassUnknown(String),
+    RepresentationAlreadyBound(String),
+    SameObjectReceiptRequired,
+    SameObjectReceiptMismatch,
+    SameObjectReceiptMayNotPromote,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct WorldIdentityRegistry {
+    representation_to_class: BTreeMap<RepresentationIdentity, String>,
+    identity_classes: BTreeSet<String>,
+}
+
+impl WorldIdentityRegistry {
+    pub fn register_canonical(
+        &mut self,
+        canonical_world_object_ref: impl Into<String>,
+        representation: &RepresentationIdentity,
+    ) -> Result<(), WorldIdentityError> {
+        let canonical_world_object_ref = canonical_world_object_ref.into();
+        if canonical_world_object_ref.trim().is_empty() {
+            return Err(WorldIdentityError::EmptyCoordinate("canonical_world_object_ref"));
+        }
+        if representation.representation_ref.trim().is_empty() {
+            return Err(WorldIdentityError::EmptyCoordinate("representation_ref"));
+        }
+        if let Some(existing) = self.representation_to_class.get(representation) {
+            if existing != &canonical_world_object_ref {
+                return Err(WorldIdentityError::RepresentationAlreadyBound(
+                    representation.representation_ref.clone(),
+                ));
+            }
+            return Ok(());
+        }
+        self.identity_classes.insert(canonical_world_object_ref.clone());
+        self.representation_to_class
+            .insert(representation.clone(), canonical_world_object_ref);
+        Ok(())
+    }
+
+    pub fn attach_to_class(
+        &mut self,
+        canonical_world_object_ref: &str,
+        representation: &RepresentationIdentity,
+        receipt: Option<&SameObjectReceipt>,
+    ) -> Result<WorldIdentityResolution, WorldIdentityError> {
+        if !self.identity_classes.contains(canonical_world_object_ref) {
+            return Err(WorldIdentityError::CanonicalClassUnknown(
+                canonical_world_object_ref.to_owned(),
+            ));
+        }
+        if let Some(existing) = self.representation_to_class.get(representation) {
+            return Ok(WorldIdentityResolution::ExistingIdentityClass(existing.clone()));
+        }
+        let receipt = receipt.ok_or(WorldIdentityError::SameObjectReceiptRequired)?;
+        if !receipt.reviewed || receipt.creates_semantic_authority || receipt.creates_claim_truth {
+            return Err(WorldIdentityError::SameObjectReceiptMayNotPromote);
+        }
+        let established_matches = self
+            .representation_to_class
+            .get(&receipt.established_representation)
+            .is_some_and(|class_ref| class_ref == canonical_world_object_ref);
+        let candidate_matches = receipt.candidate_representation == *representation;
+        if receipt.canonical_world_object_ref != canonical_world_object_ref
+            || !established_matches
+            || !candidate_matches
+        {
+            return Err(WorldIdentityError::SameObjectReceiptMismatch);
+        }
+        self.representation_to_class.insert(
+            representation.clone(),
+            canonical_world_object_ref.to_owned(),
+        );
+        Ok(WorldIdentityResolution::ExistingIdentityClass(
+            canonical_world_object_ref.to_owned(),
+        ))
+    }
+
+    pub fn resolve(
+        &mut self,
+        representation: &RepresentationIdentity,
+        receipt: Option<&SameObjectReceipt>,
+    ) -> Result<WorldIdentityResolution, WorldIdentityError> {
+        if let Some(existing) = self.representation_to_class.get(representation) {
+            return Ok(WorldIdentityResolution::ExistingIdentityClass(existing.clone()));
+        }
+        if let Some(receipt) = receipt {
+            return self.attach_to_class(
+                &receipt.canonical_world_object_ref,
+                representation,
+                Some(receipt),
+            );
+        }
+        let canonical = representation.representation_ref.clone();
+        self.register_canonical(canonical.clone(), representation)?;
+        Ok(WorldIdentityResolution::NewIdentityClass(canonical))
+    }
+
+    #[must_use]
+    pub fn identity_class_count(&self) -> usize {
+        self.identity_classes.len()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
