@@ -13,7 +13,7 @@ use sensiblaw_proof_search_loop::world_expansion_adapters::{
 use sensiblaw_proof_search_loop::world_expansion_reentry::PostAcquisitionWorldObservation;
 use sensiblaw_proof_search_loop::world_expansion_runner::{
     run_recurrent_world_expansion, PreparedWorldExpansionCycle, RecurrentRunBlocker,
-    WorldExpansionCycleSource, WorldExpansionRunnerConfig,
+    RecurrentRunBlockerKind, WorldExpansionCycleSource, WorldExpansionRunnerConfig,
 };
 use sensiblaw_proof_search_loop::world_expansion_session::WorldExpansionSession;
 use sensiblaw_proof_search_loop::world_expansion_step::ResidualRouting;
@@ -42,9 +42,12 @@ impl WorldExpansionCycleSource for OnePreparedCycle {
         &mut self,
         _session: &WorldExpansionSession,
     ) -> Result<PreparedWorldExpansionCycle, RecurrentRunBlocker> {
-        self.0
-            .take()
-            .ok_or_else(|| RecurrentRunBlocker::new("campaign:no-second-reviewed-cycle"))
+        self.0.take().ok_or_else(|| {
+            RecurrentRunBlocker::new(
+                RecurrentRunBlockerKind::NoPreparedCycle,
+                "campaign:no-second-reviewed-cycle",
+            )
+        })
     }
 }
 
