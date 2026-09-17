@@ -43,6 +43,7 @@ pub mod world_expansion_step;
 pub mod world_identity;
 pub mod world_identity_guard;
 pub mod world_identity_lineage;
+pub mod world_known_identity_payment;
 pub mod world_observation;
 pub mod world_observation_adapters;
 
