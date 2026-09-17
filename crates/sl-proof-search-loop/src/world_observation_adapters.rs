@@ -19,6 +19,15 @@ pub enum WorldObservationAdapterError {
     WikidataSourcePromoted,
 }
 
+const fn supported_wikidata_property_producer(producer: ProducerFamily) -> bool {
+    matches!(
+        producer,
+        ProducerFamily::IdentitySource
+            | ProducerFamily::AuthoritySource
+            | ProducerFamily::ClassificationEvidence
+    )
+}
+
 fn hex_digest(bytes: &[u8; 32]) -> String {
     let mut out = String::with_capacity(71);
     out.push_str("sha256:");
@@ -38,7 +47,7 @@ pub fn wikidata_property_observation(
     if route.route_family != RouteFamily::WikidataProperty {
         return Err(WorldObservationAdapterError::WrongWikidataRoute);
     }
-    if route.producer != ProducerFamily::IdentitySource {
+    if !supported_wikidata_property_producer(route.producer) {
         return Err(WorldObservationAdapterError::WrongWikidataProducer);
     }
     if !source.candidate_only {
