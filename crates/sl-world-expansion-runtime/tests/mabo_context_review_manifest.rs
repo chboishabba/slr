@@ -8,7 +8,6 @@ use adaptive_context_review::{
     bounded_context_candidate_set_sha256, parse_mabo_context_review_tsv,
     prepare_reviewed_context_expansion, ContextExpansionReviewError,
 };
-use sensiblaw_world_expansion_runtime::MaboIdentityReviewPlan;
 
 fn candidate(target: &str) -> ParsedBoundedContextCandidate {
     ParsedBoundedContextCandidate {
