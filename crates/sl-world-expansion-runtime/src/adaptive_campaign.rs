@@ -106,6 +106,11 @@ pub fn diagnose_mabo_context_expansion_frontier(
     expanded_source_refs: &BTreeSet<String>,
     frontier_ref: impl Into<String>,
 ) -> ProofFrontier {
+    let current_world_refs = world
+        .visited_refs
+        .iter()
+        .map(String::as_str)
+        .collect::<BTreeSet<_>>();
     let mut dependencies: BTreeMap<&str, BTreeSet<String>> = BTreeMap::new();
     for edge in &world.edges {
         if edge.relation_ref.starts_with("context:wikidata:") {
@@ -120,6 +125,7 @@ pub fn diagnose_mabo_context_expansion_frontier(
         .representation_identity_class_refs
         .keys()
         .filter(|representation_ref| valid_qid(representation_ref))
+        .filter(|representation_ref| current_world_refs.contains(representation_ref.as_str()))
         .filter(|representation_ref| !expanded_source_refs.contains(*representation_ref))
         .map(|representation_ref| {
             let dependency_refs = dependencies
