@@ -28,6 +28,8 @@ pub struct WorldExpansionStepReceipt {
     pub routing_reason_ref: String,
     pub selected_candidate_ref: String,
     pub selected_object_ref: String,
+    pub selected_discovery_parent_ref: String,
+    pub selected_source_revision_ref: Option<String>,
     pub selected_producer_lane: ProducerLane,
     pub expected_residual_contraction: u64,
     pub admission: AdmissionReceipt,
@@ -88,6 +90,8 @@ pub fn execute_reviewed_expansion_step(
         routing_reason_ref: routing.routing_reason_ref.clone(),
         selected_candidate_ref: selected.candidate_ref.clone(),
         selected_object_ref: selected.object_ref.clone(),
+        selected_discovery_parent_ref: selected.discovery_parent_ref.clone(),
+        selected_source_revision_ref: selected.source_revision_ref.clone(),
         selected_producer_lane: selected.producer_lane,
         expected_residual_contraction: selected.expected_residual_contraction,
         admission,
@@ -102,9 +106,7 @@ pub fn execute_reviewed_expansion_step(
 mod tests {
     use super::*;
     use crate::frontier::{ProofResidual, ResidualStatus};
-    use crate::world_expansion::{
-        KnowledgeObjectKind, mabo_world_expansion_policy,
-    };
+    use crate::world_expansion::{KnowledgeObjectKind, mabo_world_expansion_policy};
 
     fn frontier(status: ResidualStatus) -> ProofFrontier {
         ProofFrontier {
@@ -145,7 +147,7 @@ mod tests {
             triggering_residual_ref: "residual:mabo:authority-source".into(),
             residual_class: ResidualClass::Legal,
             producer_lane,
-            source_revision_ref: None,
+            source_revision_ref: Some("source-revision:test".into()),
             expected_residual_contraction: contraction,
             provenance_quality: 5,
             same_object_confidence: 5,
@@ -165,12 +167,7 @@ mod tests {
         };
         let candidates = [
             candidate("wiki", "Q975866", ProducerLane::WikidataIdentity, 3),
-            candidate(
-                "oalc",
-                "source:mabo:[1992]-HCA-23",
-                ProducerLane::GovernedLegal,
-                3,
-            ),
+            candidate("oalc", "source:mabo:[1992]-HCA-23", ProducerLane::GovernedLegal, 3),
         ];
 
         let receipt = execute_reviewed_expansion_step(
@@ -186,6 +183,8 @@ mod tests {
 
         assert_eq!(receipt.selected_candidate_ref, "oalc");
         assert_eq!(receipt.selected_producer_lane, ProducerLane::GovernedLegal);
+        assert_eq!(receipt.selected_discovery_parent_ref, "Q1501525");
+        assert_eq!(receipt.selected_source_revision_ref.as_deref(), Some("source-revision:test"));
         assert_eq!(receipt.routing_reason_ref, "pnf:authority-obligation");
         assert_eq!(receipt.total_new_world_objects, 1);
         assert!(!receipt.target_complete);
@@ -203,12 +202,7 @@ mod tests {
             routing_reason_ref: "world:gap:identity-disambiguation".into(),
         };
         let candidates = [
-            candidate(
-                "oalc",
-                "source:mabo:[1992]-HCA-23",
-                ProducerLane::GovernedLegal,
-                2,
-            ),
+            candidate("oalc", "source:mabo:[1992]-HCA-23", ProducerLane::GovernedLegal, 2),
             candidate("qid", "Q975866", ProducerLane::WikidataIdentity, 4),
         ];
 
@@ -235,12 +229,7 @@ mod tests {
             residual_class: ResidualClass::Legal,
             routing_reason_ref: "pnf:authority-obligation".into(),
         };
-        let candidates = [candidate(
-            "oalc",
-            "source:mabo:[1992]-HCA-23",
-            ProducerLane::GovernedLegal,
-            3,
-        )];
+        let candidates = [candidate("oalc", "source:mabo:[1992]-HCA-23", ProducerLane::GovernedLegal, 3)];
 
         assert_eq!(
             execute_reviewed_expansion_step(
@@ -281,12 +270,7 @@ mod tests {
             residual_class: ResidualClass::Legal,
             routing_reason_ref: "pnf:authority-obligation".into(),
         };
-        let candidates = [candidate(
-            "oalc",
-            "source:mabo:[1992]-HCA-23",
-            ProducerLane::GovernedLegal,
-            3,
-        )];
+        let candidates = [candidate("oalc", "source:mabo:[1992]-HCA-23", ProducerLane::GovernedLegal, 3)];
 
         let receipt = execute_reviewed_expansion_step(
             &frontier(ResidualStatus::Open),
