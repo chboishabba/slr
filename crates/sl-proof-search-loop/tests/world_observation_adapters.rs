@@ -1,7 +1,7 @@
-use sensiblaw_proof_search_loop::world_expansion_adapters::AcquiredWikidataEntity;
 use sensiblaw_proof_search_loop::world_observation::{GetterBackend, ObservationParity};
 use sensiblaw_proof_search_loop::world_observation_adapters::wikidata_property_observation;
 use sensiblaw_route_selector::{ProducerFamily, RouteCandidate, RouteFamily};
+use sensiblaw_wikimedia_candidate_provider::entity_revision_receipt_from_rdf;
 
 fn route() -> RouteCandidate {
     RouteCandidate {
@@ -26,13 +26,11 @@ fn route() -> RouteCandidate {
 
 #[test]
 fn mabo_native_wikidata_route_normalizes_to_golden_observation_shape() {
-    let acquired = AcquiredWikidataEntity {
-        qid: "Q1501525".into(),
-        source_revision_ref: "wikidata:Q1501525:oldid:2333409615".into(),
-        content_digest_ref: "sha256:mabo-wikidata".into(),
-        candidate_only: true,
-        semantic_promotion: false,
-    };
+    let acquired = entity_revision_receipt_from_rdf(
+        "Q1501525",
+        2333409615,
+        b"<rdf:RDF>mabo fixture</rdf:RDF>".to_vec(),
+    ).unwrap();
     let observation = wikidata_property_observation(
         "query:mabo:P710",
         &acquired,
@@ -43,6 +41,7 @@ fn mabo_native_wikidata_route_normalizes_to_golden_observation_shape() {
     assert_eq!(observation.relation_ref, "P710");
     assert_eq!(observation.value_ref, "Q975866");
     assert_eq!(observation.source_revision_ref, "wikidata:Q1501525:oldid:2333409615");
+    assert!(observation.content_digest_ref.starts_with("sha256:"));
     assert!(observation.validate().is_ok());
     let interop = sensiblaw_proof_search_loop::world_observation::WorldObservation {
         backend: GetterBackend::LeanInterop,
