@@ -4,6 +4,7 @@ mod discovery_identity_baseline;
 mod discovery_lineage;
 mod latent_world;
 mod legal_ir_materialization;
+mod non_novel_identity_alias;
 mod proposition_rows;
 mod reviewed_pnf;
 
@@ -32,6 +33,11 @@ pub use latent_world::{
 pub use legal_ir_materialization::{
     materialize_reviewed_proposition_support, LegalIrMaterializationError, MaterializedLegalIrRefs,
     ReviewedPropositionSupport,
+};
+pub use non_novel_identity_alias::{
+    identity_alias_row, materialize_non_novel_identity_aliases, NonNovelIdentityAliasError,
+    NonNovelIdentityAliasInput, NonNovelIdentityAliasMaterializationReceipt,
+    NonNovelIdentityAliasRow,
 };
 pub use proposition_rows::{
     load_mabo_proposition_rows, load_proposition_rows, PropositionObservationRow, PropositionRows,
