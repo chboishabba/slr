@@ -10,6 +10,7 @@ dotenvy = "0.15"
 postgres = "0.19"
 sha2 = "0.10"
 thiserror = "1"
+sensiblaw-proof-search-loop = { path = "../sl-proof-search-loop" }
 
 [dev-dependencies]
 sensiblaw-evidence-payment = { path = "../sl-evidence-payment" }
