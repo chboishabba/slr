@@ -1,10 +1,10 @@
 //! Adaptive one-hop Mabo campaign projections.
 //!
 //! This module owns no review inference and no semantic authority. It projects
-//! the current reviewed identity plan and the current durable-but-unexpanded
-//! QID surface into the canonical proof-frontier Pareto selector, and parses
-//! one already-acquired target manifestation into the finite bounded Wikidata
-//! context surface used by the campaign.
+//! the current identity diagnosis and durable-but-unexpanded QID surface into
+//! the canonical proof-frontier Pareto selector, and parses one already-
+//! acquired target manifestation into the finite bounded Wikidata context
+//! surface used by the campaign.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::Cursor;
@@ -26,7 +26,7 @@ use sensiblaw_route_selector::{decode_route_candidate, RouteFamily};
 use sensiblaw_wikimedia_candidate_provider::{emit_candidates_from_rdf, AcquiredEntityRdf};
 use thiserror::Error;
 
-use crate::MaboIdentityReviewPlan;
+use crate::{MaboConsumerDiagnosis, MaboIdentityReviewPlan};
 
 const CONTEXT_EXPANSION_PRODUCER: &str = "producer:wikidata-bounded-context-expansion";
 const CONTEXT_EXPANSION_RESIDUAL_PREFIX: &str = "residual:mabo:context-expansion:";
@@ -72,11 +72,7 @@ fn reviewed_frontier_moves(plan: &MaboIdentityReviewPlan) -> Vec<FrontierCandida
         .collect()
 }
 
-/// Select exactly one reviewed identity move from the *current* proof frontier.
-///
-/// Callers must rebuild `frontier` from durable state before each invocation.
-/// This function intentionally has no queue state: once the world changes, the
-/// next selection is recomputed through the canonical frontier Pareto owner.
+/// Compatibility selector for already-matched reviewed identity rows.
 #[must_use]
 pub fn select_next_reviewed_mabo_gap(
     frontier: &ProofFrontier,
@@ -103,13 +99,6 @@ fn valid_qid(value: &str) -> bool {
         .is_some_and(|digits| !digits.is_empty() && digits.bytes().all(|byte| byte.is_ascii_digit()))
 }
 
-/// Build the separate source-expansion frontier for durable QID
-/// representations whose own bounded outgoing context has not yet been
-/// reviewed/materialized.
-///
-/// Incoming reviewed context roles become dependency coordinates only. They
-/// provide a structural Pareto tie-break and do not imply identity, authority,
-/// applicability or claim truth.
 #[must_use]
 pub fn diagnose_mabo_context_expansion_frontier(
     baseline: &DiscoveryIdentityBaseline,
@@ -170,13 +159,8 @@ pub struct MaboContextExpansionSelection {
     pub shared_dependency_gain: u64,
 }
 
-/// Pareto-select one durable source to expand from the freshly rebuilt context
-/// expansion frontier. No identity-review queue participates in this choice.
-#[must_use]
-pub fn select_next_mabo_context_expansion(
-    frontier: &ProofFrontier,
-) -> Option<MaboContextExpansionSelection> {
-    let candidates = frontier
+fn context_expansion_moves(frontier: &ProofFrontier) -> Vec<FrontierCandidateMove> {
+    frontier
         .open_residuals()
         .filter(|residual| residual.producer_class_ref == CONTEXT_EXPANSION_PRODUCER)
         .filter_map(|residual| {
@@ -215,8 +199,14 @@ pub fn select_next_mabo_context_expansion(
                 shared_dependency_gain,
             })
         })
-        .collect::<Vec<_>>();
+        .collect()
+}
 
+#[must_use]
+pub fn select_next_mabo_context_expansion(
+    frontier: &ProofFrontier,
+) -> Option<MaboContextExpansionSelection> {
+    let candidates = context_expansion_moves(frontier);
     let selected = select_frontier_move(frontier, &candidates, 1)?;
     let residual_ref = selected.target_residual_refs.first()?.clone();
     let source_qid = residual_ref
@@ -228,6 +218,113 @@ pub fn select_next_mabo_context_expansion(
         move_ref: selected.move_.move_ref.clone(),
         shared_dependency_gain: selected.shared_dependency_gain,
     })
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MaboAdaptiveDecision {
+    Identity(MaboAdaptiveSelection),
+    ContextExpansion(MaboContextExpansionSelection),
+}
+
+fn identity_moves(diagnosis: &MaboConsumerDiagnosis) -> Vec<FrontierCandidateMove> {
+    diagnosis
+        .rows
+        .iter()
+        .map(|row| {
+            let shared_dependency_gain =
+                u64::try_from(row.relation_type_refs.len().max(1)).unwrap_or(u64::MAX);
+            FrontierCandidateMove {
+                target_residual_refs: vec![row.residual_ref.clone()],
+                move_: CandidateMove {
+                    move_ref: format!("move:mabo-identity:{}", row.representation_ref),
+                    strategy: ExecutionStrategy::GovernedExactAuthorityFetch,
+                    source_ref: row.source_revision_refs.first().cloned(),
+                    provider_operation_ref: "wikidata:identity-review-then-exact-reacquisition".into(),
+                    cost: ExecutionCostVector {
+                        network_requests: 1,
+                        operator_review_cost: 1,
+                        ..ExecutionCostVector::default()
+                    },
+                    value: ProofValueVector {
+                        expected_proof_reduction: 1,
+                        discriminative_value: shared_dependency_gain,
+                        coverage_gain: shared_dependency_gain,
+                        ..ProofValueVector::default()
+                    },
+                    admissible: true,
+                    calibration_ref: "mabo-adaptive-identity:v1".into(),
+                },
+                expected_whole_frontier_reduction: 1,
+                shared_dependency_gain,
+            }
+        })
+        .collect()
+}
+
+/// Rank the current semantic work before looking at review manifests.
+///
+/// The review manifest is an execution authority, not a scheduler prior. Both
+/// identity gaps and durable-source expansion gaps are projected into one fresh
+/// frontier and one canonical Pareto selection on every iteration.
+#[must_use]
+pub fn select_next_mabo_adaptive_decision(
+    diagnosis: &MaboConsumerDiagnosis,
+    baseline: &DiscoveryIdentityBaseline,
+    world: &LatentWorldRows,
+    expanded_source_refs: &BTreeSet<String>,
+    frontier_ref: impl Into<String>,
+) -> Option<MaboAdaptiveDecision> {
+    let expansion_frontier = diagnose_mabo_context_expansion_frontier(
+        baseline,
+        world,
+        expanded_source_refs,
+        "frontier:mabo:context-expansion:adaptive",
+    );
+    let mut residuals = diagnosis.residuals.clone();
+    for residual in &mut residuals {
+        if let Some(row) = diagnosis
+            .rows
+            .iter()
+            .find(|row| row.residual_ref == residual.residual_ref)
+        {
+            residual.dependency_refs = row.relation_type_refs.clone();
+        }
+    }
+    residuals.extend(expansion_frontier.residuals.clone());
+    let frontier = ProofFrontier {
+        consumer_ref: "consumer:mabo-adaptive-world-expansion".into(),
+        frontier_ref: frontier_ref.into(),
+        residuals,
+        satisfied_payment_refs: vec![],
+        contested_coordinate_refs: vec![],
+        authority_blocked_refs: vec![],
+        authority: "experimental_candidate_only",
+    };
+
+    let mut candidates = identity_moves(diagnosis);
+    candidates.extend(context_expansion_moves(&expansion_frontier));
+    let selected = select_frontier_move(&frontier, &candidates, 1)?;
+    let residual_ref = selected.target_residual_refs.first()?.clone();
+
+    if let Some(row) = diagnosis.rows.iter().find(|row| row.residual_ref == residual_ref) {
+        return Some(MaboAdaptiveDecision::Identity(MaboAdaptiveSelection {
+            residual_ref,
+            representation_ref: row.representation_ref.clone(),
+            move_ref: selected.move_.move_ref.clone(),
+            shared_dependency_gain: selected.shared_dependency_gain,
+        }));
+    }
+    let source_qid = residual_ref
+        .strip_prefix(CONTEXT_EXPANSION_RESIDUAL_PREFIX)?
+        .to_owned();
+    Some(MaboAdaptiveDecision::ContextExpansion(
+        MaboContextExpansionSelection {
+            residual_ref,
+            source_qid,
+            move_ref: selected.move_.move_ref.clone(),
+            shared_dependency_gain: selected.shared_dependency_gain,
+        },
+    ))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -249,9 +346,6 @@ pub enum AdaptiveTargetContextError {
     PromotingArtifact,
 }
 
-/// Parse one exact acquired target manifestation into the finite bounded
-/// context candidate surface. Unsupported Wikidata properties, articles,
-/// searches and parser-repair routes remain outside this consumer.
 pub fn parse_bounded_target_context(
     acquired: &AcquiredEntityRdf,
 ) -> Result<Vec<ParsedBoundedContextCandidate>, AdaptiveTargetContextError> {
@@ -295,9 +389,6 @@ pub fn parse_bounded_target_context(
     Ok(candidates)
 }
 
-/// Convert parsed bounded context into durable candidate context only when the
-/// caller supplies an explicit context-review decision. Identity review is not
-/// inspected and cannot pay this boundary.
 pub fn prepare_reviewed_target_context(
     candidates: &[ParsedBoundedContextCandidate],
     review_decision: ContextReviewDecision,
