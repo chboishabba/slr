@@ -17,7 +17,7 @@ pub use context_federation::{
 };
 pub use discovery_lineage::{
     discovery_lineage_row, materialize_discovery_lineage, DiscoveryLineageError,
-    DiscoveryLineageMaterializationReceipt, DiscoveryLineageRow,
+    DiscoveryLineageInput, DiscoveryLineageMaterializationReceipt, DiscoveryLineageRow,
 };
 pub use latent_world::{
     load_latent_world_rows, load_latent_world_rows_with_budget, LatentWorldBudget,
