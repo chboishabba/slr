@@ -11,6 +11,13 @@ pub struct DiscoveryIdentityBaselineRow {
     pub identity_class_ref: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DiscoveryCampaignIdentityRow {
+    pub object_ref: String,
+    pub identity_class_ref: String,
+    pub discovery_parent_ref: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct DiscoveryIdentityBaseline {
     pub identity_class_refs: BTreeSet<String>,
@@ -65,6 +72,46 @@ pub fn collapse_discovery_identity_baseline(
     Ok(baseline)
 }
 
+/// Compute the reviewed novel identity classes transitively rooted at one
+/// campaign seed. Global identity equivalence is intentionally not scoped by
+/// this function; this set is only the campaign novelty/cardinality coordinate.
+pub fn collapse_discovery_campaign_identity_classes(
+    seed_ref: &str,
+    rows: &[DiscoveryCampaignIdentityRow],
+) -> Result<BTreeSet<String>, DiscoveryIdentityBaselineError> {
+    if seed_ref.trim().is_empty() {
+        return Err(DiscoveryIdentityBaselineError::EmptyCoordinate("seed_ref"));
+    }
+    for row in rows {
+        for (name, value) in [
+            ("object_ref", row.object_ref.as_str()),
+            ("identity_class_ref", row.identity_class_ref.as_str()),
+            ("discovery_parent_ref", row.discovery_parent_ref.as_str()),
+        ] {
+            if value.trim().is_empty() {
+                return Err(DiscoveryIdentityBaselineError::EmptyCoordinate(name));
+            }
+        }
+    }
+
+    let mut reachable_representations = BTreeSet::from([seed_ref.to_owned()]);
+    let mut identity_class_refs = BTreeSet::new();
+    loop {
+        let mut changed = false;
+        for row in rows {
+            if !reachable_representations.contains(&row.discovery_parent_ref) {
+                continue;
+            }
+            changed |= reachable_representations.insert(row.object_ref.clone());
+            changed |= identity_class_refs.insert(row.identity_class_ref.clone());
+        }
+        if !changed {
+            break;
+        }
+    }
+    Ok(identity_class_refs)
+}
+
 /// Load the durable identity quotient from both novel discovery lineage and
 /// reviewed non-novel aliases. Alias rows contribute representation coverage
 /// only: because the baseline cardinality is a set of identity-class refs, an
@@ -104,4 +151,35 @@ pub fn load_discovery_identity_baseline(
         })
         .collect::<Vec<_>>();
     collapse_discovery_identity_baseline(&rows)
+}
+
+/// Load only reviewed novel identity classes in the transitive discovery
+/// lineage rooted at `seed_ref`. This is the correct denominator for a
+/// campaign-specific novelty target; unrelated global lineage rows cannot pay
+/// the Mabo target merely because they share the same PostgreSQL store.
+pub fn load_discovery_campaign_identity_classes(
+    config: &DatabaseConfig,
+    seed_ref: &str,
+) -> Result<BTreeSet<String>, DiscoveryIdentityBaselineError> {
+    let mut client = Client::connect(config.database_url(), NoTls)?;
+    let rows = client.query(
+        "SELECT object_ref, identity_class_ref, discovery_parent_ref \
+         FROM context.discovery_lineage_receipt \
+         WHERE identity_class_ref IS NOT NULL \
+           AND candidate_only = TRUE \
+           AND creates_semantic_authority = FALSE \
+           AND applicability_promoted = FALSE \
+           AND claim_truth_promoted = FALSE \
+         ORDER BY discovery_parent_ref, object_ref, identity_class_ref",
+        &[],
+    )?;
+    let rows = rows
+        .into_iter()
+        .map(|row| DiscoveryCampaignIdentityRow {
+            object_ref: row.get::<_, String>(0),
+            identity_class_ref: row.get::<_, String>(1),
+            discovery_parent_ref: row.get::<_, String>(2),
+        })
+        .collect::<Vec<_>>();
+    collapse_discovery_campaign_identity_classes(seed_ref, &rows)
 }
