@@ -218,6 +218,164 @@ pub fn mabo_consumer_diagnosis_frontier(
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MaboIdentityReviewAssignment {
+    pub representation_ref: String,
+    pub identity_class_ref: String,
+    pub review_ref: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MaboPlannedIdentityReview {
+    pub row: MaboIdentityDiagnosisRow,
+    pub assignment: MaboIdentityReviewAssignment,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MaboIdentityReviewPlan {
+    pub matched: Vec<MaboPlannedIdentityReview>,
+    pub pending_rows: Vec<MaboIdentityDiagnosisRow>,
+    pub unmatched_assignments: Vec<MaboIdentityReviewAssignment>,
+}
+
+#[derive(Debug, Error, Clone, PartialEq, Eq)]
+pub enum MaboReviewManifestError {
+    #[error("review manifest line {line_number} has {field_count} fields; expected 3")]
+    InvalidFieldCount {
+        line_number: usize,
+        field_count: usize,
+    },
+    #[error("review manifest line {line_number} has an empty {field_name}")]
+    EmptyField {
+        line_number: usize,
+        field_name: &'static str,
+    },
+    #[error(
+        "representation {representation_ref} has conflicting reviewed identity classes: {first_identity_class_ref} vs {second_identity_class_ref}"
+    )]
+    ConflictingAssignment {
+        representation_ref: String,
+        first_identity_class_ref: String,
+        second_identity_class_ref: String,
+    },
+    #[error(
+        "representation {representation_ref} has conflicting review refs: {first_review_ref} vs {second_review_ref}"
+    )]
+    ConflictingReviewReference {
+        representation_ref: String,
+        first_review_ref: String,
+        second_review_ref: String,
+    },
+    #[error("diagnosis contains duplicate representation row: {representation_ref}")]
+    DuplicateDiagnosisRepresentation { representation_ref: String },
+}
+
+/// Parse explicit operator-reviewed identity assignments.
+///
+/// Format: `representation_ref<TAB>identity_class_ref<TAB>review_ref`.
+/// Blank lines and `#` comments are ignored. Exact duplicate assignments are
+/// idempotent; conflicting assignments fail closed.
+pub fn parse_mabo_identity_review_tsv(
+    input: &str,
+) -> Result<Vec<MaboIdentityReviewAssignment>, MaboReviewManifestError> {
+    let mut assignments: BTreeMap<String, MaboIdentityReviewAssignment> = BTreeMap::new();
+
+    for (offset, raw_line) in input.lines().enumerate() {
+        let line_number = offset + 1;
+        let line = raw_line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+
+        let fields = line.split('\t').map(str::trim).collect::<Vec<_>>();
+        if fields.len() != 3 {
+            return Err(MaboReviewManifestError::InvalidFieldCount {
+                line_number,
+                field_count: fields.len(),
+            });
+        }
+        for (field_name, value) in [
+            ("representation_ref", fields[0]),
+            ("identity_class_ref", fields[1]),
+            ("review_ref", fields[2]),
+        ] {
+            if value.is_empty() {
+                return Err(MaboReviewManifestError::EmptyField {
+                    line_number,
+                    field_name,
+                });
+            }
+        }
+
+        let assignment = MaboIdentityReviewAssignment {
+            representation_ref: fields[0].to_owned(),
+            identity_class_ref: fields[1].to_owned(),
+            review_ref: fields[2].to_owned(),
+        };
+        if let Some(existing) = assignments.get(&assignment.representation_ref) {
+            if existing.identity_class_ref != assignment.identity_class_ref {
+                return Err(MaboReviewManifestError::ConflictingAssignment {
+                    representation_ref: assignment.representation_ref,
+                    first_identity_class_ref: existing.identity_class_ref.clone(),
+                    second_identity_class_ref: assignment.identity_class_ref,
+                });
+            }
+            if existing.review_ref != assignment.review_ref {
+                return Err(MaboReviewManifestError::ConflictingReviewReference {
+                    representation_ref: assignment.representation_ref,
+                    first_review_ref: existing.review_ref.clone(),
+                    second_review_ref: assignment.review_ref,
+                });
+            }
+            continue;
+        }
+        assignments.insert(assignment.representation_ref.clone(), assignment);
+    }
+
+    Ok(assignments.into_values().collect())
+}
+
+/// Match explicit reviews to the currently diagnosed consumer frontier.
+///
+/// A manifest entry cannot create a diagnosis row. Reviews for representations
+/// outside the current diagnosis remain visible as unmatched rather than being
+/// silently coerced into campaign work.
+pub fn plan_mabo_identity_reviews(
+    diagnosis: &MaboConsumerDiagnosis,
+    reviews: &[MaboIdentityReviewAssignment],
+) -> Result<MaboIdentityReviewPlan, MaboReviewManifestError> {
+    let mut review_by_representation = reviews
+        .iter()
+        .cloned()
+        .map(|review| (review.representation_ref.clone(), review))
+        .collect::<BTreeMap<_, _>>();
+    let mut diagnosis_seen = BTreeSet::new();
+    let mut matched = Vec::new();
+    let mut pending_rows = Vec::new();
+
+    for row in &diagnosis.rows {
+        if !diagnosis_seen.insert(row.representation_ref.clone()) {
+            return Err(MaboReviewManifestError::DuplicateDiagnosisRepresentation {
+                representation_ref: row.representation_ref.clone(),
+            });
+        }
+        if let Some(assignment) = review_by_representation.remove(&row.representation_ref) {
+            matched.push(MaboPlannedIdentityReview {
+                row: row.clone(),
+                assignment,
+            });
+        } else {
+            pending_rows.push(row.clone());
+        }
+    }
+
+    Ok(MaboIdentityReviewPlan {
+        matched,
+        pending_rows,
+        unmatched_assignments: review_by_representation.into_values().collect(),
+    })
+}
+
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum WorldExpansionRuntimeError {
     #[error("reviewed identity class is required for durable recurrent lineage")]
