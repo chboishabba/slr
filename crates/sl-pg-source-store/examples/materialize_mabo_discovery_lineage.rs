@@ -5,7 +5,7 @@ use sensiblaw_pg_source_store::{
 fn usage() -> ! {
     eprintln!(
         "usage: materialize_mabo_discovery_lineage \
-         <object_ref> <discovery_parent_ref> <triggering_residual_ref> \
+         <object_ref> <identity_class_ref> <discovery_parent_ref> <triggering_residual_ref> \
          <selected_candidate_ref> <producer_lane> <source_revision_ref> \
          <pnf_world_disambiguation_ref> <expected_contraction> \
          <observed_contraction> [new_residual_ref ...]\n\n\
@@ -28,22 +28,23 @@ fn lane(value: &str) -> String {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = std::env::args().skip(1).collect::<Vec<_>>();
-    if args.len() < 9 {
+    if args.len() < 10 {
         usage();
     }
-    let expected_residual_contraction = args[7].parse::<u64>()?;
-    let observed_residual_contraction = args[8].parse::<u64>()?;
+    let expected_residual_contraction = args[8].parse::<u64>()?;
+    let observed_residual_contraction = args[9].parse::<u64>()?;
     let lineage = DiscoveryLineageInput {
         object_ref: args[0].clone(),
-        discovery_parent_ref: args[1].clone(),
-        triggering_residual_ref: args[2].clone(),
-        selected_candidate_ref: args[3].clone(),
-        producer_lane_ref: lane(&args[4]),
-        source_revision_ref: args[5].clone(),
-        pnf_world_disambiguation_ref: args[6].clone(),
+        identity_class_ref: args[1].clone(),
+        discovery_parent_ref: args[2].clone(),
+        triggering_residual_ref: args[3].clone(),
+        selected_candidate_ref: args[4].clone(),
+        producer_lane_ref: lane(&args[5]),
+        source_revision_ref: args[6].clone(),
+        pnf_world_disambiguation_ref: args[7].clone(),
         expected_residual_contraction,
         observed_residual_contraction,
-        new_residual_refs: args[9..].to_vec(),
+        new_residual_refs: args[10..].to_vec(),
         candidate_only: true,
         creates_semantic_authority: false,
         applicability_promoted: false,
@@ -56,10 +57,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("attempted_count={}", receipt.attempted_count);
     println!("materialized_count={}", receipt.materialized_count);
     println!("candidate_only={}", receipt.candidate_only);
-    println!(
-        "creates_semantic_authority={}",
-        receipt.creates_semantic_authority
-    );
+    println!("creates_semantic_authority={}", receipt.creates_semantic_authority);
     println!("applicability_promoted={}", receipt.applicability_promoted);
     println!("claim_truth_promoted={}", receipt.claim_truth_promoted);
     Ok(())

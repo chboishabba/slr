@@ -8,5 +8,6 @@ rust-version.workspace = true
 [dependencies]
 sensiblaw-route-selector = { path = "../sl-route-selector" }
 quick-xml = "0.37"
+sha2 = "0.10"
 thiserror = "2"
 ureq = { version = "2.12", default-features = false, features = ["tls"] }
