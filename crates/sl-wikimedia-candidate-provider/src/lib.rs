@@ -1,3 +1,10 @@
+mod latest_revision;
+
+pub use latest_revision::{
+    fetch_latest_entity_rdf_revision_receipt, fetch_latest_revision_id,
+    latest_revision_api_url, parse_latest_revision_id,
+};
+
 use quick_xml::events::{BytesStart, Event};
 use quick_xml::Reader;
 use sensiblaw_route_selector::{
