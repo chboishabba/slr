@@ -1266,6 +1266,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "sensiblaw-reviewed-evidence-payment"
+version = "0.1.0"
+dependencies = [
+ "sensiblaw-consumer-residual",
+ "sensiblaw-world-store",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "sensiblaw-route-executor"
 version = "0.1.0"
 dependencies = [
@@ -1334,6 +1343,20 @@ version = "0.1.0"
 dependencies = [
  "sensiblaw-world-store",
  "sha2 0.10.9",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "sensiblaw-world-expansion-runtime"
+version = "0.1.0"
+dependencies = [
+ "sensiblaw-consumer-residual",
+ "sensiblaw-pg-source-store",
+ "sensiblaw-proof-search-loop",
+ "sensiblaw-reviewed-evidence-payment",
+ "sensiblaw-route-selector",
+ "sensiblaw-wikimedia-candidate-provider",
+ "sensiblaw-world-store",
  "thiserror 1.0.69",
 ]
 

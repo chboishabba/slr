@@ -139,11 +139,13 @@ fn review_for_already_durable_representation_is_unmatched_not_recounted() {
         applicability_promoted: false,
         claim_truth_promoted: false,
     };
-    let mut baseline = DiscoveryIdentityBaseline::default();
-    baseline.representation_identity_class_refs = BTreeMap::from([(
-        "Q975866".into(),
-        "world-object:eddie-mabo".into(),
-    )]);
+    let mut baseline = DiscoveryIdentityBaseline {
+        representation_identity_class_refs: BTreeMap::from([(
+            "Q975866".into(),
+            "world-object:eddie-mabo".into(),
+        )]),
+        ..Default::default()
+    };
     baseline.identity_class_refs.insert("world-object:eddie-mabo".into());
     let diagnosis = diagnose_mabo_context_world_identity(&world, &baseline);
     let reviews = parse_mabo_identity_review_tsv(

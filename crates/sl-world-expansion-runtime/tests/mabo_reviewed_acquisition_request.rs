@@ -1,7 +1,6 @@
-#[path = "../src/reviewed_campaign.rs"]
-mod reviewed_campaign;
-
-use reviewed_campaign::{reviewed_acquisition_request, MaboReviewedCyclePreparationError};
+use sensiblaw_world_expansion_runtime::reviewed_campaign::{
+    reviewed_acquisition_request, MaboReviewedCyclePreparationError,
+};
 use sensiblaw_proof_search_loop::world_expansion::ResidualClass;
 use sensiblaw_world_expansion_runtime::{
     MaboIdentityDiagnosisRow, MaboIdentityReviewAssignment, MaboPlannedIdentityReview,

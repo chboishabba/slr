@@ -111,6 +111,22 @@ pub enum RecurrentWorldExpansionError {
     Cycle(WorldExpansionCycleError),
 }
 
+impl std::fmt::Display for RecurrentWorldExpansionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Cycle(err) => write!(f, "cycle error: {err}"),
+        }
+    }
+}
+
+impl std::error::Error for RecurrentWorldExpansionError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Cycle(err) => Some(err),
+        }
+    }
+}
+
 impl From<WorldExpansionCycleError> for RecurrentWorldExpansionError {
     fn from(value: WorldExpansionCycleError) -> Self {
         Self::Cycle(value)

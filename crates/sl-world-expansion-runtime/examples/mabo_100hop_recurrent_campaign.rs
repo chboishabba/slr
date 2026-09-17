@@ -1,10 +1,9 @@
-#[path = "../src/reviewed_campaign.rs"]
-mod reviewed_campaign;
-
 use std::fs;
 use std::io::Cursor;
 
-use reviewed_campaign::{prepare_reviewed_mabo_identity_cycle, reviewed_acquisition_request};
+use sensiblaw_world_expansion_runtime::reviewed_campaign::{
+    self, prepare_reviewed_mabo_identity_cycle, reviewed_acquisition_request,
+};
 use sensiblaw_pg_source_store::{
     load_database_config, load_discovery_identity_baseline, load_latent_world_rows_with_budget,
     LatentWorldBudget,
@@ -28,7 +27,7 @@ use sensiblaw_world_expansion_runtime::{
 use sensiblaw_world_store::{load_database_config as load_world_database_config, WorldStore};
 
 const MABO_QID: &str = "Q1501525";
-const MAX_HOPS: usize = 100;
+const MAX_HOPS: u32 = 100;
 const MAX_NODES: usize = 10_000;
 const MAX_EDGES: usize = 50_000;
 

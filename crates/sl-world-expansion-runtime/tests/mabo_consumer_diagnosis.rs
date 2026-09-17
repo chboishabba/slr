@@ -98,11 +98,13 @@ fn durable_identity_baseline_quotients_known_representations_before_residual_emi
         "context:wikidata:participant",
         "Q975866",
     )]);
-    let mut baseline = DiscoveryIdentityBaseline::default();
-    baseline.representation_identity_class_refs = BTreeMap::from([(
-        "Q975866".into(),
-        "world-object:eddie-mabo".into(),
-    )]);
+    let mut baseline = DiscoveryIdentityBaseline {
+        representation_identity_class_refs: BTreeMap::from([(
+            "Q975866".into(),
+            "world-object:eddie-mabo".into(),
+        )]),
+        ..Default::default()
+    };
     baseline.identity_class_refs.insert("world-object:eddie-mabo".into());
 
     let diagnosis = diagnose_mabo_context_world_identity(&rows, &baseline);

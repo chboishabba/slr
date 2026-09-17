@@ -1,7 +1,6 @@
-#[path = "../src/reviewed_campaign.rs"]
-mod reviewed_campaign;
-
-use reviewed_campaign::{parse_wikidata_revision_ref, prepare_reviewed_mabo_identity_cycle};
+use sensiblaw_world_expansion_runtime::reviewed_campaign::{
+    parse_wikidata_revision_ref, prepare_reviewed_mabo_identity_cycle,
+};
 use sensiblaw_consumer_residual::{
     ConsumerRequirement, ConsumerSpec, EvidenceCoordinateKind, RequirementNeed, RequirementScope,
 };

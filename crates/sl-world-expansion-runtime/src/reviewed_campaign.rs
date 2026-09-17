@@ -33,8 +33,9 @@ use sensiblaw_reviewed_evidence_payment::{
 use sensiblaw_route_selector::{RouteCandidate, RouteFamily};
 use thiserror::Error;
 
-use sensiblaw_world_expansion_runtime::{
-    MaboConsumerDiagnosis, MaboPlannedIdentityReview, ReviewedPreparedCycle,
+use crate::{
+    parse_mabo_wikidata_source_revision_ref, MaboConsumerDiagnosis, MaboPlannedIdentityReview,
+    ReviewedPreparedCycle,
 };
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
@@ -85,29 +86,11 @@ pub struct ReviewedAcquisitionRequest {
 pub fn parse_wikidata_revision_ref(
     source_revision_ref: &str,
 ) -> Result<(String, u64), MaboReviewedCyclePreparationError> {
-    let fields = source_revision_ref.split(':').collect::<Vec<_>>();
-    if fields.len() != 4 || fields[0] != "wikidata" || fields[2] != "oldid" {
-        return Err(MaboReviewedCyclePreparationError::InvalidRevisionRef(
-            source_revision_ref.to_owned(),
-        ));
-    }
-    let qid = fields[1];
-    let valid_qid = qid
-        .strip_prefix('Q')
-        .is_some_and(|digits| !digits.is_empty() && digits.bytes().all(|byte| byte.is_ascii_digit()));
-    let revision_id = fields[3]
-        .parse::<u64>()
-        .ok()
-        .filter(|revision| *revision > 0)
-        .ok_or_else(|| {
+    parse_mabo_wikidata_source_revision_ref(source_revision_ref)
+        .map(|rev| (rev.qid, rev.oldid))
+        .map_err(|_| {
             MaboReviewedCyclePreparationError::InvalidRevisionRef(source_revision_ref.to_owned())
-        })?;
-    if !valid_qid {
-        return Err(MaboReviewedCyclePreparationError::InvalidRevisionRef(
-            source_revision_ref.to_owned(),
-        ));
-    }
-    Ok((qid.to_owned(), revision_id))
+        })
 }
 
 fn diagnosed_property_refs(relation_type_refs: &[String]) -> Vec<&'static str> {

@@ -46,6 +46,14 @@ pub enum WorldExpansionStepError {
     NoCandidateMeetsThreshold,
 }
 
+impl std::fmt::Display for WorldExpansionStepError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self:?}")
+    }
+}
+
+impl std::error::Error for WorldExpansionStepError {}
+
 /// Execute one explicitly reviewed world-expansion step for one exact open
 /// residual. Cross-residual prioritisation stays with the existing frontier /
 /// Ibrahim policy; this function only binds a supplied routed residual to its
