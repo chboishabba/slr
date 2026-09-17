@@ -9,19 +9,23 @@ use sensiblaw_consumer_residual::{
     ConsumerSpec, EvidenceCoordinateKind, RequirementNeed, RequirementScope,
 };
 use sensiblaw_pg_source_store::{
-    materialize_discovery_lineage, DatabaseConfig, DiscoveryLineageInput,
+    materialize_discovery_lineage, DatabaseConfig, DiscoveryIdentityBaseline,
+    DiscoveryLineageInput,
 };
-use sensiblaw_proof_search_loop::world_expansion::ProducerLane;
+use sensiblaw_proof_search_loop::world_expansion::{ProducerLane, WorldExpansionPolicy};
 use sensiblaw_proof_search_loop::world_expansion_reentry::DiscoveryLineageReceipt;
 use sensiblaw_proof_search_loop::world_expansion_runner::{
     RecurrentRunBlocker, RecurrentRunBlockerKind, WorldExpansionCycleSink,
 };
 use sensiblaw_proof_search_loop::world_expansion_session::WorldExpansionCycleReceipt;
+use sensiblaw_proof_search_loop::world_identity_guard::IdentityCoherenceBaseline;
 use sensiblaw_proof_search_loop::world_observation::WorldObservation;
 use sensiblaw_reviewed_evidence_payment::{
     compile_reviewed_evidence_payment, ReviewedEvidenceCoordinate,
 };
 use thiserror::Error;
+
+pub const MABO_NOVEL_IDENTITY_TARGET: usize = 100;
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum WorldExpansionRuntimeError {
@@ -37,6 +41,38 @@ pub enum WorldExpansionRuntimeError {
     EvidenceScopeMismatch,
     #[error("reviewed evidence payment failed: {0}")]
     ReviewedEvidencePayment(String),
+}
+
+#[must_use]
+pub fn identity_coherence_baseline(
+    baseline: &DiscoveryIdentityBaseline,
+) -> IdentityCoherenceBaseline {
+    IdentityCoherenceBaseline {
+        identity_class_refs: baseline.identity_class_refs.clone(),
+        representation_identity_class_refs: baseline.representation_identity_class_refs.clone(),
+    }
+}
+
+#[must_use]
+pub fn mabo_remaining_world_expansion_policy(
+    baseline: &DiscoveryIdentityBaseline,
+) -> WorldExpansionPolicy {
+    WorldExpansionPolicy {
+        target_novel_objects: MABO_NOVEL_IDENTITY_TARGET
+            .saturating_sub(baseline.identity_class_refs.len()),
+        minimum_expected_residual_contraction: 1,
+    }
+}
+
+#[must_use]
+pub fn durable_mabo_campaign_total(
+    baseline: &DiscoveryIdentityBaseline,
+    newly_committed_identity_classes: usize,
+) -> usize {
+    baseline
+        .identity_class_refs
+        .len()
+        .saturating_add(newly_committed_identity_classes)
 }
 
 const fn producer_lane_ref(lane: ProducerLane) -> &'static str {
