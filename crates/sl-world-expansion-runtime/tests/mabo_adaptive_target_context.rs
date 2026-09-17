@@ -5,7 +5,6 @@ use adaptive_campaign::{parse_bounded_target_context, prepare_reviewed_target_co
 use sensiblaw_pg_source_store::ContextReviewDecision;
 use sensiblaw_proof_search_loop::world_expansion_runner::RecurrentRunBlockerKind;
 use sensiblaw_wikimedia_candidate_provider::entity_revision_receipt_from_rdf;
-use sensiblaw_world_expansion_runtime::MaboIdentityReviewPlan;
 
 fn acquired() -> sensiblaw_wikimedia_candidate_provider::AcquiredEntityRdf {
     let rdf = br#"<?xml version="1.0"?>
