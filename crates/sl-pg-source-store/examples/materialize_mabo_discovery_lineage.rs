@@ -1,4 +1,6 @@
-use sensiblaw_pg_source_store::{materialize_discovery_lineage, DatabaseConfig};
+use sensiblaw_pg_source_store::{
+    load_database_config, materialize_discovery_lineage,
+};
 use sensiblaw_proof_search_loop::world_expansion::ProducerLane;
 use sensiblaw_proof_search_loop::world_expansion_reentry::DiscoveryLineageReceipt;
 
@@ -10,7 +12,7 @@ fn usage() -> ! {
          <pnf_world_disambiguation_ref> <expected_contraction> \
          <observed_contraction> [new_residual_ref ...]\n\n\
          producer_lane: governed-legal | wikidata-identity | wikipedia-context | source-specific-provenance | other\n\
-         database connection is read from the existing SLR PostgreSQL environment/configuration"
+         database connection is read via the existing SLR DATABASE_URL/.env loader"
     );
     std::process::exit(2);
 }
@@ -27,7 +29,6 @@ fn lane(value: &str) -> ProducerLane {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    dotenvy::dotenv().ok();
     let args = std::env::args().skip(1).collect::<Vec<_>>();
     if args.len() < 9 {
         usage();
@@ -52,7 +53,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         receipt_authority: "candidate_world_expansion_only",
     };
 
-    let config = DatabaseConfig::from_env()?;
+    let config = load_database_config(None)?;
     let receipt = materialize_discovery_lineage(&config, &[lineage])?;
     println!("attempted_count={}", receipt.attempted_count);
     println!("materialized_count={}", receipt.materialized_count);
