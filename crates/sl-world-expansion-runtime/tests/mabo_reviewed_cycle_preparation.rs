@@ -17,7 +17,7 @@ use sensiblaw_world_expansion_runtime::{
 fn diagnosis_row() -> MaboIdentityDiagnosisRow {
     MaboIdentityDiagnosisRow {
         representation_ref: "Q975866".into(),
-        relation_type_refs: vec!["context:wikidata:P710".into()],
+        relation_type_refs: vec!["context:wikidata:participant".into()],
         source_revision_refs: vec!["wikidata:Q1501525:oldid:2333409615".into()],
         requirement_id: "world-identity:Q975866".into(),
         residual_ref: "residual:mabo:world-identity:Q975866".into(),
