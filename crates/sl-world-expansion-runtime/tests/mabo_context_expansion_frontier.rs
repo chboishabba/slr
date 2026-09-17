@@ -11,11 +11,13 @@ fn baseline() -> DiscoveryIdentityBaseline {
             "world-object:australia".into(),
             "world-object:queensland".into(),
             "world-object:non-qid".into(),
+            "world-object:unrelated-global-qid".into(),
         ]),
         representation_identity_class_refs: BTreeMap::from([
             ("Q408".into(), "world-object:australia".into()),
             ("Q36074".into(), "world-object:queensland".into()),
             ("case:[1992]-HCA-23".into(), "world-object:non-qid".into()),
+            ("Q999999".into(), "world-object:unrelated-global-qid".into()),
         ]),
     }
 }
@@ -57,7 +59,7 @@ fn world() -> LatentWorldRows {
 }
 
 #[test]
-fn only_durable_unexpanded_qids_become_context_expansion_residuals() {
+fn only_current_world_durable_unexpanded_qids_become_context_expansion_residuals() {
     let expanded = BTreeSet::from(["Q408".to_string(), "Q1501525".to_string()]);
     let frontier = diagnose_mabo_context_expansion_frontier(
         &baseline(),
@@ -72,6 +74,10 @@ fn only_durable_unexpanded_qids_become_context_expansion_residuals() {
         .collect::<Vec<_>>();
     assert_eq!(residuals, vec!["residual:mabo:context-expansion:Q36074"]);
     assert_eq!(frontier.residuals[0].dependency_refs.len(), 2);
+    assert!(frontier
+        .residuals
+        .iter()
+        .all(|residual| !residual.residual_ref.ends_with("Q999999")));
 }
 
 #[test]
