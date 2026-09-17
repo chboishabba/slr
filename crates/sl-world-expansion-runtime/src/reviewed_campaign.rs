@@ -9,6 +9,7 @@
 use std::io::Cursor;
 
 use sensiblaw_consumer_residual::EvidenceCoordinateKind;
+use sensiblaw_pg_source_store::mabo_wikidata_property_ref;
 use sensiblaw_proof_search_loop::frontier::ResidualStatus;
 use sensiblaw_proof_search_loop::transition::ResidualAssessmentKind;
 use sensiblaw_proof_search_loop::world_expansion::{
@@ -42,9 +43,7 @@ pub enum MaboReviewedCyclePreparationError {
     InvalidRevisionRef(String),
     #[error("reviewed diagnosis has multiple source revisions; acquisition must be exact")]
     AmbiguousSourceRevision,
-    #[error("reviewed diagnosis has multiple Wikidata relation types; acquisition must be exact")]
-    AmbiguousDiagnosedRelation,
-    #[error("reviewed diagnosis does not contain one Wikidata relation type")]
+    #[error("reviewed diagnosis does not contain a replayable bounded Mabo Wikidata relation")]
     MissingDiagnosedRelation,
     #[error("review assignment representation does not match diagnosis row")]
     ReviewRepresentationMismatch,
@@ -111,12 +110,25 @@ pub fn parse_wikidata_revision_ref(
     Ok((qid.to_owned(), revision_id))
 }
 
+fn diagnosed_property_refs(relation_type_refs: &[String]) -> Vec<&'static str> {
+    let mut properties = relation_type_refs
+        .iter()
+        .filter_map(|relation_type_ref| mabo_wikidata_property_ref(relation_type_ref))
+        .collect::<Vec<_>>();
+    properties.sort_unstable();
+    properties.dedup();
+    properties
+}
+
 /// Derive one exact pinned provider request from a matched review row.
 ///
-/// Multiple manifestations or relation types fail closed. The SameObject
-/// review concerns `target_ref -> reviewed identity class`; this request keeps
-/// the diagnosed parent relation (`source_qid --property_ref--> target_ref`)
-/// separate from that identity alignment.
+/// The persisted Mabo context layer stores bounded semantic relation types
+/// (`participant`, `judge`, etc.), not raw property ids. We recover a provider
+/// coordinate only through the exact inverse exported by that producer. When a
+/// target has several reviewed relation witnesses at the same pinned source
+/// revision, the lexicographically first bounded property is selected solely as
+/// a deterministic reacquisition witness; the SameObject review remains about
+/// `target_ref -> reviewed identity class`, not about preferring that relation.
 pub fn reviewed_acquisition_request(
     planned: &MaboPlannedIdentityReview,
 ) -> Result<ReviewedAcquisitionRequest, MaboReviewedCyclePreparationError> {
@@ -135,18 +147,11 @@ pub fn reviewed_acquisition_request(
         return Err(MaboReviewedCyclePreparationError::AmbiguousSourceRevision);
     };
     let (source_qid, revision_id) = parse_wikidata_revision_ref(source_revision_ref)?;
-
-    let wikidata_relations = planned
-        .row
-        .relation_type_refs
-        .iter()
-        .filter_map(|relation| relation.strip_prefix("context:wikidata:"))
-        .collect::<Vec<_>>();
-    let property_ref = match wikidata_relations.as_slice() {
-        [property_ref] if !property_ref.is_empty() => (*property_ref).to_owned(),
-        [] => return Err(MaboReviewedCyclePreparationError::MissingDiagnosedRelation),
-        _ => return Err(MaboReviewedCyclePreparationError::AmbiguousDiagnosedRelation),
-    };
+    let property_ref = diagnosed_property_refs(&planned.row.relation_type_refs)
+        .into_iter()
+        .next()
+        .ok_or(MaboReviewedCyclePreparationError::MissingDiagnosedRelation)?
+        .to_owned();
 
     Ok(ReviewedAcquisitionRequest {
         source_qid,
@@ -198,10 +203,14 @@ pub fn prepare_reviewed_mabo_identity_cycle(
         return Err(MaboReviewedCyclePreparationError::SourceRevisionMismatch);
     }
 
-    let diagnosed_relation = format!("context:wikidata:{}", route.property_ref);
+    let route_matches_reviewed_relation = row
+        .relation_type_refs
+        .iter()
+        .filter_map(|relation_type_ref| mabo_wikidata_property_ref(relation_type_ref))
+        .any(|property_ref| property_ref == route.property_ref);
     if route.route_family != RouteFamily::WikidataProperty
         || route.target_ref != row.representation_ref
-        || !row.relation_type_refs.iter().any(|relation| relation == &diagnosed_relation)
+        || !route_matches_reviewed_relation
     {
         return Err(MaboReviewedCyclePreparationError::RouteMismatch);
     }
