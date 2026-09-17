@@ -88,13 +88,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             break;
         }
     }
-    let route = route.ok_or("pinned Mabo P710 -> Q975866 route not present")?;
+    let route = route.ok_or_else(|| {
+        std::io::Error::other("pinned Mabo P710 -> Q975866 route not present")
+    })?;
     let observation = wikidata_property_observation(
         "query:mabo:P710:Q975866",
         &acquired,
         &route,
         GetterBackend::SlrNative,
-    )?;
+    )
+    .map_err(|error| std::io::Error::other(format!("observation adapter: {error:?}")))?;
 
     let spec = ConsumerSpec {
         consumer_id: "consumer:mabo-100-identity-classes".into(),
@@ -121,7 +124,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         8,
     )?;
     if residual_receipt.requirements_paid != 1 || residual_receipt.requirements_unpaid != 0 {
-        return Err("reviewed Mabo participant identity requirement did not contract".into());
+        return Err(std::io::Error::other(
+            "reviewed Mabo participant identity requirement did not contract",
+        )
+        .into());
     }
 
     let expansion_candidate = from_wikidata_route(
@@ -136,7 +142,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             expected_new_world_value: 5,
             acquisition_cost: 1,
         },
-    )?;
+    )
+    .map_err(|error| std::io::Error::other(format!("expansion adapter: {error:?}")))?;
     let identity_resolution = WorldIdentityResolutionReceipt {
         receipt_ref: "identity-resolution:mabo:eddie".into(),
         identity: WorldObjectIdentity::new("world-object:eddie-mabo", EDDIE_MABO_QID)
@@ -180,7 +187,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         &mut source,
         &mut sink,
         WorldExpansionRunnerConfig { max_cycles: 1 },
-    )?;
+    )
+    .map_err(|error| std::io::Error::other(format!("recurrent runner: {error:?}")))?;
 
     println!("cycles_committed={}", receipt.cycles_committed);
     println!("novel_identity_classes={}", receipt.final_novel_identity_classes);
