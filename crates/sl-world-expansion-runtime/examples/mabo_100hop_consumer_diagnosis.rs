@@ -5,7 +5,9 @@ use sensiblaw_pg_source_store::{
     load_database_config, load_discovery_identity_baseline, load_latent_world_rows_with_budget,
     LatentWorldBudget,
 };
-use sensiblaw_world_expansion_runtime::diagnose_mabo_context_world_identity;
+use sensiblaw_world_expansion_runtime::{
+    diagnose_mabo_context_world_identity, mabo_consumer_diagnosis_frontier,
+};
 
 const MABO_QID: &str = "Q1501525";
 
@@ -42,6 +44,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .into());
     }
+    let frontier = mabo_consumer_diagnosis_frontier(
+        &diagnosis,
+        "frontier:mabo-context-world-identity:diagnosed",
+    );
 
     // Compile against an empty payment stream. The point of this executable is
     // to materialise the *open* consumer frontier from the observed 100-hop
@@ -83,6 +89,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "open_identity_requirements={}",
         diagnosis.consumer_spec.requirements.len()
     );
+    println!("proof_frontier_ref={}", frontier.frontier_ref);
+    println!("proof_frontier_open_residuals={}", frontier.open_residuals().count());
+    println!("proof_frontier_authority={}", frontier.authority);
     println!("requirements_total={}", residual_receipt.requirements_total);
     println!("requirements_paid={}", residual_receipt.requirements_paid);
     println!("requirements_unpaid={}", residual_receipt.requirements_unpaid);
@@ -91,7 +100,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("payments_emitted={}", residual_receipt.payments_emitted);
     println!("residual_wire_bytes={}", residual_wire.len());
 
-    for residual in diagnosis.residuals.iter().take(25) {
+    for residual in frontier.open_residuals().take(25) {
         println!("open_residual={}", residual.residual_ref);
     }
     for row in diagnosis.rows.iter().take(25) {
