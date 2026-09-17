@@ -7,6 +7,7 @@ mod legal_ir_materialization;
 mod non_novel_identity_alias;
 mod proposition_rows;
 mod reviewed_pnf;
+mod reviewed_source_expansion;
 
 pub use candidate_pnf::{
     CandidatePnfBatch, CandidatePnfError, CandidatePnfFactor, CandidatePnfProducer,
@@ -46,6 +47,12 @@ pub use reviewed_pnf::{
     materialize_reviewed_pnf_revision, validate_reviewed_pnf_revision,
     ReviewedPnfMaterializationError, ReviewedPnfMaterializationReceipt, ReviewedPnfRevision,
     ReviewedPnfValidationError,
+};
+pub use reviewed_source_expansion::{
+    load_reviewed_context_expansion_sources, materialize_reviewed_source_expansions,
+    reviewed_source_expansion_row, ReviewedSourceExpansionError,
+    ReviewedSourceExpansionInput, ReviewedSourceExpansionMaterializationReceipt,
+    ReviewedSourceExpansionRow,
 };
 
 // Keep the established PostgreSQL source-store implementation byte-for-byte
