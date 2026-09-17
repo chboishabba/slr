@@ -49,10 +49,10 @@ pub use reviewed_pnf::{
     ReviewedPnfValidationError,
 };
 pub use reviewed_source_expansion::{
-    load_reviewed_context_expansion_sources, materialize_reviewed_source_expansions,
-    reviewed_source_expansion_row, ReviewedSourceExpansionError,
-    ReviewedSourceExpansionInput, ReviewedSourceExpansionMaterializationReceipt,
-    ReviewedSourceExpansionRow,
+    load_reviewed_context_expansion_sources, materialize_reviewed_context_expansion,
+    materialize_reviewed_source_expansions, reviewed_source_expansion_row,
+    ReviewedSourceExpansionError, ReviewedSourceExpansionInput,
+    ReviewedSourceExpansionMaterializationReceipt, ReviewedSourceExpansionRow,
 };
 
 // Keep the established PostgreSQL source-store implementation byte-for-byte
