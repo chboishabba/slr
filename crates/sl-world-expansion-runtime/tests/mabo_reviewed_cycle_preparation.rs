@@ -146,6 +146,81 @@ fn reviewed_identity_assignment_prepares_real_pinned_cycle_and_payment() {
 }
 
 #[test]
+fn authority_family_route_can_pay_identity_review_without_authority_promotion() {
+    let acquired = entity_revision_receipt_from_rdf(
+        "Q1501525",
+        2_333_409_615,
+        b"<rdf:RDF>fixture</rdf:RDF>".to_vec(),
+    )
+    .unwrap();
+    let mut row = diagnosis_row();
+    row.representation_ref = "Q6851910".into();
+    row.relation_type_refs = vec!["context:wikidata:overrules".into()];
+    row.requirement_id = "world-identity:Q6851910".into();
+    row.residual_ref = "residual:mabo:world-identity:Q6851910".into();
+    let diagnosis = MaboConsumerDiagnosis {
+        consumer_spec: ConsumerSpec {
+            consumer_id: "consumer:mabo-context-world-identity".into(),
+            surface_id: "surface:mabo:reviewed-context-world".into(),
+            requirements: vec![ConsumerRequirement {
+                requirement_id: row.requirement_id.clone(),
+                need: RequirementNeed::EvidenceCoordinate(EvidenceCoordinateKind::SameObject),
+                scope: RequirementScope::SourceManifestation(
+                    "wikidata:Q1501525:oldid:2333409615".into(),
+                ),
+            }],
+        },
+        residuals: vec![ProofResidual {
+            residual_ref: row.residual_ref.clone(),
+            proposition_ref: "mabo:world-identity:Q6851910".into(),
+            producer_class_ref: "producer:world-expansion".into(),
+            jurisdiction_ref: Some("AU".into()),
+            authority_requirement_ref: None,
+            salience: 100,
+            dependency_refs: vec![],
+            status: ResidualStatus::Open,
+        }],
+        rows: vec![row.clone()],
+        reviewed_context_edges_considered: 1,
+        known_identity_representations: 0,
+        duplicate_target_edges: 0,
+        out_of_scope_or_wrong_type_edges: 0,
+        creates_semantic_authority: false,
+        applicability_promoted: false,
+        claim_truth_promoted: false,
+    };
+    let planned = MaboPlannedIdentityReview {
+        row,
+        assignment: MaboIdentityReviewAssignment {
+            representation_ref: "Q6851910".into(),
+            identity_class_ref: "world-object:q6851910".into(),
+            review_ref: "review:mabo:identity:q6851910".into(),
+        },
+    };
+    let mut authority_route = route();
+    authority_route.candidate_id = "wikidata:Q1501525:P4006:Q6851910".into();
+    authority_route.producer = ProducerFamily::AuthoritySource;
+    authority_route.target_ref = "Q6851910".into();
+    authority_route.property_ref = "P4006".into();
+
+    let prepared = prepare_reviewed_mabo_identity_cycle(
+        &diagnosis,
+        &planned,
+        &acquired,
+        &authority_route,
+        9,
+    )
+    .unwrap();
+
+    assert_eq!(prepared.prepared.routing.residual_class, ResidualClass::Identity);
+    assert_eq!(prepared.prepared.disambiguation_outcome, sensiblaw_proof_search_loop::world_expansion::DisambiguationOutcome::NewRelatedObject);
+    assert!(prepared.prepared.identity_resolution.candidate_only);
+    assert!(!prepared.prepared.identity_resolution.creates_semantic_authority);
+    assert!(!prepared.prepared.identity_resolution.applicability_promoted);
+    assert!(!prepared.prepared.identity_resolution.claim_truth_promoted);
+}
+
+#[test]
 fn preparation_rejects_route_or_revision_not_owned_by_diagnosis_row() {
     let acquired = entity_revision_receipt_from_rdf(
         "Q1501525",
