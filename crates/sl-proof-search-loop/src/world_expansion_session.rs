@@ -1,3 +1,113 @@
+//! Atomic in-memory orchestration for one reviewed residual-expansion cycle.
+//!
+//! Admission is staged on a cloned ledger. The session commits ledger, frontier,
+//! and lineage together only after post-acquisition PNF/world re-entry succeeds.
+
+use crate::frontier::ProofFrontier;
+use crate::world_expansion::{
+    DisambiguationOutcome, ExpansionCandidate, ReviewDecision, WorldExpansionLedger,
+    WorldExpansionPolicy,
+};
+use crate::world_expansion_reentry::{
+    reenter_after_acquisition, DiscoveryLineageReceipt, PostAcquisitionWorldObservation,
+    WorldReentryError, WorldReentryReceipt,
+};
+use crate::world_expansion_step::{
+    execute_reviewed_expansion_step, ResidualRouting, WorldExpansionStepError,
+    WorldExpansionStepReceipt,
+};
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorldExpansionSession {
+    pub frontier: ProofFrontier,
+    pub ledger: WorldExpansionLedger,
+    pub policy: WorldExpansionPolicy,
+    pub lineages: Vec<DiscoveryLineageReceipt>,
+}
+
+impl WorldExpansionSession {
+    #[must_use]
+    pub fn new(frontier: ProofFrontier, policy: WorldExpansionPolicy) -> Self {
+        Self {
+            frontier,
+            ledger: WorldExpansionLedger::default(),
+            policy,
+            lineages: Vec::new(),
+        }
+    }
+
+    #[must_use]
+    pub fn complete(&self) -> bool {
+        self.policy.complete(&self.ledger)
+    }
+
+    pub fn apply_reviewed_cycle(
+        &mut self,
+        next_frontier_ref: impl Into<String>,
+        routing: &ResidualRouting,
+        candidates: &[ExpansionCandidate],
+        review_decision: ReviewDecision,
+        disambiguation_outcome: DisambiguationOutcome,
+        observation: &PostAcquisitionWorldObservation,
+    ) -> Result<WorldExpansionCycleReceipt, WorldExpansionCycleError> {
+        let mut staged_ledger = self.ledger.clone();
+        let step = execute_reviewed_expansion_step(
+            &self.frontier,
+            routing,
+            candidates,
+            &mut staged_ledger,
+            self.policy,
+            review_decision,
+            disambiguation_outcome,
+        )?;
+        let reentry = reenter_after_acquisition(
+            &self.frontier,
+            next_frontier_ref,
+            &step,
+            observation,
+        )?;
+
+        self.ledger = staged_ledger;
+        self.frontier = reentry.next_frontier.clone();
+        self.lineages.push(reentry.lineage.clone());
+
+        Ok(WorldExpansionCycleReceipt {
+            step,
+            reentry,
+            total_new_world_objects: self.ledger.total_new_world_objects,
+            target_novel_objects: self.policy.target_novel_objects,
+            target_complete: self.complete(),
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorldExpansionCycleReceipt {
+    pub step: WorldExpansionStepReceipt,
+    pub reentry: WorldReentryReceipt,
+    pub total_new_world_objects: usize,
+    pub target_novel_objects: usize,
+    pub target_complete: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum WorldExpansionCycleError {
+    Step(WorldExpansionStepError),
+    Reentry(WorldReentryError),
+}
+
+impl From<WorldExpansionStepError> for WorldExpansionCycleError {
+    fn from(value: WorldExpansionStepError) -> Self {
+        Self::Step(value)
+    }
+}
+
+impl From<WorldReentryError> for WorldExpansionCycleError {
+    fn from(value: WorldReentryError) -> Self {
+        Self::Reentry(value)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
