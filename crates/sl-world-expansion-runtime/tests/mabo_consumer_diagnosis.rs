@@ -4,7 +4,9 @@ use sensiblaw_consumer_residual::{EvidenceCoordinateKind, RequirementNeed, Requi
 use sensiblaw_pg_source_store::{DiscoveryIdentityBaseline, LatentWorldEdgeRow, LatentWorldRows};
 use sensiblaw_proof_search_loop::frontier::ResidualStatus;
 use sensiblaw_proof_search_loop::world_expansion::ResidualClass;
-use sensiblaw_world_expansion_runtime::diagnose_mabo_context_world_identity;
+use sensiblaw_world_expansion_runtime::{
+    diagnose_mabo_context_world_identity, mabo_consumer_diagnosis_frontier,
+};
 
 fn world(edges: Vec<LatentWorldEdgeRow>) -> LatentWorldRows {
     LatentWorldRows {
@@ -75,6 +77,16 @@ fn reviewed_context_targets_become_explicit_same_object_requirements_only_once()
     assert_eq!(residual.status, ResidualStatus::Open);
     assert_eq!(diagnosis.rows[0].residual_class, ResidualClass::Identity);
     assert_eq!(diagnosis.rows[0].discovery_route_ref, "residual-observation");
+
+    let frontier = mabo_consumer_diagnosis_frontier(
+        &diagnosis,
+        "frontier:mabo-context-world-identity:diagnosed",
+    );
+    assert_eq!(frontier.consumer_ref, diagnosis.consumer_spec.consumer_id);
+    assert_eq!(frontier.open_residuals().count(), 1);
+    assert_eq!(frontier.authority, "experimental_candidate_only");
+    assert!(frontier.satisfied_payment_refs.is_empty());
+
     assert!(!diagnosis.creates_semantic_authority);
     assert!(!diagnosis.applicability_promoted);
     assert!(!diagnosis.claim_truth_promoted);
