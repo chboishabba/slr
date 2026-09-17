@@ -11,7 +11,7 @@ fn planned() -> MaboPlannedIdentityReview {
     MaboPlannedIdentityReview {
         row: MaboIdentityDiagnosisRow {
             representation_ref: "Q975866".into(),
-            relation_type_refs: vec!["context:wikidata:P710".into()],
+            relation_type_refs: vec!["context:wikidata:participant".into()],
             source_revision_refs: vec!["wikidata:Q1501525:oldid:2333409615".into()],
             requirement_id: "world-identity:Q975866".into(),
             residual_ref: "residual:mabo:world-identity:Q975866".into(),
@@ -41,7 +41,7 @@ fn reviewed_row_derives_exact_pinned_provider_request() {
 }
 
 #[test]
-fn ambiguous_revision_or_relation_fails_closed() {
+fn ambiguous_revision_fails_closed_but_duplicate_reviewed_relations_choose_a_deterministic_witness() {
     let mut multiple_revisions = planned();
     multiple_revisions
         .row
@@ -56,10 +56,20 @@ fn ambiguous_revision_or_relation_fails_closed() {
     multiple_relations
         .row
         .relation_type_refs
-        .push("context:wikidata:P31".into());
+        .push("context:wikidata:judge".into());
+    let request = reviewed_acquisition_request(&multiple_relations).unwrap();
+    assert_eq!(request.source_revision_ref, "wikidata:Q1501525:oldid:2333409615");
+    assert_eq!(request.target_ref, "Q975866");
+    assert_eq!(request.property_ref, "P1594");
+}
+
+#[test]
+fn arbitrary_semantic_label_cannot_be_replayed_as_a_provider_property() {
+    let mut value = planned();
+    value.row.relation_type_refs = vec!["context:wikidata:made-up".into()];
     assert_eq!(
-        reviewed_acquisition_request(&multiple_relations),
-        Err(MaboReviewedCyclePreparationError::AmbiguousDiagnosedRelation)
+        reviewed_acquisition_request(&value),
+        Err(MaboReviewedCyclePreparationError::MissingDiagnosedRelation)
     );
 }
 
