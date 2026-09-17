@@ -37,6 +37,7 @@ pub mod world_expansion;
 pub mod world_expansion_adapters;
 pub mod world_expansion_identity_session;
 pub mod world_expansion_reentry;
+pub mod world_expansion_runner;
 pub mod world_expansion_session;
 pub mod world_expansion_step;
 pub mod world_identity;
