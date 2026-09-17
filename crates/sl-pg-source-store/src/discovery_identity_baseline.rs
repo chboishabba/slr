@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use postgres::{Client, NoTls};
 use thiserror::Error;
 
-use crate::DatabaseConfig;
+use crate::{non_novel_identity_alias::NON_NOVEL_IDENTITY_ALIAS_SCHEMA_SQL, DatabaseConfig};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DiscoveryIdentityBaselineRow {
@@ -65,18 +65,34 @@ pub fn collapse_discovery_identity_baseline(
     Ok(baseline)
 }
 
+/// Load the durable identity quotient from both novel discovery lineage and
+/// reviewed non-novel aliases. Alias rows contribute representation coverage
+/// only: because the baseline cardinality is a set of identity-class refs, an
+/// alias to an existing class cannot increment durable novelty.
 pub fn load_discovery_identity_baseline(
     config: &DatabaseConfig,
 ) -> Result<DiscoveryIdentityBaseline, DiscoveryIdentityBaselineError> {
     let mut client = Client::connect(config.database_url(), NoTls)?;
+    client.batch_execute(NON_NOVEL_IDENTITY_ALIAS_SCHEMA_SQL)?;
     let rows = client.query(
-        "SELECT object_ref, identity_class_ref \
-         FROM context.discovery_lineage_receipt \
-         WHERE identity_class_ref IS NOT NULL \
-           AND candidate_only = TRUE \
-           AND creates_semantic_authority = FALSE \
-           AND applicability_promoted = FALSE \
-           AND claim_truth_promoted = FALSE \
+        "SELECT object_ref, identity_class_ref FROM (\
+           SELECT object_ref, identity_class_ref \
+           FROM context.discovery_lineage_receipt \
+           WHERE identity_class_ref IS NOT NULL \
+             AND candidate_only = TRUE \
+             AND creates_semantic_authority = FALSE \
+             AND applicability_promoted = FALSE \
+             AND claim_truth_promoted = FALSE \
+           UNION ALL \
+           SELECT representation_ref AS object_ref, identity_class_ref \
+           FROM context.reviewed_identity_alias_receipt \
+           WHERE candidate_only = TRUE \
+             AND creates_semantic_authority = FALSE \
+             AND applicability_promoted = FALSE \
+             AND claim_truth_promoted = FALSE \
+             AND counts_as_novel_discovery = FALSE \
+             AND creates_discovery_lineage = FALSE\
+         ) AS durable_identity \
          ORDER BY identity_class_ref, object_ref",
         &[],
     )?;
