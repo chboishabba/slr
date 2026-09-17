@@ -1,12 +1,11 @@
 //! Durable append-only lineage for residual-driven world discovery.
 //!
 //! Persistence records why an object was acquired/admitted and what observed
-//! PNF/world delta followed. It does not promote the object into proof,
-//! applicability, semantic authority, or claim truth.
+//! PNF/world delta followed. It is intentionally provider-neutral and does not
+//! depend on proof-search runtime types. The caller projects its semantic receipt
+//! into this storage input at the boundary.
 
 use postgres::{Client, NoTls};
-use sensiblaw_proof_search_loop::world_expansion::ProducerLane;
-use sensiblaw_proof_search_loop::world_expansion_reentry::DiscoveryLineageReceipt;
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
@@ -33,6 +32,25 @@ CREATE TABLE IF NOT EXISTS context.discovery_lineage_receipt (
   receipt_authority TEXT NOT NULL
 )
 "#;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DiscoveryLineageInput {
+    pub object_ref: String,
+    pub discovery_parent_ref: String,
+    pub triggering_residual_ref: String,
+    pub selected_candidate_ref: String,
+    pub producer_lane_ref: String,
+    pub source_revision_ref: String,
+    pub pnf_world_disambiguation_ref: String,
+    pub expected_residual_contraction: u64,
+    pub observed_residual_contraction: u64,
+    pub new_residual_refs: Vec<String>,
+    pub candidate_only: bool,
+    pub creates_semantic_authority: bool,
+    pub applicability_promoted: bool,
+    pub claim_truth_promoted: bool,
+    pub receipt_authority: String,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DiscoveryLineageRow {
@@ -86,22 +104,12 @@ impl From<postgres::Error> for DiscoveryLineageError {
     }
 }
 
-fn producer_lane_ref(lane: ProducerLane) -> &'static str {
-    match lane {
-        ProducerLane::GovernedLegal => "governed-legal",
-        ProducerLane::WikidataIdentity => "wikidata-identity",
-        ProducerLane::WikipediaContext => "wikipedia-context",
-        ProducerLane::SourceSpecificProvenance => "source-specific-provenance",
-        ProducerLane::Other => "other",
-    }
-}
-
 fn hex_digest(bytes: &[u8]) -> String {
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
 pub fn discovery_lineage_row(
-    lineage: &DiscoveryLineageReceipt,
+    lineage: &DiscoveryLineageInput,
 ) -> Result<DiscoveryLineageRow, DiscoveryLineageError> {
     if !lineage.candidate_only {
         return Err(DiscoveryLineageError::LineageMustRemainCandidateOnly);
@@ -120,6 +128,7 @@ pub fn discovery_lineage_row(
         ("discovery_parent_ref", lineage.discovery_parent_ref.as_str()),
         ("triggering_residual_ref", lineage.triggering_residual_ref.as_str()),
         ("selected_candidate_ref", lineage.selected_candidate_ref.as_str()),
+        ("producer_lane_ref", lineage.producer_lane_ref.as_str()),
         ("source_revision_ref", lineage.source_revision_ref.as_str()),
         (
             "pnf_world_disambiguation_ref",
@@ -136,7 +145,6 @@ pub fn discovery_lineage_row(
         return Err(DiscoveryLineageError::ContractionOutOfRange);
     }
 
-    let producer_lane_ref = producer_lane_ref(lineage.producer_lane).to_string();
     let mut hasher = Sha256::new();
     for value in [
         "mabo-discovery-lineage:v1",
@@ -144,10 +152,10 @@ pub fn discovery_lineage_row(
         lineage.discovery_parent_ref.as_str(),
         lineage.triggering_residual_ref.as_str(),
         lineage.selected_candidate_ref.as_str(),
-        producer_lane_ref.as_str(),
+        lineage.producer_lane_ref.as_str(),
         lineage.source_revision_ref.as_str(),
         lineage.pnf_world_disambiguation_ref.as_str(),
-        lineage.receipt_authority,
+        lineage.receipt_authority.as_str(),
     ] {
         hasher.update(value.as_bytes());
         hasher.update([0]);
@@ -165,7 +173,7 @@ pub fn discovery_lineage_row(
         discovery_parent_ref: lineage.discovery_parent_ref.clone(),
         triggering_residual_ref: lineage.triggering_residual_ref.clone(),
         selected_candidate_ref: lineage.selected_candidate_ref.clone(),
-        producer_lane_ref,
+        producer_lane_ref: lineage.producer_lane_ref.clone(),
         source_revision_ref: lineage.source_revision_ref.clone(),
         pnf_world_disambiguation_ref: lineage.pnf_world_disambiguation_ref.clone(),
         expected_residual_contraction: lineage.expected_residual_contraction,
@@ -175,14 +183,14 @@ pub fn discovery_lineage_row(
         creates_semantic_authority: false,
         applicability_promoted: false,
         claim_truth_promoted: false,
-        receipt_authority: lineage.receipt_authority.to_string(),
+        receipt_authority: lineage.receipt_authority.clone(),
         receipt_sha256,
     })
 }
 
 pub fn materialize_discovery_lineage(
     config: &DatabaseConfig,
-    lineages: &[DiscoveryLineageReceipt],
+    lineages: &[DiscoveryLineageInput],
 ) -> Result<DiscoveryLineageMaterializationReceipt, DiscoveryLineageError> {
     let rows = lineages
         .iter()
@@ -234,16 +242,14 @@ pub fn materialize_discovery_lineage(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sensiblaw_proof_search_loop::world_expansion::ProducerLane;
-    use sensiblaw_proof_search_loop::world_expansion_reentry::DiscoveryLineageReceipt;
 
-    fn lineage() -> DiscoveryLineageReceipt {
-        DiscoveryLineageReceipt {
+    fn lineage() -> DiscoveryLineageInput {
+        DiscoveryLineageInput {
             object_ref: "case:[1992]-HCA-23".into(),
             discovery_parent_ref: "Q1501525".into(),
             triggering_residual_ref: "residual:mabo:authority-source".into(),
             selected_candidate_ref: "oalc:case:[1992]-HCA-23".into(),
-            producer_lane: ProducerLane::GovernedLegal,
+            producer_lane_ref: "governed-legal".into(),
             source_revision_ref: "oalc:[1992]-HCA-23:sha256:abc".into(),
             pnf_world_disambiguation_ref: "pnf-world:mabo:5".into(),
             expected_residual_contraction: 4,
@@ -253,7 +259,7 @@ mod tests {
             creates_semantic_authority: false,
             applicability_promoted: false,
             claim_truth_promoted: false,
-            receipt_authority: "candidate_world_expansion_only",
+            receipt_authority: "candidate_world_expansion_only".into(),
         }
     }
 
