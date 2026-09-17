@@ -10,7 +10,9 @@ use postgres::{Client, NoTls};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
-use crate::{context_federation::CONTEXT_RECEIPT_SCHEMA_SQL, DatabaseConfig};
+use crate::{
+    context_federation::CONTEXT_RECEIPT_SCHEMA_SQL, DatabaseConfig, ReviewedContextEdge,
+};
 
 pub(crate) const REVIEWED_SOURCE_EXPANSION_SCHEMA_SQL: &str = r#"
 CREATE SCHEMA IF NOT EXISTS context;
@@ -84,8 +86,14 @@ pub enum ReviewedSourceExpansionError {
         source_ref: String,
         source_revision_ref: String,
     },
+    #[error("reviewed context edge does not belong to source expansion: {0}")]
+    EdgeCoordinateMismatch(String),
+    #[error("bounded candidate count does not equal reviewed edge count")]
+    CandidateCountMismatch,
     #[error("bounded candidate count exceeds PostgreSQL BIGINT range")]
     CandidateCountOutOfRange,
+    #[error("invalid reviewed context sha256: {0}")]
+    InvalidContextDigest(String),
     #[error("postgres error: {0}")]
     Postgres(String),
 }
@@ -201,6 +209,96 @@ pub fn materialize_reviewed_source_expansions(
 
     Ok(ReviewedSourceExpansionMaterializationReceipt {
         attempted_count: rows.len(),
+        materialized_count,
+        candidate_only: true,
+        creates_semantic_authority: false,
+        applicability_promoted: false,
+        claim_truth_promoted: false,
+        counts_as_novel_identity: false,
+        pays_claim_residual: false,
+    })
+}
+
+/// Atomically materialize the entire reviewed bounded context delta together
+/// with its exact source-expansion receipt. This prevents either half from
+/// becoming durable alone.
+pub fn materialize_reviewed_context_expansion(
+    config: &DatabaseConfig,
+    edges: &[ReviewedContextEdge],
+    input: &ReviewedSourceExpansionInput,
+) -> Result<ReviewedSourceExpansionMaterializationReceipt, ReviewedSourceExpansionError> {
+    let row = reviewed_source_expansion_row(input)?;
+    if row.bounded_candidate_count != edges.len() {
+        return Err(ReviewedSourceExpansionError::CandidateCountMismatch);
+    }
+    for edge in edges {
+        if edge.left_ref != row.source_ref || edge.source_revision_ref != row.source_revision_ref {
+            return Err(ReviewedSourceExpansionError::EdgeCoordinateMismatch(
+                edge.relation_ref.clone(),
+            ));
+        }
+        if !edge.candidate_only
+            || edge.creates_semantic_authority
+            || edge.applicability_promoted
+            || edge.claim_truth_promoted
+        {
+            return Err(ReviewedSourceExpansionError::ExpansionMayNotPromote);
+        }
+    }
+
+    let mut client = Client::connect(config.database_url(), NoTls)?;
+    let mut tx = client.transaction()?;
+    tx.batch_execute(CONTEXT_RECEIPT_SCHEMA_SQL)?;
+    tx.batch_execute(REVIEWED_SOURCE_EXPANSION_SCHEMA_SQL)?;
+
+    for edge in edges {
+        let digest_bytes = crate::decode_hex_32(&edge.relation_sha256)
+            .ok_or_else(|| ReviewedSourceExpansionError::InvalidContextDigest(edge.relation_sha256.clone()))?;
+        tx.execute(
+            "INSERT INTO algebra.relation \
+             (relation_ref, relation_type_ref, left_ref, right_ref, relation_sha256) \
+             VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING",
+            &[
+                &edge.relation_ref,
+                &edge.relation_type_ref,
+                &edge.left_ref,
+                &edge.right_ref,
+                &&digest_bytes[..],
+            ],
+        )?;
+        tx.execute(
+            "INSERT INTO context.reviewed_relation_receipt \
+             (relation_ref, source_family_ref, source_revision_ref, candidate_only, \
+              creates_semantic_authority, applicability_promoted, claim_truth_promoted, receipt_sha256) \
+             VALUES ($1,$2,$3,TRUE,FALSE,FALSE,FALSE,$4) ON CONFLICT DO NOTHING",
+            &[
+                &edge.relation_ref,
+                &edge.source_family.as_str(),
+                &edge.source_revision_ref,
+                &&digest_bytes[..],
+            ],
+        )?;
+    }
+
+    let materialized_count = tx.execute(
+        "INSERT INTO context.reviewed_source_expansion_receipt (\
+         receipt_sha256, source_ref, source_revision_ref, review_ref, bounded_candidate_count, \
+         candidate_only, creates_semantic_authority, applicability_promoted, claim_truth_promoted, \
+         counts_as_novel_identity, pays_claim_residual, receipt_authority) VALUES (\
+         $1,$2,$3,$4,$5,TRUE,FALSE,FALSE,FALSE,FALSE,FALSE,$6) ON CONFLICT DO NOTHING",
+        &[
+            &row.receipt_sha256,
+            &row.source_ref,
+            &row.source_revision_ref,
+            &row.review_ref,
+            &(row.bounded_candidate_count as i64),
+            &row.receipt_authority,
+        ],
+    )? as usize;
+    tx.commit()?;
+
+    Ok(ReviewedSourceExpansionMaterializationReceipt {
+        attempted_count: 1,
         materialized_count,
         candidate_only: true,
         creates_semantic_authority: false,
