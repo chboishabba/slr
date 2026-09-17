@@ -14,7 +14,7 @@ use sensiblaw_pg_source_store::{
 use sensiblaw_proof_search_loop::world_expansion::ProducerLane;
 use sensiblaw_proof_search_loop::world_expansion_reentry::DiscoveryLineageReceipt;
 use sensiblaw_proof_search_loop::world_expansion_runner::{
-    RecurrentRunBlocker, WorldExpansionCycleSink,
+    RecurrentRunBlocker, RecurrentRunBlockerKind, WorldExpansionCycleSink,
 };
 use sensiblaw_proof_search_loop::world_expansion_session::WorldExpansionCycleReceipt;
 use sensiblaw_proof_search_loop::world_observation::WorldObservation;
@@ -160,9 +160,18 @@ impl WorldExpansionCycleSink for PgDiscoveryLineageSink {
             &receipt.reentry.lineage,
             &receipt.step.admission.identity_class_ref,
         )
-        .map_err(|error| RecurrentRunBlocker::new(format!("lineage-projection:{error}")))?;
-        materialize_discovery_lineage(&self.config, &[input])
-            .map_err(|error| RecurrentRunBlocker::new(format!("pg:discovery-lineage:{error}")))?;
+        .map_err(|error| {
+            RecurrentRunBlocker::new(
+                RecurrentRunBlockerKind::PersistenceBlocked,
+                format!("lineage-projection:{error}"),
+            )
+        })?;
+        materialize_discovery_lineage(&self.config, &[input]).map_err(|error| {
+            RecurrentRunBlocker::new(
+                RecurrentRunBlockerKind::PersistenceBlocked,
+                format!("pg:discovery-lineage:{error}"),
+            )
+        })?;
         Ok(())
     }
 }
