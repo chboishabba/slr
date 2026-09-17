@@ -3,7 +3,8 @@ use std::collections::BTreeMap;
 use sensiblaw_pg_source_store::{DiscoveryIdentityBaseline, LatentWorldEdgeRow, LatentWorldRows};
 use sensiblaw_world_expansion_runtime::{
     diagnose_mabo_context_world_identity, parse_mabo_identity_review_tsv,
-    plan_mabo_identity_reviews, MaboReviewManifestError,
+    parse_mabo_wikidata_source_revision_ref, plan_mabo_identity_reviews,
+    MaboCampaignPreparationError, MaboReviewManifestError, MaboWikidataSourceRevision,
 };
 
 fn reviewed_edge(target: &str) -> LatentWorldEdgeRow {
@@ -155,4 +156,49 @@ fn review_for_already_durable_representation_is_unmatched_not_recounted() {
     assert!(plan.matched.is_empty());
     assert!(plan.pending_rows.is_empty());
     assert_eq!(plan.unmatched_assignments.len(), 1);
+}
+
+#[test]
+fn campaign_reacquisition_requires_exact_pinned_wikidata_source_manifestation() {
+    assert_eq!(
+        parse_mabo_wikidata_source_revision_ref(
+            "wikidata:Q1501525:oldid:2333409615"
+        )
+        .unwrap(),
+        MaboWikidataSourceRevision {
+            qid: "Q1501525".into(),
+            oldid: 2_333_409_615,
+        }
+    );
+
+    assert_eq!(
+        parse_mabo_wikidata_source_revision_ref("wikidata:Q1501525:latest"),
+        Err(MaboCampaignPreparationError::UnsupportedSourceRevision(
+            "wikidata:Q1501525:latest".into()
+        ))
+    );
+    assert_eq!(
+        parse_mabo_wikidata_source_revision_ref(
+            "context:wikidata:wikidata:Q1501525:oldid:2333409615"
+        ),
+        Err(MaboCampaignPreparationError::UnsupportedSourceRevision(
+            "context:wikidata:wikidata:Q1501525:oldid:2333409615".into()
+        ))
+    );
+}
+
+#[test]
+fn campaign_reacquisition_rejects_invalid_qid_and_oldid() {
+    assert_eq!(
+        parse_mabo_wikidata_source_revision_ref("wikidata:not-a-qid:oldid:2333409615"),
+        Err(MaboCampaignPreparationError::InvalidQid(
+            "not-a-qid".into()
+        ))
+    );
+    assert_eq!(
+        parse_mabo_wikidata_source_revision_ref("wikidata:Q1501525:oldid:not-a-number"),
+        Err(MaboCampaignPreparationError::InvalidOldId(
+            "not-a-number".into()
+        ))
+    );
 }
