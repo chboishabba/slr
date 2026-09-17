@@ -16,6 +16,7 @@ use sensiblaw_pg_source_store::{
 use sensiblaw_proof_search_loop::frontier::{
     select_frontier_move, FrontierCandidateMove, ProofFrontier, ProofResidual, ResidualStatus,
 };
+use sensiblaw_proof_search_loop::world_expansion::WorldExpansionPolicy;
 use sensiblaw_proof_search_loop::world_expansion_runner::{
     RecurrentRunBlocker, RecurrentRunBlockerKind,
 };
@@ -26,7 +27,7 @@ use sensiblaw_route_selector::{decode_route_candidate, RouteFamily};
 use sensiblaw_wikimedia_candidate_provider::{emit_candidates_from_rdf, AcquiredEntityRdf};
 use thiserror::Error;
 
-use crate::{MaboConsumerDiagnosis, MaboIdentityReviewPlan};
+use crate::{MaboConsumerDiagnosis, MaboIdentityReviewPlan, MABO_NOVEL_IDENTITY_TARGET};
 
 const CONTEXT_EXPANSION_PRODUCER: &str = "producer:wikidata-bounded-context-expansion";
 const CONTEXT_EXPANSION_RESIDUAL_PREFIX: &str = "residual:mabo:context-expansion:";
@@ -97,6 +98,24 @@ fn valid_qid(value: &str) -> bool {
     value
         .strip_prefix('Q')
         .is_some_and(|digits| !digits.is_empty() && digits.bytes().all(|byte| byte.is_ascii_digit()))
+}
+
+/// Campaign completion is seed-scoped discovery-lineage cardinality, not the
+/// global world-identity quotient shared by every research campaign.
+#[must_use]
+pub fn mabo_target_complete(durable_campaign_identity_classes: usize) -> bool {
+    durable_campaign_identity_classes >= MABO_NOVEL_IDENTITY_TARGET
+}
+
+#[must_use]
+pub fn mabo_remaining_adaptive_world_expansion_policy(
+    durable_campaign_identity_classes: usize,
+) -> WorldExpansionPolicy {
+    WorldExpansionPolicy {
+        target_novel_objects: MABO_NOVEL_IDENTITY_TARGET
+            .saturating_sub(durable_campaign_identity_classes),
+        minimum_expected_residual_contraction: 1,
+    }
 }
 
 #[must_use]
