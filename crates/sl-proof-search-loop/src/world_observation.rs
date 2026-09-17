@@ -1,3 +1,179 @@
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum GetterBackend {
+    SlrNative,
+    LeanInterop,
+    Other,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RetrievalStatus {
+    Retrieved,
+    Missing,
+    Failed,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FreshnessStatus {
+    Current,
+    Stale,
+    Unknown,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProvenanceClass {
+    RevisionPinnedExternalSource,
+    RevisionPinnedFixture,
+    DigestPinnedExternalSource,
+    OtherCandidateSource,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorldObservation {
+    pub request_ref: String,
+    pub object_ref: String,
+    pub relation_ref: String,
+    pub source_ref: String,
+    pub source_revision_ref: String,
+    pub content_digest_ref: String,
+    pub value_ref: String,
+    pub retrieval_status: RetrievalStatus,
+    pub freshness_status: FreshnessStatus,
+    pub provenance_class: ProvenanceClass,
+    pub backend: GetterBackend,
+    pub candidate_only: bool,
+    pub creates_semantic_authority: bool,
+    pub claim_truth_promoted: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NormalizedWorldObservation {
+    pub request_ref: String,
+    pub object_ref: String,
+    pub relation_ref: String,
+    pub source_ref: String,
+    pub source_revision_ref: String,
+    pub content_digest_ref: String,
+    pub value_ref: String,
+    pub retrieval_status: RetrievalStatus,
+    pub freshness_status: FreshnessStatus,
+    pub provenance_class: ProvenanceClass,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WorldObservationError {
+    EmptyCoordinate,
+    MustRemainCandidateOnly,
+    ObservationMayNotPromote,
+}
+
+impl WorldObservation {
+    pub fn validate(&self) -> Result<(), WorldObservationError> {
+        if [
+            self.request_ref.as_str(),
+            self.object_ref.as_str(),
+            self.relation_ref.as_str(),
+            self.source_ref.as_str(),
+            self.source_revision_ref.as_str(),
+            self.content_digest_ref.as_str(),
+            self.value_ref.as_str(),
+        ]
+        .iter()
+        .any(|value| value.trim().is_empty())
+        {
+            return Err(WorldObservationError::EmptyCoordinate);
+        }
+        if !self.candidate_only {
+            return Err(WorldObservationError::MustRemainCandidateOnly);
+        }
+        if self.creates_semantic_authority || self.claim_truth_promoted {
+            return Err(WorldObservationError::ObservationMayNotPromote);
+        }
+        Ok(())
+    }
+
+    #[must_use]
+    pub fn normalized(&self) -> NormalizedWorldObservation {
+        NormalizedWorldObservation {
+            request_ref: self.request_ref.clone(),
+            object_ref: self.object_ref.clone(),
+            relation_ref: self.relation_ref.clone(),
+            source_ref: self.source_ref.clone(),
+            source_revision_ref: self.source_revision_ref.clone(),
+            content_digest_ref: self.content_digest_ref.clone(),
+            value_ref: self.value_ref.clone(),
+            retrieval_status: self.retrieval_status,
+            freshness_status: self.freshness_status,
+            provenance_class: self.provenance_class,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MismatchKind {
+    RequestMismatch,
+    ObjectMismatch,
+    RelationMismatch,
+    SourceMismatch,
+    RevisionMismatch,
+    DigestMismatch,
+    ValueMismatch,
+    RetrievalMismatch,
+    FreshnessMismatch,
+    ProvenanceMismatch,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GetterParityResidual {
+    pub residual_ref: String,
+    pub left_backend: GetterBackend,
+    pub right_backend: GetterBackend,
+    pub kind: MismatchKind,
+    pub candidate_only: bool,
+    pub creates_semantic_authority: bool,
+    pub claim_truth_promoted: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ObservationParity {
+    Agreement,
+    Residual(GetterParityResidual),
+}
+
+fn mismatch_kind(left: &NormalizedWorldObservation, right: &NormalizedWorldObservation) -> Option<MismatchKind> {
+    if left.request_ref != right.request_ref { return Some(MismatchKind::RequestMismatch); }
+    if left.object_ref != right.object_ref { return Some(MismatchKind::ObjectMismatch); }
+    if left.relation_ref != right.relation_ref { return Some(MismatchKind::RelationMismatch); }
+    if left.source_ref != right.source_ref { return Some(MismatchKind::SourceMismatch); }
+    if left.source_revision_ref != right.source_revision_ref { return Some(MismatchKind::RevisionMismatch); }
+    if left.content_digest_ref != right.content_digest_ref { return Some(MismatchKind::DigestMismatch); }
+    if left.value_ref != right.value_ref { return Some(MismatchKind::ValueMismatch); }
+    if left.retrieval_status != right.retrieval_status { return Some(MismatchKind::RetrievalMismatch); }
+    if left.freshness_status != right.freshness_status { return Some(MismatchKind::FreshnessMismatch); }
+    if left.provenance_class != right.provenance_class { return Some(MismatchKind::ProvenanceMismatch); }
+    None
+}
+
+#[must_use]
+pub fn compare_observations(left: &WorldObservation, right: &WorldObservation) -> ObservationParity {
+    let left_normalized = left.normalized();
+    let right_normalized = right.normalized();
+    let Some(kind) = mismatch_kind(&left_normalized, &right_normalized) else {
+        return ObservationParity::Agreement;
+    };
+    ObservationParity::Residual(GetterParityResidual {
+        residual_ref: format!(
+            "getter-parity:{}:{}:{:?}",
+            left.request_ref, left.relation_ref, kind
+        ),
+        left_backend: left.backend,
+        right_backend: right.backend,
+        kind,
+        candidate_only: true,
+        creates_semantic_authority: false,
+        claim_truth_promoted: false,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
