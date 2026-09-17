@@ -2,10 +2,10 @@ use std::fs;
 use std::io::Cursor;
 
 use sensiblaw_pg_source_store::{
-    load_database_config, load_discovery_identity_baseline,
-    load_latent_world_rows_with_budget, load_reviewed_context_expansion_sources,
-    materialize_non_novel_identity_aliases, materialize_reviewed_context_expansion,
-    LatentWorldBudget, NonNovelIdentityAliasInput,
+    load_database_config, load_discovery_campaign_identity_classes,
+    load_discovery_identity_baseline, load_latent_world_rows_with_budget,
+    load_reviewed_context_expansion_sources, materialize_non_novel_identity_aliases,
+    materialize_reviewed_context_expansion, LatentWorldBudget, NonNovelIdentityAliasInput,
 };
 use sensiblaw_proof_search_loop::world_expansion_runner::{
     run_recurrent_world_expansion, RecurrentRunStopReason, WorldExpansionRunnerConfig,
@@ -18,6 +18,7 @@ use sensiblaw_wikimedia_candidate_provider::{
     fetch_latest_entity_rdf_revision_receipt,
 };
 use sensiblaw_world_expansion_runtime::adaptive_campaign::{
+    mabo_remaining_adaptive_world_expansion_policy, mabo_target_complete,
     parse_bounded_target_context, select_next_mabo_adaptive_decision, MaboAdaptiveDecision,
 };
 use sensiblaw_world_expansion_runtime::adaptive_context_review::{
@@ -30,9 +31,8 @@ use sensiblaw_world_expansion_runtime::reviewed_campaign::{
 use sensiblaw_world_expansion_runtime::{
     apply_known_identity_payment_transaction, diagnose_mabo_context_world_identity,
     identity_coherence_baseline, mabo_consumer_diagnosis_frontier,
-    mabo_remaining_world_expansion_policy, parse_mabo_identity_review_tsv,
-    PgDiscoveryLineageSink, ReviewedCycleQueueSource, WorldStoreReviewedPaymentSink,
-    MaboPlannedIdentityReview, MABO_NOVEL_IDENTITY_TARGET,
+    parse_mabo_identity_review_tsv, MaboPlannedIdentityReview, PgDiscoveryLineageSink,
+    ReviewedCycleQueueSource, WorldStoreReviewedPaymentSink, MABO_NOVEL_IDENTITY_TARGET,
 };
 use sensiblaw_world_store::{load_database_config as load_world_database_config, WorldStore};
 
@@ -196,10 +196,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     loop {
         let baseline = load_discovery_identity_baseline(&pg_config)?;
-        if baseline.identity_class_refs.len() >= MABO_NOVEL_IDENTITY_TARGET {
+        let campaign_identity_classes =
+            load_discovery_campaign_identity_classes(&pg_config, MABO_QID)?;
+        if mabo_target_complete(campaign_identity_classes.len()) {
             println!("stop_reason=TargetComplete");
             println!("adaptive_cycles_completed={adaptive_cycles_completed}");
-            println!("durable_total_identity_classes={}", baseline.identity_class_refs.len());
+            println!(
+                "mabo_campaign_identity_classes={}",
+                campaign_identity_classes.len()
+            );
+            println!(
+                "global_durable_identity_classes={}",
+                baseline.identity_class_refs.len()
+            );
             break;
         }
         if adaptive_cycles_completed >= CAMPAIGN_MAX_CYCLES {
@@ -235,7 +244,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("world_view_deepest_observed_hop={}", world.deepest_observed_hop);
         println!("world_view_visited_refs={}", world.visited_refs.len());
         println!("world_view_edges={}", world.edges.len());
-        println!("durable_identity_classes={}", baseline.identity_class_refs.len());
+        println!(
+            "global_durable_identity_classes={}",
+            baseline.identity_class_refs.len()
+        );
+        println!(
+            "mabo_campaign_identity_classes={}",
+            campaign_identity_classes.len()
+        );
         println!("diagnosed_identity_requirements={}", diagnosis.rows.len());
         println!("reviewed_expanded_sources={}", expanded_sources.len());
 
@@ -318,7 +334,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 );
                 let mut session = WorldExpansionSession::new(
                     identity_frontier,
-                    mabo_remaining_world_expansion_policy(&baseline),
+                    mabo_remaining_adaptive_world_expansion_policy(
+                        campaign_identity_classes.len(),
+                    ),
                 );
                 let world_store = WorldStore::connect(&world_config)?;
                 let payment_sink = WorldStoreReviewedPaymentSink::new(world_store);
@@ -410,13 +428,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let final_baseline = load_discovery_identity_baseline(&pg_config)?;
+    let final_campaign_identity_classes =
+        load_discovery_campaign_identity_classes(&pg_config, MABO_QID)?;
     println!("adaptive_cycles_completed={adaptive_cycles_completed}");
     println!("identity_admissions_committed={identity_admissions_committed}");
     println!("known_identity_alias_payments={known_identity_alias_payments}");
     println!("campaign_cycle_budget={CAMPAIGN_MAX_CYCLES}");
     println!(
-        "durable_total_identity_classes={}",
+        "global_durable_identity_classes={}",
         final_baseline.identity_class_refs.len()
+    );
+    println!(
+        "durable_total_identity_classes={}",
+        final_campaign_identity_classes.len()
     );
     println!("target_identity_classes={MABO_NOVEL_IDENTITY_TARGET}");
     println!("candidate_only=true");
