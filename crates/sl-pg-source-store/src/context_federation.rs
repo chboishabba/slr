@@ -104,6 +104,23 @@ fn mabo_wikidata_relation_type(property_ref: &str) -> Option<&'static str> {
     }
 }
 
+/// Exact inverse of the bounded reviewed Mabo Wikidata relation mapping above.
+///
+/// This is provider-coordinate recovery for relations created by
+/// `review_mabo_wikidata_candidate`; it is not a general semantic-label ->
+/// Wikidata-property inference rule. Unknown labels fail closed.
+#[must_use]
+pub fn mabo_wikidata_property_ref(relation_type_ref: &str) -> Option<&'static str> {
+    match relation_type_ref {
+        "context:wikidata:jurisdiction" => Some("P1001"),
+        "context:wikidata:participant" => Some("P710"),
+        "context:wikidata:court" => Some("P4884"),
+        "context:wikidata:judge" => Some("P1594"),
+        "context:wikidata:overrules" => Some("P4006"),
+        _ => None,
+    }
+}
+
 /// Convert one exact Mabo Wikidata property candidate into durable context only
 /// after an explicit review decision.
 ///
