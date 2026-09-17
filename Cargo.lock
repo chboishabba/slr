@@ -1238,6 +1238,7 @@ dependencies = [
  "sensiblaw-reader-model",
  "sensiblaw-route-executor",
  "sensiblaw-route-selector",
+ "sensiblaw-wikimedia-candidate-provider",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -1322,6 +1323,7 @@ version = "0.1.0"
 dependencies = [
  "quick-xml",
  "sensiblaw-route-selector",
+ "sha2 0.10.9",
  "thiserror 2.0.20",
  "ureq",
 ]

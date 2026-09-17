@@ -12,6 +12,7 @@ use crate::world_expansion_step::{
 };
 use crate::world_identity::WorldIdentityResolutionReceipt;
 
+#[allow(clippy::too_many_arguments)]
 pub fn apply_reviewed_cycle_with_identity(
     session: &mut WorldExpansionSession,
     next_frontier_ref: impl Into<String>,

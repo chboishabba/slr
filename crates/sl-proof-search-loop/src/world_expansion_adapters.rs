@@ -244,8 +244,8 @@ mod tests {
 
     #[test]
     fn wikidata_receipt_must_match_source_and_supported_producer() {
-        let route = route(ProducerFamily::IdentitySource, RouteFamily::WikidataProperty, "Q1501525", "Q975866", "P710");
-        assert_eq!(from_wikidata_route(&residual(ResidualStatus::Open), ResidualClass::Identity, &acquired_wikidata("Q1"), &route, scoring()), Err(ExpansionAdapterError::WikidataSourceMismatch));
+        let ok_route = route(ProducerFamily::IdentitySource, RouteFamily::WikidataProperty, "Q1501525", "Q975866", "P710");
+        assert_eq!(from_wikidata_route(&residual(ResidualStatus::Open), ResidualClass::Identity, &acquired_wikidata("Q1"), &ok_route, scoring()), Err(ExpansionAdapterError::WikidataSourceMismatch));
         let wrong = route(ProducerFamily::ArticleSemantic, RouteFamily::WikidataProperty, "Q1501525", "Q975866", "P710");
         assert_eq!(from_wikidata_route(&residual(ResidualStatus::Open), ResidualClass::Identity, &acquired_wikidata("Q1501525"), &wrong, scoring()), Err(ExpansionAdapterError::WrongWikidataProducer));
     }

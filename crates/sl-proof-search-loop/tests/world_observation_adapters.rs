@@ -32,7 +32,7 @@ fn route() -> RouteCandidate {
     route_with(ProducerFamily::IdentitySource, "P710", "Q975866")
 }
 
-fn acquired() -> sensiblaw_wikimedia_candidate_provider::WikidataEntityRevisionReceipt {
+fn acquired() -> sensiblaw_wikimedia_candidate_provider::AcquiredEntityRdf {
     entity_revision_receipt_from_rdf(
         "Q1501525",
         2333409615,
