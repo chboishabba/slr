@@ -1,18 +1,20 @@
 //! Adaptive one-hop Mabo campaign projections.
 //!
 //! This module owns no review inference and no semantic authority. It projects
-//! the current reviewed identity plan into the canonical proof-frontier Pareto
-//! selector, and parses one already-acquired target manifestation into the
-//! finite bounded Wikidata context surface used by the campaign.
+//! the current reviewed identity plan and the current durable-but-unexpanded
+//! QID surface into the canonical proof-frontier Pareto selector, and parses
+//! one already-acquired target manifestation into the finite bounded Wikidata
+//! context surface used by the campaign.
 
+use std::collections::{BTreeMap, BTreeSet};
 use std::io::Cursor;
 
 use sensiblaw_pg_source_store::{
     bounded_wikidata_relation_type, review_bounded_wikidata_candidate,
-    ContextReviewDecision, ReviewedContextEdge,
+    ContextReviewDecision, DiscoveryIdentityBaseline, LatentWorldRows, ReviewedContextEdge,
 };
 use sensiblaw_proof_search_loop::frontier::{
-    select_frontier_move, FrontierCandidateMove, ProofFrontier,
+    select_frontier_move, FrontierCandidateMove, ProofFrontier, ProofResidual, ResidualStatus,
 };
 use sensiblaw_proof_search_loop::world_expansion_runner::{
     RecurrentRunBlocker, RecurrentRunBlockerKind,
@@ -25,6 +27,9 @@ use sensiblaw_wikimedia_candidate_provider::{emit_candidates_from_rdf, AcquiredE
 use thiserror::Error;
 
 use crate::MaboIdentityReviewPlan;
+
+const CONTEXT_EXPANSION_PRODUCER: &str = "producer:wikidata-bounded-context-expansion";
+const CONTEXT_EXPANSION_RESIDUAL_PREFIX: &str = "residual:mabo:context-expansion:";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MaboAdaptiveSelection {
@@ -67,7 +72,7 @@ fn reviewed_frontier_moves(plan: &MaboIdentityReviewPlan) -> Vec<FrontierCandida
         .collect()
 }
 
-/// Select exactly one reviewed move from the *current* proof frontier.
+/// Select exactly one reviewed identity move from the *current* proof frontier.
 ///
 /// Callers must rebuild `frontier` from durable state before each invocation.
 /// This function intentionally has no queue state: once the world changes, the
@@ -87,6 +92,139 @@ pub fn select_next_reviewed_mabo_gap(
     Some(MaboAdaptiveSelection {
         residual_ref,
         representation_ref: planned.row.representation_ref.clone(),
+        move_ref: selected.move_.move_ref.clone(),
+        shared_dependency_gain: selected.shared_dependency_gain,
+    })
+}
+
+fn valid_qid(value: &str) -> bool {
+    value
+        .strip_prefix('Q')
+        .is_some_and(|digits| !digits.is_empty() && digits.bytes().all(|byte| byte.is_ascii_digit()))
+}
+
+/// Build the separate source-expansion frontier for durable QID
+/// representations whose own bounded outgoing context has not yet been
+/// reviewed/materialized.
+///
+/// Incoming reviewed context roles become dependency coordinates only. They
+/// provide a structural Pareto tie-break and do not imply identity, authority,
+/// applicability or claim truth.
+#[must_use]
+pub fn diagnose_mabo_context_expansion_frontier(
+    baseline: &DiscoveryIdentityBaseline,
+    world: &LatentWorldRows,
+    expanded_source_refs: &BTreeSet<String>,
+    frontier_ref: impl Into<String>,
+) -> ProofFrontier {
+    let mut dependencies: BTreeMap<&str, BTreeSet<String>> = BTreeMap::new();
+    for edge in &world.edges {
+        if edge.relation_ref.starts_with("context:wikidata:") {
+            dependencies
+                .entry(edge.to_ref.as_str())
+                .or_default()
+                .insert(edge.relation_ref.clone());
+        }
+    }
+
+    let mut residuals = baseline
+        .representation_identity_class_refs
+        .keys()
+        .filter(|representation_ref| valid_qid(representation_ref))
+        .filter(|representation_ref| !expanded_source_refs.contains(*representation_ref))
+        .map(|representation_ref| {
+            let dependency_refs = dependencies
+                .get(representation_ref.as_str())
+                .map(|refs| refs.iter().cloned().collect::<Vec<_>>())
+                .unwrap_or_default();
+            ProofResidual {
+                residual_ref: format!("{CONTEXT_EXPANSION_RESIDUAL_PREFIX}{representation_ref}"),
+                proposition_ref: format!("mabo:bounded-context-expansion:{representation_ref}"),
+                producer_class_ref: CONTEXT_EXPANSION_PRODUCER.into(),
+                jurisdiction_ref: Some("AU".into()),
+                authority_requirement_ref: None,
+                salience: u64::try_from(dependency_refs.len().max(1)).unwrap_or(u64::MAX),
+                dependency_refs,
+                status: ResidualStatus::Open,
+            }
+        })
+        .collect::<Vec<_>>();
+    residuals.sort_by(|left, right| left.residual_ref.cmp(&right.residual_ref));
+
+    ProofFrontier {
+        consumer_ref: "consumer:mabo-reviewed-context-expansion".into(),
+        frontier_ref: frontier_ref.into(),
+        residuals,
+        satisfied_payment_refs: vec![],
+        contested_coordinate_refs: vec![],
+        authority_blocked_refs: vec![],
+        authority: "experimental_candidate_only",
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MaboContextExpansionSelection {
+    pub residual_ref: String,
+    pub source_qid: String,
+    pub move_ref: String,
+    pub shared_dependency_gain: u64,
+}
+
+/// Pareto-select one durable source to expand from the freshly rebuilt context
+/// expansion frontier. No identity-review queue participates in this choice.
+#[must_use]
+pub fn select_next_mabo_context_expansion(
+    frontier: &ProofFrontier,
+) -> Option<MaboContextExpansionSelection> {
+    let candidates = frontier
+        .open_residuals()
+        .filter(|residual| residual.producer_class_ref == CONTEXT_EXPANSION_PRODUCER)
+        .filter_map(|residual| {
+            let source_qid = residual
+                .residual_ref
+                .strip_prefix(CONTEXT_EXPANSION_RESIDUAL_PREFIX)?;
+            if !valid_qid(source_qid) {
+                return None;
+            }
+            let shared_dependency_gain =
+                u64::try_from(residual.dependency_refs.len().max(1)).unwrap_or(u64::MAX);
+            Some(FrontierCandidateMove {
+                target_residual_refs: vec![residual.residual_ref.clone()],
+                move_: CandidateMove {
+                    move_ref: format!("move:mabo-context-expand:{source_qid}"),
+                    strategy: ExecutionStrategy::GovernedExactAuthorityFetch,
+                    source_ref: Some(source_qid.to_owned()),
+                    provider_operation_ref: "wikidata:latest-coordinate-then-exact-revision".into(),
+                    cost: ExecutionCostVector {
+                        network_requests: 2,
+                        parser_pnf_cost: 1,
+                        semantic_assessment_cost: 1,
+                        operator_review_cost: 1,
+                        ..ExecutionCostVector::default()
+                    },
+                    value: ProofValueVector {
+                        expected_proof_reduction: 1,
+                        discriminative_value: shared_dependency_gain,
+                        coverage_gain: shared_dependency_gain,
+                        ..ProofValueVector::default()
+                    },
+                    admissible: true,
+                    calibration_ref: "mabo-adaptive-context-expansion:v1".into(),
+                },
+                expected_whole_frontier_reduction: 1,
+                shared_dependency_gain,
+            })
+        })
+        .collect::<Vec<_>>();
+
+    let selected = select_frontier_move(frontier, &candidates, 1)?;
+    let residual_ref = selected.target_residual_refs.first()?.clone();
+    let source_qid = residual_ref
+        .strip_prefix(CONTEXT_EXPANSION_RESIDUAL_PREFIX)?
+        .to_owned();
+    Some(MaboContextExpansionSelection {
+        residual_ref,
+        source_qid,
         move_ref: selected.move_.move_ref.clone(),
         shared_dependency_gain: selected.shared_dependency_gain,
     })
