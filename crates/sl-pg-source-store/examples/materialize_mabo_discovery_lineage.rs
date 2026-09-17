@@ -1,8 +1,6 @@
 use sensiblaw_pg_source_store::{
-    load_database_config, materialize_discovery_lineage,
+    load_database_config, materialize_discovery_lineage, DiscoveryLineageInput,
 };
-use sensiblaw_proof_search_loop::world_expansion::ProducerLane;
-use sensiblaw_proof_search_loop::world_expansion_reentry::DiscoveryLineageReceipt;
 
 fn usage() -> ! {
     eprintln!(
@@ -17,13 +15,13 @@ fn usage() -> ! {
     std::process::exit(2);
 }
 
-fn lane(value: &str) -> ProducerLane {
+fn lane(value: &str) -> String {
     match value {
-        "governed-legal" => ProducerLane::GovernedLegal,
-        "wikidata-identity" => ProducerLane::WikidataIdentity,
-        "wikipedia-context" => ProducerLane::WikipediaContext,
-        "source-specific-provenance" => ProducerLane::SourceSpecificProvenance,
-        "other" => ProducerLane::Other,
+        "governed-legal"
+        | "wikidata-identity"
+        | "wikipedia-context"
+        | "source-specific-provenance"
+        | "other" => value.to_owned(),
         _ => usage(),
     }
 }
@@ -35,12 +33,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     let expected_residual_contraction = args[7].parse::<u64>()?;
     let observed_residual_contraction = args[8].parse::<u64>()?;
-    let lineage = DiscoveryLineageReceipt {
+    let lineage = DiscoveryLineageInput {
         object_ref: args[0].clone(),
         discovery_parent_ref: args[1].clone(),
         triggering_residual_ref: args[2].clone(),
         selected_candidate_ref: args[3].clone(),
-        producer_lane: lane(&args[4]),
+        producer_lane_ref: lane(&args[4]),
         source_revision_ref: args[5].clone(),
         pnf_world_disambiguation_ref: args[6].clone(),
         expected_residual_contraction,
@@ -50,7 +48,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         creates_semantic_authority: false,
         applicability_promoted: false,
         claim_truth_promoted: false,
-        receipt_authority: "candidate_world_expansion_only",
+        receipt_authority: "candidate_world_expansion_only".into(),
     };
 
     let config = load_database_config(None)?;
