@@ -1,3 +1,84 @@
+use std::collections::BTreeSet;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorldObjectIdentity {
+    pub identity_class_ref: String,
+    pub primary_representation_ref: String,
+    pub representation_refs: BTreeSet<String>,
+}
+
+impl WorldObjectIdentity {
+    #[must_use]
+    pub fn new(identity_class_ref: impl Into<String>, primary_representation_ref: impl Into<String>) -> Self {
+        let primary_representation_ref = primary_representation_ref.into();
+        let mut representation_refs = BTreeSet::new();
+        representation_refs.insert(primary_representation_ref.clone());
+        Self {
+            identity_class_ref: identity_class_ref.into(),
+            primary_representation_ref,
+            representation_refs,
+        }
+    }
+
+    #[must_use]
+    pub fn with_alias(mut self, representation_ref: impl Into<String>) -> Self {
+        self.representation_refs.insert(representation_ref.into());
+        self
+    }
+
+    #[must_use]
+    pub fn contains_representation(&self, representation_ref: &str) -> bool {
+        self.representation_refs.contains(representation_ref)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WorldIdentityResolutionKind {
+    ExactSameRepresentation,
+    SameObjectDifferentRepresentation,
+    RelatedObject,
+    Ambiguous,
+    WrongType,
+    Unresolved,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorldIdentityResolutionReceipt {
+    pub receipt_ref: String,
+    pub identity: WorldObjectIdentity,
+    pub resolution_kind: WorldIdentityResolutionKind,
+    pub evidence_ref: String,
+    pub candidate_only: bool,
+    pub creates_semantic_authority: bool,
+    pub applicability_promoted: bool,
+    pub claim_truth_promoted: bool,
+}
+
+impl WorldIdentityResolutionReceipt {
+    #[must_use]
+    pub fn same_object(
+        receipt_ref: impl Into<String>,
+        identity: WorldObjectIdentity,
+        evidence_ref: impl Into<String>,
+    ) -> Self {
+        Self {
+            receipt_ref: receipt_ref.into(),
+            identity,
+            resolution_kind: WorldIdentityResolutionKind::SameObjectDifferentRepresentation,
+            evidence_ref: evidence_ref.into(),
+            candidate_only: true,
+            creates_semantic_authority: false,
+            applicability_promoted: false,
+            claim_truth_promoted: false,
+        }
+    }
+
+    #[must_use]
+    pub fn identity_class_ref(&self) -> &str {
+        &self.identity.identity_class_ref
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
