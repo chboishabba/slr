@@ -5,7 +5,7 @@
 //! the consumer residual compiler retains gap/payment semantics, and this crate
 //! performs only the reviewed projections between those established surfaces.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::io::Cursor;
 
 use sensiblaw_consumer_residual::{
@@ -23,7 +23,8 @@ use sensiblaw_proof_search_loop::world_expansion_reentry::{
     DiscoveryLineageReceipt, PostAcquisitionWorldObservation,
 };
 use sensiblaw_proof_search_loop::world_expansion_runner::{
-    RecurrentRunBlocker, RecurrentRunBlockerKind, WorldExpansionCycleSink,
+    PreparedWorldExpansionCycle, RecurrentRunBlocker, RecurrentRunBlockerKind,
+    WorldExpansionCycleSink, WorldExpansionCycleSource,
 };
 use sensiblaw_proof_search_loop::world_expansion_session::{
     WorldExpansionCycleReceipt, WorldExpansionSession,
@@ -541,6 +542,75 @@ pub trait KnownIdentityPaymentSink {
         &mut self,
         wire: &[u8],
     ) -> Result<(), RecurrentRunBlocker>;
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReviewedPreparedCycle {
+    pub prepared: PreparedWorldExpansionCycle,
+    pub reviewed_payment_wire: Vec<u8>,
+}
+
+/// Queue of already-reviewed cycles. Evidence payment is persisted immediately
+/// before a cycle is released to the recurrent runner. A payment persistence
+/// failure leaves the cycle queued, so a later retry cannot advance novelty
+/// without first successfully durabilising the review/payment artifact.
+pub struct ReviewedCycleQueueSource<K> {
+    queue: VecDeque<ReviewedPreparedCycle>,
+    payment_sink: K,
+}
+
+impl<K> ReviewedCycleQueueSource<K> {
+    #[must_use]
+    pub fn new(cycles: Vec<ReviewedPreparedCycle>, payment_sink: K) -> Self {
+        Self {
+            queue: cycles.into(),
+            payment_sink,
+        }
+    }
+
+    #[must_use]
+    pub fn pending_cycles(&self) -> usize {
+        self.queue.len()
+    }
+
+    #[must_use]
+    pub fn payment_sink(&self) -> &K {
+        &self.payment_sink
+    }
+
+    pub fn payment_sink_mut(&mut self) -> &mut K {
+        &mut self.payment_sink
+    }
+}
+
+impl<K> WorldExpansionCycleSource for ReviewedCycleQueueSource<K>
+where
+    K: KnownIdentityPaymentSink,
+{
+    fn prepare_next_cycle(
+        &mut self,
+        _session: &WorldExpansionSession,
+    ) -> Result<PreparedWorldExpansionCycle, RecurrentRunBlocker> {
+        let Some(next) = self.queue.front() else {
+            return Err(RecurrentRunBlocker::new(
+                RecurrentRunBlockerKind::IdentityReviewRequired,
+                "campaign:identity-review-required",
+            ));
+        };
+
+        self.payment_sink
+            .persist_reviewed_payment(&next.reviewed_payment_wire)?;
+
+        self.queue
+            .pop_front()
+            .map(|cycle| cycle.prepared)
+            .ok_or_else(|| {
+                RecurrentRunBlocker::new(
+                    RecurrentRunBlockerKind::Other,
+                    "campaign:reviewed-cycle-queue-invariant",
+                )
+            })
+    }
 }
 
 pub fn apply_known_identity_payment_transaction<K>(
