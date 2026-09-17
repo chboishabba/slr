@@ -36,18 +36,18 @@ fn residual(id: &str) -> ProofResidual {
     }
 }
 
-fn prepared(index: usize, object_ref: &str, identity_class_ref: &str, next: Option<&str>) -> PreparedWorldExpansionCycle {
-    let residual_ref = format!("residual:mabo:r{index}");
-    let revision = format!("wikidata:Q1501525:oldid:{}", 2333409615u64 + index as u64);
+fn prepared(object_ref: &str, identity_class_ref: &str) -> PreparedWorldExpansionCycle {
+    let residual_ref = "residual:mabo:r0".to_owned();
+    let revision = "wikidata:Q1501525:oldid:2333409615".to_owned();
     PreparedWorldExpansionCycle {
-        next_frontier_ref: format!("frontier:mabo:{}", index + 1),
+        next_frontier_ref: "frontier:mabo:1".into(),
         routing: ResidualRouting {
             residual_ref: residual_ref.clone(),
             residual_class: ResidualClass::Identity,
-            routing_reason_ref: format!("review:{index}"),
+            routing_reason_ref: "review:resume".into(),
         },
         candidates: vec![ExpansionCandidate {
-            candidate_ref: format!("candidate:{index}"),
+            candidate_ref: "candidate:resume".into(),
             object_ref: object_ref.into(),
             object_kind: KnowledgeObjectKind::Qid,
             discovery_parent_ref: "Q1501525".into(),
@@ -65,49 +65,50 @@ fn prepared(index: usize, object_ref: &str, identity_class_ref: &str, next: Opti
         review_decision: ReviewDecision::Reviewed,
         disambiguation_outcome: DisambiguationOutcome::NewRelatedObject,
         identity_resolution: WorldIdentityResolutionReceipt {
-            receipt_ref: format!("identity:{index}"),
+            receipt_ref: "identity:resume".into(),
             identity: WorldObjectIdentity::new(identity_class_ref, object_ref),
             resolution_kind: WorldIdentityResolutionKind::RelatedObject,
-            evidence_ref: format!("evidence:{index}"),
+            evidence_ref: "evidence:resume".into(),
             candidate_only: true,
             creates_semantic_authority: false,
             applicability_promoted: false,
             claim_truth_promoted: false,
         },
         observation: PostAcquisitionWorldObservation {
-            observation_ref: format!("observation:{index}"),
+            observation_ref: "observation:resume".into(),
             source_revision_ref: revision,
             triggering_residual_ref: residual_ref,
             assessment_kind: ResidualAssessmentKind::SatisfiedCandidate,
             observed_residual_contraction: 1,
-            newly_exposed_residuals: next.map(residual).into_iter().collect(),
-            pnf_world_disambiguation_ref: format!("pnf-world:{index}"),
+            newly_exposed_residuals: vec![],
+            pnf_world_disambiguation_ref: "pnf-world:resume".into(),
             observation_authority: "experimental_candidate_only",
         },
     }
 }
 
-struct DuplicateThenNovelSource {
-    next: usize,
+fn baseline() -> IdentityCoherenceBaseline {
+    let mut identity_class_refs = BTreeSet::new();
+    identity_class_refs.insert("world-object:eddie-mabo".to_owned());
+    let mut representation_identity_class_refs = BTreeMap::new();
+    representation_identity_class_refs.insert(
+        "Q975866".to_owned(),
+        "world-object:eddie-mabo".to_owned(),
+    );
+    IdentityCoherenceBaseline {
+        identity_class_refs,
+        representation_identity_class_refs,
+    }
 }
 
-impl WorldExpansionCycleSource for DuplicateThenNovelSource {
+struct OneSource(PreparedWorldExpansionCycle);
+
+impl WorldExpansionCycleSource for OneSource {
     fn prepare_next_cycle(
         &mut self,
         _session: &WorldExpansionSession,
     ) -> Result<PreparedWorldExpansionCycle, RecurrentRunBlocker> {
-        let cycle = match self.next {
-            0 => prepared(0, "Q975866", "world-object:eddie-mabo", Some("residual:mabo:r0")),
-            1 => prepared(0, "Q3778295", "world-object:justice-brennan", None),
-            _ => {
-                return Err(RecurrentRunBlocker::new(
-                    RecurrentRunBlockerKind::NoPreparedCycle,
-                    "source:exhausted",
-                ))
-            }
-        };
-        self.next += 1;
-        Ok(cycle)
+        Ok(self.0.clone())
     }
 }
 
@@ -123,39 +124,30 @@ impl WorldExpansionCycleSink for AcceptingSink {
     }
 }
 
-#[test]
-fn seeded_guard_skips_durable_duplicate_and_commits_next_novel_identity() {
-    let mut identity_class_refs = BTreeSet::new();
-    identity_class_refs.insert("world-object:eddie-mabo".to_owned());
-    let mut representation_identity_class_refs = BTreeMap::new();
-    representation_identity_class_refs.insert(
-        "Q975866".to_owned(),
-        "world-object:eddie-mabo".to_owned(),
-    );
-    let baseline = IdentityCoherenceBaseline {
-        identity_class_refs,
-        representation_identity_class_refs,
-    };
-
-    let frontier = ProofFrontier {
-        consumer_ref: "consumer:mabo-100-identity-classes".into(),
-        frontier_ref: "frontier:mabo:0".into(),
-        residuals: vec![residual("residual:mabo:r0")],
-        satisfied_payment_refs: vec![],
-        contested_coordinate_refs: vec![],
-        authority_blocked_refs: vec![],
-        authority: "experimental_candidate_only",
-    };
-    let mut session = WorldExpansionSession::new(
-        frontier,
+fn session() -> WorldExpansionSession {
+    WorldExpansionSession::new(
+        ProofFrontier {
+            consumer_ref: "consumer:mabo-100-identity-classes".into(),
+            frontier_ref: "frontier:mabo:0".into(),
+            residuals: vec![residual("residual:mabo:r0")],
+            satisfied_payment_refs: vec![],
+            contested_coordinate_refs: vec![],
+            authority_blocked_refs: vec![],
+            authority: "experimental_candidate_only",
+        },
         WorldExpansionPolicy {
             target_novel_objects: 99,
             minimum_expected_residual_contraction: 1,
         },
-    );
+    )
+}
+
+#[test]
+fn durable_known_identity_is_not_recounted_as_novel() {
+    let mut session = session();
     let mut source = IdentityCoherentCycleSource::with_baseline(
-        DuplicateThenNovelSource { next: 0 },
-        baseline,
+        OneSource(prepared("Q975866", "world-object:eddie-mabo")),
+        baseline(),
     );
     let mut sink = AcceptingSink;
 
@@ -167,52 +159,24 @@ fn seeded_guard_skips_durable_duplicate_and_commits_next_novel_identity() {
     )
     .unwrap();
 
-    assert_eq!(receipt.cycles_committed, 1);
-    assert_eq!(receipt.final_novel_identity_classes, 1);
-    assert_eq!(session.ledger.total_new_world_objects, 1);
+    assert_eq!(receipt.cycles_committed, 0);
+    assert_eq!(receipt.final_novel_identity_classes, 0);
+    assert_eq!(
+        receipt.stop_reason,
+        RecurrentRunStopReason::Blocked(RecurrentRunBlocker::new(
+            RecurrentRunBlockerKind::WorldDiagnosisRequired,
+            "identity-coherence:known-identity:world-object:eddie-mabo:requires-non-novel-payment",
+        ))
+    );
 }
 
 #[test]
 fn seeded_guard_blocks_conflict_against_durable_identity_assignment() {
-    let mut identity_class_refs = BTreeSet::new();
-    identity_class_refs.insert("world-object:eddie-mabo".to_owned());
-    let mut representation_identity_class_refs = BTreeMap::new();
-    representation_identity_class_refs.insert(
-        "Q975866".to_owned(),
-        "world-object:eddie-mabo".to_owned(),
+    let mut session = session();
+    let mut source = IdentityCoherentCycleSource::with_baseline(
+        OneSource(prepared("Q975866", "world-object:wrong")),
+        baseline(),
     );
-    let baseline = IdentityCoherenceBaseline {
-        identity_class_refs,
-        representation_identity_class_refs,
-    };
-
-    struct ConflictSource;
-    impl WorldExpansionCycleSource for ConflictSource {
-        fn prepare_next_cycle(
-            &mut self,
-            _session: &WorldExpansionSession,
-        ) -> Result<PreparedWorldExpansionCycle, RecurrentRunBlocker> {
-            Ok(prepared(0, "Q975866", "world-object:wrong", None))
-        }
-    }
-
-    let frontier = ProofFrontier {
-        consumer_ref: "consumer:mabo-100-identity-classes".into(),
-        frontier_ref: "frontier:mabo:0".into(),
-        residuals: vec![residual("residual:mabo:r0")],
-        satisfied_payment_refs: vec![],
-        contested_coordinate_refs: vec![],
-        authority_blocked_refs: vec![],
-        authority: "experimental_candidate_only",
-    };
-    let mut session = WorldExpansionSession::new(
-        frontier,
-        WorldExpansionPolicy {
-            target_novel_objects: 99,
-            minimum_expected_residual_contraction: 1,
-        },
-    );
-    let mut source = IdentityCoherentCycleSource::with_baseline(ConflictSource, baseline);
     let mut sink = AcceptingSink;
 
     let receipt = run_recurrent_world_expansion(
