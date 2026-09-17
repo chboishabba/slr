@@ -23,11 +23,13 @@ fn world(edges: Vec<LatentWorldEdgeRow>) -> LatentWorldRows {
     }
 }
 
-fn reviewed_edge(relation_ref: &str, relation_type_ref: &str, target: &str) -> LatentWorldEdgeRow {
+fn reviewed_edge(relation_type_ref: &str, target: &str) -> LatentWorldEdgeRow {
     LatentWorldEdgeRow {
         from_ref: "Q1501525".into(),
         to_ref: target.into(),
-        relation_ref: relation_ref.into(),
+        // `latent_world` stores `algebra.relation.relation_type_ref` in this
+        // compatibility field, despite the historical `relation_ref` name.
+        relation_ref: relation_type_ref.into(),
         provenance_refs: vec![
             "context:wikidata:wikidata:Q1501525:oldid:2333409615".into(),
         ],
@@ -37,34 +39,15 @@ fn reviewed_edge(relation_ref: &str, relation_type_ref: &str, target: &str) -> L
 #[test]
 fn reviewed_context_targets_become_explicit_same_object_requirements_only_once() {
     let rows = world(vec![
-        reviewed_edge("r1", "context:wikidata:participant", "Q975866"),
-        reviewed_edge("r2", "context:wikidata:judge", "Q975866"),
+        reviewed_edge("context:wikidata:participant", "Q975866"),
+        reviewed_edge("context:wikidata:judge", "Q975866"),
         LatentWorldEdgeRow {
             from_ref: "Q1501525".into(),
             to_ref: "internal:pnf:1".into(),
-            relation_ref: "r3".into(),
+            relation_ref: "legal_ir:pnf_factor".into(),
             provenance_refs: vec!["legal_ir:build:1".into()],
         },
     ]);
-
-    // The relation type is carried by the persisted edge's `relation_ref` in the
-    // real store. The diagnosis accepts the canonical type via the relation-ref
-    // prefix used by the test fixture so no graph adjacency becomes semantic
-    // authority by itself.
-    let rows = LatentWorldRows {
-        edges: vec![
-            LatentWorldEdgeRow {
-                relation_ref: "context:wikidata:participant|r1".into(),
-                ..rows.edges[0].clone()
-            },
-            LatentWorldEdgeRow {
-                relation_ref: "context:wikidata:judge|r2".into(),
-                ..rows.edges[1].clone()
-            },
-            rows.edges[2].clone(),
-        ],
-        ..rows
-    };
 
     let diagnosis = diagnose_mabo_context_world_identity(&rows, &DiscoveryIdentityBaseline::default());
 
@@ -99,14 +82,10 @@ fn reviewed_context_targets_become_explicit_same_object_requirements_only_once()
 
 #[test]
 fn durable_identity_baseline_quotients_known_representations_before_residual_emission() {
-    let rows = world(vec![LatentWorldEdgeRow {
-        from_ref: "Q1501525".into(),
-        to_ref: "Q975866".into(),
-        relation_ref: "context:wikidata:participant|r1".into(),
-        provenance_refs: vec![
-            "context:wikidata:wikidata:Q1501525:oldid:2333409615".into(),
-        ],
-    }]);
+    let rows = world(vec![reviewed_edge(
+        "context:wikidata:participant",
+        "Q975866",
+    )]);
     let mut baseline = DiscoveryIdentityBaseline::default();
     baseline.representation_identity_class_refs = BTreeMap::from([(
         "Q975866".into(),
