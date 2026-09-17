@@ -1,3 +1,236 @@
+//! Durable append-only lineage for residual-driven world discovery.
+//!
+//! Persistence records why an object was acquired/admitted and what observed
+//! PNF/world delta followed. It does not promote the object into proof,
+//! applicability, semantic authority, or claim truth.
+
+use postgres::{Client, NoTls};
+use sensiblaw_proof_search_loop::world_expansion::ProducerLane;
+use sensiblaw_proof_search_loop::world_expansion_reentry::DiscoveryLineageReceipt;
+use sha2::{Digest, Sha256};
+use thiserror::Error;
+
+use crate::DatabaseConfig;
+
+const DISCOVERY_LINEAGE_SCHEMA_SQL: &str = r#"
+CREATE SCHEMA IF NOT EXISTS context;
+CREATE TABLE IF NOT EXISTS context.discovery_lineage_receipt (
+  receipt_sha256 TEXT PRIMARY KEY,
+  object_ref TEXT NOT NULL,
+  discovery_parent_ref TEXT NOT NULL,
+  triggering_residual_ref TEXT NOT NULL,
+  selected_candidate_ref TEXT NOT NULL,
+  producer_lane_ref TEXT NOT NULL,
+  source_revision_ref TEXT NOT NULL,
+  pnf_world_disambiguation_ref TEXT NOT NULL,
+  expected_residual_contraction BIGINT NOT NULL CHECK (expected_residual_contraction >= 0),
+  observed_residual_contraction BIGINT NOT NULL CHECK (observed_residual_contraction >= 0),
+  new_residual_refs TEXT[] NOT NULL,
+  candidate_only BOOLEAN NOT NULL CHECK (candidate_only),
+  creates_semantic_authority BOOLEAN NOT NULL DEFAULT FALSE CHECK (NOT creates_semantic_authority),
+  applicability_promoted BOOLEAN NOT NULL DEFAULT FALSE CHECK (NOT applicability_promoted),
+  claim_truth_promoted BOOLEAN NOT NULL DEFAULT FALSE CHECK (NOT claim_truth_promoted),
+  receipt_authority TEXT NOT NULL
+)
+"#;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DiscoveryLineageRow {
+    pub object_ref: String,
+    pub discovery_parent_ref: String,
+    pub triggering_residual_ref: String,
+    pub selected_candidate_ref: String,
+    pub producer_lane_ref: String,
+    pub source_revision_ref: String,
+    pub pnf_world_disambiguation_ref: String,
+    pub expected_residual_contraction: u64,
+    pub observed_residual_contraction: u64,
+    pub new_residual_refs: Vec<String>,
+    pub candidate_only: bool,
+    pub creates_semantic_authority: bool,
+    pub applicability_promoted: bool,
+    pub claim_truth_promoted: bool,
+    pub receipt_authority: String,
+    pub receipt_sha256: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DiscoveryLineageMaterializationReceipt {
+    pub attempted_count: usize,
+    pub materialized_count: usize,
+    pub candidate_only: bool,
+    pub creates_semantic_authority: bool,
+    pub applicability_promoted: bool,
+    pub claim_truth_promoted: bool,
+}
+
+#[derive(Debug, Error, Clone, PartialEq, Eq)]
+pub enum DiscoveryLineageError {
+    #[error("lineage must remain candidate-only")]
+    LineageMustRemainCandidateOnly,
+    #[error("lineage persistence may not promote authority/applicability/truth")]
+    LineageMayNotPromote,
+    #[error("lineage coordinate must not be empty: {0}")]
+    EmptyCoordinate(&'static str),
+    #[error("lineage receipt authority is invalid")]
+    InvalidReceiptAuthority,
+    #[error("lineage contraction exceeds PostgreSQL BIGINT range")]
+    ContractionOutOfRange,
+    #[error("postgres error: {0}")]
+    Postgres(String),
+}
+
+impl From<postgres::Error> for DiscoveryLineageError {
+    fn from(value: postgres::Error) -> Self {
+        Self::Postgres(value.to_string())
+    }
+}
+
+fn producer_lane_ref(lane: ProducerLane) -> &'static str {
+    match lane {
+        ProducerLane::GovernedLegal => "governed-legal",
+        ProducerLane::WikidataIdentity => "wikidata-identity",
+        ProducerLane::WikipediaContext => "wikipedia-context",
+        ProducerLane::SourceSpecificProvenance => "source-specific-provenance",
+        ProducerLane::Other => "other",
+    }
+}
+
+fn hex_digest(bytes: &[u8]) -> String {
+    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+pub fn discovery_lineage_row(
+    lineage: &DiscoveryLineageReceipt,
+) -> Result<DiscoveryLineageRow, DiscoveryLineageError> {
+    if !lineage.candidate_only {
+        return Err(DiscoveryLineageError::LineageMustRemainCandidateOnly);
+    }
+    if lineage.creates_semantic_authority
+        || lineage.applicability_promoted
+        || lineage.claim_truth_promoted
+    {
+        return Err(DiscoveryLineageError::LineageMayNotPromote);
+    }
+    if lineage.receipt_authority != "candidate_world_expansion_only" {
+        return Err(DiscoveryLineageError::InvalidReceiptAuthority);
+    }
+    for (name, value) in [
+        ("object_ref", lineage.object_ref.as_str()),
+        ("discovery_parent_ref", lineage.discovery_parent_ref.as_str()),
+        ("triggering_residual_ref", lineage.triggering_residual_ref.as_str()),
+        ("selected_candidate_ref", lineage.selected_candidate_ref.as_str()),
+        ("source_revision_ref", lineage.source_revision_ref.as_str()),
+        (
+            "pnf_world_disambiguation_ref",
+            lineage.pnf_world_disambiguation_ref.as_str(),
+        ),
+    ] {
+        if value.trim().is_empty() {
+            return Err(DiscoveryLineageError::EmptyCoordinate(name));
+        }
+    }
+    if lineage.expected_residual_contraction > i64::MAX as u64
+        || lineage.observed_residual_contraction > i64::MAX as u64
+    {
+        return Err(DiscoveryLineageError::ContractionOutOfRange);
+    }
+
+    let producer_lane_ref = producer_lane_ref(lineage.producer_lane).to_string();
+    let mut hasher = Sha256::new();
+    for value in [
+        "mabo-discovery-lineage:v1",
+        lineage.object_ref.as_str(),
+        lineage.discovery_parent_ref.as_str(),
+        lineage.triggering_residual_ref.as_str(),
+        lineage.selected_candidate_ref.as_str(),
+        producer_lane_ref.as_str(),
+        lineage.source_revision_ref.as_str(),
+        lineage.pnf_world_disambiguation_ref.as_str(),
+        lineage.receipt_authority,
+    ] {
+        hasher.update(value.as_bytes());
+        hasher.update([0]);
+    }
+    hasher.update(lineage.expected_residual_contraction.to_le_bytes());
+    hasher.update(lineage.observed_residual_contraction.to_le_bytes());
+    for residual_ref in &lineage.new_residual_refs {
+        hasher.update(residual_ref.as_bytes());
+        hasher.update([0]);
+    }
+    let receipt_sha256 = hex_digest(&hasher.finalize());
+
+    Ok(DiscoveryLineageRow {
+        object_ref: lineage.object_ref.clone(),
+        discovery_parent_ref: lineage.discovery_parent_ref.clone(),
+        triggering_residual_ref: lineage.triggering_residual_ref.clone(),
+        selected_candidate_ref: lineage.selected_candidate_ref.clone(),
+        producer_lane_ref,
+        source_revision_ref: lineage.source_revision_ref.clone(),
+        pnf_world_disambiguation_ref: lineage.pnf_world_disambiguation_ref.clone(),
+        expected_residual_contraction: lineage.expected_residual_contraction,
+        observed_residual_contraction: lineage.observed_residual_contraction,
+        new_residual_refs: lineage.new_residual_refs.clone(),
+        candidate_only: true,
+        creates_semantic_authority: false,
+        applicability_promoted: false,
+        claim_truth_promoted: false,
+        receipt_authority: lineage.receipt_authority.to_string(),
+        receipt_sha256,
+    })
+}
+
+pub fn materialize_discovery_lineage(
+    config: &DatabaseConfig,
+    lineages: &[DiscoveryLineageReceipt],
+) -> Result<DiscoveryLineageMaterializationReceipt, DiscoveryLineageError> {
+    let rows = lineages
+        .iter()
+        .map(discovery_lineage_row)
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut client = Client::connect(config.database_url(), NoTls)?;
+    let mut tx = client.transaction()?;
+    tx.batch_execute(DISCOVERY_LINEAGE_SCHEMA_SQL)?;
+    let mut materialized_count = 0usize;
+    for row in &rows {
+        materialized_count += tx.execute(
+            "INSERT INTO context.discovery_lineage_receipt (\
+             receipt_sha256, object_ref, discovery_parent_ref, triggering_residual_ref, \
+             selected_candidate_ref, producer_lane_ref, source_revision_ref, \
+             pnf_world_disambiguation_ref, expected_residual_contraction, \
+             observed_residual_contraction, new_residual_refs, candidate_only, \
+             creates_semantic_authority, applicability_promoted, claim_truth_promoted, \
+             receipt_authority) VALUES (\
+             $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,TRUE,FALSE,FALSE,FALSE,$12) \
+             ON CONFLICT DO NOTHING",
+            &[
+                &row.receipt_sha256,
+                &row.object_ref,
+                &row.discovery_parent_ref,
+                &row.triggering_residual_ref,
+                &row.selected_candidate_ref,
+                &row.producer_lane_ref,
+                &row.source_revision_ref,
+                &row.pnf_world_disambiguation_ref,
+                &(row.expected_residual_contraction as i64),
+                &(row.observed_residual_contraction as i64),
+                &row.new_residual_refs,
+                &row.receipt_authority,
+            ],
+        )? as usize;
+    }
+    tx.commit()?;
+
+    Ok(DiscoveryLineageMaterializationReceipt {
+        attempted_count: rows.len(),
+        materialized_count,
+        candidate_only: true,
+        creates_semantic_authority: false,
+        applicability_promoted: false,
+        claim_truth_promoted: false,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
