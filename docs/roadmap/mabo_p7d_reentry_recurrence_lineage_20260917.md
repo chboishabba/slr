@@ -10,7 +10,7 @@ P7d.0 one exact residual -> reviewed admission step          PAID @ 68dcab7
 P7d.1 producer artifact -> ExpansionCandidate               PAID @ 0351844
 P7d.2 post-acquisition PNF/world re-entry                    SOURCE-WRITTEN
 P7d.3 canonical ProofFrontier recurrence                     SOURCE-WRITTEN
-P7d.4 durable discovery lineage                              SOURCE-WRITTEN
+P7d.4 durable discovery lineage + atomic session             SOURCE-WRITTEN
 P7d.5 live Mabo run >= 100 novel admitted objects            BLOCKED ON ACTUAL RUN
 ```
 
@@ -55,7 +55,7 @@ actual acquired object
 
 No second scheduler or planner was introduced.
 
-## P7d.4 lineage ABI repair
+## P7d.4 lineage + transaction boundary
 
 P7d.0's step receipt was strengthened to retain two coordinates that durable
 lineage actually needs:
@@ -65,7 +65,7 @@ selected_discovery_parent_ref
 selected_source_revision_ref
 ```
 
-The durable `DiscoveryLineageReceipt` now retains:
+The proof-search `DiscoveryLineageReceipt` retains:
 
 ```text
 object_ref
@@ -84,9 +84,27 @@ applicability_promoted = false
 claim_truth_promoted = false
 ```
 
-`sl-pg-source-store` adds append-only
-`context.discovery_lineage_receipt`, with a deterministic SHA-256 receipt over
-these coordinates. Persistence cannot create authority, applicability or truth.
+`WorldExpansionSession` stages admission on a cloned ledger. It commits the
+ledger, recomputed frontier, and lineage together only after post-acquisition
+re-entry succeeds. A failed re-entry therefore cannot advance the 100-object
+counter, frontier state, or lineage history.
+
+### Provider-neutral PostgreSQL boundary
+
+The PostgreSQL store deliberately does **not** depend on `sl-proof-search-loop`.
+The semantic/runtime receipt is projected at the boundary into the primitive
+`DiscoveryLineageInput`, and `sl-pg-source-store` owns only durable storage.
+This preserves the dependency direction:
+
+```text
+proof-search semantic receipt
+-> thin projection at integration boundary
+-> provider-neutral DiscoveryLineageInput
+-> context.discovery_lineage_receipt
+```
+
+The append-only table uses a deterministic SHA-256 receipt over the stored
+coordinates. Persistence cannot create authority, applicability or truth.
 
 Runnable materialiser:
 
@@ -97,12 +115,14 @@ cargo run -p sensiblaw-pg-source-store \
   <source_revision_ref> <pnf_world_ref> <expected> <observed> [new_residual ...]
 ```
 
-It uses the existing `DATABASE_URL` / `.env` configuration loader.
+It uses the existing `DATABASE_URL` / `.env` configuration loader and constructs
+the provider-neutral storage input directly.
 
 ## Actual blocker
 
-The remaining blocker is no longer a missing Rust type or orchestration seam.
-To advance P7d.5 we need a real execution environment to produce and feed:
+The remaining blocker is no longer a missing Rust type, planner, recurrence,
+transaction, or persistence seam. To advance P7d.5 we now need actual execution
+to produce and feed:
 
 ```text
 live open Mabo ProofFrontier
@@ -112,7 +132,7 @@ live open Mabo ProofFrontier
 + PostgreSQL materialisation
 ```
 
-and then repeat the recurrence until either:
+and repeat the recurrence until either:
 
 ```text
 total_new_world_objects >= 100
