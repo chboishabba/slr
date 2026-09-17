@@ -38,6 +38,7 @@ fn require_open(residual: &ProofResidual) -> Result<(), ExpansionAdapterError> {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn candidate(
     residual: &ProofResidual,
     residual_class: ResidualClass,

@@ -1236,6 +1236,8 @@ dependencies = [
  "sensiblaw-nsw-legislation-provider",
  "sensiblaw-proof-search-scheduler",
  "sensiblaw-reader-model",
+ "sensiblaw-route-executor",
+ "sensiblaw-route-selector",
  "serde",
  "serde_json",
  "sha2 0.10.9",
