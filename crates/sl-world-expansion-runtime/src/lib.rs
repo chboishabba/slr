@@ -5,16 +5,20 @@
 //! the consumer residual compiler retains gap/payment semantics, and this crate
 //! performs only the reviewed projections between those established surfaces.
 
+use std::collections::{BTreeMap, BTreeSet};
 use std::io::Cursor;
 
 use sensiblaw_consumer_residual::{
-    ConsumerSpec, EvidenceCoordinateKind, RequirementNeed, RequirementScope,
+    ConsumerRequirement, ConsumerSpec, EvidenceCoordinateKind, RequirementNeed, RequirementScope,
 };
 use sensiblaw_pg_source_store::{
     materialize_discovery_lineage, DatabaseConfig, DiscoveryIdentityBaseline,
-    DiscoveryLineageInput,
+    DiscoveryLineageInput, LatentWorldRows,
 };
-use sensiblaw_proof_search_loop::world_expansion::{ProducerLane, WorldExpansionPolicy};
+use sensiblaw_proof_search_loop::frontier::{ProofResidual, ResidualStatus};
+use sensiblaw_proof_search_loop::world_expansion::{
+    ProducerLane, ResidualClass, WorldExpansionPolicy,
+};
 use sensiblaw_proof_search_loop::world_expansion_reentry::{
     DiscoveryLineageReceipt, PostAcquisitionWorldObservation,
 };
@@ -36,6 +40,164 @@ use sensiblaw_world_store::WorldStore;
 use thiserror::Error;
 
 pub const MABO_NOVEL_IDENTITY_TARGET: usize = 100;
+pub const MABO_CONTEXT_IDENTITY_CONSUMER: &str = "consumer:mabo-context-world-identity";
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MaboIdentityDiagnosisRow {
+    pub representation_ref: String,
+    pub relation_type_refs: Vec<String>,
+    pub source_revision_refs: Vec<String>,
+    pub requirement_id: String,
+    pub residual_ref: String,
+    pub residual_class: ResidualClass,
+    /// Mirrors DASHI's plural-lens discovery vocabulary. This is a discovery
+    /// route, never an evidence-payment or identity-review claim.
+    pub discovery_route_ref: &'static str,
+    pub candidate_only: bool,
+    pub creates_semantic_authority: bool,
+    pub applicability_promoted: bool,
+    pub claim_truth_promoted: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MaboConsumerDiagnosis {
+    pub consumer_spec: ConsumerSpec,
+    pub residuals: Vec<ProofResidual>,
+    pub rows: Vec<MaboIdentityDiagnosisRow>,
+    pub reviewed_context_edges_considered: usize,
+    pub known_identity_representations: usize,
+    pub duplicate_target_edges: usize,
+    pub out_of_scope_or_wrong_type_edges: usize,
+    pub creates_semantic_authority: bool,
+    pub applicability_promoted: bool,
+    pub claim_truth_promoted: bool,
+}
+
+#[derive(Debug, Default)]
+struct PendingIdentityDiagnosis {
+    relation_type_refs: BTreeSet<String>,
+    source_revision_refs: BTreeSet<String>,
+}
+
+fn reviewed_wikidata_revision(provenance_refs: &[String]) -> Option<String> {
+    provenance_refs.iter().find_map(|provenance| {
+        provenance
+            .strip_prefix("context:wikidata:")
+            .map(ToOwned::to_owned)
+    })
+}
+
+/// Compile the persisted latent-world surface into an explicit consumer-indexed
+/// identity-review frontier.
+///
+/// Only reviewed Wikidata context edges are admissible to this first consumer.
+/// A reviewed relation may *propose* a SameObject requirement for its target;
+/// it never pays that requirement. Targets already represented in the durable
+/// identity baseline are quotiented before requirements are emitted.
+#[must_use]
+pub fn diagnose_mabo_context_world_identity(
+    world: &LatentWorldRows,
+    baseline: &DiscoveryIdentityBaseline,
+) -> MaboConsumerDiagnosis {
+    let mut pending: BTreeMap<String, PendingIdentityDiagnosis> = BTreeMap::new();
+    let mut reviewed_context_edges_considered = 0usize;
+    let mut known_identity_representations = 0usize;
+    let mut duplicate_target_edges = 0usize;
+    let mut out_of_scope_or_wrong_type_edges = 0usize;
+    let mut known_seen = BTreeSet::new();
+
+    for edge in &world.edges {
+        if !edge.relation_ref.starts_with("context:wikidata:") {
+            out_of_scope_or_wrong_type_edges += 1;
+            continue;
+        }
+        let Some(source_revision_ref) = reviewed_wikidata_revision(&edge.provenance_refs) else {
+            // A relation type that merely looks like reviewed Wikidata context
+            // is not enough. The reviewed source-revision receipt is required.
+            out_of_scope_or_wrong_type_edges += 1;
+            continue;
+        };
+        reviewed_context_edges_considered += 1;
+
+        if baseline
+            .representation_identity_class_refs
+            .contains_key(&edge.to_ref)
+        {
+            if known_seen.insert(edge.to_ref.clone()) {
+                known_identity_representations += 1;
+            }
+            continue;
+        }
+
+        let entry = pending.entry(edge.to_ref.clone()).or_default();
+        if !entry.relation_type_refs.is_empty() {
+            duplicate_target_edges += 1;
+        }
+        entry.relation_type_refs.insert(edge.relation_ref.clone());
+        entry.source_revision_refs.insert(source_revision_ref);
+    }
+
+    let mut requirements = Vec::with_capacity(pending.len());
+    let mut residuals = Vec::with_capacity(pending.len());
+    let mut rows = Vec::with_capacity(pending.len());
+
+    for (representation_ref, pending) in pending {
+        let requirement_id = format!("world-identity:{representation_ref}");
+        let residual_ref = format!("residual:mabo:world-identity:{representation_ref}");
+        let source_revision_refs = pending.source_revision_refs.into_iter().collect::<Vec<_>>();
+        let scope = source_revision_refs
+            .first()
+            .cloned()
+            .map(RequirementScope::SourceManifestation)
+            .unwrap_or(RequirementScope::AnySource);
+
+        requirements.push(ConsumerRequirement {
+            requirement_id: requirement_id.clone(),
+            need: RequirementNeed::EvidenceCoordinate(EvidenceCoordinateKind::SameObject),
+            scope,
+        });
+        residuals.push(ProofResidual {
+            residual_ref: residual_ref.clone(),
+            proposition_ref: format!("mabo:world-identity:{representation_ref}"),
+            producer_class_ref: "producer:world-expansion".into(),
+            jurisdiction_ref: Some("AU".into()),
+            authority_requirement_ref: None,
+            salience: 100,
+            dependency_refs: vec![],
+            status: ResidualStatus::Open,
+        });
+        rows.push(MaboIdentityDiagnosisRow {
+            representation_ref,
+            relation_type_refs: pending.relation_type_refs.into_iter().collect(),
+            source_revision_refs,
+            requirement_id,
+            residual_ref,
+            residual_class: ResidualClass::Identity,
+            discovery_route_ref: "residual-observation",
+            candidate_only: true,
+            creates_semantic_authority: false,
+            applicability_promoted: false,
+            claim_truth_promoted: false,
+        });
+    }
+
+    MaboConsumerDiagnosis {
+        consumer_spec: ConsumerSpec {
+            consumer_id: MABO_CONTEXT_IDENTITY_CONSUMER.into(),
+            surface_id: "surface:mabo:reviewed-context-world".into(),
+            requirements,
+        },
+        residuals,
+        rows,
+        reviewed_context_edges_considered,
+        known_identity_representations,
+        duplicate_target_edges,
+        out_of_scope_or_wrong_type_edges,
+        creates_semantic_authority: false,
+        applicability_promoted: false,
+        claim_truth_promoted: false,
+    }
+}
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum WorldExpansionRuntimeError {
