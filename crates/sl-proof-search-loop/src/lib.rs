@@ -35,6 +35,7 @@ pub mod world;
 pub mod world_acquisition;
 pub mod world_expansion;
 pub mod world_expansion_adapters;
+pub mod world_expansion_reentry;
 pub mod world_expansion_step;
 
 #[path = "legacy.rs"]
