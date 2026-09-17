@@ -1,11 +1,11 @@
 use sensiblaw_governed_legal_provider::OalcLookupReceipt;
 use sensiblaw_proof_search_loop::frontier::{ProofResidual, ResidualStatus};
-use sensiblaw_proof_search_loop::world_expansion::{ResidualClass, ProducerLane};
+use sensiblaw_proof_search_loop::world_expansion::{ProducerLane, ResidualClass};
 use sensiblaw_proof_search_loop::world_expansion_adapters::{
-    from_oalc_lookup, from_wikidata_route, AcquiredWikidataEntity, ExpansionAdapterError,
-    ExpansionScoring,
+    from_oalc_lookup, from_wikidata_route, ExpansionAdapterError, ExpansionScoring,
 };
 use sensiblaw_route_selector::{ProducerFamily, RouteCandidate, RouteFamily};
+use sensiblaw_wikimedia_candidate_provider::entity_revision_receipt_from_rdf;
 
 fn residual() -> ProofResidual {
     ProofResidual {
@@ -53,13 +53,11 @@ fn route(producer: ProducerFamily, source_ref: &str) -> RouteCandidate {
 
 #[test]
 fn wikidata_revision_receipt_must_match_route_source_qid_and_producer() {
-    let acquired = AcquiredWikidataEntity {
-        qid: "Q1501525".into(),
-        source_revision_ref: "wikidata:Q1501525:oldid:2333409615".into(),
-        content_digest_ref: "sha256:mabo-wikidata".into(),
-        candidate_only: true,
-        semantic_promotion: false,
-    };
+    let acquired = entity_revision_receipt_from_rdf(
+        "Q1501525",
+        2333409615,
+        b"<rdf:RDF>mabo fixture</rdf:RDF>".to_vec(),
+    ).unwrap();
     let candidate = from_wikidata_route(
         &residual(), ResidualClass::Identity, &acquired,
         &route(ProducerFamily::IdentitySource, "Q1501525"), scoring(),
