@@ -40,6 +40,12 @@ use sensiblaw_world_expansion_runtime::{
 pub enum MaboReviewedCyclePreparationError {
     #[error("invalid exact Wikidata revision reference: {0}")]
     InvalidRevisionRef(String),
+    #[error("reviewed diagnosis has multiple source revisions; acquisition must be exact")]
+    AmbiguousSourceRevision,
+    #[error("reviewed diagnosis has multiple Wikidata relation types; acquisition must be exact")]
+    AmbiguousDiagnosedRelation,
+    #[error("reviewed diagnosis does not contain one Wikidata relation type")]
+    MissingDiagnosedRelation,
     #[error("review assignment representation does not match diagnosis row")]
     ReviewRepresentationMismatch,
     #[error("diagnosis row is promoting or not candidate-only")]
@@ -58,6 +64,21 @@ pub enum MaboReviewedCyclePreparationError {
     RequirementNotPaid,
     #[error("world-expansion adapter failed: {0}")]
     ExpansionAdapter(String),
+}
+
+/// Exact provider/route request derived from one explicit reviewed diagnosis.
+///
+/// This is intentionally a pure projection. It does not fetch Wikidata and it
+/// does not create review. The executable may use these exact coordinates for
+/// provider acquisition and then must still pass the resulting artifact and
+/// decoded route through `prepare_reviewed_mabo_identity_cycle`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReviewedAcquisitionRequest {
+    pub source_qid: String,
+    pub revision_id: u64,
+    pub source_revision_ref: String,
+    pub property_ref: String,
+    pub target_ref: String,
 }
 
 /// Parse only the exact manifestation form used by the reviewed-context
@@ -88,6 +109,52 @@ pub fn parse_wikidata_revision_ref(
         ));
     }
     Ok((qid.to_owned(), revision_id))
+}
+
+/// Derive one exact pinned provider request from a matched review row.
+///
+/// Multiple manifestations or relation types fail closed. The SameObject
+/// review concerns `target_ref -> reviewed identity class`; this request keeps
+/// the diagnosed parent relation (`source_qid --property_ref--> target_ref`)
+/// separate from that identity alignment.
+pub fn reviewed_acquisition_request(
+    planned: &MaboPlannedIdentityReview,
+) -> Result<ReviewedAcquisitionRequest, MaboReviewedCyclePreparationError> {
+    if planned.row.representation_ref != planned.assignment.representation_ref {
+        return Err(MaboReviewedCyclePreparationError::ReviewRepresentationMismatch);
+    }
+    if !planned.row.candidate_only
+        || planned.row.creates_semantic_authority
+        || planned.row.applicability_promoted
+        || planned.row.claim_truth_promoted
+    {
+        return Err(MaboReviewedCyclePreparationError::PromotingDiagnosisRow);
+    }
+
+    let [source_revision_ref] = planned.row.source_revision_refs.as_slice() else {
+        return Err(MaboReviewedCyclePreparationError::AmbiguousSourceRevision);
+    };
+    let (source_qid, revision_id) = parse_wikidata_revision_ref(source_revision_ref)?;
+
+    let wikidata_relations = planned
+        .row
+        .relation_type_refs
+        .iter()
+        .filter_map(|relation| relation.strip_prefix("context:wikidata:"))
+        .collect::<Vec<_>>();
+    let property_ref = match wikidata_relations.as_slice() {
+        [property_ref] if !property_ref.is_empty() => (*property_ref).to_owned(),
+        [] => return Err(MaboReviewedCyclePreparationError::MissingDiagnosedRelation),
+        _ => return Err(MaboReviewedCyclePreparationError::AmbiguousDiagnosedRelation),
+    };
+
+    Ok(ReviewedAcquisitionRequest {
+        source_qid,
+        revision_id,
+        source_revision_ref: source_revision_ref.clone(),
+        property_ref,
+        target_ref: planned.row.representation_ref.clone(),
+    })
 }
 
 /// Prepare one already-reviewed Mabo identity cycle against an exactly pinned
