@@ -4,7 +4,7 @@ mod reviewed_campaign;
 use std::fs;
 use std::io::Cursor;
 
-use reviewed_campaign::{parse_wikidata_revision_ref, prepare_reviewed_mabo_identity_cycle};
+use reviewed_campaign::{prepare_reviewed_mabo_identity_cycle, reviewed_acquisition_request};
 use sensiblaw_pg_source_store::{
     load_database_config, load_discovery_identity_baseline, load_latent_world_rows_with_budget,
     LatentWorldBudget,
@@ -33,7 +33,7 @@ const MAX_NODES: usize = 10_000;
 const MAX_EDGES: usize = 50_000;
 
 fn matching_route(
-    planned: &sensiblaw_world_expansion_runtime::MaboPlannedIdentityReview,
+    request: &reviewed_campaign::ReviewedAcquisitionRequest,
     acquired: &sensiblaw_wikimedia_candidate_provider::AcquiredEntityRdf,
 ) -> Result<RouteCandidate, Box<dyn std::error::Error>> {
     let mut encoded = Vec::new();
@@ -45,35 +45,37 @@ fn matching_route(
     let mut cursor = Cursor::new(encoded);
     let mut matches = Vec::new();
     while let Some(candidate) = decode_route_candidate(&mut cursor)? {
-        if candidate.route_family != RouteFamily::WikidataProperty
-            || candidate.source_ref != acquired.qid
-            || candidate.target_ref != planned.row.representation_ref
-        {
-            continue;
-        }
-        let diagnosed_relation = format!("context:wikidata:{}", candidate.property_ref);
-        if planned
-            .row
-            .relation_type_refs
-            .iter()
-            .any(|relation| relation == &diagnosed_relation)
+        if candidate.route_family == RouteFamily::WikidataProperty
+            && candidate.source_ref == request.source_qid
+            && candidate.target_ref == request.target_ref
+            && candidate.property_ref == request.property_ref
         {
             matches.push(candidate);
         }
     }
     matches.sort_by(|left, right| left.candidate_id.cmp(&right.candidate_id));
-    matches.into_iter().next().ok_or_else(|| {
-        std::io::Error::other(format!(
-            "no pinned reviewed Wikidata route for {} at {}",
-            planned.row.representation_ref, acquired.source_revision_ref
+    match matches.as_slice() {
+        [route] => Ok(route.clone()),
+        [] => Err(std::io::Error::other(format!(
+            "no pinned reviewed Wikidata route for {} --{}--> {} at {}",
+            request.source_qid,
+            request.property_ref,
+            request.target_ref,
+            request.source_revision_ref
         ))
-        .into()
-    })
+        .into()),
+        _ => Err(std::io::Error::other(format!(
+            "multiple pinned reviewed Wikidata routes for {} --{}--> {} at {}",
+            request.source_qid,
+            request.property_ref,
+            request.target_ref,
+            request.source_revision_ref
+        ))
+        .into()),
+    }
 }
 
-fn print_pending(
-    plan: &sensiblaw_world_expansion_runtime::MaboIdentityReviewPlan,
-) {
+fn print_pending(plan: &sensiblaw_world_expansion_runtime::MaboIdentityReviewPlan) {
     for row in &plan.pending_rows {
         println!(
             "pending_identity_review={}\trequired_scope={:?}\trelation_types={:?}",
@@ -166,14 +168,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut known_identity_payments = 0usize;
 
     for (index, planned) in plan.matched.iter().enumerate() {
-        let source_revision_ref = planned
-            .row
-            .source_revision_refs
-            .first()
-            .ok_or_else(|| std::io::Error::other("diagnosis row has no source revision"))?;
-        let (source_qid, revision_id) = parse_wikidata_revision_ref(source_revision_ref)?;
-        let acquired = fetch_entity_rdf_revision_receipt(&source_qid, revision_id)?;
-        let route = matching_route(planned, &acquired)?;
+        let request = reviewed_acquisition_request(planned)?;
+        let acquired = fetch_entity_rdf_revision_receipt(&request.source_qid, request.revision_id)?;
+        if acquired.source_revision_ref != request.source_revision_ref {
+            return Err(std::io::Error::other(format!(
+                "provider returned wrong pinned source manifestation: expected {}, got {}",
+                request.source_revision_ref, acquired.source_revision_ref
+            ))
+            .into());
+        }
+        let route = matching_route(&request, &acquired)?;
         let prepared = prepare_reviewed_mabo_identity_cycle(
             &diagnosis,
             planned,
