@@ -12,6 +12,7 @@ use crate::world_expansion::{
 use sensiblaw_governed_legal_provider::OalcLookupReceipt;
 use sensiblaw_route_executor::AcquiredSource;
 use sensiblaw_route_selector::{ProducerFamily, RouteCandidate, RouteFamily};
+pub use sensiblaw_wikimedia_candidate_provider::AcquiredEntityRdf as AcquiredWikidataEntity;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ExpansionScoring {
@@ -20,15 +21,6 @@ pub struct ExpansionScoring {
     pub same_object_confidence: u64,
     pub expected_new_world_value: u64,
     pub acquisition_cost: u64,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AcquiredWikidataEntity {
-    pub qid: String,
-    pub source_revision_ref: String,
-    pub content_digest_ref: String,
-    pub candidate_only: bool,
-    pub semantic_promotion: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -170,6 +162,7 @@ mod tests {
     use crate::frontier::{ProofResidual, ResidualStatus};
     use crate::world_expansion::{KnowledgeObjectKind, ProducerLane, ResidualClass};
     use sensiblaw_route_executor::{AcquiredSource, AcquiredSourceKind};
+    use sensiblaw_wikimedia_candidate_provider::entity_revision_receipt_from_rdf;
 
     fn residual(status: ResidualStatus) -> ProofResidual {
         ProofResidual {
@@ -200,13 +193,7 @@ mod tests {
     }
 
     fn acquired_wikidata(qid: &str) -> AcquiredWikidataEntity {
-        AcquiredWikidataEntity {
-            qid: qid.into(),
-            source_revision_ref: format!("wikidata:{qid}:oldid:2333409615"),
-            content_digest_ref: "sha256:wikidata-fixture".into(),
-            candidate_only: true,
-            semantic_promotion: false,
-        }
+        entity_revision_receipt_from_rdf(qid, 2333409615, b"<rdf:RDF>fixture</rdf:RDF>".to_vec()).unwrap()
     }
 
     #[test]
