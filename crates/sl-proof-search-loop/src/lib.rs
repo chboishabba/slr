@@ -38,6 +38,8 @@ pub mod world_expansion_adapters;
 pub mod world_expansion_reentry;
 pub mod world_expansion_session;
 pub mod world_expansion_step;
+pub mod world_identity;
+pub mod world_observation;
 
 #[path = "legacy.rs"]
 mod legacy;
