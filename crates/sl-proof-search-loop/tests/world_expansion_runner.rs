@@ -154,6 +154,15 @@ fn recurrent_runner_commits_only_after_sink_and_stops_on_frontier_exhaustion() {
 
     assert_eq!(receipt.cycles_committed, 2);
     assert_eq!(receipt.final_novel_identity_classes, 2);
+    assert_eq!(receipt.candidates_seen, 2);
+    assert_eq!(receipt.candidates_rejected, 0);
+    assert_eq!(receipt.duplicates_seen, 0);
+    assert_eq!(receipt.identity_ambiguous, 0);
+    assert_eq!(receipt.reviewed_objects, 2);
+    assert_eq!(receipt.new_qids_admitted, 2);
+    assert_eq!(receipt.new_articles_admitted, 0);
+    assert_eq!(receipt.new_primary_legal_sources_admitted, 0);
+    assert_eq!(receipt.new_other_world_objects_admitted, 0);
     assert_eq!(sink.persisted, 2);
     assert_eq!(receipt.stop_reason, RecurrentRunStopReason::FrontierExhausted);
     assert_eq!(session.ledger.total_new_world_objects, 2);
@@ -178,6 +187,8 @@ fn sink_blocker_rolls_back_staged_cycle() {
 
     assert_eq!(receipt.cycles_committed, 0);
     assert_eq!(receipt.final_novel_identity_classes, 0);
+    assert_eq!(receipt.candidates_seen, 0);
+    assert_eq!(receipt.reviewed_objects, 0);
     assert_eq!(
         receipt.stop_reason,
         RecurrentRunStopReason::Blocked("pg:lineage-write-blocked".into())
