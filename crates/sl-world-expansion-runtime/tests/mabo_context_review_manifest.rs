@@ -1,7 +1,8 @@
 use sensiblaw_world_expansion_runtime::adaptive_campaign::ParsedBoundedContextCandidate;
 use sensiblaw_world_expansion_runtime::adaptive_context_review::{
     bounded_context_candidate_set_sha256, parse_mabo_context_review_tsv,
-    prepare_reviewed_context_expansion, ContextExpansionReviewError,
+    pending_context_review_bundle, prepare_reviewed_context_expansion,
+    ContextExpansionReviewError,
 };
 
 fn candidate(target: &str) -> ParsedBoundedContextCandidate {
@@ -73,4 +74,33 @@ fn zero_candidate_source_can_still_receive_exact_expansion_review() {
     assert!(prepared.edges.is_empty());
     assert_eq!(prepared.expansion.source_ref, "Q36074");
     assert_eq!(prepared.expansion.bounded_candidate_count, 0);
+}
+
+
+#[test]
+fn pending_review_bundle_is_deterministic_and_cannot_self_authorize() {
+    let candidates = vec![candidate("Q99"), candidate("Q408")];
+    let revision = "wikidata:Q36074:oldid:246813579";
+    let digest = bounded_context_candidate_set_sha256(revision, &candidates).unwrap();
+
+    let bundle = pending_context_review_bundle("Q36074", revision, &candidates).unwrap();
+
+    assert!(bundle.contains("# status=ContextReviewRequired"));
+    assert!(bundle.contains("# context_source_qid=Q36074"));
+    assert!(bundle.contains(&format!("# context_source_revision={revision}")));
+    assert!(bundle.contains(&format!("# bounded_context_candidate_set_sha256={digest}")));
+    assert!(bundle.contains("# candidate\twikidata:Q36074:P1001:Q408\tQ36074\tP1001\tQ408"));
+    assert!(bundle.contains("# candidate\twikidata:Q36074:P1001:Q99\tQ36074\tP1001\tQ99"));
+    assert!(bundle.contains(&format!(
+        "# review_manifest_template\t{revision}\t{digest}\treview:<operator-ref>"
+    )));
+
+    // The bundle is evidence for a pending review, not a review itself.
+    assert!(parse_mabo_context_review_tsv(&bundle).unwrap().is_empty());
+
+    let reversed = vec![candidate("Q408"), candidate("Q99")];
+    assert_eq!(
+        bundle,
+        pending_context_review_bundle("Q36074", revision, &reversed).unwrap()
+    );
 }
