@@ -23,7 +23,8 @@ use sensiblaw_world_expansion_runtime::adaptive_campaign::{
 };
 use sensiblaw_world_expansion_runtime::adaptive_context_review::{
     bounded_context_candidate_set_sha256, matching_context_review,
-    parse_mabo_context_review_tsv, prepare_reviewed_context_expansion,
+    parse_mabo_context_review_tsv, pending_context_review_bundle,
+    prepare_reviewed_context_expansion,
 };
 use sensiblaw_world_expansion_runtime::reviewed_campaign::{
     self, prepare_reviewed_mabo_identity_cycle, reviewed_acquisition_request,
@@ -103,6 +104,20 @@ fn print_identity_review_required(row: &sensiblaw_world_expansion_runtime::MaboI
     );
 }
 
+fn write_pending_context_review_bundle(
+    source_qid: &str,
+    source_revision_ref: &str,
+    candidates: &[sensiblaw_world_expansion_runtime::adaptive_campaign::ParsedBoundedContextCandidate],
+) -> Result<std::path::PathBuf, Box<dyn std::error::Error>> {
+    let bundle = pending_context_review_bundle(source_qid, source_revision_ref, candidates)?;
+    let directory = std::path::PathBuf::from("artifacts/mabo/context-reviews/pending");
+    fs::create_dir_all(&directory)?;
+    let filename = format!("{}.pending.tsv", source_revision_ref.replace(':', "__"));
+    let path = directory.join(filename);
+    fs::write(&path, bundle)?;
+    Ok(path)
+}
+
 fn print_context_review_required(
     source_qid: &str,
     source_revision_ref: &str,
@@ -149,6 +164,12 @@ fn complete_context_expansion(
         &digest,
         context_reviews,
     ) else {
+        let bundle_path = write_pending_context_review_bundle(
+            source_qid,
+            &acquired.source_revision_ref,
+            &candidates,
+        )?;
+        println!("context_review_bundle_path={}", bundle_path.display());
         print_context_review_required(
             source_qid,
             &acquired.source_revision_ref,

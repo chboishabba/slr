@@ -85,6 +85,47 @@ fn hex_digest(bytes: &[u8]) -> String {
 
 /// Deterministic digest of the entire finite bounded candidate set for one
 /// exact source manifestation. Candidate ordering is deliberately irrelevant.
+/// Render a deterministic, reviewable evidence bundle for one pending exact
+/// bounded-context source. Every line is a comment, so the bundle itself cannot
+/// satisfy `parse_mabo_context_review_tsv` or authorize persistence.
+///
+/// An operator may inspect/diff this artifact, then deliberately create a
+/// separate manifest assignment from the commented template.
+pub fn pending_context_review_bundle(
+    source_qid: &str,
+    source_revision_ref: &str,
+    candidates: &[ParsedBoundedContextCandidate],
+) -> Result<String, ContextExpansionReviewError> {
+    let revision_qid = source_qid_from_revision(source_revision_ref)?;
+    if revision_qid != source_qid {
+        return Err(ContextExpansionReviewError::CandidateSourceMismatch);
+    }
+    let digest = bounded_context_candidate_set_sha256(source_revision_ref, candidates)?;
+    let mut canonical = candidates.to_vec();
+    canonical.sort();
+    canonical.dedup();
+
+    let mut out = String::new();
+    out.push_str("# status=ContextReviewRequired\n");
+    out.push_str(&format!("# context_source_qid={source_qid}\n"));
+    out.push_str(&format!("# context_source_revision={source_revision_ref}\n"));
+    out.push_str(&format!("# bounded_context_candidate_count={}\n", canonical.len()));
+    out.push_str(&format!("# bounded_context_candidate_set_sha256={digest}\n"));
+    for candidate in &canonical {
+        out.push_str(&format!(
+            "# candidate\t{}\t{}\t{}\t{}\n",
+            candidate.candidate_id,
+            candidate.source_qid,
+            candidate.property_ref,
+            candidate.target_qid
+        ));
+    }
+    out.push_str(&format!(
+        "# review_manifest_template\t{source_revision_ref}\t{digest}\treview:<operator-ref>\n"
+    ));
+    Ok(out)
+}
+
 pub fn bounded_context_candidate_set_sha256(
     source_revision_ref: &str,
     candidates: &[ParsedBoundedContextCandidate],
