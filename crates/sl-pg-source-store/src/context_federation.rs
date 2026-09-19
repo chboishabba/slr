@@ -180,6 +180,66 @@ pub fn review_mabo_oalc_exact_source(
     Ok(edge)
 }
 
+/// Convert one exact Wikipedia article source receipt into durable candidate context
+/// after an explicit review decision.
+///
+/// Wikipedia article context provides background/explanatory narrative only.
+/// It does not create legal authority, applicability, proposition payment, or claim truth.
+pub fn review_mabo_wikipedia_exact_source(
+    discovery_parent_ref: impl Into<String>,
+    canonical_url: impl Into<String>,
+    source_identity_ref: impl Into<String>,
+    source_revision_ref: impl Into<String>,
+    canonical_text_digest: impl Into<String>,
+    receipt_authority: impl Into<String>,
+    review_decision: ContextReviewDecision,
+) -> Result<ReviewedContextEdge, ContextFederationError> {
+    let discovery_parent_ref = discovery_parent_ref.into();
+    let canonical_url = canonical_url.into();
+    let source_identity_ref = source_identity_ref.into();
+    let source_revision_ref = source_revision_ref.into();
+    let canonical_text_digest = canonical_text_digest.into();
+    let receipt_authority = receipt_authority.into();
+
+    if review_decision != ContextReviewDecision::Reviewed {
+        return Err(ContextFederationError::CandidateNotReviewed(format!(
+            "wikipedia:{source_revision_ref}"
+        )));
+    }
+    for (name, value) in [
+        ("discovery_parent_ref", discovery_parent_ref.as_str()),
+        ("canonical_url", canonical_url.as_str()),
+        ("source_identity_ref", source_identity_ref.as_str()),
+        ("source_revision_ref", source_revision_ref.as_str()),
+        ("canonical_text_digest", canonical_text_digest.as_str()),
+        ("receipt_authority", receipt_authority.as_str()),
+    ] {
+        if value.trim().is_empty() {
+            return Err(ContextFederationError::EmptyCoordinate(name));
+        }
+    }
+    if mutable_source_revision_alias(&source_revision_ref) {
+        return Err(ContextFederationError::MutableSourceRevision(
+            source_revision_ref,
+        ));
+    }
+    if receipt_authority != "experimental_candidate_only" {
+        return Err(ContextFederationError::InvalidReceiptAuthority(
+            receipt_authority,
+        ));
+    }
+
+    let mut edge = reviewed_context_edge(
+        SourceFamily::Wikipedia,
+        source_revision_ref,
+        discovery_parent_ref,
+        source_identity_ref,
+        "context:wikipedia:article",
+    )?;
+    edge.source_content_digest = Some(canonical_text_digest);
+    Ok(edge)
+}
+
 /// Convert one exact Mabo Wikidata property candidate into durable context only
 /// after an explicit review decision.
 ///

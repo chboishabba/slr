@@ -1,6 +1,7 @@
 use sensiblaw_pg_source_store::{
     materialize_reviewed_context_edges, review_mabo_oalc_exact_source,
-    review_mabo_wikidata_candidate, reviewed_context_edge, ContextReviewDecision, SourceFamily,
+    review_mabo_wikidata_candidate, review_mabo_wikipedia_exact_source, reviewed_context_edge,
+    ContextReviewDecision, SourceFamily,
 };
 
 #[test]
@@ -193,3 +194,73 @@ fn oalc_exact_source_rejects_mutable_revision_alias_and_non_candidate_authority(
     )
     .is_err());
 }
+
+#[test]
+fn wikipedia_exact_source_requires_explicit_review_and_retains_revision_digest_without_promotion() {
+    let rejected = review_mabo_wikipedia_exact_source(
+        "Q1501525",
+        "https://en.wikipedia.org/wiki/Mabo_v_Queensland_(No_2)",
+        "wiki:en:Mabo_v_Queensland_(No_2)",
+        "wikipedia:en:oldid:1240464670",
+        "sha256:fedcba9876543210",
+        "experimental_candidate_only",
+        ContextReviewDecision::NotReviewed,
+    );
+    assert!(rejected.is_err());
+
+    let reviewed = review_mabo_wikipedia_exact_source(
+        "Q1501525",
+        "https://en.wikipedia.org/wiki/Mabo_v_Queensland_(No_2)",
+        "wiki:en:Mabo_v_Queensland_(No_2)",
+        "wikipedia:en:oldid:1240464670",
+        "sha256:fedcba9876543210",
+        "experimental_candidate_only",
+        ContextReviewDecision::Reviewed,
+    )
+    .expect("reviewed exact Wikipedia source should become candidate context");
+
+    assert_eq!(reviewed.source_family, SourceFamily::Wikipedia);
+    assert_eq!(
+        reviewed.source_revision_ref,
+        "wikipedia:en:oldid:1240464670"
+    );
+    assert_eq!(
+        reviewed.source_content_digest.as_deref(),
+        Some("sha256:fedcba9876543210")
+    );
+    assert_eq!(reviewed.relation_type_ref, "context:wikipedia:article");
+    assert_eq!(reviewed.left_ref, "Q1501525");
+    assert_eq!(reviewed.right_ref, "wiki:en:Mabo_v_Queensland_(No_2)");
+    assert!(reviewed.candidate_only);
+    assert!(!reviewed.creates_semantic_authority);
+    assert!(!reviewed.applicability_promoted);
+    assert!(!reviewed.claim_truth_promoted);
+}
+
+#[test]
+fn wikipedia_exact_source_rejects_mutable_revision_alias_and_non_candidate_authority() {
+    for revision in ["latest", "current", "head", "main", "master"] {
+        assert!(review_mabo_wikipedia_exact_source(
+            "Q1501525",
+            "https://en.wikipedia.org/wiki/Mabo_v_Queensland_(No_2)",
+            "wiki:en:Mabo_v_Queensland_(No_2)",
+            revision,
+            "sha256:fedcba9876543210",
+            "experimental_candidate_only",
+            ContextReviewDecision::Reviewed,
+        )
+        .is_err());
+    }
+
+    assert!(review_mabo_wikipedia_exact_source(
+        "Q1501525",
+        "https://en.wikipedia.org/wiki/Mabo_v_Queensland_(No_2)",
+        "wiki:en:Mabo_v_Queensland_(No_2)",
+        "wikipedia:en:oldid:1240464670",
+        "sha256:fedcba9876543210",
+        "background_context_authority",
+        ContextReviewDecision::Reviewed,
+    )
+    .is_err());
+}
+

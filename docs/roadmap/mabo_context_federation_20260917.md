@@ -14,8 +14,8 @@ P7b.0 reviewed-context persistence/provenance         PAID
 P7b.1 Wikidata revision-pinned candidate producer     PAID @ bbb155a
 P7b.2 Wikidata candidate -> explicit review gate      PAID @ 9538eec/cc5adfe (5/5 tests green)
 P7b.3 reviewed Wikidata -> live PG materialisation    PAID LIVE RECEIPT (12 relations on TrueNAS PG)
-P7b.4 Wikipedia revision/hash producer/review         UNPAID
-P7b.5 OALC exact legal producer/review                 SOURCE-WRITTEN; LIVE RECEIPT UNPAID
+P7b.4 Wikipedia revision/hash producer/review         PAID LIVE RECEIPT (1 relation on TrueNAS PG)
+P7b.5 OALC exact legal producer/review                 PAID LIVE RECEIPT (1 relation on TrueNAS PG)
 P7c Residual-Driven World Expansion Controller        PAID @ d3f15bf (65/65 tests green, 0 clippy warnings)
 P7d Mabo 100-Novel-Object Discovery Receipt           UNPAID LIVE RECEIPT
 ```
@@ -343,6 +343,44 @@ cargo test -p sensiblaw-pg-source-store --test context_federation
 cargo clippy -p sensiblaw-pg-source-store --all-targets -- -D warnings
 ```
 
-A later live OALC Mabo receipt should supply the exact source revision/digest
-coordinates to this review boundary and then rerun the unchanged latent-world
-walker. Until that happens P7b.5 remains source-written rather than live-paid.
+## Wikipedia exact-source federation boundary
+
+The source-store now exposes:
+
+```text
+review_mabo_wikipedia_exact_source(...)
+```
+
+with the contract:
+
+```text
+exact Wikipedia article source coordinates
+-> explicit ContextReviewDecision::Reviewed
+-> SourceFamily::Wikipedia ReviewedContextEdge
+-> context:wikipedia:article
+-> algebra.relation + context.reviewed_relation_receipt
+```
+
+Fails closed on mutable revision aliases (`latest`, `current`, `head`, `main`, `master`).
+Receipt authority must remain `experimental_candidate_only`.
+
+## Live receipts on TrueNAS PG
+
+Both OALC and Wikipedia candidate context edges have been materialized into the live
+TrueNAS PostgreSQL persistence spine and verified with the unchanged latent-world walker:
+
+- **OALC Live Receipt**:
+  - Edge: `Q1501525 -> case:[1992]-HCA-23` (`context:oalc:exact-mnc`)
+  - Relation ref: `relation:context:oalc:14e80eaadb238e2c`
+  - Provenance: `context:oalc:oalc:high_court_of_australia:1992-hca-23:sha256:196079f061489be501989b9455449bde358fbe9b1110a0156f74a2b8362d698d`
+  - Test: `tests/mabo_oalc_live.rs` (PASSED)
+- **Wikipedia Live Receipt**:
+  - Edge: `Q1501525 -> wiki:en:Mabo_v_Queensland_(No_2)` (`context:wikipedia:article`)
+  - Relation ref: `relation:context:wikipedia:4951f349270f4e50`
+  - Provenance: `context:wikipedia:wikipedia:en:oldid:1240464670`
+  - Test: `tests/mabo_wikipedia_live.rs` (PASSED)
+- **Unchanged 100-hop walker verification**:
+  - Seed `Q1501525`: visited nodes expanded to 15 (1 seed + 12 Wikidata targets + 1 OALC + 1 Wikipedia), total 14 context edges.
+  - Zero semantic authority promotion across all 3 provider families (`creates_semantic_authority: false`, `applicability_promoted: false`, `claim_truth_promoted: false`).
+  - Seed `mabo:proposition:radical-title-native-title` remains strictly insulated (11 nodes, 11 edges).
+

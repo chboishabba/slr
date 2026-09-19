@@ -11,7 +11,7 @@ pub use candidate_pnf::{
 };
 pub use context_federation::{
     materialize_reviewed_context_edges, review_mabo_oalc_exact_source,
-    review_mabo_wikidata_candidate, reviewed_context_edge,
+    review_mabo_wikidata_candidate, review_mabo_wikipedia_exact_source, reviewed_context_edge,
     ContextFederationError, ContextMaterializationReceipt, ContextReviewDecision,
     ReviewedContextEdge, SourceFamily,
 };

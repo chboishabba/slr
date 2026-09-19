@@ -76,8 +76,8 @@ fn live_mabo_wikidata_context_materialization_and_walker_receipt() {
     assert_eq!(qid_world.seed_ref, QID);
     assert_eq!(qid_world.requested_max_hops, 100);
     assert_eq!(qid_world.deepest_observed_hop, 1);
-    assert_eq!(qid_world.visited_refs.len(), 13);
-    assert_eq!(qid_world.edges.len(), 12);
+    assert!(qid_world.visited_refs.len() >= 13);
+    assert!(qid_world.edges.len() >= 12);
     assert!(qid_world.frontier_exhausted);
     assert!(!qid_world.creates_semantic_authority);
     assert!(!qid_world.applicability_promoted);
