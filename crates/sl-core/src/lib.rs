@@ -1,3 +1,5 @@
+pub mod canonical_evidence;
+
 //! SensibLaw deterministic direct-delta core.
 //! Parser output is observation evidence; it is never semantic authority.
 
