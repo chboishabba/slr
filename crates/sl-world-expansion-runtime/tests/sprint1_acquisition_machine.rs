@@ -344,3 +344,22 @@ fn replay_fails_closed_when_world_chain_is_not_restart_equivalent() {
         Err(Sprint1AcquisitionError::ReplayWorldMismatch(1))
     ));
 }
+
+
+#[test]
+fn persisted_exact_revision_is_not_snapshot_simultaneous() {
+    let persisted = object("pg", AcquisitionPath::PersistedExactRevision);
+    let mut planner = FixturePlanner::default();
+    planner.rows.insert("Q1".into(), vec![persisted]);
+    let plan = plan_physical_acquisition(
+        &[request("r1", "Q1", ProducerFamily::IdentitySource)],
+        &mut planner,
+    )
+    .unwrap();
+
+    let mut transport = FixtureTransport::default();
+    let (_, receipt) = execute_physical_acquisition(&plan, &mut transport).unwrap();
+
+    assert_eq!(receipt.live_fallbacks, 0);
+    assert!(!receipt.snapshot_simultaneous);
+}
