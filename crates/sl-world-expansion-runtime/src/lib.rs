@@ -1,11 +1,13 @@
-pub mod gwb_ambiguity_campaign;
-pub mod gwb_review;
 //! Thin production wiring for recurrent world expansion.
 //!
 //! This crate is intentionally an integration layer: proof-search retains the
 //! semantic recurrence, `sl-pg-source-store` retains provider-neutral storage,
 //! the consumer residual compiler retains gap/payment semantics, and this crate
 //! performs only the reviewed projections between those established surfaces.
+
+pub mod gwb_ambiguity_campaign;
+pub mod gwb_review;
+pub mod gwb_analysis;
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::io::Cursor;

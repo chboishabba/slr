@@ -1,10 +1,9 @@
-use std::collections::BTreeSet;
 use std::fs;
 use std::io::Cursor;
 use std::path::PathBuf;
 
 use sensiblaw_pg_source_store::{
-    load_database_config, load_gwb_reviewed_move_refs, load_latest_gwb_hop,
+    load_database_config, load_gwb_hops, load_gwb_reviewed_move_refs, load_latest_gwb_hop,
     load_open_gwb_ambiguity_residuals, materialize_gwb_ambiguity_residuals,
     materialize_gwb_campaign_commit, GwbCampaignCommitInput, GwbHopLedgerInput,
 };
@@ -20,6 +19,9 @@ use sensiblaw_world_expansion_runtime::gwb_ambiguity_campaign::{
     residuals_opened_by_reviewed_routes, seed_gwb_qid_ambiguities,
     select_gwb_investigation, GwbInvestigationCandidate, GwbInvestigationKind,
     GWB_ADAPTIVE_CAMPAIGN_REF, GWB_ADAPTIVE_HOP_TARGET,
+};
+use sensiblaw_world_expansion_runtime::gwb_analysis::{
+    analyze_gwb_hops, render_gwb_analysis_receipt,
 };
 use sensiblaw_world_expansion_runtime::gwb_review::{
     gwb_frontier_sha256, parse_gwb_review_tsv, pending_gwb_review_bundle,
@@ -358,6 +360,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
         println!("applicability_promoted={}", commit.applicability_promoted);
         println!("claim_truth_promoted={}", commit.claim_truth_promoted);
+        if let Ok(rows) = load_gwb_hops(&pg_config, GWB_ADAPTIVE_CAMPAIGN_REF) {
+            let analysis = analyze_gwb_hops(&rows);
+            println!("{}", render_gwb_analysis_receipt(&analysis));
+        }
         // Loop: reconstruct state, recompile the frontier, and select afresh.
     }
 

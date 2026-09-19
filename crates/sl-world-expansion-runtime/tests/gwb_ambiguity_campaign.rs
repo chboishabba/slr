@@ -169,6 +169,7 @@ fn current_world_questions_are_selected_before_any_provider_observation_exists()
 }
 
 #[test]
+#[allow(clippy::cloned_ref_to_slice_refs)]
 fn reviewed_narrow_question_falls_through_to_external_ontology_then_snowball() {
     let r = residual(GwbAmbiguityKind::TypeClass);
     let classification = "move:gwb:inspect:Q207:classification".to_string();

@@ -293,6 +293,7 @@ pub fn route_candidate_to_investigation(
 }
 
 impl GwbInvestigationCandidate {
+    #[allow(clippy::too_many_arguments)]
     #[must_use]
     pub fn governed_query(
         target_residual_ref: impl Into<String>,
@@ -656,6 +657,7 @@ pub fn project_open_gwb_state_after_review(
 }
 
 
+#[allow(clippy::too_many_arguments)]
 fn merge_question(
     questions: &mut BTreeMap<String, GwbInvestigationCandidate>,
     residual: &GwbAmbiguityResidual,

@@ -1356,6 +1356,7 @@ dependencies = [
  "sensiblaw-proof-search-loop",
  "sensiblaw-proof-search-scheduler",
  "sensiblaw-reviewed-evidence-payment",
+ "sensiblaw-route-executor",
  "sensiblaw-route-selector",
  "sensiblaw-wikimedia-candidate-provider",
  "sensiblaw-world-store",
