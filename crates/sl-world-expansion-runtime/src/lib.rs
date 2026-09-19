@@ -749,4 +749,5 @@ impl WorldExpansionCycleSink for PgDiscoveryLineageSink {
 
 pub mod adaptive_campaign;
 pub mod adaptive_context_review;
+pub mod adaptive_trajectory;
 pub mod reviewed_campaign;
