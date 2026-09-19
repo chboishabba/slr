@@ -574,13 +574,89 @@ impl ZelphHfTypeProvider {
         format!("\"{escaped}\"")
     }
 
-    fn load_command(&self) -> String {
+    fn routeable_manifest(&self) -> bool {
+        self.source.ends_with(".json") || self.source.starts_with("hf://")
+    }
+
+    fn route_name_load_command(&self, qid: &str) -> String {
         let source = Self::quote(&self.source);
-        if self.source.ends_with(".json") || self.source.starts_with("hf://") {
-            format!(".load-partial {source} nameOfNode=none nodeOfName=none")
-        } else {
-            format!(".load {source}")
+        format!(
+            ".load-partial {source} route-name={qid} route-lang=wikidata left=none right=none nameOfNode=none"
+        )
+    }
+
+    fn route_node_load_command(&self, qid: &str, node_id: u64) -> String {
+        let source = Self::quote(&self.source);
+        format!(
+            ".load-partial {source} route-node={node_id} route-name={qid} route-lang=wikidata"
+        )
+    }
+
+    fn run_commands(&mut self, commands: &[String]) -> Result<String, TypeClosureError> {
+        let mut child = Command::new(&self.executable)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|error| {
+                TypeClosureError::Provider(ProviderError::InvalidInput(format!(
+                    "Zelph executable unavailable ({}): {error}",
+                    self.executable
+                )))
+            })?;
+        if let Some(stdin) = child.stdin.as_mut() {
+            stdin
+                .write_all(commands.join("\n").as_bytes())
+                .map_err(|error| TypeClosureError::Provider(ProviderError::Io(error)))?;
         }
+        let output = child
+            .wait_with_output()
+            .map_err(|error| TypeClosureError::Provider(ProviderError::Io(error)))?;
+        self.stats.provider_calls = self.stats.provider_calls.saturating_add(1);
+        let combined = format!(
+            "{}\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        if !output.status.success() || combined.contains("Error in line") {
+            return Err(TypeClosureError::Provider(ProviderError::InvalidInput(
+                format!(
+                    "Zelph route-aware snapshot query failed: {}",
+                    combined
+                        .chars()
+                        .rev()
+                        .take(2000)
+                        .collect::<String>()
+                        .chars()
+                        .rev()
+                        .collect::<String>()
+                ),
+            )));
+        }
+        Ok(combined)
+    }
+
+    fn parse_resolved_node_id(output: &str) -> Option<u64> {
+        output.lines().find_map(|line| {
+            line.trim()
+                .strip_prefix("Resolved to node ID:")
+                .or_else(|| line.trim().strip_prefix("Node ID:"))
+                .and_then(|value| value.trim().parse::<u64>().ok())
+        })
+    }
+
+    fn resolve_route_node(&mut self, qid: &str) -> Result<Option<u64>, TypeClosureError> {
+        if !self.routeable_manifest() {
+            return Ok(None);
+        }
+        let output = self.run_commands(&[
+            ".lang wikidata".into(),
+            self.route_name_load_command(qid),
+            format!(".node {qid}"),
+            ".quit".into(),
+            String::new(),
+        ])?;
+        Ok(Self::parse_resolved_node_id(&output))
     }
 
     fn property_query(qid: &str, pid: &str) -> String {
@@ -634,9 +710,16 @@ impl TypeClosureNodeProvider for ZelphHfTypeProvider {
         if !valid_qid(qid) {
             return Err(TypeClosureError::InvalidQid(qid.to_owned()));
         }
+        let Some(node_id) = self.resolve_route_node(qid)? else {
+            // A local .bin or a manifest without a resolvable route is not an
+            // admissible remote snapshot fast path. Returning a miss allows
+            // the tiered provider to use the governed revision-pinned fallback
+            // rather than silently loading all adjacency.
+            return Ok(None);
+        };
         let commands = [
             format!(".lang {}", self.language),
-            self.load_command(),
+            self.route_node_load_command(qid, node_id),
             ".import sparql".into(),
             Self::property_query(qid, "P31"),
             String::new(),
@@ -645,37 +728,7 @@ impl TypeClosureNodeProvider for ZelphHfTypeProvider {
             ".quit".into(),
             String::new(),
         ];
-        let mut child = Command::new(&self.executable)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|error| {
-                TypeClosureError::Provider(ProviderError::InvalidInput(format!(
-                    "Zelph executable unavailable ({}): {error}",
-                    self.executable
-                )))
-            })?;
-        if let Some(stdin) = child.stdin.as_mut() {
-            stdin.write_all(commands.join("\n").as_bytes()).map_err(|error| {
-                TypeClosureError::Provider(ProviderError::Io(error))
-            })?;
-        }
-        let output = child.wait_with_output().map_err(|error| {
-            TypeClosureError::Provider(ProviderError::Io(error))
-        })?;
-        self.stats.provider_calls = self.stats.provider_calls.saturating_add(1);
-        let combined = format!(
-            "{}\n{}",
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
-        );
-        if !output.status.success() || combined.contains("Error in line") {
-            return Err(TypeClosureError::Provider(ProviderError::InvalidInput(format!(
-                "Zelph snapshot query failed: {}",
-                combined.chars().rev().take(2000).collect::<String>().chars().rev().collect::<String>()
-            ))));
-        }
+        let combined = self.run_commands(&commands)?;
         let sections = combined.split("?value\n").skip(1).collect::<Vec<_>>();
         let p31 = sections
             .first()
