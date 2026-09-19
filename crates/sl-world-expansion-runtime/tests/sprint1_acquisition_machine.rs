@@ -3,7 +3,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use sensiblaw_pg_source_store::GwbHopLedgerRow;
 use sensiblaw_route_selector::ProducerFamily;
 use sensiblaw_world_expansion_runtime::sprint1_acquisition_machine::{
-    execute_physical_acquisition, plan_physical_acquisition, replay_campaign_head,
+    execute_physical_acquisition, plan_physical_acquisition,
+    producer_execution_plan_from_candidate, replay_campaign_head,
     AcquisitionPath, BoundedPhysicalTransport, CandidateProducerEvidence,
     LogicalAcquisitionRequest, LogicalToPhysicalPlanner, PhysicalObjectFetch,
     PlannedPhysicalObject, ProducerExecutionPlan, ProducerExecutor,
@@ -364,4 +365,31 @@ fn persisted_exact_revision_is_not_snapshot_simultaneous() {
 
     assert_eq!(receipt.live_fallbacks, 0);
     assert!(!receipt.snapshot_simultaneous);
+}
+
+
+#[test]
+fn selected_route_lowers_without_reinterpreting_producer_family() {
+    let candidate = sensiblaw_route_selector::RouteCandidate {
+        candidate_id: "candidate:authority".into(),
+        producer: ProducerFamily::AuthoritySource,
+        route_family: sensiblaw_route_selector::RouteFamily::PrimarySourceSearch,
+        source_ref: "source".into(),
+        target_ref: "[2026] HCA 19".into(),
+        property_ref: String::new(),
+        cross_language_gap_coverage: 0,
+        source_surface_support: 1,
+        root_qid_support: 1,
+        typed_property_support: 0,
+        route_specificity: 5,
+        yield_history_observed: 0,
+        prior_contracted_old_gaps: 0,
+        prior_retired_obligations: 0,
+        prior_new_gap_atoms: 0,
+        prior_network_requests: 0,
+    };
+    let plan = producer_execution_plan_from_candidate("residual:authority", &candidate);
+    assert_eq!(plan.move_ref, candidate.candidate_id);
+    assert_eq!(plan.producer, ProducerFamily::AuthoritySource);
+    assert_eq!(plan.target_ref, "[2026] HCA 19");
 }
