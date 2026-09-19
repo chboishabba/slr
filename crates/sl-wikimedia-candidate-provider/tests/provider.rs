@@ -1,6 +1,7 @@
 use sensiblaw_route_selector::{decode_route_candidate, ProducerFamily, RouteFamily};
 use sensiblaw_wikimedia_candidate_provider::{
-    emit_candidates_from_rdf, entity_data_rdf_revision_url, entity_data_rdf_url, ProviderReceipt,
+    emit_candidates_from_rdf, emit_multilingual_wikipedia_candidates_from_rdf,
+    entity_data_rdf_revision_url, entity_data_rdf_url, ProviderReceipt,
 };
 use std::io::Cursor;
 
@@ -202,4 +203,54 @@ fn provider_dependency_surface_has_no_json_or_regex() {
     )
     .unwrap();
     assert!(!cargo.contains("regex"));
+}
+
+
+#[test]
+fn multilingual_article_projection_emits_peer_wikipedia_surfaces_without_semantic_equivalence() {
+    let rdf = r#"<?xml version="1.0"?>
+<rdf:RDF
+ xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+ xmlns:schema="http://schema.org/">
+ <rdf:Description rdf:about="https://en.wikipedia.org/wiki/George_W._Bush">
+   <rdf:type rdf:resource="http://schema.org/Article"/>
+   <schema:about rdf:resource="http://www.wikidata.org/entity/Q207"/>
+   <schema:isPartOf rdf:resource="https://en.wikipedia.org/"/>
+ </rdf:Description>
+ <rdf:Description rdf:about="https://es.wikipedia.org/wiki/George_W._Bush">
+   <rdf:type rdf:resource="http://schema.org/Article"/>
+   <schema:about rdf:resource="http://www.wikidata.org/entity/Q207"/>
+   <schema:isPartOf rdf:resource="https://es.wikipedia.org/"/>
+ </rdf:Description>
+ <rdf:Description rdf:about="https://simple.wikipedia.org/wiki/George_W._Bush">
+   <rdf:type rdf:resource="http://schema.org/Article"/>
+   <schema:about rdf:resource="http://www.wikidata.org/entity/Q207"/>
+   <schema:isPartOf rdf:resource="https://simple.wikipedia.org/"/>
+ </rdf:Description>
+</rdf:RDF>"#;
+
+    let mut out = Vec::new();
+    let receipt =
+        emit_multilingual_wikipedia_candidates_from_rdf("Q207", rdf.as_bytes(), &mut out)
+            .unwrap();
+    let mut rows = Vec::new();
+    let mut cursor = Cursor::new(out);
+    while let Some(row) = decode_route_candidate(&mut cursor).unwrap() {
+        rows.push(row);
+    }
+
+    assert_eq!(receipt.wikipedia_article_candidates, 3);
+    assert!(receipt.candidate_only);
+    assert!(!receipt.semantic_promotion);
+    assert!(!receipt.same_qid_creates_semantic_equivalence);
+
+    let targets = rows.iter().map(|row| row.target_ref.as_str()).collect::<Vec<_>>();
+    assert!(targets.contains(&"https://en.wikipedia.org/wiki/George_W._Bush"));
+    assert!(targets.contains(&"https://es.wikipedia.org/wiki/George_W._Bush"));
+    assert!(targets.contains(&"https://simple.wikipedia.org/wiki/George_W._Bush"));
+    assert!(rows.iter().all(|row| {
+        row.producer == ProducerFamily::ArticleSemantic
+            && row.route_family == RouteFamily::WikipediaArticle
+            && row.cross_language_gap_coverage == 1
+    }));
 }
