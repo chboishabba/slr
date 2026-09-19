@@ -88,14 +88,12 @@ Milestones:
   - `world_before(n+1) == world_after(n)`;
   - replay reconstructs the exact latest production head before continuation.
 
-**Current state:** implementation is source-written. Sprint 1 remains open until
-the exact Rust head has a passing deterministic test receipt, persisted replay
-receipt and matching exact-head Agda kernel receipt.
+**Current state:** **certified closed** at `4bc8ce04eee4d79ccf15ef9131d80c8e19647bfb` with a green workspace test receipt, live PostgreSQL replay receipt, and matching Agda kernel receipt on the golden Sprint-1 head.
 
 After Sprint 1, transport is infrastructure unless telemetry supplies a concrete
 counterexample.
 
-# Sprint 2 — Canonical evidence convergence
+# Sprint 2 — Canonical evidence convergence — ACTIVE
 
 **Goal:** anything SensibLaw learns enters one evidence/provenance substrate.
 
@@ -187,8 +185,20 @@ Sprint 4 yields a usable SensibLaw product.
 ## Current critical path
 
 ```text
-finish acquisition machine
-  -> unify evidence machine
+unify evidence machine
   -> build legal reasoning machine
   -> ship product
 ```
+
+
+## Sprint 2 current cut
+
+M2.1 and M2.2 are paid on the stacked Sprint-2 branch:
+
+- `sensiblaw-core::canonical_evidence::EvidenceManifestation` owns one revision/digest/receipt-pinned manifestation envelope;
+- the existing Wikidata, Wikipedia and OALC observation adapters lower into that same envelope;
+- the envelope is candidate-only and cannot carry semantic authority, applicability promotion or claim-truth promotion;
+- M2.2 source/revision/anchor/observation convergence is now source-written: text uses exact character ranges, structured graph evidence uses exact structured coordinates, compiler tokens require a preceding exact revision, and persisted PG legal slices project into the same carrier.
+- M2.3 shared reducer ABI is now source-written: one reviewed canonical evidence object fans out to optional world/matter/legal projection slots, with exact observation/revision/span/review/payment identity repeated in each projection receipt; abstention is explicit and no projection or reducer creates semantic authority, applicability, or claim truth.
+
+M2.1 and M2.2 have exact Rust and Agda receipts. M2.3 is source-written only on the new head and remains `implementedAwaitingRuntime` until fresh Rust/Agda execution receipts are observed. Sprint 2 remains open pending M2.4, M2.5 and the persisted cross-family replay capstone.

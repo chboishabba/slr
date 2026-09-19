@@ -1,5 +1,8 @@
 use sensiblaw_proof_search_loop::world_observation::{GetterBackend, ObservationParity};
-use sensiblaw_proof_search_loop::world_observation_adapters::wikidata_property_observation;
+use sensiblaw_proof_search_loop::world_observation_adapters::{
+    oalc_evidence_manifestation, wikidata_evidence_manifestation,
+    wikidata_property_observation, wikipedia_evidence_manifestation,
+};
 use sensiblaw_route_selector::{ProducerFamily, RouteCandidate, RouteFamily};
 use sensiblaw_wikimedia_candidate_provider::entity_revision_receipt_from_rdf;
 
@@ -112,4 +115,60 @@ fn wikidata_observation_accepts_classification_source_but_rejects_unrelated_prod
         error,
         sensiblaw_proof_search_loop::world_observation_adapters::WorldObservationAdapterError::WrongWikidataProducer
     );
+}
+
+
+#[test]
+fn canonical_manifestation_envelope_is_shared_across_existing_producers() {
+    use sensiblaw_core::canonical_evidence::EvidenceManifestationFamily;
+    use sensiblaw_governed_legal_provider::OalcLookupReceipt;
+    use sensiblaw_route_executor::{AcquiredSource, AcquiredSourceKind};
+
+    let wikidata = acquired();
+    let wikidata_manifestation =
+        wikidata_evidence_manifestation(&wikidata, "receipt:wikidata:fixture").unwrap();
+    assert_eq!(
+        wikidata_manifestation.family,
+        EvidenceManifestationFamily::Wikidata
+    );
+    assert!(wikidata_manifestation.validate().is_ok());
+
+    let wikipedia = AcquiredSource {
+        kind: AcquiredSourceKind::WikipediaRenderedHtml,
+        document_ref: "document:wikipedia:fixture".into(),
+        source_ref: "https://en.wikipedia.org/wiki/Mabo_v_Queensland_(No_2)".into(),
+        language: "en".into(),
+        revision_ref: "wikipedia:en:fixture:oldid:1".into(),
+        canonical_url: "https://en.wikipedia.org/wiki/Mabo_v_Queensland_(No_2)".into(),
+        source_sha256: [7_u8; 32],
+        text: "fixture".into(),
+        candidate_only: true,
+        semantic_promotion: false,
+    };
+    let wikipedia_manifestation =
+        wikipedia_evidence_manifestation(&wikipedia, "receipt:wikipedia:fixture").unwrap();
+    assert_eq!(
+        wikipedia_manifestation.family,
+        EvidenceManifestationFamily::Wikipedia
+    );
+    assert!(wikipedia_manifestation.validate().is_ok());
+
+    let oalc = OalcLookupReceipt {
+        corpus_revision_ref: "oalc:corpus:fixture".into(),
+        citation: "Mabo v Queensland (No 2) [1992] HCA 23".into(),
+        source_identity_ref: "case:[1992]-HCA-23".into(),
+        source_revision_ref: "oalc:revision:fixture".into(),
+        canonical_text_digest: "sha256:fixture".into(),
+        local_artifact_ref: "artifact:oalc:fixture".into(),
+        network_requests: 0,
+        receipt_authority: "experimental_candidate_only",
+    };
+    let oalc_manifestation =
+        oalc_evidence_manifestation(&oalc, "receipt:oalc:fixture").unwrap();
+    assert_eq!(oalc_manifestation.family, EvidenceManifestationFamily::Oalc);
+    assert!(oalc_manifestation.validate().is_ok());
+
+    assert!(!wikidata_manifestation.creates_semantic_authority);
+    assert!(!wikipedia_manifestation.applicability_promoted);
+    assert!(!oalc_manifestation.claim_truth_promoted);
 }

@@ -2,6 +2,10 @@ use crate::world_expansion_adapters::{AcquiredWikidataEntity, ExpansionAdapterEr
 use crate::world_observation::{
     FreshnessStatus, GetterBackend, ProvenanceClass, RetrievalStatus, WorldObservation,
 };
+use sensiblaw_core::canonical_evidence::{
+    manifestation_ref_for_revision, EvidenceManifestation, EvidenceManifestationError,
+    EvidenceManifestationFamily,
+};
 use sensiblaw_governed_legal_provider::OalcLookupReceipt;
 use sensiblaw_route_executor::AcquiredSource;
 use sensiblaw_route_selector::{ProducerFamily, RouteCandidate, RouteFamily};
@@ -146,6 +150,68 @@ pub fn oalc_source_observation(
         backend,
         candidate_only: true,
         creates_semantic_authority: false,
+        claim_truth_promoted: false,
+    })
+}
+
+
+fn validated_manifestation(
+    manifestation: EvidenceManifestation,
+) -> Result<EvidenceManifestation, EvidenceManifestationError> {
+    manifestation.validate()?;
+    Ok(manifestation)
+}
+
+pub fn wikidata_evidence_manifestation(
+    source: &AcquiredWikidataEntity,
+    acquisition_receipt_ref: impl Into<String>,
+) -> Result<EvidenceManifestation, EvidenceManifestationError> {
+    validated_manifestation(EvidenceManifestation {
+        manifestation_ref: manifestation_ref_for_revision(&source.source_revision_ref),
+        family: EvidenceManifestationFamily::Wikidata,
+        source_ref: format!("wikidata:{}", source.qid),
+        source_revision_ref: source.source_revision_ref.clone(),
+        content_digest_ref: source.content_digest_ref.clone(),
+        acquisition_receipt_ref: acquisition_receipt_ref.into(),
+        candidate_only: source.candidate_only,
+        creates_semantic_authority: false,
+        applicability_promoted: false,
+        claim_truth_promoted: source.semantic_promotion,
+    })
+}
+
+pub fn wikipedia_evidence_manifestation(
+    source: &AcquiredSource,
+    acquisition_receipt_ref: impl Into<String>,
+) -> Result<EvidenceManifestation, EvidenceManifestationError> {
+    validated_manifestation(EvidenceManifestation {
+        manifestation_ref: manifestation_ref_for_revision(&source.revision_ref),
+        family: EvidenceManifestationFamily::Wikipedia,
+        source_ref: source.source_ref.clone(),
+        source_revision_ref: source.revision_ref.clone(),
+        content_digest_ref: hex_digest(&source.source_sha256),
+        acquisition_receipt_ref: acquisition_receipt_ref.into(),
+        candidate_only: source.candidate_only,
+        creates_semantic_authority: false,
+        applicability_promoted: false,
+        claim_truth_promoted: source.semantic_promotion,
+    })
+}
+
+pub fn oalc_evidence_manifestation(
+    receipt: &OalcLookupReceipt,
+    acquisition_receipt_ref: impl Into<String>,
+) -> Result<EvidenceManifestation, EvidenceManifestationError> {
+    validated_manifestation(EvidenceManifestation {
+        manifestation_ref: manifestation_ref_for_revision(&receipt.source_revision_ref),
+        family: EvidenceManifestationFamily::Oalc,
+        source_ref: receipt.source_identity_ref.clone(),
+        source_revision_ref: receipt.source_revision_ref.clone(),
+        content_digest_ref: receipt.canonical_text_digest.clone(),
+        acquisition_receipt_ref: acquisition_receipt_ref.into(),
+        candidate_only: receipt.receipt_authority == "experimental_candidate_only",
+        creates_semantic_authority: false,
+        applicability_promoted: false,
         claim_truth_promoted: false,
     })
 }

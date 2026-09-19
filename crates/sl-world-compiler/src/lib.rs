@@ -1,4 +1,7 @@
+use std::collections::HashMap;
 use std::io::{ErrorKind, Read, Write};
+
+use sensiblaw_core::canonical_evidence::{EvidenceObservation, EvidenceSpan};
 
 use sensiblaw_world_store::{encode_record, WireRecord, WorldRecordKind};
 use sha2::{Digest, Sha256};
@@ -224,9 +227,52 @@ fn iteration_body(receipt:&CompileReceipt) -> Vec<u8> {
     out.push(1); out.push(0); out
 }
 
+#[allow(clippy::too_many_arguments)]
+fn canonical_text_observation(
+    document_ref: &str,
+    revision_ref: &str,
+    sentence_id: u64,
+    local_ordinal: u32,
+    start_char: u32,
+    end_char: u32,
+    shape: DependencyShape,
+    orth: &str,
+    lemma: &str,
+) -> Result<EvidenceObservation, CompilerError> {
+    let span = EvidenceSpan::text(
+        revision_ref.to_owned(),
+        format!("span:{document_ref}:{revision_ref}:{start_char}-{end_char}"),
+        u64::from(start_char),
+        u64::from(end_char),
+    )
+    .map_err(|error| CompilerError::InvalidObservation(format!(
+        "canonical evidence span rejected: {error:?}"
+    )))?;
+    let observation = EvidenceObservation {
+        observation_ref: format!(
+            "observation:{document_ref}:{revision_ref}:{sentence_id}:{local_ordinal}"
+        ),
+        source_revision_ref: revision_ref.to_owned(),
+        span,
+        predicate_ref: format!("dependency:{shape:?}"),
+        value_ref: if lemma.is_empty() { orth.to_owned() } else { lemma.to_owned() },
+        candidate_only: true,
+        creates_semantic_authority: false,
+        applicability_promoted: false,
+        claim_truth_promoted: false,
+    };
+    observation.validate().map_err(|error| {
+        CompilerError::InvalidObservation(format!(
+            "canonical evidence observation rejected: {error:?}"
+        ))
+    })?;
+    Ok(observation)
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CompileReceipt {
     pub manifestations:u64,
+    pub canonical_observations:u64,
     pub pnf_candidates:u64,
     pub world_atoms:u64,
     pub unresolved_dependencies:u64,
@@ -235,15 +281,42 @@ pub struct CompileReceipt {
 }
 
 pub fn compile_observation_stream<R:Read,W:Write>(reader:&mut R, writer:&mut W, iteration_index:i64) -> Result<CompileReceipt,CompilerError> {
-    let mut receipt=CompileReceipt{manifestations:0,pnf_candidates:0,world_atoms:0,unresolved_dependencies:0,candidate_only:true,semantic_promotion:false};
+    let mut receipt=CompileReceipt{manifestations:0,canonical_observations:0,pnf_candidates:0,world_atoms:0,unresolved_dependencies:0,candidate_only:true,semantic_promotion:false};
+    let mut revision_by_document: HashMap<String, String> = HashMap::new();
     while let Some(observation)=decode_observation(reader)? {
         match observation {
             ObservationRecord::Manifestation{document_ref,qid,language,revision_ref,source_sha256} => {
+                if let Some(existing) = revision_by_document.get(&document_ref) {
+                    if existing != &revision_ref {
+                        return Err(CompilerError::InvalidObservation(format!(
+                            "document {document_ref} changed revision within one observation stream: {existing} -> {revision_ref}"
+                        )));
+                    }
+                } else {
+                    revision_by_document.insert(document_ref.clone(), revision_ref.clone());
+                }
                 let body=manifestation_body(&qid,&language,&revision_ref,&source_sha256)?;
                 encode_record(writer,&WireRecord{kind:WorldRecordKind::SourceManifestation,id:document_ref,iteration_index:Some(iteration_index),aux1:None,payload:body})?;
                 receipt.manifestations+=1;
             }
             ObservationRecord::Token{document_ref,sentence_id,local_ordinal,start_char,end_char,head_ordinal,shape,orth,lemma,head_orth,head_lemma} => {
+                let revision_ref = revision_by_document.get(&document_ref).ok_or_else(|| {
+                    CompilerError::InvalidObservation(format!(
+                        "token for {document_ref} has no preceding exact manifestation revision"
+                    ))
+                })?;
+                let _canonical_observation = canonical_text_observation(
+                    &document_ref,
+                    revision_ref,
+                    sentence_id,
+                    local_ordinal,
+                    start_char,
+                    end_char,
+                    shape,
+                    &orth,
+                    &lemma,
+                )?;
+                receipt.canonical_observations += 1;
                 if let Some(fragment)=fragment_for_shape(shape) {
                     let candidate_id=sha_id("pnf-candidate:",&[document_ref.as_bytes(),&sentence_id.to_le_bytes(),&local_ordinal.to_le_bytes(),&[shape as u8],orth.as_bytes(),lemma.as_bytes(),head_lemma.as_bytes()]);
                     let pnf=pnf_body(fragment,shape,sentence_id,local_ordinal,head_ordinal,start_char,end_char,&orth,&lemma,&head_orth,&head_lemma)?;
