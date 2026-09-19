@@ -158,7 +158,7 @@ pub fn materialize_gwb_campaign_commit(
             .map(|value| i64::try_from(value).map_err(|_| GwbHopLedgerError::HopIndexOutOfRange))
             .transpose()?;
         residuals_opened += tx.execute(
-            "INSERT INTO context.gwb_ambiguity_residual (             campaign_ref,residual_ref,subject_ref,proposition_ref,kind_ref,root_qid,salience,             dependency_refs,status_ref,opened_by_hop,candidate_only,creates_semantic_authority,             applicability_promoted,claim_truth_promoted) VALUES (             $1,$2,$3,$4,$5,$6,$7,$8,'open',$9,TRUE,FALSE,FALSE,FALSE)              ON CONFLICT (campaign_ref,residual_ref) DO NOTHING",
+            "INSERT INTO context.gwb_ambiguity_residual (             campaign_ref,residual_ref,subject_ref,proposition_ref,kind_ref,root_qid,salience,             dependency_refs,status_ref,opened_by_hop,candidate_only,creates_semantic_authority,             applicability_promoted,claim_truth_promoted) VALUES (             $1,$2,$3,$4,$5,$6,$7,$8,'open',$9,TRUE,FALSE,FALSE,FALSE)              ON CONFLICT (campaign_ref,residual_ref) DO UPDATE SET                subject_ref=EXCLUDED.subject_ref,                proposition_ref=EXCLUDED.proposition_ref,                kind_ref=EXCLUDED.kind_ref,                root_qid=EXCLUDED.root_qid,                salience=EXCLUDED.salience,                dependency_refs=EXCLUDED.dependency_refs,                status_ref='open',                opened_by_hop=EXCLUDED.opened_by_hop,                closed_by_hop=NULL,                close_review_ref=NULL",
             &[
                 &row.campaign_ref,
                 &row.residual_ref,
