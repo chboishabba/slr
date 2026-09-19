@@ -34,6 +34,7 @@ pub mod transition;
 pub mod world;
 pub mod world_acquisition;
 pub mod world_expansion;
+pub mod world_expansion_step;
 
 #[path = "legacy.rs"]
 mod legacy;
