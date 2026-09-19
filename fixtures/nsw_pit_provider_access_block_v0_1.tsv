@@ -1,0 +1,2 @@
+provider	request_ref	status	content_type	mitigation	classification	negative_legal_evidence	historical_frontier_open
+provider:official-nsw-legislation	https://legislation.nsw.gov.au/view/html/inforce/2017-01-26/act-1983-038/xml	403	text/html; charset=UTF-8	cf-mitigated:challenge	challenge_blocked	false	true

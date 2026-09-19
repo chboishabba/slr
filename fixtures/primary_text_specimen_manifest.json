@@ -1,0 +1,27 @@
+{
+  "schema_version": "sensiblaw.primary-text-specimen-manifest.v0_1",
+  "authority": "source_and_passage_metadata_only",
+  "specimens": [
+    {
+      "id": "native-title-applicant-submission-context",
+      "fixture": "fixtures/reporting_attribution_paragraph.txt",
+      "source_pdf": "../ITIR-suite/SensibLaw/Native Title (New South Wales) Act 1994 (NSW).pdf",
+      "source_passage": "Wilson v Anderson [2002] HCA 29, paragraph 62, reproduced in the NSW compilation",
+      "reviewed_context": "party submission; not a court finding"
+    },
+    {
+      "id": "mabo-brennan-majority-native-title",
+      "fixture": "fixtures/mabo_brennan_majority_passage.txt",
+      "source_pdf": "../ITIR-suite/SensibLaw/Mabo [No 2] - [1992] HCA 23.pdf",
+      "source_passage": "Mabo (No 2), Brennan J, paragraphs 61-62",
+      "reviewed_context": "judicial reasoning; source attribution is metadata"
+    },
+    {
+      "id": "mabo-dawson-contrasting-native-title",
+      "fixture": "fixtures/mabo_dawson_contrasting_passage.txt",
+      "source_pdf": "../ITIR-suite/SensibLaw/Mabo [No 2] - [1992] HCA 23.pdf",
+      "source_passage": "Mabo (No 2), Dawson J, paragraphs 13-14",
+      "reviewed_context": "contrasting judicial reasoning; source attribution is metadata"
+    }
+  ]
+}
