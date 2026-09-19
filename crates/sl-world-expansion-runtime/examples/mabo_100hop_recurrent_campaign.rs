@@ -4,8 +4,10 @@ use std::io::Cursor;
 use sensiblaw_pg_source_store::{
     discovery_lineage_row, identity_alias_row, load_adaptive_negative_assessments,
     load_database_config, load_discovery_campaign_identity_classes,
-    load_discovery_identity_baseline, load_latent_world_rows_with_budget,
-    load_mabo_proposition_rows, load_reviewed_context_expansion_sources,
+    load_discovery_identity_baseline, load_latest_adaptive_trajectory,
+    load_latent_world_rows_with_budget, load_mabo_proposition_rows,
+    load_reviewed_context_expansion_sources, materialize_adaptive_trajectory,
+    AdaptiveTrajectoryInput,
     materialize_non_novel_identity_aliases, materialize_reviewed_context_expansion,
     reviewed_source_expansion_row, LatentWorldBudget, NonNovelIdentityAliasInput,
 };
@@ -50,6 +52,7 @@ use sensiblaw_world_expansion_runtime::{
 use sensiblaw_world_store::{load_database_config as load_world_database_config, WorldStore};
 
 const MABO_QID: &str = "Q1501525";
+const MABO_ADAPTIVE_CAMPAIGN_REF: &str = "campaign:mabo-adaptive";
 const CAMPAIGN_MAX_CYCLES: usize = 100;
 const WORLD_VIEW_MAX_HOPS: u32 = 100;
 const WORLD_VIEW_MAX_NODES: usize = 10_000;
@@ -246,6 +249,42 @@ fn complete_context_expansion(
     ))
 }
 
+fn persist_completed_trajectory(
+    pg_config: &sensiblaw_pg_source_store::DatabaseConfig,
+    receipt: &AdaptiveSelectionReceipt,
+) -> Result<String, Box<dyn std::error::Error>> {
+    let commit_ref = receipt
+        .commit_ref
+        .clone()
+        .ok_or_else(|| std::io::Error::other("completed trajectory receipt missing commit ref"))?;
+    let input = AdaptiveTrajectoryInput {
+        campaign_ref: MABO_ADAPTIVE_CAMPAIGN_REF.into(),
+        cycle_index: receipt.cycle_index,
+        world_digest: receipt.world_digest.clone(),
+        frontier_digest: receipt.frontier_digest.clone(),
+        selected_residual_ref: receipt.selected_residual_ref.clone(),
+        selected_move_ref: receipt.selected_move_ref.clone(),
+        selected_producer_lane_ref: receipt.selected_producer_lane_ref.clone(),
+        prior_commit_ref: receipt.prior_commit_ref.clone(),
+        commit_ref,
+        review_or_payment_ref: receipt
+            .review_or_payment_ref
+            .clone()
+            .ok_or_else(|| std::io::Error::other("completed trajectory receipt missing review/payment ref"))?,
+        world_delta_ref: receipt
+            .world_delta_ref
+            .clone()
+            .ok_or_else(|| std::io::Error::other("completed trajectory receipt missing world delta ref"))?,
+        selection_origin: receipt.selection_origin.clone(),
+        candidate_only: receipt.candidate_only,
+        creates_semantic_authority: receipt.creates_semantic_authority,
+        applicability_promoted: receipt.applicability_promoted,
+        claim_truth_promoted: receipt.claim_truth_promoted,
+    };
+    let durable = materialize_adaptive_trajectory(pg_config, &input)?;
+    Ok(format!("pg:adaptive-trajectory:{}", durable.receipt_sha256))
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = std::env::args().collect::<Vec<_>>();
     let identity_review_text = match args.get(1) {
@@ -261,8 +300,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let pg_config = load_database_config(None)?;
     let world_config = load_world_database_config(None)?;
-    let mut adaptive_cycles_completed = 0usize;
-    let mut prior_commit_ref: Option<String> = None;
+    let prior_trajectory =
+        load_latest_adaptive_trajectory(&pg_config, MABO_ADAPTIVE_CAMPAIGN_REF)?;
+    let mut adaptive_cycles_completed = prior_trajectory
+        .as_ref()
+        .map(|row| row.cycle_index.saturating_add(1))
+        .unwrap_or(0);
+    let mut prior_commit_ref = prior_trajectory
+        .as_ref()
+        .map(|row| row.commit_ref.clone());
+    println!(
+        "durable_adaptive_cycles_completed={adaptive_cycles_completed}"
+    );
+    println!(
+        "durable_prior_commit_ref={}",
+        prior_commit_ref.as_deref().unwrap_or("")
+    );
     let mut identity_admissions_committed = 0usize;
     let mut known_identity_alias_payments = 0usize;
 
@@ -404,10 +457,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             transition.review_or_payment_ref,
                             transition.world_delta_ref,
                         );
+                        let durable_trajectory_ref =
+                            persist_completed_trajectory(&pg_config, &completed)?;
                         let committed_path =
                             write_trajectory_receipt(&completed, "committed")?;
                         println!("trajectory_commit_path={}", committed_path.display());
                         println!("trajectory_commit_ref={}", transition.commit_ref);
+                        println!("trajectory_durable_ref={durable_trajectory_ref}");
                         prior_commit_ref = Some(transition.commit_ref);
                         adaptive_cycles_completed += 1;
                         println!("cycle_commit=context-expansion");
@@ -605,9 +661,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     completed_transition.review_or_payment_ref,
                     completed_transition.world_delta_ref,
                 );
+                let durable_trajectory_ref =
+                    persist_completed_trajectory(&pg_config, &completed)?;
                 let committed_path = write_trajectory_receipt(&completed, "committed")?;
                 println!("trajectory_commit_path={}", committed_path.display());
                 println!("trajectory_commit_ref={}", completed_transition.commit_ref);
+                println!("trajectory_durable_ref={durable_trajectory_ref}");
                 prior_commit_ref = Some(completed_transition.commit_ref);
                 adaptive_cycles_completed += 1;
                 println!("cycle_commit=identity-plus-reentry");
