@@ -1,6 +1,7 @@
 mod candidate_pnf;
 mod context_federation;
 mod discovery_identity_baseline;
+mod gwb_ambiguity_state;
 mod gwb_hop_ledger;
 mod discovery_lineage;
 mod latent_world;
@@ -19,6 +20,12 @@ pub use context_federation::{
     materialize_reviewed_context_edges, review_bounded_wikidata_candidate,
     review_mabo_wikidata_candidate, reviewed_context_edge, ContextFederationError,
     ContextMaterializationReceipt, ContextReviewDecision, ReviewedContextEdge, SourceFamily,
+};
+pub use gwb_ambiguity_state::{
+    close_gwb_ambiguity_residuals, gwb_ambiguity_state_row,
+    load_open_gwb_ambiguity_residuals, materialize_gwb_ambiguity_residuals,
+    GwbAmbiguityMaterializationReceipt, GwbAmbiguityStateError,
+    GwbAmbiguityStateInput, GwbAmbiguityStateRow,
 };
 pub use gwb_hop_ledger::{
     gwb_hop_ledger_row, load_latest_gwb_hop, materialize_gwb_hop,
