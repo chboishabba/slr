@@ -444,6 +444,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 );
                 let world_store = WorldStore::connect(&world_config)?;
                 let payment_sink = WorldStoreReviewedPaymentSink::new(world_store);
+                let identity_world_delta_ref =
+                    prepared.prepared.observation.pnf_world_disambiguation_ref.clone();
+                let identity_commit_ref: String;
 
                 if baseline.identity_class_refs.contains(&assignment.identity_class_ref) {
                     let mut payment_sink = payment_sink;
@@ -458,19 +461,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .map_err(|error| {
                         std::io::Error::other(format!("known identity payment failed: {error:?}"))
                     })?;
+                    let alias_input = NonNovelIdentityAliasInput {
+                        representation_ref: assignment.representation_ref.clone(),
+                        identity_class_ref: assignment.identity_class_ref.clone(),
+                        review_ref: assignment.review_ref.clone(),
+                        source_revision_ref: acquired.source_revision_ref.clone(),
+                        candidate_only: true,
+                        creates_semantic_authority: false,
+                        applicability_promoted: false,
+                        claim_truth_promoted: false,
+                    };
+                    let durable_alias = identity_alias_row(&alias_input)?;
                     materialize_non_novel_identity_aliases(
                         &pg_config,
-                        &[NonNovelIdentityAliasInput {
-                            representation_ref: assignment.representation_ref.clone(),
-                            identity_class_ref: assignment.identity_class_ref.clone(),
-                            review_ref: assignment.review_ref.clone(),
-                            source_revision_ref: acquired.source_revision_ref.clone(),
-                            candidate_only: true,
-                            creates_semantic_authority: false,
-                            applicability_promoted: false,
-                            claim_truth_promoted: false,
-                        }],
+                        std::slice::from_ref(&alias_input),
                     )?;
+                    identity_commit_ref = format!(
+                        "pg:reviewed-identity-alias:{}",
+                        durable_alias.receipt_sha256
+                    );
                     known_identity_alias_payments += 1;
                     println!("identity_commit=known-non-novel-alias");
                 } else {
@@ -508,6 +517,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         ))
                         .into());
                     }
+                    let lineage = session.lineages.last().ok_or_else(|| {
+                        std::io::Error::other(
+                            "novel identity cycle committed without retained discovery lineage",
+                        )
+                    })?;
+                    let lineage_input =
+                        discovery_lineage_input(lineage, &assignment.identity_class_ref)?;
+                    let durable_lineage = discovery_lineage_row(&lineage_input)?;
+                    identity_commit_ref = format!(
+                        "pg:discovery-lineage:{}",
+                        durable_lineage.receipt_sha256
+                    );
                     identity_admissions_committed += 1;
                     println!("identity_commit=novel-reviewed-lineage");
                 }
@@ -515,16 +536,67 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 // A QID identity transition is not considered a complete
                 // adaptive acquisition/re-entry cycle until its own exact
                 // source manifestation has been parsed and context-reviewed.
-                if is_qid(&selection.representation_ref) && !complete_context_expansion(
+                let completed_transition = if is_qid(&selection.representation_ref) {
+                    match complete_context_expansion(
                         &pg_config,
                         &selection.representation_ref,
                         &context_reviews,
                     )? {
-                    println!("partial_transition=identity-committed-context-pending");
-                    break;
-                }
+                        ContextExpansionExecution::ReviewRequired => {
+                            println!("partial_identity_commit_ref={identity_commit_ref}");
+                            println!("partial_transition=identity-committed-context-pending");
+                            break;
+                        }
+                        ContextExpansionExecution::Committed(context_transition) => {
+                            CompletedAdaptiveTransition {
+                                commit_ref: format!(
+                                    "adaptive-composite:{}+{}",
+                                    identity_commit_ref, context_transition.commit_ref
+                                ),
+                                review_or_payment_ref: format!(
+                                    "{}+{}",
+                                    assignment.review_ref,
+                                    context_transition.review_or_payment_ref
+                                ),
+                                world_delta_ref: format!(
+                                    "{}+{}",
+                                    identity_world_delta_ref,
+                                    context_transition.world_delta_ref
+                                ),
+                            }
+                        }
+                    }
+                } else {
+                    CompletedAdaptiveTransition {
+                        commit_ref: identity_commit_ref,
+                        review_or_payment_ref: assignment.review_ref.clone(),
+                        world_delta_ref: identity_world_delta_ref,
+                    }
+                };
+                let completed = complete_adaptive_selection_receipt(
+                    &selection_receipt,
+                    completed_transition.commit_ref.clone(),
+                    completed_transition.review_or_payment_ref,
+                    completed_transition.world_delta_ref,
+                );
+                let committed_path = write_trajectory_receipt(&completed, "committed")?;
+                println!("trajectory_commit_path={}", committed_path.display());
+                println!("trajectory_commit_ref={}", completed_transition.commit_ref);
+                prior_commit_ref = Some(completed_transition.commit_ref);
                 adaptive_cycles_completed += 1;
                 println!("cycle_commit=identity-plus-reentry");
+            }
+            MaboAdaptiveDecision::TypedProducer(selection) => {
+                println!("selected_kind=typed-producer");
+                println!("selected_residual={}", selection.residual_ref);
+                println!("selected_move={}", selection.move_ref);
+                println!("selected_producer_lane={:?}", selection.producer_lane);
+                println!("selected_diagnosis_reference={}", selection.diagnosis_reference);
+                return Err(std::io::Error::other(format!(
+                    "typed adaptive producer execution is not yet wired for {} via {}",
+                    selection.residual_ref, selection.move_ref
+                ))
+                .into());
             }
         }
     }
