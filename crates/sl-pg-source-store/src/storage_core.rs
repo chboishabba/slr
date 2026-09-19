@@ -4,6 +4,10 @@ use std::env;
 use std::path::{Path, PathBuf};
 
 use postgres::{Client, NoTls, Transaction};
+use sensiblaw_core::canonical_evidence::{
+    manifestation_ref_for_revision, EvidenceManifestation, EvidenceManifestationFamily,
+    EvidenceSourceRevision, EvidenceSpan, EvidenceSubstrateError,
+};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
@@ -179,6 +183,79 @@ pub struct PersistedSourceRefs {
     pub external_source_revision_ref: String,
     pub source_resolution_ref: String,
     pub source_slice_refs: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PersistedCanonicalEvidence {
+    pub manifestation: EvidenceManifestation,
+    pub revision: EvidenceSourceRevision,
+    pub spans: Vec<EvidenceSpan>,
+}
+
+pub fn canonical_evidence_from_persisted_source(
+    document: &ResolvedExternalDocument<'_>,
+    refs: &PersistedSourceRefs,
+    slices: &[SourceSlice<'_>],
+) -> Result<PersistedCanonicalEvidence, EvidenceSubstrateError> {
+    let content_digest_ref = format!(
+        "sha256:{}",
+        hex(&sha256_bytes(document.canonical_text.as_bytes()))
+    );
+    let family = if document.provider_ref.to_ascii_lowercase().contains("oalc") {
+        EvidenceManifestationFamily::Oalc
+    } else {
+        EvidenceManifestationFamily::LegalAuthority
+    };
+    let manifestation = EvidenceManifestation {
+        manifestation_ref: manifestation_ref_for_revision(
+            &refs.external_source_revision_ref,
+        ),
+        family,
+        source_ref: refs.document_ref.clone(),
+        source_revision_ref: refs.external_source_revision_ref.clone(),
+        content_digest_ref: content_digest_ref.clone(),
+        acquisition_receipt_ref: refs.source_resolution_ref.clone(),
+        candidate_only: true,
+        creates_semantic_authority: false,
+        applicability_promoted: false,
+        claim_truth_promoted: false,
+    };
+    manifestation
+        .validate()
+        .map_err(|error| match error {
+            sensiblaw_core::canonical_evidence::EvidenceManifestationError::EmptyCoordinate(name) =>
+                EvidenceSubstrateError::EmptyCoordinate(name),
+            sensiblaw_core::canonical_evidence::EvidenceManifestationError::MustRemainCandidateOnly =>
+                EvidenceSubstrateError::MustRemainCandidateOnly,
+            sensiblaw_core::canonical_evidence::EvidenceManifestationError::PromotionNotAllowed =>
+                EvidenceSubstrateError::PromotionNotAllowed,
+        })?;
+
+    let revision = EvidenceSourceRevision::from_manifestation(
+        &manifestation,
+        refs.source_resolution_ref.clone(),
+    )?;
+
+    if refs.source_slice_refs.len() != slices.len() {
+        return Err(EvidenceSubstrateError::EmptyCoordinate(
+            "persisted_source_slice_alignment",
+        ));
+    }
+    let mut canonical_spans = Vec::with_capacity(slices.len());
+    for (slice_ref, slice) in refs.source_slice_refs.iter().zip(slices.iter()) {
+        canonical_spans.push(EvidenceSpan::text(
+            refs.external_source_revision_ref.clone(),
+            slice_ref.clone(),
+            slice.start_char as u64,
+            slice.end_char as u64,
+        )?);
+    }
+
+    Ok(PersistedCanonicalEvidence {
+        manifestation,
+        revision,
+        spans: canonical_spans,
+    })
 }
 
 pub struct PostgresSourceStore {
