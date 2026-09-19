@@ -15,13 +15,16 @@ CREATE TABLE IF NOT EXISTS context.reviewed_relation_receipt (
   relation_ref TEXT NOT NULL REFERENCES algebra.relation(relation_ref),
   source_family_ref TEXT NOT NULL,
   source_revision_ref TEXT NOT NULL,
+  source_content_digest TEXT,
   candidate_only BOOLEAN NOT NULL CHECK (candidate_only),
   creates_semantic_authority BOOLEAN NOT NULL DEFAULT FALSE CHECK (NOT creates_semantic_authority),
   applicability_promoted BOOLEAN NOT NULL DEFAULT FALSE CHECK (NOT applicability_promoted),
   claim_truth_promoted BOOLEAN NOT NULL DEFAULT FALSE CHECK (NOT claim_truth_promoted),
   receipt_sha256 BYTEA NOT NULL UNIQUE,
   PRIMARY KEY (relation_ref, source_revision_ref)
-)
+);
+ALTER TABLE context.reviewed_relation_receipt
+  ADD COLUMN IF NOT EXISTS source_content_digest TEXT
 "#;
 
 const MABO_WIKIDATA_QID: &str = "Q1501525";
@@ -55,6 +58,7 @@ pub enum ContextReviewDecision {
 pub struct ReviewedContextEdge {
     pub source_family: SourceFamily,
     pub source_revision_ref: String,
+    pub source_content_digest: Option<String>,
     pub relation_ref: String,
     pub relation_type_ref: String,
     pub left_ref: String,
@@ -89,6 +93,10 @@ pub enum ContextFederationError {
     MaboWikidataCandidateMismatch(String),
     #[error("invalid sha256 hex: {0}")]
     InvalidHex(String),
+    #[error("source revision must be immutable, not alias: {0}")]
+    MutableSourceRevision(String),
+    #[error("source receipt authority must remain experimental candidate-only: {0}")]
+    InvalidReceiptAuthority(String),
     #[error("postgres error: {0}")]
     Postgres(#[from] postgres::Error),
 }
@@ -102,6 +110,74 @@ fn mabo_wikidata_relation_type(property_ref: &str) -> Option<&'static str> {
         "P4006" => Some("context:wikidata:overrules"),
         _ => None,
     }
+}
+
+fn mutable_source_revision_alias(value: &str) -> bool {
+    matches!(
+        value.trim().to_ascii_lowercase().as_str(),
+        "" | "latest" | "current" | "head" | "main" | "master"
+    )
+}
+
+/// Convert one exact OALC legal-source receipt into durable candidate context
+/// after an explicit review decision.
+///
+/// This is a federation/provenance edge only.  A governed legal provider
+/// receipt does not itself establish legal authority, applicability, a
+/// proposition payment, or claim truth.
+pub fn review_mabo_oalc_exact_source(
+    discovery_parent_ref: impl Into<String>,
+    citation: impl Into<String>,
+    source_identity_ref: impl Into<String>,
+    source_revision_ref: impl Into<String>,
+    canonical_text_digest: impl Into<String>,
+    receipt_authority: impl Into<String>,
+    review_decision: ContextReviewDecision,
+) -> Result<ReviewedContextEdge, ContextFederationError> {
+    let discovery_parent_ref = discovery_parent_ref.into();
+    let citation = citation.into();
+    let source_identity_ref = source_identity_ref.into();
+    let source_revision_ref = source_revision_ref.into();
+    let canonical_text_digest = canonical_text_digest.into();
+    let receipt_authority = receipt_authority.into();
+
+    if review_decision != ContextReviewDecision::Reviewed {
+        return Err(ContextFederationError::CandidateNotReviewed(format!(
+            "oalc:{source_revision_ref}"
+        )));
+    }
+    for (name, value) in [
+        ("discovery_parent_ref", discovery_parent_ref.as_str()),
+        ("citation", citation.as_str()),
+        ("source_identity_ref", source_identity_ref.as_str()),
+        ("source_revision_ref", source_revision_ref.as_str()),
+        ("canonical_text_digest", canonical_text_digest.as_str()),
+        ("receipt_authority", receipt_authority.as_str()),
+    ] {
+        if value.trim().is_empty() {
+            return Err(ContextFederationError::EmptyCoordinate(name));
+        }
+    }
+    if mutable_source_revision_alias(&source_revision_ref) {
+        return Err(ContextFederationError::MutableSourceRevision(
+            source_revision_ref,
+        ));
+    }
+    if receipt_authority != "experimental_candidate_only" {
+        return Err(ContextFederationError::InvalidReceiptAuthority(
+            receipt_authority,
+        ));
+    }
+
+    let mut edge = reviewed_context_edge(
+        SourceFamily::Oalc,
+        source_revision_ref,
+        discovery_parent_ref,
+        source_identity_ref,
+        "context:oalc:exact-mnc",
+    )?;
+    edge.source_content_digest = Some(canonical_text_digest);
+    Ok(edge)
 }
 
 /// Convert one exact Mabo Wikidata property candidate into durable context only
@@ -208,6 +284,7 @@ pub fn reviewed_context_edge(
     Ok(ReviewedContextEdge {
         source_family,
         source_revision_ref,
+        source_content_digest: None,
         relation_ref,
         relation_type_ref,
         left_ref,
@@ -249,14 +326,15 @@ pub fn materialize_reviewed_context_edges(
         )?;
         materialized_count += tx.execute(
             "INSERT INTO context.reviewed_relation_receipt \
-             (relation_ref, source_family_ref, source_revision_ref, candidate_only, \
+             (relation_ref, source_family_ref, source_revision_ref, source_content_digest, candidate_only, \
               creates_semantic_authority, applicability_promoted, claim_truth_promoted, receipt_sha256) \
-             VALUES ($1, $2, $3, TRUE, FALSE, FALSE, FALSE, $4) \
+             VALUES ($1, $2, $3, $4, TRUE, FALSE, FALSE, FALSE, $5) \
              ON CONFLICT DO NOTHING",
             &[
                 &edge.relation_ref,
                 &edge.source_family.as_str(),
                 &edge.source_revision_ref,
+                &edge.source_content_digest,
                 &&digest_bytes[..],
             ],
         )?;
