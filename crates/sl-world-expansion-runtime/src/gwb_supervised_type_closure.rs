@@ -1102,6 +1102,22 @@ where
 /// digest. The aggregate is therefore reproducible as a manifest, but it is
 /// deliberately *not* described as a simultaneous global Wikidata snapshot.
 
+#[derive(Default)]
+struct EmptySnapshotTypeProvider;
+
+impl TypeClosureNodeProvider for EmptySnapshotTypeProvider {
+    fn acquire_type_node(
+        &mut self,
+        _qid: &str,
+    ) -> Result<Option<TypeNodeAcquisition>, TypeClosureError> {
+        Ok(None)
+    }
+
+    fn snapshot_simultaneous(&self) -> bool {
+        true
+    }
+}
+
 pub struct ThreeTierTypeClosureProvider<P, S, L> {
     preferred_slice: P,
     snapshot: S,
@@ -1188,7 +1204,11 @@ pub fn acquire_supervised_type_closure(
             acquire_supervised_type_closure_with(request, &mut provider)
         }
         (Some(preferred_slice), None) => {
-            let mut provider = TieredTypeClosureProvider::new(preferred_slice, live);
+            let mut provider = ThreeTierTypeClosureProvider::new(
+                preferred_slice,
+                EmptySnapshotTypeProvider,
+                live,
+            );
             acquire_supervised_type_closure_with(request, &mut provider)
         }
         (None, Some(snapshot)) => {
