@@ -328,6 +328,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     frontier_sha256,
                     selected_move_ref: prepared.selected.move_ref.clone(),
                     investigation_kind_ref: prepared.selected.investigation_kind.as_str().into(),
+                    producer_ref: prepared.selected.producer_ref.clone(),
                     source_revision_ref: prepared.source_revision_ref.clone(),
                     evidence_digest_ref: prepared.evidence_digest_ref.clone(),
                     review_ref: prepared.review_ref.clone(),
