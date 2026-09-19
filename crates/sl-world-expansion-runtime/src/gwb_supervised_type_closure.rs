@@ -13,7 +13,9 @@
 //! - dimensional/type mismatch creates review pressure, not automatic action.
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
-use std::io::Cursor;
+use std::env;
+use std::io::{Cursor, Write};
+use std::process::{Command, Stdio};
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 
@@ -523,6 +525,205 @@ impl TypeClosureNodeProvider for RevisionPinnedLiveTypeProvider {
     }
 }
 
+pub struct ZelphHfTypeProvider {
+    executable: String,
+    source: String,
+    snapshot_ref: String,
+    language: String,
+    stats: TypeProviderStats,
+}
+
+impl ZelphHfTypeProvider {
+    #[must_use]
+    pub fn new(
+        executable: impl Into<String>,
+        source: impl Into<String>,
+        snapshot_ref: impl Into<String>,
+        language: impl Into<String>,
+    ) -> Self {
+        Self {
+            executable: executable.into(),
+            source: source.into(),
+            snapshot_ref: snapshot_ref.into(),
+            language: language.into(),
+            stats: TypeProviderStats::default(),
+        }
+    }
+
+    #[must_use]
+    pub fn from_env() -> Option<Self> {
+        let source = env::var("SLR_ZELPH_WIKIDATA_SOURCE").ok()?;
+        if source.trim().is_empty() {
+            return None;
+        }
+        let executable = env::var("SLR_ZELPH_EXECUTABLE").unwrap_or_else(|_| "zelph".into());
+        let snapshot_ref = env::var("SLR_ZELPH_SNAPSHOT_REF").unwrap_or_else(|_| source.clone());
+        let language = env::var("SLR_ZELPH_LANGUAGE").unwrap_or_else(|_| "en".into());
+        Some(Self::new(executable, source, snapshot_ref, language))
+    }
+
+    fn quote(value: &str) -> String {
+        format!("\\\"{}\\\"", value.replace('\\\\', "\\\\\\\\").replace('\\\"', "\\\\\\\""))
+    }
+
+    fn load_command(&self) -> String {
+        let source = Self::quote(&self.source);
+        if self.source.ends_with(".json") || self.source.starts_with("hf://") {
+            format!(".load-partial {source} nameOfNode=none nodeOfName=none")
+        } else {
+            format!(".load {source}")
+        }
+    }
+
+    fn property_query(qid: &str, pid: &str) -> String {
+        format!("sparql\\nSELECT ?value WHERE {{ wd:{qid} wdt:{pid} ?value . }}")
+    }
+
+    fn parse_qids(section: &str) -> Vec<String> {
+        let mut rows = Vec::new();
+        for raw in section.lines() {
+            let value = raw.trim().split('\\t').next().unwrap_or("").trim();
+            let qid = value.split_whitespace().next().unwrap_or("");
+            if valid_qid(qid) && !rows.iter().any(|existing| existing == qid) {
+                rows.push(qid.to_owned());
+            }
+        }
+        rows.sort();
+        rows
+    }
+
+    fn digest_rows(qid: &str, p31: &[String], p279: &[String], source_ref: &str) -> String {
+        let mut hasher = Sha256::new();
+        hasher.update(b"gwb-zelph-hf-type-node:v1\\0");
+        for value in [qid, source_ref] {
+            hasher.update((value.len() as u64).to_be_bytes());
+            hasher.update(value.as_bytes());
+        }
+        for (property, rows) in [("P31", p31), ("P279", p279)] {
+            for target in rows {
+                for value in [property, target.as_str()] {
+                    hasher.update((value.len() as u64).to_be_bytes());
+                    hasher.update(value.as_bytes());
+                }
+            }
+        }
+        format!(
+            "sha256:{}",
+            hasher
+                .finalize()
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>()
+        )
+    }
+}
+
+impl TypeClosureNodeProvider for ZelphHfTypeProvider {
+    fn acquire_type_node(
+        &mut self,
+        qid: &str,
+    ) -> Result<Option<TypeNodeAcquisition>, TypeClosureError> {
+        if !valid_qid(qid) {
+            return Err(TypeClosureError::InvalidQid(qid.to_owned()));
+        }
+        let commands = [
+            format!(".lang {}", self.language),
+            self.load_command(),
+            ".import sparql".into(),
+            Self::property_query(qid, "P31"),
+            String::new(),
+            Self::property_query(qid, "P279"),
+            String::new(),
+            ".quit".into(),
+            String::new(),
+        ];
+        let mut child = Command::new(&self.executable)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|error| {
+                TypeClosureError::Provider(ProviderError::InvalidInput(format!(
+                    "Zelph executable unavailable ({}): {error}",
+                    self.executable
+                )))
+            })?;
+        if let Some(stdin) = child.stdin.as_mut() {
+            stdin.write_all(commands.join("\\n").as_bytes()).map_err(|error| {
+                TypeClosureError::Provider(ProviderError::Io(error))
+            })?;
+        }
+        let output = child.wait_with_output().map_err(|error| {
+            TypeClosureError::Provider(ProviderError::Io(error))
+        })?;
+        self.stats.provider_calls = self.stats.provider_calls.saturating_add(1);
+        let combined = format!(
+            "{}\\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        if !output.status.success() || combined.contains("Error in line") {
+            return Err(TypeClosureError::Provider(ProviderError::InvalidInput(format!(
+                "Zelph snapshot query failed: {}",
+                combined.chars().rev().take(2000).collect::<String>().chars().rev().collect::<String>()
+            ))));
+        }
+        let sections = combined.split("?value\\n").skip(1).collect::<Vec<_>>();
+        let p31 = sections
+            .first()
+            .map(|section| Self::parse_qids(section.split("--").next().unwrap_or(section)))
+            .unwrap_or_default();
+        let p279 = sections
+            .get(1)
+            .map(|section| Self::parse_qids(section.split("--").next().unwrap_or(section)))
+            .unwrap_or_default();
+        if p31.is_empty() && p279.is_empty() {
+            return Ok(None);
+        }
+
+        let source_revision_ref = format!("zelph-hf:{}:{}", self.snapshot_ref, qid);
+        let evidence_digest_ref = Self::digest_rows(qid, &p31, &p279, &source_revision_ref);
+        let mut observations = Vec::new();
+        for target_qid in p31 {
+            observations.push(TypeObservation {
+                subject_qid: qid.to_owned(),
+                property: TypeObservationProperty::InstanceOf,
+                target_qid,
+                source_revision_ref: source_revision_ref.clone(),
+                evidence_digest_ref: evidence_digest_ref.clone(),
+            });
+        }
+        for target_qid in p279 {
+            observations.push(TypeObservation {
+                subject_qid: qid.to_owned(),
+                property: TypeObservationProperty::SubclassOf,
+                target_qid,
+                source_revision_ref: source_revision_ref.clone(),
+                evidence_digest_ref: evidence_digest_ref.clone(),
+            });
+        }
+        observations.sort();
+        observations.dedup();
+        Ok(Some(TypeNodeAcquisition {
+            qid: qid.to_owned(),
+            observations,
+            node_receipt: TypeNodeReceipt {
+                qid: qid.to_owned(),
+                source_revision_ref,
+                evidence_digest_ref,
+            },
+        }))
+    }
+
+    fn snapshot_simultaneous(&self) -> bool {
+        true
+    }
+
+    fn stats(&self) -> TypeProviderStats {
+        self.stats
+    }
+}
+
 pub struct TieredTypeClosureProvider<S, L> {
     snapshot: S,
     live: L,
@@ -679,8 +880,14 @@ where
 pub fn acquire_supervised_type_closure(
     request: &TypeClosureRequest,
 ) -> Result<ObservedTypeClosure, TypeClosureError> {
-    let mut provider = RevisionPinnedLiveTypeProvider::default();
-    acquire_supervised_type_closure_with(request, &mut provider)
+    let live = RevisionPinnedLiveTypeProvider::default();
+    if let Some(snapshot) = ZelphHfTypeProvider::from_env() {
+        let mut provider = TieredTypeClosureProvider::new(snapshot, live);
+        acquire_supervised_type_closure_with(request, &mut provider)
+    } else {
+        let mut provider = live;
+        acquire_supervised_type_closure_with(request, &mut provider)
+    }
 }
 
 
