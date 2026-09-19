@@ -4,13 +4,15 @@ use std::io::Cursor;
 use sensiblaw_pg_source_store::{
     discovery_lineage_row, identity_alias_row, load_adaptive_negative_assessments,
     load_database_config, load_discovery_campaign_identity_classes,
-    load_discovery_identity_baseline, load_latest_adaptive_trajectory,
-    load_latent_world_rows_with_budget, load_mabo_proposition_rows,
-    load_reviewed_context_expansion_sources, materialize_adaptive_trajectory,
+    load_discovery_identity_baseline, load_exact_legal_source_text,
+    load_latest_adaptive_trajectory, load_latent_world_rows_with_budget,
+    load_mabo_proposition_rows, load_reviewed_context_expansion_sources,
+    materialize_adaptive_trajectory,
     AdaptiveTrajectoryInput,
     materialize_non_novel_identity_aliases, materialize_reviewed_context_expansion,
     reviewed_source_expansion_row, LatentWorldBudget, NonNovelIdentityAliasInput,
 };
+use sensiblaw_proof_search_loop::judgment_candidates::extract_judgment_citation_candidates;
 use sensiblaw_proof_search_loop::world_expansion_runner::{
     run_recurrent_world_expansion, RecurrentRunStopReason, WorldExpansionRunnerConfig,
 };
@@ -37,7 +39,8 @@ use sensiblaw_world_expansion_runtime::adaptive_trajectory::{
     selection_receipt_from_decision, AdaptiveSelectionReceipt,
 };
 use sensiblaw_world_expansion_runtime::mabo_heterogeneous_diagnosis::{
-    diagnose_mabo_proposition_research, MABO_RADICAL_TITLE_PROPOSITION,
+    diagnose_mabo_proposition_research, expand_mabo_legal_follow_candidates,
+    MABO_RADICAL_TITLE_PROPOSITION, MABO_RADICAL_TITLE_SOURCE_REVISION,
     MABO_RADICAL_TITLE_SPAN,
 };
 use sensiblaw_world_expansion_runtime::reviewed_campaign::{
@@ -370,6 +373,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             MABO_RADICAL_TITLE_SPAN,
         )?;
         let proposition_research = diagnose_mabo_proposition_research(&proposition_rows)?;
+        let trigger_source =
+            load_exact_legal_source_text(&pg_config, MABO_RADICAL_TITLE_SOURCE_REVISION)?;
+        let citation_candidates = extract_judgment_citation_candidates(
+            &trigger_source.document_ref,
+            &trigger_source.source_revision_ref,
+            &trigger_source.canonical_text_sha256,
+            &trigger_source.canonical_text,
+        );
+        let heterogeneous_moves =
+            expand_mabo_legal_follow_candidates(&proposition_research, &citation_candidates);
         let diagnosis = diagnose_mabo_context_world_identity(&world, &baseline);
 
         println!("campaign_cycle_index={adaptive_cycles_completed}");
@@ -395,6 +408,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "mabo_proposition_research_moves={}",
             proposition_research.moves.len()
         );
+        println!("mabo_trigger_source_citations={}", citation_candidates.len());
+        println!("mabo_heterogeneous_moves={}", heterogeneous_moves.len());
         println!(
             "mabo_bounded_why_executable={}",
             proposition_research.why_executable
@@ -405,7 +420,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             &baseline,
             &world,
             &expanded_sources,
-            &proposition_research.moves,
+            &heterogeneous_moves,
             &negative_assessments,
             format!("frontier:mabo:adaptive:{adaptive_cycles_completed}"),
         );
