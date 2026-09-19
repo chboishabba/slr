@@ -1,0 +1,11 @@
+[package]
+name = "sensiblaw-reviewed-evidence-payment"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+sensiblaw-consumer-residual = { path = "../sl-consumer-residual" }
+sensiblaw-world-store = { path = "../sl-world-store" }
+thiserror = "1"

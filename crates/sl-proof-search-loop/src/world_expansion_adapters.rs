@@ -36,6 +36,14 @@ pub enum ExpansionAdapterError {
     WikipediaSourcePromoted,
 }
 
+impl std::fmt::Display for ExpansionAdapterError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self:?}")
+    }
+}
+
+impl std::error::Error for ExpansionAdapterError {}
+
 fn require_open(residual: &ProofResidual) -> Result<(), ExpansionAdapterError> {
     if residual.status == ResidualStatus::Open { Ok(()) } else { Err(ExpansionAdapterError::ResidualNotOpen) }
 }

@@ -85,6 +85,8 @@ pub enum ContextFederationError {
     UnsupportedMaboWikidataRevision(String),
     #[error("unsupported Mabo Wikidata property: {0}")]
     UnsupportedMaboWikidataProperty(String),
+    #[error("Wikidata candidate coordinate mismatch: {0}")]
+    WikidataCandidateMismatch(String),
     #[error("Mabo Wikidata candidate coordinate mismatch: {0}")]
     MaboWikidataCandidateMismatch(String),
     #[error("invalid sha256 hex: {0}")]
@@ -93,7 +95,11 @@ pub enum ContextFederationError {
     Postgres(#[from] postgres::Error),
 }
 
-fn mabo_wikidata_relation_type(property_ref: &str) -> Option<&'static str> {
+/// Finite provider-property -> durable context-role mapping used by the Mabo
+/// world-expansion surface. This is intentionally not a general Wikidata
+/// semantic inference rule.
+#[must_use]
+pub fn bounded_wikidata_relation_type(property_ref: &str) -> Option<&'static str> {
     match property_ref {
         "P1001" => Some("context:wikidata:jurisdiction"),
         "P710" => Some("context:wikidata:participant"),
@@ -104,15 +110,89 @@ fn mabo_wikidata_relation_type(property_ref: &str) -> Option<&'static str> {
     }
 }
 
+/// Exact inverse of the bounded reviewed Wikidata relation mapping above.
+///
+/// This is provider-coordinate recovery for relations created by the bounded
+/// context producer; it is not a general semantic-label -> Wikidata-property
+/// inference rule. Unknown labels fail closed.
+#[must_use]
+pub fn mabo_wikidata_property_ref(relation_type_ref: &str) -> Option<&'static str> {
+    match relation_type_ref {
+        "context:wikidata:jurisdiction" => Some("P1001"),
+        "context:wikidata:participant" => Some("P710"),
+        "context:wikidata:court" => Some("P4884"),
+        "context:wikidata:judge" => Some("P1594"),
+        "context:wikidata:overrules" => Some("P4006"),
+        _ => None,
+    }
+}
+
+fn exact_wikidata_revision_matches_source(source_revision_ref: &str, source_ref: &str) -> bool {
+    let fields = source_revision_ref.split(':').collect::<Vec<_>>();
+    fields.len() == 4
+        && fields[0] == "wikidata"
+        && fields[1] == source_ref
+        && fields[2] == "oldid"
+        && fields[3]
+            .parse::<u64>()
+            .is_ok_and(|revision_id| revision_id > 0)
+}
+
+/// Convert one exact bounded Wikidata property candidate into durable context
+/// only after an explicit relation/context review decision.
+///
+/// Unlike `review_mabo_wikidata_candidate`, this accepts any QID provided the
+/// source manifestation is pinned as `wikidata:<same-QID>:oldid:<positive>`.
+/// The finite property mapping remains exactly the Mabo bounded context surface.
+/// Identity review is not consulted here and cannot substitute for this review.
+pub fn review_bounded_wikidata_candidate(
+    source_revision_ref: impl Into<String>,
+    candidate_id: impl Into<String>,
+    source_ref: impl Into<String>,
+    target_ref: impl Into<String>,
+    property_ref: impl Into<String>,
+    review_decision: ContextReviewDecision,
+) -> Result<ReviewedContextEdge, ContextFederationError> {
+    let source_revision_ref = source_revision_ref.into();
+    let candidate_id = candidate_id.into();
+    let source_ref = source_ref.into();
+    let target_ref = target_ref.into();
+    let property_ref = property_ref.into();
+
+    if review_decision != ContextReviewDecision::Reviewed {
+        return Err(ContextFederationError::CandidateNotReviewed(candidate_id));
+    }
+    if !exact_wikidata_revision_matches_source(&source_revision_ref, &source_ref) {
+        return Err(ContextFederationError::WikidataCandidateMismatch(format!(
+            "source revision {source_revision_ref} does not pin source {source_ref}"
+        )));
+    }
+
+    let relation_type_ref = bounded_wikidata_relation_type(&property_ref).ok_or_else(|| {
+        ContextFederationError::UnsupportedMaboWikidataProperty(property_ref.clone())
+    })?;
+    let expected_candidate_id = format!("wikidata:{source_ref}:{property_ref}:{target_ref}");
+    if candidate_id != expected_candidate_id {
+        return Err(ContextFederationError::WikidataCandidateMismatch(format!(
+            "expected candidate id {expected_candidate_id}, got {candidate_id}"
+        )));
+    }
+
+    reviewed_context_edge(
+        SourceFamily::Wikidata,
+        source_revision_ref,
+        source_ref,
+        target_ref,
+        relation_type_ref,
+    )
+}
+
 /// Convert one exact Mabo Wikidata property candidate into durable context only
 /// after an explicit review decision.
 ///
-/// This function deliberately accepts primitive candidate coordinates rather
-/// than depending on the route-selector crate. Acquisition/SLRG decoding stays
-/// upstream; PostgreSQL persistence owns only the reviewed boundary artifact.
-/// `P4006` is therefore stored as an `overrules` context relation, but neither
-/// its upstream `AuthoritySource` producer family nor this review creates legal
-/// authority, applicability, proposition payment, or claim truth.
+/// This compatibility wrapper retains the stronger original contract: the
+/// source must be Q1501525 at the exact reviewed Mabo revision. The generalized
+/// bounded reviewer above is used only after these Mabo-specific checks pass.
 pub fn review_mabo_wikidata_candidate(
     source_revision_ref: impl Into<String>,
     candidate_id: impl Into<String>,
@@ -141,23 +221,20 @@ pub fn review_mabo_wikidata_candidate(
         ));
     }
 
-    let relation_type_ref = mabo_wikidata_relation_type(&property_ref).ok_or_else(|| {
-        ContextFederationError::UnsupportedMaboWikidataProperty(property_ref.clone())
-    })?;
-    let expected_candidate_id = format!("wikidata:{source_ref}:{property_ref}:{target_ref}");
-    if candidate_id != expected_candidate_id {
-        return Err(ContextFederationError::MaboWikidataCandidateMismatch(
-            format!("expected candidate id {expected_candidate_id}, got {candidate_id}"),
-        ));
-    }
-
-    reviewed_context_edge(
-        SourceFamily::Wikidata,
+    review_bounded_wikidata_candidate(
         source_revision_ref,
+        candidate_id,
         source_ref,
         target_ref,
-        relation_type_ref,
+        property_ref,
+        review_decision,
     )
+    .map_err(|error| match error {
+        ContextFederationError::WikidataCandidateMismatch(detail) => {
+            ContextFederationError::MaboWikidataCandidateMismatch(detail)
+        }
+        other => other,
+    })
 }
 
 /// Build one reviewed, revision-pinned external context edge. Different source

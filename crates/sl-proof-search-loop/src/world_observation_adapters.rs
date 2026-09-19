@@ -19,6 +19,24 @@ pub enum WorldObservationAdapterError {
     WikidataSourcePromoted,
 }
 
+impl std::fmt::Display for WorldObservationAdapterError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::ExpansionAdapter(err) => write!(f, "expansion adapter: {err}"),
+            other => write!(f, "{other:?}"),
+        }
+    }
+}
+
+impl std::error::Error for WorldObservationAdapterError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::ExpansionAdapter(err) => Some(err),
+            _ => None,
+        }
+    }
+}
+
 const fn supported_wikidata_property_producer(producer: ProducerFamily) -> bool {
     matches!(
         producer,

@@ -96,6 +96,24 @@ pub enum WorldExpansionCycleError {
     Reentry(WorldReentryError),
 }
 
+impl std::fmt::Display for WorldExpansionCycleError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Step(err) => write!(f, "step error: {err}"),
+            Self::Reentry(err) => write!(f, "reentry error: {err}"),
+        }
+    }
+}
+
+impl std::error::Error for WorldExpansionCycleError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Step(err) => Some(err),
+            Self::Reentry(err) => Some(err),
+        }
+    }
+}
+
 impl From<WorldExpansionStepError> for WorldExpansionCycleError {
     fn from(value: WorldExpansionStepError) -> Self {
         Self::Step(value)

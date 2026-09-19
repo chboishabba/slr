@@ -70,6 +70,14 @@ pub enum WorldReentryError {
     FrontierTransition(FrontierTransitionError),
 }
 
+impl std::fmt::Display for WorldReentryError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self:?}")
+    }
+}
+
+impl std::error::Error for WorldReentryError {}
+
 impl From<FrontierTransitionError> for WorldReentryError {
     fn from(value: FrontierTransitionError) -> Self { Self::FrontierTransition(value) }
 }
