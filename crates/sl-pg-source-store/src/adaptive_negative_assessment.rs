@@ -235,7 +235,7 @@ pub fn load_adaptive_negative_assessments(
     let mut client = Client::connect(config.database_url(), NoTls)?;
     client.batch_execute(ADAPTIVE_NEGATIVE_SCHEMA_SQL)?;
     let rows = client.query(
-        "SELECT residual_ref, move_ref, kind_ref, assessment_ref, source_revision_ref,                 candidate_only, makes_move_inadmissible, satisfies_residual,                 creates_semantic_authority, applicability_promoted, claim_truth_promoted,                 receipt_authority, receipt_sha256          FROM context.adaptive_negative_assessment_receipt          WHERE candidate_only = TRUE            AND makes_move_inadmissible = TRUE            AND satisfies_residual = FALSE            AND creates_semantic_authority = FALSE            AND applicability_promoted = FALSE            AND claim_truth_promoted = FALSE          ORDER BY residual_ref, move_ref, kind_ref, assessment_ref, source_revision_ref",
+        "SELECT residual_ref, move_ref, kind_ref, assessment_ref, source_revision_ref,                 candidate_only, makes_move_inadmissible, satisfies_residual,                 creates_semantic_authority, applicability_promoted, claim_truth_promoted,                 receipt_authority, receipt_sha256          FROM context.adaptive_negative_assessment_receipt          WHERE candidate_only = TRUE            AND makes_move_inadmissible = TRUE            AND satisfies_residual = FALSE            AND creates_semantic_authority = FALSE            AND applicability_promoted = FALSE            AND claim_truth_promoted = FALSE            AND receipt_authority = 'reviewed_negative_search_constraint_only'          ORDER BY residual_ref, move_ref, kind_ref, assessment_ref, source_revision_ref",
         &[],
     )?;
 
