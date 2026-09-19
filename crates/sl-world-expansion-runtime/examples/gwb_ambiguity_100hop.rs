@@ -17,8 +17,9 @@ use sensiblaw_world_expansion_runtime::gwb_ambiguity_campaign::{
     ambiguity_residuals_from_rows, compile_gwb_question_frontier,
     gwb_ambiguity_world_sha256, project_open_gwb_state_after_review,
     residuals_opened_by_reviewed_routes, seed_gwb_qid_ambiguities,
-    select_gwb_investigation, GwbInvestigationCandidate, GwbInvestigationKind,
-    GWB_ADAPTIVE_CAMPAIGN_REF, GWB_ADAPTIVE_HOP_TARGET,
+    select_gwb_investigation, GwbAmbiguityKind, GwbAmbiguityResidual,
+    GwbInvestigationCandidate, GwbInvestigationKind, GWB_ADAPTIVE_CAMPAIGN_REF,
+    GWB_ADAPTIVE_HOP_TARGET,
 };
 use sensiblaw_world_expansion_runtime::gwb_analysis::{
     analyze_gwb_hops, render_gwb_analysis_receipt,
@@ -26,6 +27,10 @@ use sensiblaw_world_expansion_runtime::gwb_analysis::{
 use sensiblaw_world_expansion_runtime::gwb_review::{
     gwb_frontier_sha256, parse_gwb_review_tsv, pending_gwb_review_bundle,
     prepare_reviewed_gwb_hop, GwbResidualEffect, GwbReviewAssignment,
+};
+use sensiblaw_world_expansion_runtime::gwb_supervised_type_closure::{
+    acquire_supervised_type_closure, render_type_closure_review_evidence,
+    type_closure_route_candidates, TypeClosureQuestion, TypeClosureRequest,
 };
 
 const GWB_REVIEWED_ROOT_QIDS: &[&str] = &[
@@ -94,6 +99,30 @@ fn selected_route_observations(
         })
         .collect();
     Ok(rows)
+}
+
+fn type_closure_question_for_selection(
+    selected: &GwbInvestigationCandidate,
+    residuals: &[GwbAmbiguityResidual],
+) -> Option<TypeClosureQuestion> {
+    for residual_ref in &selected.target_residual_refs {
+        let residual = residuals
+            .iter()
+            .find(|residual| &residual.residual_ref == residual_ref)?;
+        match residual.kind {
+            GwbAmbiguityKind::Superclass | GwbAmbiguityKind::Subclass => {
+                return Some(TypeClosureQuestion::Superclass);
+            }
+            GwbAmbiguityKind::TypeClass
+            | GwbAmbiguityKind::PropertySupport
+            | GwbAmbiguityKind::CompetingAlternatives
+            | GwbAmbiguityKind::ConsumerSemanticGap => {
+                return Some(TypeClosureQuestion::TypeClass);
+            }
+            _ => {}
+        }
+    }
+    None
 }
 
 fn append_observations(mut bundle: String, rows: &[RouteCandidate]) -> String {
@@ -206,6 +235,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
 
         let mut observed_routes = Vec::new();
+        let mut supervised_type_closure_evidence = String::new();
         let (source_revision_ref, evidence_digest_ref) =
             if selected.investigation_kind == GwbInvestigationKind::CrossLanguageSurface
                 && selected.target_ref.is_some()
@@ -252,6 +282,52 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 observed_routes =
                     selected_route_observations(&selected, &acquired.rdf_bytes, qid)?;
                 (acquired.source_revision_ref, acquired.content_digest_ref)
+            } else if selected.investigation_kind
+                == GwbInvestigationKind::ExternalOntologyFallback
+            {
+                let qid = selected
+                    .source_ref
+                    .as_deref()
+                    .ok_or_else(|| std::io::Error::other(
+                        "supervised classification fallback missing root QID"
+                    ))?;
+                let question = type_closure_question_for_selection(&selected, &residuals)
+                    .ok_or_else(|| std::io::Error::other(
+                        "external fallback is not a supervised type/class residual"
+                    ))?;
+                let closure = acquire_supervised_type_closure(&TypeClosureRequest {
+                    root_qid: qid.to_owned(),
+                    question,
+                    max_depth: 4,
+                    max_nodes: 32,
+                })?;
+                if !closure.candidate_only
+                    || closure.creates_semantic_authority
+                    || closure.applicability_promoted
+                    || closure.claim_truth_promoted
+                    || closure.superclass_residual_paid
+                {
+                    return Err(std::io::Error::other(
+                        "supervised type closure violated non-promotion boundary"
+                    )
+                    .into());
+                }
+                println!(
+                    "supervised_type_closure_disposition={}",
+                    closure.disposition.as_str()
+                );
+                println!(
+                    "supervised_type_closure_nodes={}",
+                    closure.node_receipts.len()
+                );
+                println!(
+                    "supervised_type_closure_truncated={}",
+                    closure.truncated
+                );
+                observed_routes = type_closure_route_candidates(&closure);
+                supervised_type_closure_evidence =
+                    render_type_closure_review_evidence(&closure);
+                (closure.source_manifest_ref, closure.evidence_digest_ref)
             } else {
                 println!("stop_reason=DriverBlocked");
                 println!("blocked_move={}", selected.move_ref);
@@ -270,7 +346,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 &source_revision_ref,
                 &evidence_digest_ref,
             )?;
-            let bundle = append_observations(bundle, &observed_routes);
+            let mut bundle = append_observations(bundle, &observed_routes);
+            bundle.push_str(&supervised_type_closure_evidence);
             let path = pending_path(hop_index);
             if let Some(parent) = path.parent() {
                 fs::create_dir_all(parent)?;

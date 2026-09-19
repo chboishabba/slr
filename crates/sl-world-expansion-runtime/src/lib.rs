@@ -7,6 +7,7 @@
 
 pub mod gwb_ambiguity_campaign;
 pub mod gwb_review;
+pub mod gwb_supervised_type_closure;
 pub mod gwb_analysis;
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};

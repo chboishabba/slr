@@ -1,0 +1,103 @@
+# status=GwbReviewRequired
+# hop_index=2
+# frontier_sha256=sha256:fa5f855121d669473dfd6713e5cd7f60260542a08b1bd6343665ffeefb4929e9
+# selected_move=move:gwb:external:residual:gwb:Q7725634:superclass
+# investigation_kind=external-ontology-fallback
+# selected_source=Q7725634
+# selected_target=
+# selected_property=
+# source_revision=wikidata-type-closure:Q7725634:sha256:feee1753e6a2964d291a915c335d29b4fa45bb0ddd6e99ebc1a29333771af619
+# evidence_digest=sha256:feee1753e6a2964d291a915c335d29b4fa45bb0ddd6e99ebc1a29333771af619
+# target_residuals=residual:gwb:Q7725634:superclass
+# review_manifest_template	2	sha256:fa5f855121d669473dfd6713e5cd7f60260542a08b1bd6343665ffeefb4929e9	move:gwb:external:residual:gwb:Q7725634:superclass	wikidata-type-closure:Q7725634:sha256:feee1753e6a2964d291a915c335d29b4fa45bb0ddd6e99ebc1a29333771af619	sha256:feee1753e6a2964d291a915c335d29b4fa45bb0ddd6e99ebc1a29333771af619	<outcome>	<residual-effect>	<review-ref>
+# observed_route	wikidata-type-closure:Q116474095:P279:Q1437361	ClassificationEvidence	WikidataProperty	Q116474095	P279	Q1437361
+# observed_route	wikidata-type-closure:Q116474095:P31:Q19478619	ClassificationEvidence	WikidataProperty	Q116474095	P31	Q19478619
+# observed_route	wikidata-type-closure:Q1292119:P279:Q1207505	ClassificationEvidence	WikidataProperty	Q1292119	P279	Q1207505
+# observed_route	wikidata-type-closure:Q1292119:P31:Q151885	ClassificationEvidence	WikidataProperty	Q1292119	P31	Q151885
+# observed_route	wikidata-type-closure:Q1292119:P31:Q3533467	ClassificationEvidence	WikidataProperty	Q1292119	P31	Q3533467
+# observed_route	wikidata-type-closure:Q132907471:P279:Q35120	ClassificationEvidence	WikidataProperty	Q132907471	P279	Q35120
+# observed_route	wikidata-type-closure:Q132907471:P31:Q104086571	ClassificationEvidence	WikidataProperty	Q132907471	P31	Q104086571
+# observed_route	wikidata-type-closure:Q133449656:P279:Q96251598	ClassificationEvidence	WikidataProperty	Q133449656	P279	Q96251598
+# observed_route	wikidata-type-closure:Q133449656:P31:Q19478619	ClassificationEvidence	WikidataProperty	Q133449656	P31	Q19478619
+# observed_route	wikidata-type-closure:Q141444735:P279:Q132907471	ClassificationEvidence	WikidataProperty	Q141444735	P279	Q132907471
+# observed_route	wikidata-type-closure:Q141444832:P279:Q141444818	ClassificationEvidence	WikidataProperty	Q141444832	P279	Q141444818
+# observed_route	wikidata-type-closure:Q141444832:P279:Q7563762	ClassificationEvidence	WikidataProperty	Q141444832	P279	Q7563762
+# observed_route	wikidata-type-closure:Q141445610:P279:Q141447513	ClassificationEvidence	WikidataProperty	Q141445610	P279	Q141447513
+# observed_route	wikidata-type-closure:Q1437361:P279:Q2085518	ClassificationEvidence	WikidataProperty	Q1437361	P279	Q2085518
+# observed_route	wikidata-type-closure:Q1437361:P31:Q19478619	ClassificationEvidence	WikidataProperty	Q1437361	P31	Q19478619
+# observed_route	wikidata-type-closure:Q15621286:P279:Q386724	ClassificationEvidence	WikidataProperty	Q15621286	P279	Q386724
+# observed_route	wikidata-type-closure:Q16686448:P279:Q488383	ClassificationEvidence	WikidataProperty	Q16686448	P279	Q488383
+# observed_route	wikidata-type-closure:Q16686448:P31:Q33104279	ClassificationEvidence	WikidataProperty	Q16686448	P31	Q33104279
+# observed_route	wikidata-type-closure:Q16686448:P31:Q96251598	ClassificationEvidence	WikidataProperty	Q16686448	P31	Q96251598
+# observed_route	wikidata-type-closure:Q16889133:P279:Q5127848	ClassificationEvidence	WikidataProperty	Q16889133	P279	Q5127848
+# observed_route	wikidata-type-closure:Q16889133:P31:Q115490628	ClassificationEvidence	WikidataProperty	Q16889133	P31	Q115490628
+# observed_route	wikidata-type-closure:Q16889133:P31:Q151885	ClassificationEvidence	WikidataProperty	Q16889133	P31	Q151885
+# observed_route	wikidata-type-closure:Q16889133:P31:Q19478619	ClassificationEvidence	WikidataProperty	Q16889133	P31	Q19478619
+# observed_route	wikidata-type-closure:Q16889133:P31:Q23958852	ClassificationEvidence	WikidataProperty	Q16889133	P31	Q23958852
+# observed_route	wikidata-type-closure:Q17537576:P279:Q15621286	ClassificationEvidence	WikidataProperty	Q17537576	P279	Q15621286
+# observed_route	wikidata-type-closure:Q17537576:P31:Q133449656	ClassificationEvidence	WikidataProperty	Q17537576	P31	Q133449656
+# observed_route	wikidata-type-closure:Q2085518:P279:Q1292119	ClassificationEvidence	WikidataProperty	Q2085518	P279	Q1292119
+# observed_route	wikidata-type-closure:Q2085518:P279:Q6671777	ClassificationEvidence	WikidataProperty	Q2085518	P279	Q6671777
+# observed_route	wikidata-type-closure:Q2085518:P31:Q111972893	ClassificationEvidence	WikidataProperty	Q2085518	P31	Q111972893
+# observed_route	wikidata-type-closure:Q21146257:P279:Q141444832	ClassificationEvidence	WikidataProperty	Q21146257	P279	Q141444832
+# observed_route	wikidata-type-closure:Q21146257:P279:Q16889133	ClassificationEvidence	WikidataProperty	Q21146257	P279	Q16889133
+# observed_route	wikidata-type-closure:Q21146257:P31:Q151885	ClassificationEvidence	WikidataProperty	Q21146257	P31	Q151885
+# observed_route	wikidata-type-closure:Q21146257:P31:Q19478619	ClassificationEvidence	WikidataProperty	Q21146257	P31	Q19478619
+# observed_route	wikidata-type-closure:Q35120:P31:Q23958852	ClassificationEvidence	WikidataProperty	Q35120	P31	Q23958852
+# observed_route	wikidata-type-closure:Q386724:P279:Q16686448	ClassificationEvidence	WikidataProperty	Q386724	P279	Q16686448
+# observed_route	wikidata-type-closure:Q47461344:P279:Q15621286	ClassificationEvidence	WikidataProperty	Q47461344	P279	Q15621286
+# observed_route	wikidata-type-closure:Q47461344:P31:Q133449656	ClassificationEvidence	WikidataProperty	Q47461344	P31	Q133449656
+# observed_route	wikidata-type-closure:Q488383:P279:Q141445610	ClassificationEvidence	WikidataProperty	Q488383	P279	Q141445610
+# observed_route	wikidata-type-closure:Q488383:P279:Q35120	ClassificationEvidence	WikidataProperty	Q488383	P279	Q35120
+# observed_route	wikidata-type-closure:Q488383:P31:Q115471117	ClassificationEvidence	WikidataProperty	Q488383	P31	Q115471117
+# observed_route	wikidata-type-closure:Q488383:P31:Q151885	ClassificationEvidence	WikidataProperty	Q488383	P31	Q151885
+# observed_route	wikidata-type-closure:Q488383:P31:Q23958852	ClassificationEvidence	WikidataProperty	Q488383	P31	Q23958852
+# observed_route	wikidata-type-closure:Q6671777:P279:Q140961552	ClassificationEvidence	WikidataProperty	Q6671777	P279	Q140961552
+# observed_route	wikidata-type-closure:Q6671777:P31:Q33104279	ClassificationEvidence	WikidataProperty	Q6671777	P31	Q33104279
+# observed_route	wikidata-type-closure:Q7725634:P279:Q47461344	ClassificationEvidence	WikidataProperty	Q7725634	P279	Q47461344
+# observed_route	wikidata-type-closure:Q7725634:P279:Q838948	ClassificationEvidence	WikidataProperty	Q7725634	P279	Q838948
+# observed_route	wikidata-type-closure:Q7725634:P31:Q116474095	ClassificationEvidence	WikidataProperty	Q7725634	P31	Q116474095
+# observed_route	wikidata-type-closure:Q7725634:P31:Q133449656	ClassificationEvidence	WikidataProperty	Q7725634	P31	Q133449656
+# observed_route	wikidata-type-closure:Q838948:P279:Q16686448	ClassificationEvidence	WikidataProperty	Q838948	P279	Q16686448
+# observed_route	wikidata-type-closure:Q838948:P279:Q17537576	ClassificationEvidence	WikidataProperty	Q838948	P279	Q17537576
+# observed_route	wikidata-type-closure:Q838948:P31:Q133449656	ClassificationEvidence	WikidataProperty	Q838948	P31	Q133449656
+# observed_route	wikidata-type-closure:Q838948:P31:Q139243747	ClassificationEvidence	WikidataProperty	Q838948	P31	Q139243747
+# observed_route	wikidata-type-closure:Q838948:P31:Q151885	ClassificationEvidence	WikidataProperty	Q838948	P31	Q151885
+# observed_route	wikidata-type-closure:Q96251598:P279:Q141444735	ClassificationEvidence	WikidataProperty	Q96251598	P279	Q141444735
+# observed_route	wikidata-type-closure:Q96251598:P279:Q21146257	ClassificationEvidence	WikidataProperty	Q96251598	P279	Q21146257
+# observed_route	wikidata-type-closure:Q96251598:P31:Q151885	ClassificationEvidence	WikidataProperty	Q96251598	P31	Q151885
+# observed_route	wikidata-type-closure:Q96251598:P31:Q21146257	ClassificationEvidence	WikidataProperty	Q96251598	P31	Q21146257
+# observed_route	wikidata-type-closure:Q96251598:P31:Q23958852	ClassificationEvidence	WikidataProperty	Q96251598	P31	Q23958852
+# supervised_type_closure_disposition=truncated
+# supervised_type_closure_root=Q7725634
+# supervised_type_closure_question=superclass
+# supervised_type_closure_truncated=true
+# observed_direct_surface_complete=true
+# global_ontology_complete=false
+# snapshot_simultaneous=false
+# direct_instance_types=Q116474095,Q133449656
+# direct_superclasses=Q47461344,Q838948
+# observed_instance_type_closure=Q116474095,Q1207505,Q1292119,Q132907471,Q133449656,Q140961552,Q141444735,Q141444818,Q141444832,Q1437361,Q16889133,Q2085518,Q21146257,Q35120,Q5127848,Q6671777,Q7563762,Q96251598
+# observed_superclass_closure=Q141445610,Q141447513,Q15621286,Q16686448,Q17537576,Q35120,Q386724,Q47461344,Q488383,Q838948
+# type_closure_source	Q116474095	wikidata:Q116474095:oldid:2545044217	sha256:3b19e18449ad74c6245783ea5e2530001b42fbeda2422befcfe2dbde8328eee2
+# type_closure_source	Q1292119	wikidata:Q1292119:oldid:2539116134	sha256:bd76c61a1df2a1af63e591df77358e933e166458fdb2e14407f268e559df2aca
+# type_closure_source	Q132907471	wikidata:Q132907471:oldid:2545236145	sha256:2981aae911f96309072daac00c9f32d78ac7ab0098adf411e9ec97c303e7096f
+# type_closure_source	Q133449656	wikidata:Q133449656:oldid:2533394577	sha256:830ddd0f21b0e67ecc3ad8e4b077c77f9471f9e3cbb3b84570a3381a423412b8
+# type_closure_source	Q141444735	wikidata:Q141444735:oldid:2546639160	sha256:b08d987b384a46303240f9d67ec163415b9228f0b4e28a0e259e5bf0ee8a0cb1
+# type_closure_source	Q141444832	wikidata:Q141444832:oldid:2545026686	sha256:744c067fb894a2bce0bb6e0cdf1a7a3d2dccbc05466ba3df39355b1c9b8d5b0a
+# type_closure_source	Q141445610	wikidata:Q141445610:oldid:2546186545	sha256:66919471ae44a52e53dac3e09679fc0de1003eea1296b2ceba6612b27a66ba3d
+# type_closure_source	Q1437361	wikidata:Q1437361:oldid:2534256234	sha256:9bbd2a8e36f1d97a13d3261ca2ccf973dc97fb13245cf6eb55aba6a6442a0f6d
+# type_closure_source	Q15621286	wikidata:Q15621286:oldid:2540003127	sha256:1499776692255f442640ae228c483a192dc7e807ccc2ea66da8a2b62c3a0d2ff
+# type_closure_source	Q16686448	wikidata:Q16686448:oldid:2547164273	sha256:1dc7d27945364a44c1dc6e83fe1d919d8b8555401222bbb1f2ea6c3984337f68
+# type_closure_source	Q16889133	wikidata:Q16889133:oldid:2541080324	sha256:dbfdf57ef54bc98a606be255888a34d1a4b810ff32c696333cb5c5e9b7aacd4d
+# type_closure_source	Q17537576	wikidata:Q17537576:oldid:2527988465	sha256:73e116fd28a3359f2f5181e5ac6ac351be6dd305d77d23df7e5bf87f392dcc92
+# type_closure_source	Q2085518	wikidata:Q2085518:oldid:2538588169	sha256:7d4fefed81fe43aa6e8c1acdea7f3765da0b92a8496a577ba9535ea71daaf514
+# type_closure_source	Q21146257	wikidata:Q21146257:oldid:2545026770	sha256:df81eb65aac0dfd8e6a177760dab4d85657e486536c38c13a105440cf7a27587
+# type_closure_source	Q35120	wikidata:Q35120:oldid:2546807460	sha256:9446325b728023ff222d0af464eab27b223415ccfbde3e8d30ca1faec4548ad9
+# type_closure_source	Q386724	wikidata:Q386724:oldid:2527988740	sha256:faedc69e6026fb5fec9bb9a04bada8fcfce689358eb0b33be48af944ba7f7654
+# type_closure_source	Q47461344	wikidata:Q47461344:oldid:2545579742	sha256:44c7bc0fa9cb6f167fcc93ed6c8ada041ca383ea64e6e42315450220d17f090b
+# type_closure_source	Q488383	wikidata:Q488383:oldid:2546642824	sha256:ac6c72ffb089e431c524fb4a53b60c27e4266e919a999aad5b19f414e7e4fa2c
+# type_closure_source	Q6671777	wikidata:Q6671777:oldid:2547044451	sha256:22baf03dce8b39b2d717602356385e769b6fc14fef7145fb7799fba319a88442
+# type_closure_source	Q7725634	wikidata:Q7725634:oldid:2542268616	sha256:a42d2f4b8e0039f867f65f8470d8057f42ded0d57d747c6f7523fba5df5407af
+# type_closure_source	Q838948	wikidata:Q838948:oldid:2543591640	sha256:780e9d9ffaf3927271017e84e6e24dab6c90bf187fc4167746f53eff23daa88e
+# type_closure_source	Q96251598	wikidata:Q96251598:oldid:2545878780	sha256:4b9b259b1857546d8a9df985effbbc9ee950e0c46be2446358184b338dc2f379
