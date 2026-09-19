@@ -503,13 +503,17 @@ impl TypeClosureNodeProvider for RevisionPinnedLiveTypeProvider {
                         },
                     }));
                 }
-                Err(error @ ProviderError::Network(_)) if attempt < self.policy.max_retries => {
+                Err(error)
+                    if error.network_is_retryable() && attempt < self.policy.max_retries =>
+                {
                     self.stats.retries = self.stats.retries.saturating_add(1);
-                    if error.to_string().contains("429") {
+                    if error.network_status_code() == Some(429) {
                         self.stats.rate_limit_retries =
                             self.stats.rate_limit_retries.saturating_add(1);
                     }
-                    let delay = self.backoff_seconds(attempt);
+                    let delay = error
+                        .network_retry_after_seconds()
+                        .unwrap_or_else(|| self.backoff_seconds(attempt));
                     if delay > 0.0 {
                         sleep(Duration::from_secs_f64(delay));
                     }
@@ -557,7 +561,10 @@ impl ZelphHfTypeProvider {
             return None;
         }
         let executable = env::var("SLR_ZELPH_EXECUTABLE").unwrap_or_else(|_| "zelph".into());
-        let snapshot_ref = env::var("SLR_ZELPH_SNAPSHOT_REF").unwrap_or_else(|_| source.clone());
+        let snapshot_ref = env::var("SLR_ZELPH_SNAPSHOT_REF").ok()?;
+        if snapshot_ref.trim().is_empty() {
+            return None;
+        }
         let language = env::var("SLR_ZELPH_LANGUAGE").unwrap_or_else(|_| "en".into());
         Some(Self::new(executable, source, snapshot_ref, language))
     }
