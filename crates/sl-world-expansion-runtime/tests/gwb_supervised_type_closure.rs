@@ -161,3 +161,49 @@ fn truncation_forces_abstaining_disposition() {
     assert_eq!(closure.disposition, TypeClosureDisposition::Truncated);
     assert!(!closure.superclass_residual_paid);
 }
+
+
+#[test]
+fn q7725634_historical_lean_cache_shape_is_direct_superclass_observation() {
+    // Historical regression only:
+    // dashi_lean4@349f9b7d...
+    // DASHI/output-final_aristotle/.wikidata-cache/Q7725634.json
+    // lastrevid=2519725566 contained direct P279 values Q838948 and Q47461344.
+    // This does NOT assert current Wikidata state.
+    let closure = evaluate_observed_type_closure(
+        &TypeClosureRequest {
+            root_qid: "Q7725634".into(),
+            question: TypeClosureQuestion::Superclass,
+            max_depth: 4,
+            max_nodes: 32,
+        },
+        &[
+            obs(
+                "Q7725634",
+                TypeObservationProperty::SubclassOf,
+                "Q838948",
+                "wikidata:Q7725634:oldid:2519725566",
+            ),
+            obs(
+                "Q7725634",
+                TypeObservationProperty::SubclassOf,
+                "Q47461344",
+                "wikidata:Q7725634:oldid:2519725566",
+            ),
+        ],
+        false,
+    )
+    .unwrap();
+
+    assert_eq!(
+        closure.disposition,
+        TypeClosureDisposition::DirectSuperclassObserved
+    );
+    assert_eq!(
+        closure.direct_superclasses,
+        vec!["Q47461344".to_string(), "Q838948".to_string()]
+    );
+    assert!(!closure.superclass_residual_paid);
+    assert!(!closure.global_ontology_complete);
+    assert!(!closure.snapshot_simultaneous);
+}
