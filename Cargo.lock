@@ -1356,6 +1356,7 @@ name = "sensiblaw-world-expansion-runtime"
 version = "0.1.0"
 dependencies = [
  "sensiblaw-consumer-residual",
+ "sensiblaw-core",
  "sensiblaw-governed-legal-provider",
  "sensiblaw-pg-source-store",
  "sensiblaw-proof-search-loop",
