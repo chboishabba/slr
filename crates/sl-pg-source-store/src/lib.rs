@@ -4,6 +4,7 @@ mod candidate_pnf;
 mod context_federation;
 mod discovery_identity_baseline;
 mod discovery_lineage;
+mod exact_legal_source_text;
 mod latent_world;
 mod legal_ir_materialization;
 mod non_novel_identity_alias;
@@ -42,6 +43,9 @@ pub use discovery_identity_baseline::{
 pub use discovery_lineage::{
     discovery_lineage_row, materialize_discovery_lineage, DiscoveryLineageError,
     DiscoveryLineageInput, DiscoveryLineageMaterializationReceipt, DiscoveryLineageRow,
+};
+pub use exact_legal_source_text::{
+    load_exact_legal_source_text, ExactLegalSourceText, ExactLegalSourceTextError,
 };
 pub use latent_world::{
     load_latent_world_rows, load_latent_world_rows_with_budget, LatentWorldBudget,
