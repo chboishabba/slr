@@ -9,12 +9,13 @@ use sensiblaw_route_executor::{AcquiredSource, AcquiredSourceKind};
 use sensiblaw_route_selector::{ProducerFamily, RouteCandidate, RouteFamily};
 use sensiblaw_wikimedia_candidate_provider::entity_revision_receipt_from_rdf;
 use sensiblaw_world_expansion_runtime::sprint2_provider_normalisation::{
-    normalize_cached_legal_provider, normalize_oalc_provider, normalize_wikidata_provider,
-    normalize_wikipedia_provider, reduce_reviewed_provider_evidence,
+    normalize_cache_first_resolution, normalize_cached_legal_provider, normalize_oalc_provider,
+    normalize_wikidata_provider, normalize_wikipedia_provider, reduce_reviewed_provider_evidence,
+    CacheFirstProviderPath,
 };
 use sensiblaw_reviewed_evidence_payment::ReviewedEvidenceCoordinate;
 use sensiblaw_pg_source_store::{
-    CachedResolvedDocument, ResolutionPath, TemporalCoverage,
+    CacheFirstResolution, CachedResolvedDocument, ResolutionPath, TemporalCoverage,
 };
 
 fn review_for(observation_ref: &str) -> ReviewedEvidenceCoordinate {
@@ -171,4 +172,76 @@ fn cache_first_legal_source_enters_the_same_canonical_review_reducer_path() {
     assert!(!reduced.creates_semantic_authority);
     assert!(!reduced.applicability_promoted);
     assert!(!reduced.claim_truth_promoted);
+}
+
+
+#[test]
+fn pg_hit_preserves_zero_network_when_lowered_to_canonical_evidence() {
+    let cached = CachedResolvedDocument {
+        document_ref: "document:cache:hit".into(),
+        external_source_revision_ref: "legal:revision:hit".into(),
+        source_resolution_ref: "resolution:hit".into(),
+        provider_ref: "oalc".into(),
+        dataset_ref: "isaacus/open-australian-legal-corpus".into(),
+        dataset_revision_ref: "dataset:fixture".into(),
+        external_version_ref: "version:fixture".into(),
+        citation: "Mabo v Queensland (No 2) [1992] HCA 23".into(),
+        source_ref: "case:[1992]-HCA-23".into(),
+        jurisdiction_ref: "AU".into(),
+        document_type_ref: "primary_case".into(),
+        temporal_coverage: TemporalCoverage::HistoricallyVerified,
+        resolution_path: ResolutionPath::OfflineJsonlReplay,
+        source_url: None,
+        canonical_text: "fixture canonical legal text".into(),
+    };
+    let normalized = normalize_cache_first_resolution(
+        "request:m2.4:pg-hit",
+        &CacheFirstResolution::PgHit {
+            source: cached,
+            network_requests: 0,
+        },
+        "receipt:revision:pg-hit",
+    )
+    .unwrap();
+
+    assert_eq!(normalized.path, CacheFirstProviderPath::PgHit);
+    assert_eq!(normalized.acquisition_network_requests, 0);
+    assert_eq!(normalized.verification_network_requests, 0);
+    normalized.validate().unwrap();
+}
+
+#[test]
+fn acquired_persisted_path_retains_acquisition_count_and_zero_network_verification() {
+    let cached = CachedResolvedDocument {
+        document_ref: "document:cache:miss".into(),
+        external_source_revision_ref: "legal:revision:miss".into(),
+        source_resolution_ref: "resolution:miss".into(),
+        provider_ref: "official-court".into(),
+        dataset_ref: "official-source".into(),
+        dataset_revision_ref: "dataset:fixture".into(),
+        external_version_ref: "version:fixture".into(),
+        citation: "[2026] HCA 19".into(),
+        source_ref: "case:[2026]-HCA-19".into(),
+        jurisdiction_ref: "AU".into(),
+        document_type_ref: "primary_case".into(),
+        temporal_coverage: TemporalCoverage::HistoricallyVerified,
+        resolution_path: ResolutionPath::RevisionPinnedStreamingLegacy,
+        source_url: Some("https://example.invalid/hca/19".into()),
+        canonical_text: "fixture official legal text".into(),
+    };
+    let normalized = normalize_cache_first_resolution(
+        "request:m2.4:pg-miss",
+        &CacheFirstResolution::AcquiredPersisted {
+            source: cached,
+            acquisition_network_requests: 1,
+            verification_network_requests: 0,
+        },
+        "receipt:revision:pg-miss",
+    )
+    .unwrap();
+
+    assert_eq!(normalized.path, CacheFirstProviderPath::AcquiredPersisted);
+    assert_eq!(normalized.acquisition_network_requests, 1);
+    assert_eq!(normalized.verification_network_requests, 0);
+    normalized.validate().unwrap();
 }
