@@ -17,6 +17,11 @@ pub enum EvidenceManifestationFamily {
     Other,
 }
 
+#[must_use]
+pub fn manifestation_ref_for_revision(source_revision_ref: &str) -> String {
+    format!("manifestation:{source_revision_ref}")
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EvidenceManifestation {
     pub manifestation_ref: String,
