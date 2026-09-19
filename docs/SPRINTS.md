@@ -137,12 +137,11 @@ persisted PostgreSQL ledger.
 M1.1 physical plan             source-written + tests
 M1.2 bounded transport        source-written + tests
 M1.3 generic producer exec    source-written + tests
-M1.4 reviewed recurrence      existing runtime + durable hop ledger
-M1.5 restart/replay           source-written over durable PG ledger
+M1.4 reviewed recurrence      existing generic runner + adaptive capstone test
+M1.5 restart/replay           strict validator + capstone replay + durable PG audit
 ```
 
-The remaining closure requirement is an executable receipt on the exact branch:
-Rust tests plus one persisted campaign replay showing the five gates together.
+The remaining closure requirement is an executable receipt on the exact branch: run the Rust suite/capstone, run the persisted PostgreSQL replay audit against the production campaign, and obtain the matching Agda kernel receipt.
 Until that receipt exists, Sprint 1 is **implemented awaiting runtime
 certification**, not declared closed.
 
