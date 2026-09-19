@@ -15,7 +15,7 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::io::Cursor;
 
-use sensiblaw_route_selector::{decode_route_candidate, RouteFamily};
+use sensiblaw_route_selector::{decode_route_candidate, ProducerFamily, RouteCandidate, RouteFamily};
 use sensiblaw_wikimedia_candidate_provider::{
     emit_candidates_from_rdf, fetch_latest_entity_rdf_revision_receipt, ProviderError,
 };
@@ -467,4 +467,95 @@ pub fn acquire_supervised_type_closure(
         request.root_qid, closure.evidence_digest_ref
     );
     Ok(closure)
+}
+
+
+#[must_use]
+pub fn type_closure_route_candidates(closure: &ObservedTypeClosure) -> Vec<RouteCandidate> {
+    let mut rows = closure
+        .observations
+        .iter()
+        .map(|observation| RouteCandidate {
+            candidate_id: format!(
+                "wikidata-type-closure:{}:{}:{}",
+                observation.subject_qid,
+                observation.property.property_ref(),
+                observation.target_qid
+            ),
+            producer: ProducerFamily::ClassificationEvidence,
+            route_family: RouteFamily::WikidataProperty,
+            source_ref: observation.subject_qid.clone(),
+            target_ref: observation.target_qid.clone(),
+            property_ref: observation.property.property_ref().into(),
+            cross_language_gap_coverage: 0,
+            source_surface_support: 1,
+            root_qid_support: u32::from(observation.subject_qid == closure.request.root_qid),
+            typed_property_support: 1,
+            route_specificity: 5,
+            yield_history_observed: 1,
+            prior_contracted_old_gaps: 0,
+            prior_retired_obligations: 0,
+            prior_new_gap_atoms: 0,
+            prior_network_requests: 0,
+        })
+        .collect::<Vec<_>>();
+    rows.sort_by(|left, right| left.candidate_id.cmp(&right.candidate_id));
+    rows.dedup_by(|left, right| left.candidate_id == right.candidate_id);
+    rows
+}
+
+#[must_use]
+pub fn render_type_closure_review_evidence(closure: &ObservedTypeClosure) -> String {
+    let mut out = String::new();
+    out.push_str(&format!(
+        "# supervised_type_closure_disposition={}\n",
+        closure.disposition.as_str()
+    ));
+    out.push_str(&format!(
+        "# supervised_type_closure_root={}\n",
+        closure.request.root_qid
+    ));
+    out.push_str(&format!(
+        "# supervised_type_closure_question={}\n",
+        closure.request.question.as_str()
+    ));
+    out.push_str(&format!(
+        "# supervised_type_closure_truncated={}\n",
+        closure.truncated
+    ));
+    out.push_str(&format!(
+        "# observed_direct_surface_complete={}\n",
+        closure.observed_direct_surface_complete
+    ));
+    out.push_str(&format!(
+        "# global_ontology_complete={}\n",
+        closure.global_ontology_complete
+    ));
+    out.push_str(&format!(
+        "# snapshot_simultaneous={}\n",
+        closure.snapshot_simultaneous
+    ));
+    out.push_str(&format!(
+        "# direct_instance_types={}\n",
+        closure.direct_instance_types.join(",")
+    ));
+    out.push_str(&format!(
+        "# direct_superclasses={}\n",
+        closure.direct_superclasses.join(",")
+    ));
+    out.push_str(&format!(
+        "# observed_instance_type_closure={}\n",
+        closure.observed_instance_type_closure.join(",")
+    ));
+    out.push_str(&format!(
+        "# observed_superclass_closure={}\n",
+        closure.observed_superclass_closure.join(",")
+    ));
+    for receipt in &closure.node_receipts {
+        out.push_str(&format!(
+            "# type_closure_source\t{}\t{}\t{}\n",
+            receipt.qid, receipt.source_revision_ref, receipt.evidence_digest_ref
+        ));
+    }
+    out
 }
