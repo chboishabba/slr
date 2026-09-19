@@ -971,7 +971,14 @@ pub fn residuals_opened_by_reviewed_routes(
                     .strip_prefix('Q')
                     .is_some_and(|rest| !rest.is_empty() && rest.bytes().all(|byte| byte.is_ascii_digit()))
                 {
+                    let branch_ceiling = if matches!(route.property_ref.as_str(), "P31" | "P279") {
+                        60
+                    } else {
+                        65
+                    };
                     for mut row in seed_gwb_qid_ambiguities(target) {
+                        row.salience = row.salience.min(branch_ceiling);
+                        row.dependency_refs.push(selected.move_ref.clone());
                         row.opened_by_hop = Some(hop_index);
                         opened.push(row);
                     }
@@ -993,7 +1000,7 @@ pub fn residuals_opened_by_reviewed_routes(
                     proposition_ref: format!("gwb:surface-observation:{url}"),
                     kind_ref: "cross-language-gap".into(),
                     root_qid: Some(route.source_ref.clone()),
-                    salience: 75,
+                    salience: 65,
                     dependency_refs: vec![selected.move_ref.clone()],
                     opened_by_hop: Some(hop_index),
                     candidate_only: true,
