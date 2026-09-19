@@ -7,7 +7,12 @@
 //! The scheduler owns no HTTP. Search returns references, fetch returns bytes,
 //! and semantic/legal interpretation begins only after local ingestion/review.
 
+use serde::Deserialize;
+use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
+use std::fs::File;
+use std::io::{BufRead, BufReader};
+use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -150,6 +155,137 @@ pub fn lookup_oalc_exact_mnc(snapshot: &OalcSnapshot, citation: &str) -> Option<
             network_requests: 0,
             receipt_authority: RECEIPT_AUTHORITY,
         })
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OalcSnapshotLoadReceipt {
+    pub snapshot: OalcSnapshot,
+    pub input_path: PathBuf,
+    pub line_count: usize,
+    pub receipt_authority: &'static str,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum OalcSnapshotLoadError {
+    EmptyRevision,
+    MutableRevisionAlias(String),
+    Io(String),
+    InvalidJsonLine { line_number: usize, detail: String },
+}
+
+impl std::fmt::Display for OalcSnapshotLoadError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self:?}")
+    }
+}
+
+impl std::error::Error for OalcSnapshotLoadError {}
+
+#[derive(Debug, Deserialize)]
+struct OalcJsonLine {
+    version_id: String,
+    source: String,
+    citation: String,
+    text: String,
+}
+
+fn oalc_revision_is_mutable(value: &str) -> bool {
+    matches!(
+        value.trim().to_ascii_lowercase().as_str(),
+        "" | "main" | "master" | "latest" | "head" | "current" | "oalc:revision-unset"
+    )
+}
+
+fn extract_medium_neutral_citation(citation: &str) -> Option<String> {
+    let parts = citation.split_whitespace().collect::<Vec<_>>();
+    for window in parts.windows(3) {
+        let year = window[0].trim_matches(['[', ']']);
+        let court = window[1];
+        let number = window[2].trim_matches(|c: char| !c.is_ascii_digit());
+        if window[0].starts_with('[')
+            && window[0].ends_with(']')
+            && year.len() == 4
+            && year.parse::<u32>().is_ok()
+            && !court.is_empty()
+            && court.chars().all(|c| c.is_ascii_uppercase())
+            && number.parse::<u32>().is_ok()
+        {
+            return Some(format!("[{year}] {court} {number}"));
+        }
+    }
+    None
+}
+
+/// Load a pinned local OALC JSONL snapshot into the provider-neutral exact-MNC
+/// index already used by `lookup_oalc_exact_mnc`.
+///
+/// The JSONL path is an implementation input only. It is not part of the
+/// semantic/provider contract and no loaded row creates legal authority.
+pub fn load_oalc_jsonl_snapshot(
+    path: &Path,
+    corpus_revision_ref: &str,
+) -> Result<OalcSnapshotLoadReceipt, OalcSnapshotLoadError> {
+    if corpus_revision_ref.trim().is_empty() {
+        return Err(OalcSnapshotLoadError::EmptyRevision);
+    }
+    if oalc_revision_is_mutable(corpus_revision_ref) {
+        return Err(OalcSnapshotLoadError::MutableRevisionAlias(
+            corpus_revision_ref.to_owned(),
+        ));
+    }
+
+    let file = File::open(path).map_err(|error| OalcSnapshotLoadError::Io(error.to_string()))?;
+    let reader = BufReader::new(file);
+    let mut records = Vec::new();
+    let mut line_count = 0usize;
+
+    for (offset, line) in reader.lines().enumerate() {
+        let line = line.map_err(|error| OalcSnapshotLoadError::Io(error.to_string()))?;
+        if line.trim().is_empty() {
+            continue;
+        }
+        line_count = line_count.saturating_add(1);
+        let record: OalcJsonLine = serde_json::from_str(&line).map_err(|error| {
+            OalcSnapshotLoadError::InvalidJsonLine {
+                line_number: offset.saturating_add(1),
+                detail: error.to_string(),
+            }
+        })?;
+        let Some(mnc) = extract_medium_neutral_citation(&record.citation) else {
+            continue;
+        };
+        let digest = format!("sha256:{:x}", Sha256::digest(record.text.as_bytes()));
+        records.push(OalcRecord {
+            citation: mnc,
+            source_identity_ref: format!("oalc:{}:{}", record.source, record.version_id),
+            source_revision_ref: format!("{}:{}", corpus_revision_ref, record.version_id),
+            canonical_text_digest: digest,
+            local_artifact_ref: format!(
+                "oalc://{}/{}",
+                corpus_revision_ref, record.version_id
+            ),
+        });
+    }
+
+    records.sort_by(|left, right| {
+        left.citation
+            .cmp(&right.citation)
+            .then_with(|| left.source_revision_ref.cmp(&right.source_revision_ref))
+    });
+    records.dedup_by(|left, right| {
+        left.citation == right.citation
+            && left.source_revision_ref == right.source_revision_ref
+    });
+
+    Ok(OalcSnapshotLoadReceipt {
+        snapshot: OalcSnapshot {
+            corpus_revision_ref: corpus_revision_ref.to_owned(),
+            records,
+        },
+        input_path: path.to_path_buf(),
+        line_count,
+        receipt_authority: RECEIPT_AUTHORITY,
+    })
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
