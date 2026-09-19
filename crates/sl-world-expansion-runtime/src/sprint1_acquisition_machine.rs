@@ -506,6 +506,210 @@ impl Sprint1ProducerController {
     }
 }
 
+
+/// Concrete Sprint-1 classification adapter over the existing bounded
+/// supervised P31/P279 provider seam.
+pub struct ClassificationProducerExecutor<P> {
+    provider: P,
+    pub max_depth: usize,
+    pub max_nodes: usize,
+}
+
+impl<P> ClassificationProducerExecutor<P> {
+    #[must_use]
+    pub fn new(provider: P, max_depth: usize, max_nodes: usize) -> Self {
+        Self {
+            provider,
+            max_depth,
+            max_nodes,
+        }
+    }
+
+    #[must_use]
+    pub fn provider(&self) -> &P {
+        &self.provider
+    }
+
+    pub fn provider_mut(&mut self) -> &mut P {
+        &mut self.provider
+    }
+}
+
+impl<P> ProducerExecutor for ClassificationProducerExecutor<P>
+where
+    P: TypeClosureNodeProvider,
+{
+    fn execute(
+        &mut self,
+        plan: &ProducerExecutionPlan,
+    ) -> Result<CandidateProducerEvidence, Sprint1AcquisitionError> {
+        if plan.producer != ProducerFamily::ClassificationEvidence {
+            return Err(Sprint1AcquisitionError::ProducerFamilyMismatch);
+        }
+        let request = TypeClosureRequest {
+            root_qid: plan.target_ref.clone(),
+            question: TypeClosureQuestion::TypeClass,
+            max_depth: self.max_depth,
+            max_nodes: self.max_nodes,
+        };
+        let closure = acquire_supervised_type_closure_with(&request, &mut self.provider)
+            .map_err(|error| {
+                Sprint1AcquisitionError::Provider(format!(
+                    "classification:{}:{error}",
+                    plan.target_ref
+                ))
+            })?;
+        Ok(CandidateProducerEvidence {
+            producer: ProducerFamily::ClassificationEvidence,
+            evidence_ref: closure.source_manifest_ref.clone(),
+            source_revision_ref: closure.source_manifest_ref,
+            candidate_only: closure.candidate_only,
+            creates_semantic_authority: closure.creates_semantic_authority,
+            applicability_promoted: closure.applicability_promoted,
+            claim_truth_promoted: closure.claim_truth_promoted,
+            complete: !closure.truncated,
+        })
+    }
+}
+
+/// Concrete Sprint-1 identity/source adapter over the durable reviewed identity
+/// quotient already owned by the PostgreSQL source/world substrate.
+pub struct PersistedIdentityProducerExecutor {
+    baseline: DiscoveryIdentityBaseline,
+}
+
+impl PersistedIdentityProducerExecutor {
+    #[must_use]
+    pub fn new(baseline: DiscoveryIdentityBaseline) -> Self {
+        Self { baseline }
+    }
+}
+
+impl ProducerExecutor for PersistedIdentityProducerExecutor {
+    fn execute(
+        &mut self,
+        plan: &ProducerExecutionPlan,
+    ) -> Result<CandidateProducerEvidence, Sprint1AcquisitionError> {
+        if plan.producer != ProducerFamily::IdentitySource {
+            return Err(Sprint1AcquisitionError::ProducerFamilyMismatch);
+        }
+        let identity_class_ref = self
+            .baseline
+            .representation_identity_class_refs
+            .get(&plan.target_ref)
+            .cloned();
+        let (evidence_ref, source_revision_ref, complete) = match identity_class_ref {
+            Some(identity_class_ref) => (
+                format!("identity-evidence:{}:{identity_class_ref}", plan.target_ref),
+                format!("persisted-reviewed-identity:{identity_class_ref}"),
+                true,
+            ),
+            None => (
+                format!("identity-evidence-miss:{}", plan.target_ref),
+                "persisted-reviewed-identity:unresolved".into(),
+                false,
+            ),
+        };
+        Ok(CandidateProducerEvidence {
+            producer: ProducerFamily::IdentitySource,
+            evidence_ref,
+            source_revision_ref,
+            candidate_only: true,
+            creates_semantic_authority: false,
+            applicability_promoted: false,
+            claim_truth_promoted: false,
+            complete,
+        })
+    }
+}
+
+/// Concrete Sprint-1 authority adapter. Persisted authority remains first; an
+/// installed OALC snapshot is exact/no-network when it contains the requested
+/// MNC. Other governed resolution stages remain candidate acquisition plans,
+/// not authority or applicability payments.
+pub struct GovernedAuthorityProducerExecutor {
+    context: ResolutionContext,
+    oalc_snapshot: Option<OalcSnapshot>,
+    jurisdiction_ref: String,
+}
+
+impl GovernedAuthorityProducerExecutor {
+    #[must_use]
+    pub fn new(
+        context: ResolutionContext,
+        oalc_snapshot: Option<OalcSnapshot>,
+        jurisdiction_ref: impl Into<String>,
+    ) -> Self {
+        Self {
+            context,
+            oalc_snapshot,
+            jurisdiction_ref: jurisdiction_ref.into(),
+        }
+    }
+}
+
+impl ProducerExecutor for GovernedAuthorityProducerExecutor {
+    fn execute(
+        &mut self,
+        plan: &ProducerExecutionPlan,
+    ) -> Result<CandidateProducerEvidence, Sprint1AcquisitionError> {
+        if plan.producer != ProducerFamily::AuthoritySource {
+            return Err(Sprint1AcquisitionError::ProducerFamilyMismatch);
+        }
+
+        if let Some(snapshot) = self.oalc_snapshot.as_ref() {
+            if let Some(receipt) = lookup_oalc_exact_mnc(snapshot, &plan.target_ref) {
+                return Ok(CandidateProducerEvidence {
+                    producer: ProducerFamily::AuthoritySource,
+                    evidence_ref: format!(
+                        "authority:oalc:{}:{}",
+                        receipt.citation, receipt.canonical_text_digest
+                    ),
+                    source_revision_ref: receipt.source_revision_ref,
+                    candidate_only: true,
+                    creates_semantic_authority: false,
+                    applicability_promoted: false,
+                    claim_truth_promoted: false,
+                    complete: true,
+                });
+            }
+        }
+
+        let demand = KnownAuthorityDemand {
+            demand_ref: plan.residual_ref.clone(),
+            jurisdiction_ref: self.jurisdiction_ref.clone(),
+            source_identity_ref: plan.target_ref.clone(),
+            medium_neutral_citation: Some(plan.target_ref.clone()),
+            explicit_austlii_ref: None,
+            proposition_ref: None,
+            use_intent: PropositionUseIntent::SourceProposition,
+            treatment_intent: CitationTreatmentIntent::None,
+        };
+        let resolution = resolve_known_authority(&demand, &self.context);
+        let (source_revision_ref, complete) = match &resolution.stage {
+            ResolutionStage::Persisted {
+                source_revision_ref,
+            } => (source_revision_ref.clone(), true),
+            ResolutionStage::Unresolved => ("authority-resolution:unresolved".into(), false),
+            other => (format!("authority-resolution:{other:?}"), false),
+        };
+
+        Ok(CandidateProducerEvidence {
+            producer: ProducerFamily::AuthoritySource,
+            evidence_ref: format!(
+                "authority-resolution:{}:{}",
+                plan.target_ref, resolution.receipt_authority
+            ),
+            source_revision_ref,
+            candidate_only: true,
+            creates_semantic_authority: false,
+            applicability_promoted: false,
+            claim_truth_promoted: false,
+            complete,
+        })
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReplayedCampaignHead {
     pub campaign_ref: String,
