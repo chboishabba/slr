@@ -1,0 +1,13 @@
+# status=GwbReviewRequired
+# hop_index=0
+# frontier_sha256=sha256:7bd6e728a565293f537ebb76057fedcbe66c79ef0b3f412b6536f2d992a248ec
+# selected_move=move:gwb:inspect:Q16156115:classification
+# investigation_kind=type-class
+# selected_source=Q16156115
+# selected_target=
+# selected_property=
+# source_revision=wikidata:Q16156115:oldid:2399365529
+# evidence_digest=sha256:f99818eef84594e59ebea079343d0815c889502b0a4ac6482bfd957b290732f2
+# target_residuals=residual:gwb:Q16156115:superclass,residual:gwb:Q16156115:type-class
+# review_manifest_template	0	sha256:7bd6e728a565293f537ebb76057fedcbe66c79ef0b3f412b6536f2d992a248ec	move:gwb:inspect:Q16156115:classification	wikidata:Q16156115:oldid:2399365529	sha256:f99818eef84594e59ebea079343d0815c889502b0a4ac6482bfd957b290732f2	<outcome>	<residual-effect>	<review-ref>
+# observed_route	wikidata:Q16156115:P31:Q7725634	ClassificationEvidence	WikidataProperty	Q16156115	P31	Q7725634

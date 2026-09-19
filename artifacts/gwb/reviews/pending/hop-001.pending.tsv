@@ -1,0 +1,16 @@
+# status=GwbReviewRequired
+# hop_index=1
+# frontier_sha256=sha256:fcf54615acc188cc1b01ded434970576db53b83101e0a133e4a6a4894d704afe
+# selected_move=move:gwb:inspect:Q7725634:classification
+# investigation_kind=type-class
+# selected_source=Q7725634
+# selected_target=
+# selected_property=
+# source_revision=wikidata:Q7725634:oldid:2542268616
+# evidence_digest=sha256:a42d2f4b8e0039f867f65f8470d8057f42ded0d57d747c6f7523fba5df5407af
+# target_residuals=residual:gwb:Q7725634:superclass,residual:gwb:Q7725634:type-class
+# review_manifest_template	1	sha256:fcf54615acc188cc1b01ded434970576db53b83101e0a133e4a6a4894d704afe	move:gwb:inspect:Q7725634:classification	wikidata:Q7725634:oldid:2542268616	sha256:a42d2f4b8e0039f867f65f8470d8057f42ded0d57d747c6f7523fba5df5407af	<outcome>	<residual-effect>	<review-ref>
+# observed_route	wikidata:Q7725634:P279:Q47461344	ClassificationEvidence	WikidataProperty	Q7725634	P279	Q47461344
+# observed_route	wikidata:Q7725634:P279:Q838948	ClassificationEvidence	WikidataProperty	Q7725634	P279	Q838948
+# observed_route	wikidata:Q7725634:P31:Q116474095	ClassificationEvidence	WikidataProperty	Q7725634	P31	Q116474095
+# observed_route	wikidata:Q7725634:P31:Q133449656	ClassificationEvidence	WikidataProperty	Q7725634	P31	Q133449656
