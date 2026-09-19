@@ -1,6 +1,7 @@
 use sensiblaw_route_selector::{ProducerFamily, RouteCandidate, RouteFamily};
 use sensiblaw_world_expansion_runtime::gwb_ambiguity_campaign::{
-    compile_gwb_ambiguity_frontier, route_candidate_to_investigation,
+    compile_gwb_ambiguity_frontier, compile_gwb_question_frontier,
+    gwb_question_investigations, route_candidate_to_investigation,
     select_gwb_investigation, GwbAmbiguityKind, GwbAmbiguityResidual,
     GwbInvestigationKind,
 };
@@ -147,4 +148,44 @@ fn multilingual_surface_and_type_questions_can_coexist_on_one_pareto_frontier() 
         .investigations
         .values()
         .any(|move_| move_.investigation_kind == GwbInvestigationKind::TypeClass));
+}
+
+
+#[test]
+fn current_world_questions_are_selected_before_any_provider_observation_exists() {
+    let r = residual(GwbAmbiguityKind::TypeClass);
+    let compiled = compile_gwb_question_frontier(
+        &[r],
+        &std::collections::BTreeSet::new(),
+        "frontier:gwb:question-first",
+    );
+    let selected = select_gwb_investigation(&compiled).unwrap();
+
+    assert_eq!(selected.move_ref, "move:gwb:inspect:Q207:classification");
+    assert!(selected.source_revision_ref.is_none());
+    assert_eq!(selected.source_ref.as_deref(), Some("Q207"));
+    assert!(selected.candidate_only);
+    assert!(!selected.creates_semantic_authority);
+}
+
+#[test]
+fn reviewed_narrow_question_falls_through_to_external_ontology_then_snowball() {
+    let r = residual(GwbAmbiguityKind::TypeClass);
+    let classification = "move:gwb:inspect:Q207:classification".to_string();
+    let reviewed = std::collections::BTreeSet::from([classification.clone()]);
+    let after_classification = gwb_question_investigations(&[r.clone()], &reviewed);
+    assert_eq!(after_classification.len(), 1);
+    assert_eq!(
+        after_classification[0].investigation_kind,
+        GwbInvestigationKind::ExternalOntologyFallback
+    );
+
+    let external = after_classification[0].move_ref.clone();
+    let reviewed = std::collections::BTreeSet::from([classification, external]);
+    let after_external = gwb_question_investigations(&[r], &reviewed);
+    assert_eq!(after_external.len(), 1);
+    assert_eq!(
+        after_external[0].investigation_kind,
+        GwbInvestigationKind::Snowball
+    );
 }
