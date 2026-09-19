@@ -13,7 +13,10 @@ use sensiblaw_proof_search_loop::frontier::{
 use sensiblaw_proof_search_scheduler::{
     CandidateMove, ExecutionCostVector, ExecutionStrategy, ProofValueVector,
 };
-use sensiblaw_pg_source_store::{GwbAmbiguityStateInput, GwbAmbiguityStateRow};
+use sensiblaw_pg_source_store::{
+    gwb_ambiguity_state_row, GwbAmbiguityStateError, GwbAmbiguityStateInput,
+    GwbAmbiguityStateRow,
+};
 use sensiblaw_route_selector::{ProducerFamily, RouteCandidate, RouteFamily};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
@@ -624,4 +627,27 @@ pub fn gwb_ambiguity_world_sha256(rows: &[GwbAmbiguityStateRow]) -> String {
             .map(|byte| format!("{byte:02x}"))
             .collect::<String>()
     )
+}
+
+
+pub fn project_open_gwb_state_after_review(
+    before: &[GwbAmbiguityStateRow],
+    close_residual_refs: &[String],
+    open_residuals: &[GwbAmbiguityStateInput],
+) -> Result<Vec<GwbAmbiguityStateRow>, GwbAmbiguityStateError> {
+    let closed = close_residual_refs.iter().map(String::as_str).collect::<BTreeSet<_>>();
+    let mut rows = before
+        .iter()
+        .filter(|row| !closed.contains(row.residual_ref.as_str()))
+        .cloned()
+        .collect::<Vec<_>>();
+    rows.extend(
+        open_residuals
+            .iter()
+            .map(gwb_ambiguity_state_row)
+            .collect::<Result<Vec<_>, _>>()?,
+    );
+    rows.sort_by(|left, right| left.residual_ref.cmp(&right.residual_ref));
+    rows.dedup_by(|left, right| left.residual_ref == right.residual_ref);
+    Ok(rows)
 }
