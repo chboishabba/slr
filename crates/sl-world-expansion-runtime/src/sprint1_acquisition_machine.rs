@@ -265,19 +265,22 @@ fn transport_digest(
             object.cache_key.as_str(),
             object.route_ref.as_str(),
             object.source_ref.as_str(),
-            object
-                .source_range
-                .map(|(start, end)| format!("{start}-{end}"))
-                .unwrap_or_default()
-                .as_str(),
-            object
-                .expected_bytes
-                .map(|bytes| bytes.to_string())
-                .unwrap_or_default()
-                .as_str(),
         ] {
             hasher.update((value.len() as u64).to_be_bytes());
             hasher.update(value.as_bytes());
+        }
+        if let Some((start, end)) = object.source_range {
+            hasher.update([1]);
+            hasher.update(start.to_be_bytes());
+            hasher.update(end.to_be_bytes());
+        } else {
+            hasher.update([0]);
+        }
+        if let Some(bytes) = object.expected_bytes {
+            hasher.update([1]);
+            hasher.update(bytes.to_be_bytes());
+        } else {
+            hasher.update([0]);
         }
     }
     for fetch in fetches {
