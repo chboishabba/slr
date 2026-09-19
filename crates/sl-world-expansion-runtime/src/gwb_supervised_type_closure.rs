@@ -206,13 +206,15 @@ fn aggregate_digest(
     receipts: &[TypeNodeReceipt],
     truncated: bool,
 ) -> String {
+    let max_depth = request.max_depth.to_string();
+    let max_nodes = request.max_nodes.to_string();
     let mut hasher = Sha256::new();
     hasher.update(b"gwb-supervised-type-closure:v1\0");
     for value in [
         request.root_qid.as_str(),
         request.question.as_str(),
-        &request.max_depth.to_string(),
-        &request.max_nodes.to_string(),
+        max_depth.as_str(),
+        max_nodes.as_str(),
         if truncated { "truncated" } else { "bounded-complete" },
     ] {
         hasher.update((value.len() as u64).to_be_bytes());
