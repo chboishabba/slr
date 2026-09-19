@@ -1,0 +1,7 @@
+# Reviewed bounded-context assignment for the exact emitted Q1358798 bundle.
+# Reviewed candidate: wikidata:Q1358798:P1001:Q408
+# Q1358798 = High Court of Australia
+# P1001 = applies to jurisdiction
+# Q408 = Australia
+# Review is bound to the exact emitted source manifestation and candidate-set digest below.
+wikidata:Q1358798:oldid:2546712967	0ec0a80fdbefe5bfd0702bba41a7a17f45d32f6a2d329bb97a95db0ee3b6295b	review:mabo:context:q1358798-p1001-q408:2026-09-19
