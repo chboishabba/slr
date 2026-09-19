@@ -10,7 +10,7 @@ use sensiblaw_core::canonical_evidence::{
     EvidenceManifestationFamily, EvidenceObservation, EvidenceSourceRevision,
     EvidenceSpan, EvidenceSubstrateError,
 };
-use sensiblaw_governed_legal_provider::OalcLookupReceipt;
+use sensiblaw_governed_legal_provider::{LocalIngestionReceipt, OalcLookupReceipt, RECEIPT_AUTHORITY};
 use sensiblaw_pg_source_store::{CacheFirstResolution, CachedResolvedDocument};
 use sha2::{Digest, Sha256};
 use sensiblaw_proof_search_loop::world_observation::GetterBackend;
@@ -244,6 +244,69 @@ pub fn normalize_oalc_provider(
     )
 }
 
+
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LocalDocumentEvidenceFamily {
+    PdfDocument,
+    LegalAuthority,
+}
+
+impl LocalDocumentEvidenceFamily {
+    const fn canonical_family(self) -> EvidenceManifestationFamily {
+        match self {
+            Self::PdfDocument => EvidenceManifestationFamily::PdfDocument,
+            Self::LegalAuthority => EvidenceManifestationFamily::LegalAuthority,
+        }
+    }
+}
+
+pub fn normalize_local_ingested_document(
+    request_ref: impl Into<String>,
+    receipt: &LocalIngestionReceipt,
+    family: LocalDocumentEvidenceFamily,
+    revision_receipt_ref: impl Into<String>,
+) -> Result<ProviderCanonicalEvidence, ProviderNormalisationError> {
+    if !receipt.locally_ingested {
+        return Err(ProviderNormalisationError::Adapter(
+            "document must be locally ingested before canonical normalisation".into(),
+        ));
+    }
+    if receipt.receipt_authority != RECEIPT_AUTHORITY {
+        return Err(ProviderNormalisationError::Adapter(
+            "document ingestion receipt is not candidate-only".into(),
+        ));
+    }
+    let request_ref = request_ref.into();
+    let manifestation = EvidenceManifestation {
+        manifestation_ref: manifestation_ref_for_revision(&receipt.source_revision_ref),
+        family: family.canonical_family(),
+        source_ref: receipt.source_identity_ref.clone(),
+        source_revision_ref: receipt.source_revision_ref.clone(),
+        content_digest_ref: receipt.canonical_bytes_digest.clone(),
+        acquisition_receipt_ref: format!(
+            "local-ingestion:{}:{}",
+            receipt.source_revision_ref, receipt.network_requests_used_to_acquire
+        ),
+        candidate_only: true,
+        creates_semantic_authority: false,
+        applicability_promoted: false,
+        claim_truth_promoted: false,
+    };
+    let span = EvidenceSpan::whole_revision(
+        receipt.source_revision_ref.clone(),
+        format!("span:whole:{}", receipt.source_revision_ref),
+    )?;
+    assemble(
+        format!("provider:{:?}", receipt.provider),
+        manifestation,
+        revision_receipt_ref,
+        span,
+        format!("observation:{request_ref}"),
+        "document:local-ingestion",
+        receipt.explicit_reference.clone(),
+    )
+}
 
 fn sha256_ref(text: &str) -> String {
     let digest = Sha256::digest(text.as_bytes());
