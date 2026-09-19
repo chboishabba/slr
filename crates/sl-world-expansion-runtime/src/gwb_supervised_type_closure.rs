@@ -649,13 +649,24 @@ impl ZelphHfTypeProvider {
         if !self.routeable_manifest() {
             return Ok(None);
         }
-        let output = self.run_commands(&[
+        let output = match self.run_commands(&[
             ".lang wikidata".into(),
             self.route_name_load_command(qid),
             format!(".node {qid}"),
             ".quit".into(),
             String::new(),
-        ])?;
+        ]) {
+            Ok(output) => output,
+            Err(error)
+                if error
+                    .to_string()
+                    .contains("nodeRouteIndex resolved no matching chunks")
+                    || error.to_string().contains("Unknown node") =>
+            {
+                return Ok(None);
+            }
+            Err(error) => return Err(error),
+        };
         Ok(Self::parse_resolved_node_id(&output))
     }
 
