@@ -519,6 +519,20 @@ pub fn compile_mabo_heterogeneous_frontier(
         frontier_ref,
     );
 
+    for candidate in &mut compiled.candidates {
+        let suppressed = negative_assessments.iter().any(|assessment| {
+            assessment.is_non_promoting()
+                && candidate
+                    .target_residual_refs
+                    .iter()
+                    .any(|residual_ref| residual_ref == &assessment.residual_ref)
+                && candidate.move_.move_ref == assessment.move_ref
+        });
+        if suppressed {
+            candidate.move_.admissible = false;
+        }
+    }
+
     let mut residual_refs = compiled
         .frontier
         .residuals
