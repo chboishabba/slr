@@ -1,6 +1,7 @@
 mod candidate_pnf;
 mod context_federation;
 mod discovery_identity_baseline;
+mod gwb_hop_ledger;
 mod discovery_lineage;
 mod latent_world;
 mod legal_ir_materialization;
@@ -18,6 +19,11 @@ pub use context_federation::{
     materialize_reviewed_context_edges, review_bounded_wikidata_candidate,
     review_mabo_wikidata_candidate, reviewed_context_edge, ContextFederationError,
     ContextMaterializationReceipt, ContextReviewDecision, ReviewedContextEdge, SourceFamily,
+};
+pub use gwb_hop_ledger::{
+    gwb_hop_ledger_row, load_latest_gwb_hop, materialize_gwb_hop,
+    GwbHopLedgerError, GwbHopLedgerInput, GwbHopLedgerMaterializationReceipt,
+    GwbHopLedgerRow,
 };
 pub use discovery_identity_baseline::{
     collapse_discovery_campaign_identity_classes, collapse_discovery_identity_baseline,
