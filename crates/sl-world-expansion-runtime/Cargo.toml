@@ -15,5 +15,6 @@ sensiblaw-route-executor = { path = "../sl-route-executor" }
 sensiblaw-route-selector = { path = "../sl-route-selector" }
 sensiblaw-wikimedia-candidate-provider = { path = "../sl-wikimedia-candidate-provider" }
 sensiblaw-world-store = { path = "../sl-world-store" }
+serde_json = "1"
 sha2 = "0.10"
 thiserror = "1"
