@@ -363,7 +363,18 @@ mod substrate_tests {
 
     #[test]
     fn source_revision_is_derived_from_manifestation_identity() {
-        let manifestation = fixture(EvidenceManifestationFamily::Transcript);
+        let manifestation = EvidenceManifestation {
+            manifestation_ref: "manifestation:revision:fixture".into(),
+            family: EvidenceManifestationFamily::Transcript,
+            source_ref: "source:fixture".into(),
+            source_revision_ref: "revision:fixture".into(),
+            content_digest_ref: "sha256:fixture".into(),
+            acquisition_receipt_ref: "receipt:acquisition:fixture".into(),
+            candidate_only: true,
+            creates_semantic_authority: false,
+            applicability_promoted: false,
+            claim_truth_promoted: false,
+        };
         let revision =
             EvidenceSourceRevision::from_manifestation(&manifestation, "receipt:revision:fixture")
                 .unwrap();
