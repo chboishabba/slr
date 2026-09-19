@@ -309,6 +309,40 @@ where
     })
 }
 
+pub fn acquire_wikipedia_article(
+    source_ref: &str,
+    target_url: &str,
+) -> Result<AcquiredSource, RouteExecutorError> {
+    if source_ref.trim().is_empty() {
+        return Err(RouteExecutorError::InvalidRoute(
+            "Wikipedia source reference must not be empty".into(),
+        ));
+    }
+    let (url, language) = validate_wikipedia_target(target_url)?;
+    let response = ureq::get(url.as_str())
+        .set("User-Agent", "SensibLaw-SLR/1.0 (+https://github.com/chboishabba/slr)")
+        .call()
+        .map_err(|error| RouteExecutorError::Fetch(error.to_string()))?;
+    let etag = response.header("etag").map(ToOwned::to_owned);
+    let mut bytes = Vec::new();
+    response.into_reader().read_to_end(&mut bytes)?;
+    let text = rendered_text(&bytes)?;
+    let source_sha256 = sha256(text.as_bytes());
+    let revision_ref = etag.unwrap_or_else(|| format!("sha256:{}", hex_digest(&source_sha256)));
+    Ok(AcquiredSource {
+        kind: AcquiredSourceKind::WikipediaRenderedHtml,
+        document_ref: format!("wikipedia:{source_ref}:{language}:{revision_ref}"),
+        source_ref: source_ref.to_owned(),
+        language,
+        revision_ref,
+        canonical_url: url.to_string(),
+        source_sha256,
+        text,
+        candidate_only: true,
+        semantic_promotion: false,
+    })
+}
+
 pub fn execute_selected_routes<R: Read, W: Write>(reader: &mut R, writer: &mut W) -> Result<ExecutionReceipt, RouteExecutorError> {
     execute_selected_routes_with_fetcher(reader, writer, |url| {
         let response = ureq::get(url)
