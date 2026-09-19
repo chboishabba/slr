@@ -7,7 +7,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use sensiblaw_pg_source_store::GwbHopLedgerRow;
+use sensiblaw_pg_source_store::{load_gwb_hops, DatabaseConfig, GwbHopLedgerRow};
 use sensiblaw_route_selector::ProducerFamily;
 use sha2::{Digest, Sha256};
 use thiserror::Error;
@@ -553,4 +553,16 @@ pub fn replay_campaign_head(
         applicability_promoted: false,
         claim_truth_promoted: false,
     })
+}
+
+
+/// Load the persisted PostgreSQL campaign ledger and reconstruct the exact
+/// production restart head through the same validator used for offline replay.
+pub fn load_and_replay_campaign_head(
+    config: &DatabaseConfig,
+    campaign_ref: &str,
+) -> Result<ReplayedCampaignHead, Sprint1AcquisitionError> {
+    let rows = load_gwb_hops(config, campaign_ref)
+        .map_err(|error| Sprint1AcquisitionError::Provider(format!("pg-hop-ledger:{error}")))?;
+    replay_campaign_head(campaign_ref, &rows)
 }
