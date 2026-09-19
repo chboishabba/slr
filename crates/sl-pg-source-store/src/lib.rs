@@ -1,4 +1,5 @@
 mod adaptive_negative_assessment;
+mod adaptive_trajectory;
 mod candidate_pnf;
 mod context_federation;
 mod discovery_identity_baseline;
@@ -10,6 +11,12 @@ mod proposition_rows;
 mod reviewed_pnf;
 mod reviewed_source_expansion;
 
+pub use adaptive_trajectory::{
+    adaptive_trajectory_row, load_latest_adaptive_trajectory,
+    materialize_adaptive_trajectory, AdaptiveTrajectoryError,
+    AdaptiveTrajectoryInput, AdaptiveTrajectoryMaterializationReceipt,
+    AdaptiveTrajectoryRow,
+};
 pub use adaptive_negative_assessment::{
     adaptive_negative_assessment_row, load_adaptive_negative_assessments,
     materialize_adaptive_negative_assessments, AdaptiveNegativeAssessmentError,
