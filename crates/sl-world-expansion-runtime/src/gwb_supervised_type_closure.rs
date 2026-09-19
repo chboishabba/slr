@@ -489,7 +489,11 @@ pub fn type_closure_route_candidates(closure: &ObservedTypeClosure) -> Vec<Route
             property_ref: observation.property.property_ref().into(),
             cross_language_gap_coverage: 0,
             source_surface_support: 1,
-            root_qid_support: u32::from(observation.subject_qid == closure.request.root_qid),
+            root_qid_support: if observation.subject_qid == closure.request.root_qid {
+                1
+            } else {
+                0
+            },
             typed_property_support: 1,
             route_specificity: 5,
             yield_history_observed: 1,
