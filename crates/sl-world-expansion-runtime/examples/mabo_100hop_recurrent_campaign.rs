@@ -2,9 +2,10 @@ use std::fs;
 use std::io::Cursor;
 
 use sensiblaw_pg_source_store::{
-    discovery_lineage_row, identity_alias_row, load_database_config,
-    load_discovery_campaign_identity_classes, load_discovery_identity_baseline,
-    load_latent_world_rows_with_budget, load_reviewed_context_expansion_sources,
+    discovery_lineage_row, identity_alias_row, load_adaptive_negative_assessments,
+    load_database_config, load_discovery_campaign_identity_classes,
+    load_discovery_identity_baseline, load_latent_world_rows_with_budget,
+    load_reviewed_context_expansion_sources,
     materialize_non_novel_identity_aliases, materialize_reviewed_context_expansion,
     reviewed_source_expansion_row, LatentWorldBudget, NonNovelIdentityAliasInput,
 };
@@ -19,9 +20,10 @@ use sensiblaw_wikimedia_candidate_provider::{
     fetch_latest_entity_rdf_revision_receipt,
 };
 use sensiblaw_world_expansion_runtime::adaptive_campaign::{
-    compile_mabo_heterogeneous_frontier, mabo_remaining_adaptive_world_expansion_policy,
-    mabo_target_complete, parse_bounded_target_context,
-    select_next_mabo_heterogeneous_decision, MaboAdaptiveDecision,
+    compile_mabo_heterogeneous_frontier, durable_negative_assessments_from_rows,
+    mabo_remaining_adaptive_world_expansion_policy, mabo_target_complete,
+    parse_bounded_target_context, select_next_mabo_heterogeneous_decision,
+    MaboAdaptiveDecision,
 };
 use sensiblaw_world_expansion_runtime::adaptive_context_review::{
     bounded_context_candidate_set_sha256, matching_context_review,
@@ -303,6 +305,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .into());
         }
         let expanded_sources = load_reviewed_context_expansion_sources(&pg_config)?;
+        let negative_rows = load_adaptive_negative_assessments(&pg_config)?;
+        let negative_assessments = durable_negative_assessments_from_rows(&negative_rows);
         let diagnosis = diagnose_mabo_context_world_identity(&world, &baseline);
 
         println!("campaign_cycle_index={adaptive_cycles_completed}");
@@ -320,6 +324,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
         println!("diagnosed_identity_requirements={}", diagnosis.rows.len());
         println!("reviewed_expanded_sources={}", expanded_sources.len());
+        println!(
+            "durable_negative_constraints={}",
+            negative_assessments.len()
+        );
 
         let compiled = compile_mabo_heterogeneous_frontier(
             &diagnosis,
@@ -327,7 +335,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             &world,
             &expanded_sources,
             &[],
-            &[],
+            &negative_assessments,
             format!("frontier:mabo:adaptive:{adaptive_cycles_completed}"),
         );
         let Some(decision) = select_next_mabo_heterogeneous_decision(
