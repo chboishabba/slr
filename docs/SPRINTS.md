@@ -1,53 +1,174 @@
 # SensibLaw / SLR Sprint Board
 
-This board is intentionally capability-sized. It exists to prevent the production roadmap degrading into one-file or one-adapter micro-sprints.
+This board is capability-sized. A sprint is not a file, adapter, semaphore or
+provider patch; it closes only when the corresponding production capability is
+demonstrated, persisted and replayable.
 
-## A — Bounded ontology transport closure — ACTIVE
+## Sprint 1 — Complete the recurrent acquisition machine — ACTIVE
 
-**Single deliverable:** GWB P31/P279 acquisition is physically bounded, deduplicated, replayable and measurable.
+**Deliverable**
+
+```text
+Residual
+  -> ProducerPlan
+  -> bounded physical acquisition
+  -> candidate evidence
+  -> explicit review
+  -> payment
+  -> W(n+1)
+  -> re-diagnose
+  -> repeat
+```
+
+restartably, without transport or acquisition evidence acquiring semantic
+authority.
+
+### M1.1 — Canonical physical acquisition plan
+
+Semantic requests are resolved before scheduling:
+
+```text
+semantic request
+  -> provider-specific resolution
+  -> internal node / exact source coordinate
+  -> physical acquisition objects
+```
+
+For Zelph/HF classification the preferred path is:
+
+```text
+P31/P279 specialised slice
+  -> route-aware general snapshot
+  -> governed revision-pinned live fallback
+```
+
+Production contract:
+- logical QIDs are not the concurrency domain;
+- physical objects are deduplicated before concurrency;
+- repeated logical requests for one object are coalesced;
+- no ordinary path is defined as "load all adjacency";
+- acquisition plans and transport are inspectable/receipted.
+
+Runtime owner:
+`sl-world-expansion-runtime::sprint1_acquisition_machine` plus
+`gwb_supervised_type_closure`.
+
+### M1.2 — Bounded transport
+
+The canonical transport ABI enforces:
+- cache hit -> zero network;
+- at most five distinct cold physical objects per transport batch;
+- same physical object x N requests -> at most one acquisition;
+- mixed snapshot + live -> not snapshot-simultaneous;
+- incomplete/truncated object -> abstain;
+- retrieval failure is not ontology negation.
+
+The transport receipt exposes:
+- logical request count;
+- resolved-node count;
+- planned object references;
+- unique physical objects;
+- cache hits/misses;
+- coalesced gets;
+- remote gets;
+- bytes fetched;
+- live fallbacks;
+- peak cold-batch width;
+- truncation/abstention state;
+- deterministic receipt digest.
+
+After this gate, transport is infrastructure unless telemetry supplies a
+counterexample.
+
+### M1.3 — Generic producer execution
+
+One controller ABI executes materially different producer families. The Sprint 1
+gate is demonstrated for at least:
+- `ClassificationEvidence` -> P31/P279;
+- `IdentitySource` -> Wikidata/persisted identity evidence;
+- `AuthoritySource` -> governed legal authority/OALC producer.
+
+The controller validates candidate-only/non-promoting evidence regardless of
+family. The planner/review ontology remains owned by the existing
+`sl-consumer-residual`, `sl-residual-planner`, `sl-route-selector`,
+`sl-route-executor`, and `sl-reviewed-evidence-payment` crates.
+
+### M1.4 — Reviewed recurrent world expansion
+
+The production invariant is:
+
+```text
+W0
+ -> diagnose R0
+ -> select/execute producer
+ -> candidate evidence
+ -> explicit review/payment
+ -> persist reviewed hop
+ -> W1
+ -> diagnose R1
+ -> ...
+```
+
+Existing GWB adaptive runtime already provides the reviewed atomic-hop and
+post-hop re-diagnosis machinery. Sprint 1 treats it as a production invariant:
+- producer families may change between hops;
+- new residuals may emerge;
+- rejected/blocked evidence remains ledgered;
+- acquisition alone never pays a semantic residual;
+- no fixed queue may masquerade as adaptivity.
+
+### M1.5 — Restart/replay equivalence
+
+The existing PostgreSQL `context.gwb_adaptive_hop_receipt` chain is the durable
+campaign receipt. Sprint 1 adds strict replay validation:
+- hop indexes must be consecutive;
+- each hop must name the previous receipt;
+- `world_before(n+1) == world_after(n)`;
+- every receipt remains candidate-only/non-promoting;
+- replay reconstructs the exact latest world digest, receipt head, producer
+  history and review outcomes.
+
+`load_and_replay_campaign_head` performs this check directly against the
+persisted PostgreSQL ledger.
+
+### Sprint 1 exit gate
+
+```text
+M1.1 physical plan             source-written + tests
+M1.2 bounded transport        source-written + tests
+M1.3 generic producer exec    source-written + tests
+M1.4 reviewed recurrence      existing runtime + durable hop ledger
+M1.5 restart/replay           source-written over durable PG ledger
+```
+
+The remaining closure requirement is an executable receipt on the exact branch:
+Rust tests plus one persisted campaign replay showing the five gates together.
+Until that receipt exists, Sprint 1 is **implemented awaiting runtime
+certification**, not declared closed.
+
+## Sprint 2 — Canonical evidence convergence — NEXT
+
+**Single deliverable:** world, legal-source and narrative evidence converge on
+one canonical evidence/provenance substrate.
 
 Work package:
-- predicate-slice fast path;
-- route-aware general HF fallback;
-- physical-object plan + dedupe/coalescing;
-- <=5 distinct remote object fills;
-- cache-hit zero-network invariant;
-- transport receipt;
-- replay/campaign proof that full adjacency is not the normal path.
+- one evidence manifestation envelope;
+- one SourceRevision -> TextSpan -> Observation substrate;
+- `shared_reducer` as the supported production ABI;
+- legal providers as ordinary producer implementations;
+- PG-hit/no-network, PG-miss/acquire/persist/reuse;
+- cross-family exact replay.
 
-Do not split these into separate roadmap milestones.
+## Sprint 3 — World-to-law weld
 
-## B — Generic epistemic scheduler — NEXT
+**Single deliverable:** one reviewed matter projects into a legal issue graph
+without promoting event/harm/classification into legal conclusions.
 
-**Single deliverable:** one scheduler executes multiple residual/producer families and persists/replays the resulting world-expansion campaign.
+## Sprint 4 — Legal reasoning + product surface
 
-Reuse:
-- `sl-consumer-residual`;
-- `sl-residual-planner`;
-- `sl-route-selector`;
-- `sl-route-executor`;
-- `sl-reviewed-evidence-payment`;
-- `sl-world-expansion-runtime`.
-
-The work is ABI/convergence and campaign execution, not a new planner ontology.
-
-## C — Canonical reducer + legal source convergence
-
-**Single deliverable:** world, legal-source and narrative evidence all enter one canonical evidence substrate and replay by exact provenance.
-
-Reuse the existing PG source/world stores and governed legal providers.
-
-## D — World-to-law weld
-
-**Single deliverable:** one reviewed matter can project into a legal issue graph without promoting event/harm/classification into legal conclusions.
-
-## E — Legal reasoning kernel
-
-**Single deliverable:** one complete legal issue is reasoned as support/contradiction/unknown across elements, conditions/exceptions/defences, time, jurisdiction and authority.
-
-## F — Productisation
-
-**Single deliverable:** a user can navigate matter -> issue -> rule -> evidence -> receipt and ask why/what-missing/as-at without a parallel UI ontology.
+**Single deliverable:** complete legal-issue reasoning and user navigation over
+matter -> issue -> rule -> evidence -> receipt, with why/what-missing/as-at
+queries and no parallel UI ontology.
 
 ## Definition of sprint complete
 
@@ -59,4 +180,4 @@ A sprint closes only when:
 - at least one end-to-end campaign demonstrates the capability;
 - semantic/promotion firewalls remain fail-closed.
 
-A compile-only or unit-only tranche is progress inside a sprint, not a new sprint.
+A compile-only or unit-only tranche is progress inside a sprint, not a sprint.
