@@ -31,7 +31,9 @@ fn producer_family(value: &str) -> &str {
 }
 
 fn source_family(value: &str) -> &'static str {
-    if value.starts_with("wikidata:") {
+    if value.starts_with("wikidata-type-closure:") {
+        "wikidata-type-closure"
+    } else if value.starts_with("wikidata:") {
         "wikidata"
     } else if value.starts_with("wikipedia:") {
         "wikipedia"
