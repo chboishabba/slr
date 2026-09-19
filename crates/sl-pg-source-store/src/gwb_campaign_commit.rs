@@ -174,7 +174,7 @@ pub fn materialize_gwb_campaign_commit(
     }
 
     let inserted = tx.execute(
-        "INSERT INTO context.gwb_adaptive_hop_receipt (         receipt_sha256,campaign_ref,hop_index,prior_receipt_sha256,world_before_sha256,         frontier_sha256,selected_move_ref,investigation_kind_ref,source_revision_ref,         evidence_digest_ref,review_ref,outcome_ref,residual_effect_ref,world_after_sha256,         closed_residual_refs,opened_residual_refs,candidate_only,creates_semantic_authority,         applicability_promoted,claim_truth_promoted,receipt_authority) VALUES (         $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,TRUE,FALSE,FALSE,FALSE,$17)",
+        "INSERT INTO context.gwb_adaptive_hop_receipt (         receipt_sha256,campaign_ref,hop_index,prior_receipt_sha256,world_before_sha256,         frontier_sha256,selected_move_ref,investigation_kind_ref,producer_ref,source_revision_ref,         evidence_digest_ref,review_ref,outcome_ref,residual_effect_ref,world_after_sha256,         closed_residual_refs,opened_residual_refs,candidate_only,creates_semantic_authority,         applicability_promoted,claim_truth_promoted,receipt_authority) VALUES (         $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,TRUE,FALSE,FALSE,FALSE,$18)",
         &[
             &hop.receipt_sha256,
             &hop.campaign_ref,
@@ -184,6 +184,7 @@ pub fn materialize_gwb_campaign_commit(
             &hop.frontier_sha256,
             &hop.selected_move_ref,
             &hop.investigation_kind_ref,
+            &hop.producer_ref,
             &hop.source_revision_ref,
             &hop.evidence_digest_ref,
             &hop.review_ref,
