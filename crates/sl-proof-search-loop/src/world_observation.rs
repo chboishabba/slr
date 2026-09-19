@@ -1,4 +1,5 @@
 use crate::frontier::{ProofResidual, ResidualStatus};
+use sensiblaw_core::canonical_evidence::{EvidenceObservation, EvidenceSpan, EvidenceSubstrateError};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum GetterBackend { SlrNative, LeanInterop, Other }
@@ -61,6 +62,40 @@ impl WorldObservation {
         if !self.candidate_only { return Err(WorldObservationError::MustRemainCandidateOnly); }
         if self.creates_semantic_authority || self.claim_truth_promoted { return Err(WorldObservationError::ObservationMayNotPromote); }
         Ok(())
+    }
+
+    pub fn canonical_evidence_observation(
+        &self,
+    ) -> Result<EvidenceObservation, EvidenceSubstrateError> {
+        let span_ref = format!(
+            "span:structured:{}:{}:{}",
+            self.source_revision_ref, self.object_ref, self.relation_ref
+        );
+        let coordinate_ref = format!(
+            "structured-coordinate:{}:{}:{}",
+            self.object_ref, self.relation_ref, self.value_ref
+        );
+        let span = EvidenceSpan::structured(
+            self.source_revision_ref.clone(),
+            span_ref,
+            coordinate_ref,
+        )?;
+        let observation = EvidenceObservation {
+            observation_ref: format!(
+                "observation:{}:{}:{}",
+                self.request_ref, self.relation_ref, self.value_ref
+            ),
+            source_revision_ref: self.source_revision_ref.clone(),
+            span,
+            predicate_ref: self.relation_ref.clone(),
+            value_ref: self.value_ref.clone(),
+            candidate_only: self.candidate_only,
+            creates_semantic_authority: self.creates_semantic_authority,
+            applicability_promoted: false,
+            claim_truth_promoted: self.claim_truth_promoted,
+        };
+        observation.validate()?;
+        Ok(observation)
     }
 
     #[must_use]
@@ -187,4 +222,19 @@ mod tests {
         assert!(!observation.creates_semantic_authority);
         assert!(!observation.claim_truth_promoted);
     }
+    #[test]
+    fn world_observation_lowers_to_structured_canonical_observation() {
+        use sensiblaw_core::canonical_evidence::EvidenceSpanKind;
+        let observation = mabo_observation(GetterBackend::SlrNative, "Q975866");
+        let canonical = observation.canonical_evidence_observation().unwrap();
+        assert_eq!(canonical.source_revision_ref, observation.source_revision_ref);
+        assert_eq!(canonical.predicate_ref, "P710");
+        assert_eq!(canonical.value_ref, "Q975866");
+        assert!(matches!(
+            canonical.span.kind,
+            EvidenceSpanKind::StructuredCoordinate { .. }
+        ));
+        assert!(canonical.validate().is_ok());
+    }
+
 }
