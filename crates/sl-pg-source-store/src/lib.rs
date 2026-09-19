@@ -1,3 +1,4 @@
+mod adaptive_negative_assessment;
 mod candidate_pnf;
 mod context_federation;
 mod discovery_identity_baseline;
@@ -9,6 +10,12 @@ mod proposition_rows;
 mod reviewed_pnf;
 mod reviewed_source_expansion;
 
+pub use adaptive_negative_assessment::{
+    adaptive_negative_assessment_row, load_adaptive_negative_assessments,
+    materialize_adaptive_negative_assessments, AdaptiveNegativeAssessmentError,
+    AdaptiveNegativeAssessmentInput, AdaptiveNegativeAssessmentMaterializationReceipt,
+    AdaptiveNegativeAssessmentRow,
+};
 pub use candidate_pnf::{
     CandidatePnfBatch, CandidatePnfError, CandidatePnfFactor, CandidatePnfProducer,
     CandidatePnfRole, ExactSourceSpan, SpacyTsvAdapter,
