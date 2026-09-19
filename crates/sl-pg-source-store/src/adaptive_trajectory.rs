@@ -237,7 +237,7 @@ pub fn load_latest_adaptive_trajectory(
     let mut client = Client::connect(config.database_url(), NoTls)?;
     client.batch_execute(ADAPTIVE_TRAJECTORY_SCHEMA_SQL)?;
     let row = client.query_opt(
-        "SELECT campaign_ref, cycle_index, world_digest, frontier_digest,                 selected_residual_ref, selected_move_ref, selected_producer_lane_ref,                 prior_commit_ref, commit_ref, review_or_payment_ref, world_delta_ref,                 selection_origin, candidate_only, creates_semantic_authority,                 applicability_promoted, claim_truth_promoted, receipt_sha256          FROM context.adaptive_trajectory_receipt          WHERE campaign_ref = $1          ORDER BY cycle_index DESC LIMIT 1",
+        "SELECT campaign_ref, cycle_index, world_digest, frontier_digest,                 selected_residual_ref, selected_move_ref, selected_producer_lane_ref,                 prior_commit_ref, commit_ref, review_or_payment_ref, world_delta_ref,                 selection_origin, candidate_only, creates_semantic_authority,                 applicability_promoted, claim_truth_promoted, receipt_sha256          FROM context.adaptive_trajectory_receipt          WHERE campaign_ref = $1            AND receipt_authority = 'adaptive_trajectory_runtime_only'          ORDER BY cycle_index DESC LIMIT 1",
         &[&campaign_ref],
     )?;
     let Some(row) = row else {
@@ -277,7 +277,7 @@ pub fn materialize_adaptive_trajectory(
     tx.batch_execute(ADAPTIVE_TRAJECTORY_SCHEMA_SQL)?;
 
     let latest = tx.query_opt(
-        "SELECT cycle_index, commit_ref, receipt_sha256          FROM context.adaptive_trajectory_receipt          WHERE campaign_ref = $1          ORDER BY cycle_index DESC LIMIT 1 FOR UPDATE",
+        "SELECT cycle_index, commit_ref, receipt_sha256          FROM context.adaptive_trajectory_receipt          WHERE campaign_ref = $1            AND receipt_authority = 'adaptive_trajectory_runtime_only'          ORDER BY cycle_index DESC LIMIT 1 FOR UPDATE",
         &[&prepared.campaign_ref],
     )?;
 
