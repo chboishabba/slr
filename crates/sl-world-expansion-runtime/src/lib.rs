@@ -10,6 +10,7 @@ pub mod gwb_review;
 pub mod gwb_supervised_type_closure;
 pub mod gwb_analysis;
 pub mod sprint1_acquisition_machine;
+pub mod zelph_hf_physical;
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::io::Cursor;
