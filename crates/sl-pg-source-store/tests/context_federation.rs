@@ -1,6 +1,6 @@
 use sensiblaw_pg_source_store::{
-    materialize_reviewed_context_edges, review_mabo_wikidata_candidate, reviewed_context_edge,
-    ContextReviewDecision, SourceFamily,
+    materialize_reviewed_context_edges, review_mabo_oalc_exact_source,
+    review_mabo_wikidata_candidate, reviewed_context_edge, ContextReviewDecision, SourceFamily,
 };
 
 #[test]
@@ -128,4 +128,68 @@ fn mabo_wikidata_review_gate_accepts_only_the_bounded_direct_property_surface() 
 #[test]
 fn materializer_symbol_is_part_of_the_public_storage_surface() {
     let _ = materialize_reviewed_context_edges;
+}
+
+
+#[test]
+fn oalc_exact_source_requires_explicit_review_and_retains_revision_digest_without_promotion() {
+    let rejected = review_mabo_oalc_exact_source(
+        "Q1501525",
+        "[1992] HCA 23",
+        "case:[1992]-HCA-23",
+        "oalc:[1992]-HCA-23:sha256:abc",
+        "sha256:abc",
+        "experimental_candidate_only",
+        ContextReviewDecision::NotReviewed,
+    );
+    assert!(rejected.is_err());
+
+    let reviewed = review_mabo_oalc_exact_source(
+        "Q1501525",
+        "[1992] HCA 23",
+        "case:[1992]-HCA-23",
+        "oalc:[1992]-HCA-23:sha256:abc",
+        "sha256:abc",
+        "experimental_candidate_only",
+        ContextReviewDecision::Reviewed,
+    )
+    .expect("reviewed exact OALC source should become candidate context");
+
+    assert_eq!(reviewed.source_family, SourceFamily::Oalc);
+    assert_eq!(reviewed.source_revision_ref, "oalc:[1992]-HCA-23:sha256:abc");
+    assert_eq!(reviewed.source_content_digest.as_deref(), Some("sha256:abc"));
+    assert_eq!(reviewed.relation_type_ref, "context:oalc:exact-mnc");
+    assert_eq!(reviewed.left_ref, "Q1501525");
+    assert_eq!(reviewed.right_ref, "case:[1992]-HCA-23");
+    assert!(reviewed.candidate_only);
+    assert!(!reviewed.creates_semantic_authority);
+    assert!(!reviewed.applicability_promoted);
+    assert!(!reviewed.claim_truth_promoted);
+}
+
+#[test]
+fn oalc_exact_source_rejects_mutable_revision_alias_and_non_candidate_authority() {
+    for revision in ["latest", "current", "head"] {
+        assert!(review_mabo_oalc_exact_source(
+            "Q1501525",
+            "[1992] HCA 23",
+            "case:[1992]-HCA-23",
+            revision,
+            "sha256:abc",
+            "experimental_candidate_only",
+            ContextReviewDecision::Reviewed,
+        )
+        .is_err());
+    }
+
+    assert!(review_mabo_oalc_exact_source(
+        "Q1501525",
+        "[1992] HCA 23",
+        "case:[1992]-HCA-23",
+        "oalc:[1992]-HCA-23:sha256:abc",
+        "sha256:abc",
+        "legal_authority",
+        ContextReviewDecision::Reviewed,
+    )
+    .is_err());
 }
