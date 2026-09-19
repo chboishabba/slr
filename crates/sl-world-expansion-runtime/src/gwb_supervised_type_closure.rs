@@ -568,7 +568,7 @@ where
     }
 
     fn snapshot_simultaneous(&self) -> bool {
-        self.snapshot.snapshot_simultaneous()
+        self.stats.live_fallbacks == 0 && self.snapshot.snapshot_simultaneous()
     }
 
     fn stats(&self) -> TypeProviderStats {
