@@ -1,6 +1,8 @@
 use sensiblaw_world_expansion_runtime::gwb_supervised_type_closure::{
-    evaluate_observed_type_closure, TypeClosureDisposition, TypeClosureQuestion,
-    TypeObservation, TypeObservationProperty, TypeClosureRequest,
+    acquire_supervised_type_closure_with, evaluate_observed_type_closure,
+    TieredTypeClosureProvider, TypeClosureDisposition, TypeClosureError,
+    TypeClosureNodeProvider, TypeClosureQuestion, TypeClosureRequest, TypeNodeAcquisition,
+    TypeNodeReceipt, TypeObservation, TypeObservationProperty, TypeProviderStats,
 };
 
 fn obs(
@@ -206,4 +208,149 @@ fn q7725634_historical_lean_cache_shape_is_direct_superclass_observation() {
     assert!(!closure.superclass_residual_paid);
     assert!(!closure.global_ontology_complete);
     assert!(!closure.snapshot_simultaneous);
+}
+
+
+#[derive(Clone)]
+struct FixtureProvider {
+    rows: std::collections::BTreeMap<String, TypeNodeAcquisition>,
+    simultaneous: bool,
+    calls: usize,
+}
+
+impl FixtureProvider {
+    fn new(rows: Vec<TypeNodeAcquisition>, simultaneous: bool) -> Self {
+        Self {
+            rows: rows.into_iter().map(|row| (row.qid.clone(), row)).collect(),
+            simultaneous,
+            calls: 0,
+        }
+    }
+}
+
+impl TypeClosureNodeProvider for FixtureProvider {
+    fn acquire_type_node(
+        &mut self,
+        qid: &str,
+    ) -> Result<Option<TypeNodeAcquisition>, TypeClosureError> {
+        self.calls += 1;
+        Ok(self.rows.get(qid).cloned())
+    }
+
+    fn snapshot_simultaneous(&self) -> bool {
+        self.simultaneous
+    }
+
+    fn stats(&self) -> TypeProviderStats {
+        TypeProviderStats {
+            provider_calls: self.calls,
+            ..TypeProviderStats::default()
+        }
+    }
+}
+
+fn node(qid: &str, rows: Vec<TypeObservation>, source: &str) -> TypeNodeAcquisition {
+    TypeNodeAcquisition {
+        qid: qid.into(),
+        observations: rows,
+        node_receipt: TypeNodeReceipt {
+            qid: qid.into(),
+            source_revision_ref: source.into(),
+            evidence_digest_ref:
+                "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".into(),
+        },
+    }
+}
+
+#[test]
+fn snapshot_first_provider_avoids_live_when_snapshot_covers_closure() {
+    let snapshot = FixtureProvider::new(
+        vec![
+            node(
+                "Q1",
+                vec![obs(
+                    "Q1",
+                    TypeObservationProperty::SubclassOf,
+                    "Q2",
+                    "zelph-hf:snapshot-1:Q1",
+                )],
+                "zelph-hf:snapshot-1:Q1",
+            ),
+            node("Q2", vec![], "zelph-hf:snapshot-1:Q2"),
+        ],
+        true,
+    );
+    let live = FixtureProvider::new(vec![], false);
+    let mut tiered = TieredTypeClosureProvider::new(snapshot, live);
+    let closure = acquire_supervised_type_closure_with(
+        &TypeClosureRequest {
+            root_qid: "Q1".into(),
+            question: TypeClosureQuestion::Superclass,
+            max_depth: 4,
+            max_nodes: 16,
+        },
+        &mut tiered,
+    )
+    .unwrap();
+
+    assert!(closure.snapshot_simultaneous);
+    assert_eq!(tiered.stats().snapshot_hits, 2);
+    assert_eq!(tiered.stats().live_fallbacks, 0);
+    assert_eq!(tiered.live().stats().provider_calls, 0);
+}
+
+#[test]
+fn live_fallback_is_explicit_and_revokes_snapshot_simultaneity() {
+    let snapshot = FixtureProvider::new(
+        vec![node(
+            "Q1",
+            vec![obs(
+                "Q1",
+                TypeObservationProperty::SubclassOf,
+                "Q2",
+                "zelph-hf:snapshot-1:Q1",
+            )],
+            "zelph-hf:snapshot-1:Q1",
+        )],
+        true,
+    );
+    let live = FixtureProvider::new(
+        vec![node("Q2", vec![], "wikidata:Q2:oldid:42")],
+        false,
+    );
+    let mut tiered = TieredTypeClosureProvider::new(snapshot, live);
+    let closure = acquire_supervised_type_closure_with(
+        &TypeClosureRequest {
+            root_qid: "Q1".into(),
+            question: TypeClosureQuestion::Superclass,
+            max_depth: 4,
+            max_nodes: 16,
+        },
+        &mut tiered,
+    )
+    .unwrap();
+
+    assert!(!closure.snapshot_simultaneous);
+    assert_eq!(tiered.stats().snapshot_hits, 1);
+    assert_eq!(tiered.stats().live_fallbacks, 1);
+    assert_eq!(tiered.live().stats().provider_calls, 1);
+}
+
+#[test]
+fn provider_gap_abstains_by_marking_closure_truncated() {
+    let mut provider = FixtureProvider::new(vec![], true);
+    let closure = acquire_supervised_type_closure_with(
+        &TypeClosureRequest {
+            root_qid: "Q1".into(),
+            question: TypeClosureQuestion::Superclass,
+            max_depth: 4,
+            max_nodes: 16,
+        },
+        &mut provider,
+    )
+    .unwrap();
+
+    assert!(closure.truncated);
+    assert_eq!(closure.disposition, TypeClosureDisposition::Truncated);
+    assert!(!closure.superclass_residual_paid);
 }
