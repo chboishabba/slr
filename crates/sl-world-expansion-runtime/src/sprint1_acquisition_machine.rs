@@ -432,7 +432,6 @@ pub struct ProducerExecutionPlan {
     pub target_ref: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
 /// Lower an actually selected route candidate into the shared Sprint 1
 /// producer-execution ABI.  Route selection remains the owner of producer
 /// choice; the controller does not re-rank or reinterpret it.
@@ -449,6 +448,7 @@ pub fn producer_execution_plan_from_candidate(
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CandidateProducerEvidence {
     pub producer: ProducerFamily,
     pub evidence_ref: String,
