@@ -36,6 +36,44 @@ impl From<ureq::Error> for ProviderError {
     fn from(error: ureq::Error) -> Self { Self::Network(Box::new(error)) }
 }
 
+impl ProviderError {
+    #[must_use]
+    pub fn network_status_code(&self) -> Option<u16> {
+        match self {
+            Self::Network(error) => match error.as_ref() {
+                ureq::Error::Status(code, _) => Some(*code),
+                ureq::Error::Transport(_) => None,
+            },
+            _ => None,
+        }
+    }
+
+    #[must_use]
+    pub fn network_retry_after_seconds(&self) -> Option<f64> {
+        match self {
+            Self::Network(error) => match error.as_ref() {
+                ureq::Error::Status(_, response) => response
+                    .header("Retry-After")
+                    .and_then(|raw| raw.parse::<f64>().ok())
+                    .map(|seconds| seconds.max(0.0)),
+                ureq::Error::Transport(_) => None,
+            },
+            _ => None,
+        }
+    }
+
+    #[must_use]
+    pub fn network_is_retryable(&self) -> bool {
+        match self {
+            Self::Network(error) => match error.as_ref() {
+                ureq::Error::Status(code, _) => matches!(*code, 429 | 502 | 503 | 504),
+                ureq::Error::Transport(_) => true,
+            },
+            _ => false,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ProviderReceipt {
     pub direct_property_candidates: u64,

@@ -1220,6 +1220,7 @@ version = "0.1.0"
 dependencies = [
  "dotenvy",
  "postgres",
+ "sensiblaw-core",
  "sensiblaw-evidence-payment",
  "sensiblaw-reader-model",
  "sha2 0.10.9",
@@ -1231,6 +1232,7 @@ dependencies = [
 name = "sensiblaw-proof-search-loop"
 version = "0.1.0"
 dependencies = [
+ "sensiblaw-core",
  "sensiblaw-evidential-reopen",
  "sensiblaw-governed-legal-provider",
  "sensiblaw-nsw-legislation-provider",
@@ -1270,6 +1272,7 @@ name = "sensiblaw-reviewed-evidence-payment"
 version = "0.1.0"
 dependencies = [
  "sensiblaw-consumer-residual",
+ "sensiblaw-core",
  "sensiblaw-world-store",
  "thiserror 1.0.69",
 ]
@@ -1342,6 +1345,7 @@ dependencies = [
 name = "sensiblaw-world-compiler"
 version = "0.1.0"
 dependencies = [
+ "sensiblaw-core",
  "sensiblaw-world-store",
  "sha2 0.10.9",
  "thiserror 1.0.69",
@@ -1352,6 +1356,7 @@ name = "sensiblaw-world-expansion-runtime"
 version = "0.1.0"
 dependencies = [
  "sensiblaw-consumer-residual",
+ "sensiblaw-governed-legal-provider",
  "sensiblaw-pg-source-store",
  "sensiblaw-proof-search-loop",
  "sensiblaw-proof-search-scheduler",
@@ -1360,6 +1365,7 @@ dependencies = [
  "sensiblaw-route-selector",
  "sensiblaw-wikimedia-candidate-provider",
  "sensiblaw-world-store",
+ "serde_json",
  "sha2 0.10.9",
  "thiserror 1.0.69",
 ]

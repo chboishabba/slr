@@ -7,6 +7,7 @@ rust-version.workspace = true
 
 [dependencies]
 sensiblaw-consumer-residual = { path = "../sl-consumer-residual" }
+sensiblaw-governed-legal-provider = { path = "../sl-governed-legal-provider" }
 sensiblaw-proof-search-loop = { path = "../sl-proof-search-loop" }
 sensiblaw-proof-search-scheduler = { path = "../sl-proof-search-scheduler" }
 sensiblaw-pg-source-store = { path = "../sl-pg-source-store" }
@@ -15,5 +16,6 @@ sensiblaw-route-executor = { path = "../sl-route-executor" }
 sensiblaw-route-selector = { path = "../sl-route-selector" }
 sensiblaw-wikimedia-candidate-provider = { path = "../sl-wikimedia-candidate-provider" }
 sensiblaw-world-store = { path = "../sl-world-store" }
+serde_json = "1"
 sha2 = "0.10"
 thiserror = "1"

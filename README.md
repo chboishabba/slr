@@ -24,6 +24,15 @@ From-scratch Rust foundation for SensibLaw, built against the current DASHI/Sens
 
 The parser sidecar never owns canonical semantic state; Rust owns deterministic compilation and publication boundaries.
 
+## Roadmap
+
+SLR is the production SensibLaw runtime; DASHI/Agda is the golden semantic/reference layer.
+
+- [Production roadmap](docs/ROADMAP.md)
+- [Capability-sized sprint board](docs/SPRINTS.md)
+
+The current critical path is: finish the recurrent acquisition machine -> canonical evidence convergence -> full legal issue reasoning -> product. A compile-only, one-file, or one-adapter tranche is progress inside a milestone, not a completed sprint.
+
 ## Build
 
 ```sh
@@ -50,3 +59,33 @@ The return loop preserves the existing evidential boundary: parser/PNF is a loca
 See `docs/DIRECT_DELTA.md`, `docs/PROOF_OBLIGATIONS.md`, `docs/GWB_TRANCHE.md`, and `docs/LEGAL_SEMANTIC_ADMISSION.md`. The mandatory direct path is designed around zero sentence-local DB crossings, zero production parser-token writes, zero unchanged-relation writes, and zero parent rescans of closed sentence interiors.
 
 Candidate semantics are not legal authority. The admission layer requires an exact candidate-matched resolution receipt, preserves unresolved/rejected evidence, and still exposes no publication API. Residual counts and priority scores are workflow diagnostics only, never semantic confidence or truth scores.
+
+
+## Sprint 1 classification transport
+
+Classification acquisition is ordered:
+
+```text
+local/revisioned P31/P279 slice
+  -> route-aware Zelph/HF snapshot
+  -> governed revision-pinned live Wikidata
+```
+
+Optional specialised-slice configuration:
+
+```sh
+SLR_WIKIDATA_P31_P279_SLICE=/path/to/p31-p279-slice.json
+SLR_WIKIDATA_P31_P279_SLICE_REF=immutable-snapshot-ref
+```
+
+General Zelph/HF configuration remains:
+
+```sh
+SLR_ZELPH_WIKIDATA_SOURCE=/path/to/manifest.json
+SLR_ZELPH_SNAPSHOT_REF=immutable-snapshot-ref
+SLR_ZELPH_EXECUTABLE=zelph
+SLR_ZELPH_LANGUAGE=en
+```
+
+A slice miss is not ontology negation. A general-snapshot fallback is still a
+snapshot; only actual live fallback revokes snapshot simultaneity.

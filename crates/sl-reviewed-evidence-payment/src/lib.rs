@@ -246,3 +246,11 @@ pub fn compile_consumer_residual_stream_review_aware<R: Read, W: Write>(
         semantic_promotion: false,
     })
 }
+
+mod shared_reducer;
+pub use shared_reducer::{
+    reduce_reviewed_canonical_evidence, CanonicalEvidenceProjection,
+    CanonicalProjectionReceipt, ProjectionDisposition, ProjectionFamily,
+    ReviewedCanonicalEvidence, SharedEvidenceReductionReceipt,
+    SharedEvidenceReducerError,
+};
