@@ -7,6 +7,7 @@ rust-version.workspace = true
 
 [dependencies]
 sensiblaw-consumer-residual = { path = "../sl-consumer-residual" }
+sensiblaw-evidence-payment = { path = "../sl-evidence-payment" }
 sensiblaw-proof-search-loop = { path = "../sl-proof-search-loop" }
 sensiblaw-proof-search-scheduler = { path = "../sl-proof-search-scheduler" }
 sensiblaw-pg-source-store = { path = "../sl-pg-source-store" }
