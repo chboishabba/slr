@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS context.gwb_adaptive_hop_receipt (
   frontier_sha256 TEXT NOT NULL,
   selected_move_ref TEXT NOT NULL,
   investigation_kind_ref TEXT NOT NULL,
+  producer_ref TEXT NOT NULL,
   source_revision_ref TEXT NOT NULL,
   evidence_digest_ref TEXT NOT NULL,
   review_ref TEXT NOT NULL,
@@ -47,6 +48,7 @@ pub struct GwbHopLedgerInput {
     pub frontier_sha256: String,
     pub selected_move_ref: String,
     pub investigation_kind_ref: String,
+    pub producer_ref: String,
     pub source_revision_ref: String,
     pub evidence_digest_ref: String,
     pub review_ref: String,
@@ -70,6 +72,7 @@ pub struct GwbHopLedgerRow {
     pub frontier_sha256: String,
     pub selected_move_ref: String,
     pub investigation_kind_ref: String,
+    pub producer_ref: String,
     pub source_revision_ref: String,
     pub evidence_digest_ref: String,
     pub review_ref: String,
@@ -163,6 +166,7 @@ pub fn gwb_hop_ledger_row(
         ("frontier_sha256", input.frontier_sha256.as_str()),
         ("selected_move_ref", input.selected_move_ref.as_str()),
         ("investigation_kind_ref", input.investigation_kind_ref.as_str()),
+        ("producer_ref", input.producer_ref.as_str()),
         ("source_revision_ref", input.source_revision_ref.as_str()),
         ("evidence_digest_ref", input.evidence_digest_ref.as_str()),
         ("review_ref", input.review_ref.as_str()),
@@ -223,6 +227,7 @@ pub fn gwb_hop_ledger_row(
         input.frontier_sha256.as_str(),
         input.selected_move_ref.as_str(),
         input.investigation_kind_ref.as_str(),
+        input.producer_ref.as_str(),
         input.source_revision_ref.as_str(),
         input.evidence_digest_ref.as_str(),
         input.review_ref.as_str(),
@@ -249,6 +254,7 @@ pub fn gwb_hop_ledger_row(
         frontier_sha256: input.frontier_sha256.clone(),
         selected_move_ref: input.selected_move_ref.clone(),
         investigation_kind_ref: input.investigation_kind_ref.clone(),
+        producer_ref: input.producer_ref.clone(),
         source_revision_ref: input.source_revision_ref.clone(),
         evidence_digest_ref: input.evidence_digest_ref.clone(),
         review_ref: input.review_ref.clone(),
@@ -295,7 +301,7 @@ pub fn load_latest_gwb_hop(
     let mut client = Client::connect(config.database_url(), NoTls)?;
     client.batch_execute(GWB_HOP_SCHEMA_SQL)?;
     let row = client.query_opt(
-        "SELECT campaign_ref, hop_index, prior_receipt_sha256, world_before_sha256,                 frontier_sha256, selected_move_ref, investigation_kind_ref,                 source_revision_ref, evidence_digest_ref, review_ref, outcome_ref,                 residual_effect_ref, world_after_sha256, closed_residual_refs,                 opened_residual_refs, candidate_only, creates_semantic_authority,                 applicability_promoted, claim_truth_promoted, receipt_sha256          FROM context.gwb_adaptive_hop_receipt          WHERE campaign_ref = $1            AND receipt_authority = 'gwb_adaptive_runtime_review_only'          ORDER BY hop_index DESC LIMIT 1",
+        "SELECT campaign_ref, hop_index, prior_receipt_sha256, world_before_sha256,                 frontier_sha256, selected_move_ref, investigation_kind_ref, producer_ref,                 source_revision_ref, evidence_digest_ref, review_ref, outcome_ref,                 residual_effect_ref, world_after_sha256, closed_residual_refs,                 opened_residual_refs, candidate_only, creates_semantic_authority,                 applicability_promoted, claim_truth_promoted, receipt_sha256          FROM context.gwb_adaptive_hop_receipt          WHERE campaign_ref = $1            AND receipt_authority = 'gwb_adaptive_runtime_review_only'          ORDER BY hop_index DESC LIMIT 1",
         &[&campaign_ref],
     )?;
     let Some(row) = row else {
@@ -310,20 +316,21 @@ pub fn load_latest_gwb_hop(
         frontier_sha256: row.get(4),
         selected_move_ref: row.get(5),
         investigation_kind_ref: row.get(6),
-        source_revision_ref: row.get(7),
-        evidence_digest_ref: row.get(8),
-        review_ref: row.get(9),
-        outcome_ref: row.get(10),
-        residual_effect_ref: row.get(11),
-        world_after_sha256: row.get(12),
-        closed_residual_refs: row.get(13),
-        opened_residual_refs: row.get(14),
-        candidate_only: row.get(15),
-        creates_semantic_authority: row.get(16),
-        applicability_promoted: row.get(17),
-        claim_truth_promoted: row.get(18),
+        producer_ref: row.get(7),
+        source_revision_ref: row.get(8),
+        evidence_digest_ref: row.get(9),
+        review_ref: row.get(10),
+        outcome_ref: row.get(11),
+        residual_effect_ref: row.get(12),
+        world_after_sha256: row.get(13),
+        closed_residual_refs: row.get(14),
+        opened_residual_refs: row.get(15),
+        candidate_only: row.get(16),
+        creates_semantic_authority: row.get(17),
+        applicability_promoted: row.get(18),
+        claim_truth_promoted: row.get(19),
         receipt_authority: "gwb_adaptive_runtime_review_only",
-        receipt_sha256: row.get(19),
+        receipt_sha256: row.get(20),
     }))
 }
 
@@ -382,7 +389,7 @@ pub fn materialize_gwb_hop(
     }
 
     let inserted = tx.execute(
-        "INSERT INTO context.gwb_adaptive_hop_receipt (         receipt_sha256, campaign_ref, hop_index, prior_receipt_sha256, world_before_sha256,          frontier_sha256, selected_move_ref, investigation_kind_ref, source_revision_ref,          evidence_digest_ref, review_ref, outcome_ref, residual_effect_ref, world_after_sha256,          closed_residual_refs, opened_residual_refs, candidate_only, creates_semantic_authority,          applicability_promoted, claim_truth_promoted, receipt_authority) VALUES (         $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,TRUE,FALSE,FALSE,FALSE,$17)          ON CONFLICT DO NOTHING",
+        "INSERT INTO context.gwb_adaptive_hop_receipt (         receipt_sha256, campaign_ref, hop_index, prior_receipt_sha256, world_before_sha256,          frontier_sha256, selected_move_ref, investigation_kind_ref, producer_ref, source_revision_ref,          evidence_digest_ref, review_ref, outcome_ref, residual_effect_ref, world_after_sha256,          closed_residual_refs, opened_residual_refs, candidate_only, creates_semantic_authority,          applicability_promoted, claim_truth_promoted, receipt_authority) VALUES (         $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,TRUE,FALSE,FALSE,FALSE,$18)          ON CONFLICT DO NOTHING",
         &[
             &prepared.receipt_sha256,
             &prepared.campaign_ref,
@@ -392,6 +399,7 @@ pub fn materialize_gwb_hop(
             &prepared.frontier_sha256,
             &prepared.selected_move_ref,
             &prepared.investigation_kind_ref,
+            &prepared.producer_ref,
             &prepared.source_revision_ref,
             &prepared.evidence_digest_ref,
             &prepared.review_ref,
