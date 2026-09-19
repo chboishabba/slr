@@ -1,11 +1,14 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use sensiblaw_pg_source_store::{DiscoveryIdentityBaseline, LatentWorldRows};
+use sensiblaw_pg_source_store::{
+    AdaptiveNegativeAssessmentRow, DiscoveryIdentityBaseline, LatentWorldRows,
+};
 use sensiblaw_proof_search_loop::frontier::{ProofResidual, ResidualStatus};
 use sensiblaw_proof_search_loop::world_expansion::{ProducerLane, ResidualClass};
 use sensiblaw_world_expansion_runtime::adaptive_campaign::{
-    compile_mabo_heterogeneous_frontier, select_next_mabo_heterogeneous_decision,
-    DurableAdaptiveNegativeAssessment, DurableAdaptiveNegativeKind,
+    compile_mabo_heterogeneous_frontier, durable_negative_assessments_from_rows,
+    select_next_mabo_heterogeneous_decision, DurableAdaptiveNegativeAssessment,
+    DurableAdaptiveNegativeKind,
     MaboAdaptiveDecision, TypedAdaptiveResidualMove,
 };
 use sensiblaw_world_expansion_runtime::MaboConsumerDiagnosis;
@@ -196,4 +199,30 @@ fn durable_wrong_type_suppresses_one_move_without_satisfying_the_residual() {
         }
         other => panic!("expected alternate typed producer, got {other:?}"),
     }
+}
+
+
+#[test]
+fn persisted_negative_rows_round_trip_into_runtime_constraints() {
+    let rows = vec![AdaptiveNegativeAssessmentRow {
+        residual_ref: "residual:mabo:legal:authority".into(),
+        move_ref: "move:oalc:wrong-type".into(),
+        kind_ref: "wrong-type".into(),
+        assessment_ref: "assessment:wrong-type:1".into(),
+        source_revision_ref: Some("source:oalc:1".into()),
+        candidate_only: true,
+        makes_move_inadmissible: true,
+        satisfies_residual: false,
+        creates_semantic_authority: false,
+        applicability_promoted: false,
+        claim_truth_promoted: false,
+        receipt_authority: "reviewed_negative_search_constraint_only",
+        receipt_sha256: "abc".into(),
+    }];
+
+    let mapped = durable_negative_assessments_from_rows(&rows);
+    assert_eq!(mapped.len(), 1);
+    assert_eq!(mapped[0].kind, DurableAdaptiveNegativeKind::WrongType);
+    assert_eq!(mapped[0].residual_ref, "residual:mabo:legal:authority");
+    assert_eq!(mapped[0].move_ref, "move:oalc:wrong-type");
 }
