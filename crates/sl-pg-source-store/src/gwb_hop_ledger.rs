@@ -266,6 +266,25 @@ pub fn gwb_hop_ledger_row(
     })
 }
 
+pub fn load_gwb_reviewed_move_refs(
+    config: &DatabaseConfig,
+    campaign_ref: &str,
+) -> Result<std::collections::BTreeSet<String>, GwbHopLedgerError> {
+    if campaign_ref.trim().is_empty() {
+        return Err(GwbHopLedgerError::EmptyCoordinate("campaign_ref"));
+    }
+    let mut client = Client::connect(config.database_url(), NoTls)?;
+    client.batch_execute(GWB_HOP_SCHEMA_SQL)?;
+    let rows = client.query(
+        "SELECT selected_move_ref FROM context.gwb_adaptive_hop_receipt \
+         WHERE campaign_ref = $1 \
+           AND receipt_authority = 'gwb_adaptive_runtime_review_only' \
+         ORDER BY hop_index",
+        &[&campaign_ref],
+    )?;
+    Ok(rows.into_iter().map(|row| row.get(0)).collect())
+}
+
 pub fn load_latest_gwb_hop(
     config: &DatabaseConfig,
     campaign_ref: &str,
