@@ -11,6 +11,7 @@ fn input(hop_index: usize, prior: Option<&str>) -> GwbHopLedgerInput {
         frontier_sha256: format!("sha256:{:064x}", hop_index + 101),
         selected_move_ref: format!("move:gwb:{hop_index}"),
         investigation_kind_ref: "type-class".into(),
+        producer_ref: "producer:wikidata-classification".into(),
         source_revision_ref: format!("wikidata:Q207:oldid:{}", hop_index + 1),
         evidence_digest_ref: format!("sha256:{:064x}", hop_index + 201),
         review_ref: format!("review:gwb:{hop_index}"),
