@@ -291,6 +291,60 @@ pub fn load_gwb_reviewed_move_refs(
     Ok(rows.into_iter().map(|row| row.get(0)).collect())
 }
 
+pub fn load_gwb_hops(
+    config: &DatabaseConfig,
+    campaign_ref: &str,
+) -> Result<Vec<GwbHopLedgerRow>, GwbHopLedgerError> {
+    if campaign_ref.trim().is_empty() {
+        return Err(GwbHopLedgerError::EmptyCoordinate("campaign_ref"));
+    }
+    let mut client = Client::connect(config.database_url(), NoTls)?;
+    client.batch_execute(GWB_HOP_SCHEMA_SQL)?;
+    let rows = client.query(
+        "SELECT campaign_ref, hop_index, prior_receipt_sha256, world_before_sha256, \
+                frontier_sha256, selected_move_ref, investigation_kind_ref, producer_ref, \
+                source_revision_ref, evidence_digest_ref, review_ref, outcome_ref, \
+                residual_effect_ref, world_after_sha256, closed_residual_refs, \
+                opened_residual_refs, candidate_only, creates_semantic_authority, \
+                applicability_promoted, claim_truth_promoted, receipt_sha256 \
+         FROM context.gwb_adaptive_hop_receipt \
+         WHERE campaign_ref = $1 \
+           AND receipt_authority = 'gwb_adaptive_runtime_review_only' \
+         ORDER BY hop_index",
+        &[&campaign_ref],
+    )?;
+    rows.into_iter()
+        .map(|row| {
+            let index: i64 = row.get(1);
+            Ok(GwbHopLedgerRow {
+                campaign_ref: row.get(0),
+                hop_index: usize::try_from(index)
+                    .map_err(|_| GwbHopLedgerError::HopIndexOutOfRange)?,
+                prior_receipt_sha256: row.get(2),
+                world_before_sha256: row.get(3),
+                frontier_sha256: row.get(4),
+                selected_move_ref: row.get(5),
+                investigation_kind_ref: row.get(6),
+                producer_ref: row.get(7),
+                source_revision_ref: row.get(8),
+                evidence_digest_ref: row.get(9),
+                review_ref: row.get(10),
+                outcome_ref: row.get(11),
+                residual_effect_ref: row.get(12),
+                world_after_sha256: row.get(13),
+                closed_residual_refs: row.get(14),
+                opened_residual_refs: row.get(15),
+                candidate_only: row.get(16),
+                creates_semantic_authority: row.get(17),
+                applicability_promoted: row.get(18),
+                claim_truth_promoted: row.get(19),
+                receipt_authority: "gwb_adaptive_runtime_review_only",
+                receipt_sha256: row.get(20),
+            })
+        })
+        .collect()
+}
+
 pub fn load_latest_gwb_hop(
     config: &DatabaseConfig,
     campaign_ref: &str,
