@@ -2,7 +2,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use sensiblaw_pg_source_store::{DiscoveryIdentityBaseline, LatentWorldEdgeRow, LatentWorldRows};
 use sensiblaw_world_expansion_runtime::adaptive_campaign::{
-    select_next_mabo_adaptive_decision, MaboAdaptiveDecision,
+    compile_mabo_adaptive_frontier, select_next_mabo_adaptive_decision,
+    MaboAdaptiveDecision,
 };
 use sensiblaw_world_expansion_runtime::diagnose_mabo_context_world_identity;
 
@@ -103,4 +104,39 @@ fn once_identity_gap_is_removed_rebuilt_world_can_choose_context_expansion() {
         }
         other => panic!("expected context expansion after re-diagnosis, got {other:?}"),
     }
+}
+
+
+#[test]
+fn compiled_frontier_is_the_exact_whole_frontier_surface_used_for_selection() {
+    let baseline = baseline();
+    let world = world();
+    let diagnosis = diagnose_mabo_context_world_identity(&world, &baseline);
+    let expanded = BTreeSet::from(["Q1501525".to_string()]);
+
+    let compiled = compile_mabo_adaptive_frontier(
+        &diagnosis,
+        &baseline,
+        &world,
+        &expanded,
+        "frontier:adaptive:compiled",
+    );
+
+    assert_eq!(compiled.frontier.consumer_ref, "consumer:mabo-adaptive-world-expansion");
+    assert!(
+        compiled
+            .frontier
+            .residuals
+            .iter()
+            .any(|residual| residual.residual_ref == "residual:mabo:world-identity:Q1")
+    );
+    assert!(
+        compiled
+            .frontier
+            .residuals
+            .iter()
+            .any(|residual| residual.residual_ref == "residual:mabo:context-expansion:Q2")
+    );
+    assert!(compiled.candidates.len() >= 2);
+    assert!(compiled.candidates.iter().all(|candidate| candidate.move_.admissible));
 }
