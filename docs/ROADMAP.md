@@ -198,6 +198,7 @@ M2.1 is now source-written on the stacked Sprint-2 branch:
 - `sensiblaw-core::canonical_evidence::EvidenceManifestation` owns one revision/digest/receipt-pinned manifestation envelope;
 - the existing Wikidata, Wikipedia and OALC observation adapters lower into that same envelope;
 - the envelope is candidate-only and cannot carry semantic authority, applicability promotion or claim-truth promotion;
-- M2.2 source/revision/span/observation convergence remains the next min-cut.
+- M2.2 source/revision/anchor/observation convergence is now source-written: text uses exact character ranges, structured graph evidence uses exact structured coordinates, compiler tokens require a preceding exact revision, and persisted PG legal slices project into the same carrier.
+- M2.3 shared reducer ABI is now the next min-cut.
 
-This does **not** declare Sprint 2 or M2.2 paid.
+This does **not** declare Sprint 2, M2.1 or M2.2 certified; the new heads still require Rust/Agda receipts.
