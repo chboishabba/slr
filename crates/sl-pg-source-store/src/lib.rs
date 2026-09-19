@@ -33,7 +33,8 @@ pub use gwb_ambiguity_state::{
     GwbAmbiguityStateInput, GwbAmbiguityStateRow,
 };
 pub use gwb_hop_ledger::{
-    gwb_hop_ledger_row, load_gwb_reviewed_move_refs, load_latest_gwb_hop,
+    gwb_hop_ledger_row, load_gwb_hops, load_gwb_reviewed_move_refs,
+    load_latest_gwb_hop,
     materialize_gwb_hop,
     GwbHopLedgerError, GwbHopLedgerInput, GwbHopLedgerMaterializationReceipt,
     GwbHopLedgerRow,
