@@ -247,7 +247,13 @@ pub fn normalize_oalc_provider(
 
 fn sha256_ref(text: &str) -> String {
     let digest = Sha256::digest(text.as_bytes());
-    format!("sha256:{digest:x}")
+    let mut out = String::with_capacity(71);
+    out.push_str("sha256:");
+    for byte in digest {
+        use std::fmt::Write as _;
+        let _ = write!(&mut out, "{byte:02x}");
+    }
+    out
 }
 
 pub fn normalize_cached_legal_provider(
