@@ -202,6 +202,7 @@ Wikidata property artifact
 Wikipedia acquired article
 OALC exact legal source
 cache-first persisted legal source
+locally ingested official DOCX/PDF
         ↓
 EvidenceManifestation
         ↓
@@ -220,6 +221,12 @@ Provider-specific evidence may not bypass the canonical carrier, explicit review
 or the shared reducer. Wikidata uses a structured coordinate; article/legal
 whole-revision observations may remain whole-revision anchors until a narrower
 reviewed span is available.
+
+Official court/document acquisition is also normalised only after local
+ingestion has fixed a source identity, exact source revision and byte digest.
+A PDF may use the canonical PdfDocument family; an official legal document may
+use LegalAuthority. Ingestion still creates no legal authority or semantic
+payment.
 
 The cache-first path retains whether canonical evidence came from an exact
 PostgreSQL hit or an acquire→persist path. Exact PG hits retain zero network
