@@ -58,6 +58,7 @@ pub struct SharedEvidenceReductionReceipt {
 pub enum SharedEvidenceReducerError {
     EmptyCoordinate(&'static str),
     EvidenceReferenceMismatch,
+    ReviewedEvidenceIdentityMismatch,
     ReviewPromotionNotAllowed,
     CanonicalEvidence(EvidenceSubstrateError),
     ProjectionFamilyMismatch {
@@ -74,6 +75,10 @@ impl From<EvidenceSubstrateError> for SharedEvidenceReducerError {
     fn from(value: EvidenceSubstrateError) -> Self {
         Self::CanonicalEvidence(value)
     }
+}
+
+fn reviewed_evidence_ref(review_ref: &str, observation_ref: &str) -> String {
+    format!("reviewed-canonical-evidence:{review_ref}:{observation_ref}")
 }
 
 impl ReviewedCanonicalEvidence {
@@ -107,9 +112,9 @@ impl ReviewedCanonicalEvidence {
         }
 
         Ok(Self {
-            reviewed_evidence_ref: format!(
-                "reviewed-canonical-evidence:{}:{}",
-                review.review_ref, observation.observation_ref
+            reviewed_evidence_ref: reviewed_evidence_ref(
+                &review.review_ref,
+                &observation.observation_ref,
             ),
             observation,
             review_ref: review.review_ref.clone(),
@@ -121,6 +126,12 @@ impl ReviewedCanonicalEvidence {
 
     pub fn validate(&self) -> Result<(), SharedEvidenceReducerError> {
         self.observation.validate()?;
+        let expected_reviewed_evidence_ref =
+            reviewed_evidence_ref(&self.review_ref, &self.observation.observation_ref);
+        if self.reviewed_evidence_ref != expected_reviewed_evidence_ref {
+            return Err(SharedEvidenceReducerError::ReviewedEvidenceIdentityMismatch);
+        }
+
         for (name, value) in [
             ("reviewed_evidence_ref", self.reviewed_evidence_ref.as_str()),
             ("review_ref", self.review_ref.as_str()),
@@ -363,6 +374,22 @@ mod tests {
                 "payment:fixture",
             ),
             Err(SharedEvidenceReducerError::EvidenceReferenceMismatch)
+        );
+    }
+
+    #[test]
+    fn reviewed_evidence_identity_cannot_be_rewritten_after_construction() {
+        let mut evidence = ReviewedCanonicalEvidence::from_reviewed_coordinate(
+            &review(),
+            observation(),
+            "payment:fixture",
+        )
+        .unwrap();
+        evidence.reviewed_evidence_ref = "reviewed-canonical-evidence:rewritten".into();
+
+        assert_eq!(
+            evidence.validate(),
+            Err(SharedEvidenceReducerError::ReviewedEvidenceIdentityMismatch)
         );
     }
 

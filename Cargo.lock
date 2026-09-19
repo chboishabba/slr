@@ -1271,8 +1271,8 @@ dependencies = [
 name = "sensiblaw-reviewed-evidence-payment"
 version = "0.1.0"
 dependencies = [
- "sensiblaw-core",
  "sensiblaw-consumer-residual",
+ "sensiblaw-core",
  "sensiblaw-world-store",
  "thiserror 1.0.69",
 ]

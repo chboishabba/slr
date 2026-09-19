@@ -227,6 +227,7 @@ fn iteration_body(receipt:&CompileReceipt) -> Vec<u8> {
     out.push(1); out.push(0); out
 }
 
+#[allow(clippy::too_many_arguments)]
 fn canonical_text_observation(
     document_ref: &str,
     revision_ref: &str,
