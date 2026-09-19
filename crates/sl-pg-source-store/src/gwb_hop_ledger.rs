@@ -10,7 +10,7 @@ use thiserror::Error;
 
 use crate::DatabaseConfig;
 
-const GWB_HOP_SCHEMA_SQL: &str = r#"
+pub(crate) const GWB_HOP_SCHEMA_SQL: &str = r#"
 CREATE SCHEMA IF NOT EXISTS context;
 CREATE TABLE IF NOT EXISTS context.gwb_adaptive_hop_receipt (
   receipt_sha256 TEXT PRIMARY KEY,
