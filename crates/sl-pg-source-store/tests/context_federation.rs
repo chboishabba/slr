@@ -1,0 +1,131 @@
+use sensiblaw_pg_source_store::{
+    materialize_reviewed_context_edges, review_mabo_wikidata_candidate, reviewed_context_edge,
+    ContextReviewDecision, SourceFamily,
+};
+
+#[test]
+fn reviewed_context_edges_are_revision_attributed_candidate_only_and_non_promoting() {
+    let first = reviewed_context_edge(
+        SourceFamily::Wikidata,
+        "wikidata:Q1501525:oldid:2333409615",
+        "Q1501525",
+        "Q1358798",
+        "context:wikidata:court",
+    )
+    .expect("valid reviewed Wikidata edge");
+    let revised = reviewed_context_edge(
+        SourceFamily::Wikidata,
+        "wikidata:Q1501525:oldid:2333409616",
+        "Q1501525",
+        "Q1358798",
+        "context:wikidata:court",
+    )
+    .expect("valid reviewed Wikidata edge");
+
+    assert_ne!(first.relation_ref, revised.relation_ref);
+    assert_ne!(first.relation_sha256, revised.relation_sha256);
+    assert_eq!(first.source_family, SourceFamily::Wikidata);
+    assert_eq!(first.source_revision_ref, "wikidata:Q1501525:oldid:2333409615");
+    assert!(first.candidate_only);
+    assert!(!first.creates_semantic_authority);
+    assert!(!first.applicability_promoted);
+    assert!(!first.claim_truth_promoted);
+}
+
+#[test]
+fn federation_rejects_empty_revision_or_endpoint_coordinates() {
+    assert!(reviewed_context_edge(
+        SourceFamily::Wikipedia,
+        "",
+        "wiki:en:Mabo_v_Queensland_(No_2)",
+        "Q1501525",
+        "context:wikipedia:about",
+    )
+    .is_err());
+    assert!(reviewed_context_edge(
+        SourceFamily::Oalc,
+        "oalc:snapshot:example",
+        "",
+        "source:mabo:1992:hca:23",
+        "context:oalc:exact-mnc",
+    )
+    .is_err());
+}
+
+#[test]
+fn mabo_wikidata_candidate_requires_explicit_review_before_edge_construction() {
+    let rejected = review_mabo_wikidata_candidate(
+        "wikidata:Q1501525:oldid:2333409615",
+        "wikidata:Q1501525:P4006:Q123",
+        "Q1501525",
+        "Q123",
+        "P4006",
+        ContextReviewDecision::NotReviewed,
+    );
+    assert!(rejected.is_err());
+
+    let reviewed = review_mabo_wikidata_candidate(
+        "wikidata:Q1501525:oldid:2333409615",
+        "wikidata:Q1501525:P4006:Q123",
+        "Q1501525",
+        "Q123",
+        "P4006",
+        ContextReviewDecision::Reviewed,
+    )
+    .expect("explicitly reviewed P4006 candidate should become context only");
+
+    assert_eq!(reviewed.relation_type_ref, "context:wikidata:overrules");
+    assert_eq!(reviewed.left_ref, "Q1501525");
+    assert_eq!(reviewed.right_ref, "Q123");
+    assert!(reviewed.candidate_only);
+    assert!(!reviewed.creates_semantic_authority);
+    assert!(!reviewed.applicability_promoted);
+    assert!(!reviewed.claim_truth_promoted);
+}
+
+#[test]
+fn mabo_wikidata_review_gate_accepts_only_the_bounded_direct_property_surface() {
+    for (property, relation) in [
+        ("P1001", "context:wikidata:jurisdiction"),
+        ("P710", "context:wikidata:participant"),
+        ("P4884", "context:wikidata:court"),
+        ("P1594", "context:wikidata:judge"),
+        ("P4006", "context:wikidata:overrules"),
+    ] {
+        let edge = review_mabo_wikidata_candidate(
+            "wikidata:Q1501525:oldid:2333409615",
+            format!("wikidata:Q1501525:{property}:Q42"),
+            "Q1501525",
+            "Q42",
+            property,
+            ContextReviewDecision::Reviewed,
+        )
+        .expect("bounded reviewed property should be admitted");
+        assert_eq!(edge.relation_type_ref, relation);
+    }
+
+    assert!(review_mabo_wikidata_candidate(
+        "wikidata:Q1501525:oldid:2333409615",
+        "wikidata:Q1501525:P31:Q2334719",
+        "Q1501525",
+        "Q2334719",
+        "P31",
+        ContextReviewDecision::Reviewed,
+    )
+    .is_err());
+
+    assert!(review_mabo_wikidata_candidate(
+        "wikidata:Q1501525:oldid:2333409615",
+        "wikidata:Q999:P710:Q42",
+        "Q999",
+        "Q42",
+        "P710",
+        ContextReviewDecision::Reviewed,
+    )
+    .is_err());
+}
+
+#[test]
+fn materializer_symbol_is_part_of_the_public_storage_surface() {
+    let _ = materialize_reviewed_context_edges;
+}
