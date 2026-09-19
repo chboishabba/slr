@@ -8,6 +8,9 @@
 
 use sensiblaw_pg_source_store::{LatentWorldEdgeRow, LatentWorldRows};
 use sensiblaw_proof_search_loop::frontier::{ProofFrontier, ProofResidual, ResidualStatus};
+use sensiblaw_proof_search_loop::world_expansion::ProducerLane;
+
+use crate::adaptive_campaign::MaboAdaptiveDecision;
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
@@ -175,6 +178,36 @@ pub fn proof_frontier_digest(frontier: &ProofFrontier) -> String {
     format!("sha256:{}", hex_digest(&hasher.finalize()))
 }
 
+fn producer_lane_ref(lane: ProducerLane) -> &'static str {
+    match lane {
+        ProducerLane::GovernedLegal => "governed-legal",
+        ProducerLane::WikidataIdentity => "wikidata-identity",
+        ProducerLane::WikipediaContext => "wikipedia-context",
+        ProducerLane::SourceSpecificProvenance => "source-specific-provenance",
+        ProducerLane::Other => "other",
+    }
+}
+
+fn decision_coordinates(decision: &MaboAdaptiveDecision) -> (&str, &str, &'static str) {
+    match decision {
+        MaboAdaptiveDecision::Identity(selection) => (
+            selection.residual_ref.as_str(),
+            selection.move_ref.as_str(),
+            "wikidata-identity",
+        ),
+        MaboAdaptiveDecision::ContextExpansion(selection) => (
+            selection.residual_ref.as_str(),
+            selection.move_ref.as_str(),
+            "wikidata-context-expansion",
+        ),
+        MaboAdaptiveDecision::TypedProducer(selection) => (
+            selection.residual_ref.as_str(),
+            selection.move_ref.as_str(),
+            producer_lane_ref(selection.producer_lane),
+        ),
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AdaptiveSelectionReceipt {
     pub schema_version: String,
@@ -193,6 +226,86 @@ pub struct AdaptiveSelectionReceipt {
     pub creates_semantic_authority: bool,
     pub applicability_promoted: bool,
     pub claim_truth_promoted: bool,
+}
+
+#[must_use]
+pub fn selection_receipt_from_decision(
+    cycle_index: usize,
+    prior_commit_ref: Option<String>,
+    world: &LatentWorldRows,
+    frontier: &ProofFrontier,
+    decision: &MaboAdaptiveDecision,
+) -> AdaptiveSelectionReceipt {
+    let (selected_residual_ref, selected_move_ref, selected_producer_lane_ref) =
+        decision_coordinates(decision);
+    AdaptiveSelectionReceipt {
+        schema_version: "mabo-adaptive-selection:v1".into(),
+        cycle_index,
+        world_digest: latent_world_digest(world),
+        frontier_digest: proof_frontier_digest(frontier),
+        selected_residual_ref: selected_residual_ref.to_owned(),
+        selected_move_ref: selected_move_ref.to_owned(),
+        selected_producer_lane_ref: selected_producer_lane_ref.into(),
+        prior_commit_ref,
+        commit_ref: None,
+        review_or_payment_ref: None,
+        world_delta_ref: None,
+        selection_origin: POST_COMMIT_SELECTION_ORIGIN.into(),
+        candidate_only: true,
+        creates_semantic_authority: false,
+        applicability_promoted: false,
+        claim_truth_promoted: false,
+    }
+}
+
+#[must_use]
+pub fn complete_adaptive_selection_receipt(
+    receipt: &AdaptiveSelectionReceipt,
+    commit_ref: impl Into<String>,
+    review_or_payment_ref: impl Into<String>,
+    world_delta_ref: impl Into<String>,
+) -> AdaptiveSelectionReceipt {
+    let mut completed = receipt.clone();
+    completed.commit_ref = Some(commit_ref.into());
+    completed.review_or_payment_ref = Some(review_or_payment_ref.into());
+    completed.world_delta_ref = Some(world_delta_ref.into());
+    completed
+}
+
+/// Stable line-oriented representation for trajectory artifacts. This format is
+/// evidence only and is not consumed as review authority.
+#[must_use]
+pub fn render_adaptive_selection_receipt(receipt: &AdaptiveSelectionReceipt) -> String {
+    let value = |value: &Option<String>| value.as_deref().unwrap_or("");
+    [
+        format!("schema_version\t{}", receipt.schema_version),
+        format!("cycle_index\t{}", receipt.cycle_index),
+        format!("world_digest\t{}", receipt.world_digest),
+        format!("frontier_digest\t{}", receipt.frontier_digest),
+        format!("selected_residual\t{}", receipt.selected_residual_ref),
+        format!("selected_move\t{}", receipt.selected_move_ref),
+        format!(
+            "selected_producer_lane\t{}",
+            receipt.selected_producer_lane_ref
+        ),
+        format!("prior_commit_ref\t{}", value(&receipt.prior_commit_ref)),
+        format!("commit_ref\t{}", value(&receipt.commit_ref)),
+        format!(
+            "review_or_payment_ref\t{}",
+            value(&receipt.review_or_payment_ref)
+        ),
+        format!("world_delta_ref\t{}", value(&receipt.world_delta_ref)),
+        format!("selection_origin\t{}", receipt.selection_origin),
+        format!("candidate_only\t{}", receipt.candidate_only),
+        format!(
+            "creates_semantic_authority\t{}",
+            receipt.creates_semantic_authority
+        ),
+        format!("applicability_promoted\t{}", receipt.applicability_promoted),
+        format!("claim_truth_promoted\t{}", receipt.claim_truth_promoted),
+    ]
+    .join("\n")
+        + "\n"
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
