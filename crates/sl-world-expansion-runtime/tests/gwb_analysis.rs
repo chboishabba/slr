@@ -84,3 +84,32 @@ fn analysis_counts_switches_negative_redirects_and_residual_flow() {
     assert!(rendered.contains("committed_hops\t3"));
     assert!(rendered.contains("producer_family_switches\t2"));
 }
+
+
+#[test]
+fn supervised_type_closure_is_a_distinct_source_family_switch() {
+    let rows = vec![
+        row(
+            0,
+            "type-class",
+            "producer:wikidata-classification|operation:gwb:selected-question",
+            "wikidata:Q7725634:oldid:1",
+            "same-object",
+            "move:classification",
+        ),
+        row(
+            1,
+            "external-ontology-fallback",
+            "producer:external-ontology-advisory|operation:gwb:selected-question",
+            "wikidata-type-closure:Q7725634:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "shared-superclass",
+            "move:external",
+        ),
+    ];
+    let receipt = analyze_gwb_hops(&rows);
+
+    assert_eq!(receipt.unique_source_families, 2);
+    assert_eq!(receipt.source_family_switches, 1);
+    assert_eq!(receipt.unique_producer_families, 2);
+    assert_eq!(receipt.producer_family_switches, 1);
+}
