@@ -81,3 +81,32 @@ fn wrong_proposition_or_span_fails_closed() {
     bad.required_span_ref = "span:other".into();
     assert!(diagnose_mabo_proposition_research(&bad).is_err());
 }
+
+
+#[test]
+fn retained_role_research_uses_legal_follow_not_trigger_source_reacquisition() {
+    let diagnosed = diagnose_mabo_proposition_research(&rows(true, true)).unwrap();
+    for residual_ref in [
+        "mabo:residual:qualifier-unpaid",
+        "mabo:residual:defeater-unpaid",
+        "mabo:residual:comparator-unpaid",
+    ] {
+        let move_ = diagnosed
+            .moves
+            .iter()
+            .find(|move_| move_.residual.residual_ref == residual_ref)
+            .unwrap();
+        assert_eq!(move_.producer_lane, ProducerLane::GovernedLegal);
+        assert!(move_
+            .provider_operation_ref
+            .starts_with("legal-follow:proposition-role:"));
+        assert_eq!(
+            move_.source_ref.as_deref(),
+            Some("case:[1992]-HCA-23")
+        );
+        assert_ne!(
+            move_.provider_operation_ref,
+            "oalc:exact-mnc:[1992]-HCA-23"
+        );
+    }
+}
