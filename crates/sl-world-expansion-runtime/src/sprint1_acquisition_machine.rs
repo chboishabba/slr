@@ -392,7 +392,14 @@ pub fn execute_physical_acquisition<T: BoundedPhysicalTransport>(
         max_cold_remote_objects: MAX_COLD_REMOTE_PHYSICAL_OBJECTS,
         truncated_objects,
         abstain_required: truncated_objects > 0,
-        snapshot_simultaneous: live_fallbacks == 0,
+        snapshot_simultaneous: live_fallbacks == 0
+            && plan.unique_objects.iter().all(|object| {
+                matches!(
+                    object.acquisition_path,
+                    AcquisitionPath::SpecializedP31P279Slice
+                        | AcquisitionPath::RouteAwareGeneralSnapshot
+                )
+            }),
         candidate_only: true,
         creates_semantic_authority: false,
         applicability_promoted: false,
