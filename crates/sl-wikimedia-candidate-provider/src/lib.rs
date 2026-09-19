@@ -49,6 +49,14 @@ pub struct ProviderReceipt {
     pub semantic_promotion: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MultilingualArticleProjectionReceipt {
+    pub wikipedia_article_candidates: u64,
+    pub candidate_only: bool,
+    pub semantic_promotion: bool,
+    pub same_qid_creates_semantic_equivalence: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AcquiredEntityRdf {
     pub qid: String,
@@ -191,6 +199,28 @@ fn article_candidate(root_qid: &str, article_url: &str) -> RouteCandidate {
     }
 }
 
+fn multilingual_article_candidate(root_qid: &str, article_url: &str) -> RouteCandidate {
+    let mut candidate = article_candidate(root_qid, article_url);
+    candidate.cross_language_gap_coverage = 1;
+    candidate
+}
+
+fn wikipedia_root(value: &str) -> bool {
+    let Some(host) = value
+        .strip_prefix("https://")
+        .and_then(|rest| rest.strip_suffix('/'))
+    else {
+        return false;
+    };
+    let Some(language) = host.strip_suffix(".wikipedia.org") else {
+        return false;
+    };
+    !language.is_empty()
+        && language
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+}
+
 fn search_candidate(root_qid: &str, producer: ProducerFamily, route_family: RouteFamily, label: &str) -> RouteCandidate {
     RouteCandidate {
         candidate_id: format!("search:{root_qid}:{label}"),
@@ -313,6 +343,100 @@ fn process_xml<R: BufRead, W: Write>(root_qid: &str, reader: R, writer: &mut W) 
         buffer.clear();
     }
     Ok((direct_count, article_count))
+}
+
+/// Emit every language-specific Wikipedia article surface attached to one
+/// exact Wikidata RDF manifestation. All surfaces are peer candidates:
+/// shared QID identity never establishes translation or semantic equivalence.
+pub fn emit_multilingual_wikipedia_candidates_from_rdf<R: Read, W: Write>(
+    root_qid: &str,
+    mut rdf: R,
+    writer: &mut W,
+) -> Result<MultilingualArticleProjectionReceipt, ProviderError> {
+    if !valid_qid(root_qid) {
+        return Err(ProviderError::InvalidInput(format!("invalid QID {root_qid}")));
+    }
+    let mut bytes = Vec::new();
+    rdf.by_ref()
+        .take((MAX_RDF_BYTES + 1) as u64)
+        .read_to_end(&mut bytes)?;
+    if bytes.len() > MAX_RDF_BYTES {
+        return Err(ProviderError::InvalidInput(
+            "RDF entity document exceeds size limit".into(),
+        ));
+    }
+
+    let mut xml = Reader::from_reader(std::io::Cursor::new(bytes));
+    xml.config_mut().trim_text(true);
+    let mut buffer = Vec::new();
+    let mut current_article_url: Option<String> = None;
+    let mut current_article_is_article = false;
+    let mut article_about_root = false;
+    let mut article_is_wikipedia = false;
+    let mut count = 0u64;
+
+    loop {
+        match xml.read_event_into(&mut buffer)? {
+            Event::Start(start) => match start.name().as_ref() {
+                b"rdf:Description" | b"schema:Article" => {
+                    current_article_url = attribute_value(&start, b"rdf:about")?;
+                    current_article_is_article = start.name().as_ref() == b"schema:Article";
+                    article_about_root = false;
+                    article_is_wikipedia = false;
+                }
+                _ => {}
+            },
+            Event::Empty(empty) => {
+                let raw = empty.name();
+                match raw.as_ref() {
+                    b"rdf:type" if current_article_url.is_some() => {
+                        current_article_is_article =
+                            attribute_value(&empty, b"rdf:resource")?.as_deref()
+                                == Some("http://schema.org/Article");
+                    }
+                    b"schema:about" if current_article_url.is_some() => {
+                        article_about_root = attribute_value(&empty, b"rdf:resource")?
+                            .and_then(|value| qid_from_entity_uri(&value))
+                            .as_deref()
+                            == Some(root_qid);
+                    }
+                    b"schema:isPartOf" if current_article_url.is_some() => {
+                        article_is_wikipedia = attribute_value(&empty, b"rdf:resource")?
+                            .as_deref()
+                            .is_some_and(wikipedia_root);
+                    }
+                    _ => {}
+                }
+            }
+            Event::End(end)
+                if matches!(end.name().as_ref(), b"rdf:Description" | b"schema:Article") =>
+            {
+                if current_article_is_article && article_about_root && article_is_wikipedia {
+                    if let Some(url) = current_article_url.as_deref() {
+                        encode_route_candidate(
+                            writer,
+                            &multilingual_article_candidate(root_qid, url),
+                        )?;
+                        count += 1;
+                    }
+                }
+                current_article_url = None;
+                current_article_is_article = false;
+                article_about_root = false;
+                article_is_wikipedia = false;
+            }
+            Event::Eof => break,
+            _ => {}
+        }
+        buffer.clear();
+    }
+
+    Ok(MultilingualArticleProjectionReceipt {
+        wikipedia_article_candidates: count,
+        candidate_only: true,
+        semantic_promotion: false,
+        same_qid_creates_semantic_equivalence: false,
+    })
 }
 
 pub fn emit_candidates_from_rdf<R: Read, W: Write>(root_qid: &str, mut rdf: R, writer: &mut W) -> Result<ProviderReceipt, ProviderError> {
