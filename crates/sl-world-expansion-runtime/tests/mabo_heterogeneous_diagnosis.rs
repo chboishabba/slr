@@ -1,8 +1,11 @@
 use sensiblaw_pg_source_store::{PropositionObservationRow, PropositionRows};
+use sensiblaw_proof_search_loop::judgment_candidates::{
+    CitationOccurrenceCandidate, LexicalTreatmentHint,
+};
 use sensiblaw_proof_search_loop::world_expansion::{ProducerLane, ResidualClass};
 use sensiblaw_world_expansion_runtime::mabo_heterogeneous_diagnosis::{
-    diagnose_mabo_proposition_research, MABO_RADICAL_TITLE_PROPOSITION,
-    MABO_RADICAL_TITLE_SPAN,
+    diagnose_mabo_proposition_research, expand_mabo_legal_follow_candidates,
+    MABO_RADICAL_TITLE_PROPOSITION, MABO_RADICAL_TITLE_SPAN,
 };
 
 fn rows(exact_source_paid: bool, with_support: bool) -> PropositionRows {
@@ -109,4 +112,53 @@ fn retained_role_research_uses_legal_follow_not_trigger_source_reacquisition() {
             "oalc:exact-mnc:[1992]-HCA-23"
         );
     }
+}
+
+
+fn citation(text: &str, locator: &str) -> CitationOccurrenceCandidate {
+    CitationOccurrenceCandidate {
+        document_ref: "document:mabo".into(),
+        source_revision_ref: "source-revision:mabo".into(),
+        canonical_text_sha256: "sha256:text".into(),
+        paragraph_ordinal: 42,
+        paragraph_locator_ref: locator.into(),
+        reported_paragraph_label: Some("[42]".into()),
+        citation_text: text.into(),
+        paragraph_text: format!("considered {text}"),
+        anchor_paragraph_locator_refs: vec![locator.into()],
+        anchor_paragraph_texts: vec![format!("considered {text}")],
+        lexical_treatment_hints: vec![LexicalTreatmentHint::ReliedOnCandidate],
+        reviewed: false,
+        candidate_only: true,
+    }
+}
+
+#[test]
+fn retained_legal_debt_expands_to_source_located_citation_moves_without_self_follow() {
+    let diagnosis = diagnose_mabo_proposition_research(&rows(true, true)).unwrap();
+    let expanded = expand_mabo_legal_follow_candidates(
+        &diagnosis,
+        &[
+            citation("[1992] HCA 23", "document:mabo#paragraph-1"),
+            citation("[1988] HCA 69", "document:mabo#paragraph-42"),
+        ],
+    );
+
+    assert!(!expanded.iter().any(|move_| {
+        move_.source_ref.as_deref() == Some("[1992] HCA 23")
+    }));
+    let legal = expanded
+        .iter()
+        .filter(|move_| {
+            move_.source_ref.as_deref() == Some("[1988] HCA 69")
+                && move_.producer_lane == ProducerLane::GovernedLegal
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(legal.len(), 3);
+    assert!(legal
+        .iter()
+        .all(|move_| move_.provider_operation_ref == "legal-follow:exact-citation"));
+    assert!(legal
+        .iter()
+        .all(|move_| move_.diagnosis_reference.contains("document:mabo#paragraph-42")));
 }
