@@ -286,19 +286,26 @@ fn identity_moves(diagnosis: &MaboConsumerDiagnosis) -> Vec<FrontierCandidateMov
         .collect()
 }
 
-/// Rank the current semantic work before looking at review manifests.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MaboAdaptiveFrontierCompilation {
+    pub frontier: ProofFrontier,
+    pub candidates: Vec<FrontierCandidateMove>,
+}
+
+/// Compile the whole current Mabo adaptive work surface before review lookup.
 ///
-/// The review manifest is an execution authority, not a scheduler prior. Both
-/// identity gaps and durable-source expansion gaps are projected into one fresh
-/// frontier and one canonical Pareto selection on every iteration.
+/// This is the exact frontier/candidate pair consumed by the Pareto selector.
+/// Exposing it makes the selection provenance auditable and gives later legal,
+/// provenance and diagnostic residual compilers one composition point without
+/// introducing another scheduler.
 #[must_use]
-pub fn select_next_mabo_adaptive_decision(
+pub fn compile_mabo_adaptive_frontier(
     diagnosis: &MaboConsumerDiagnosis,
     baseline: &DiscoveryIdentityBaseline,
     world: &LatentWorldRows,
     expanded_source_refs: &BTreeSet<String>,
     frontier_ref: impl Into<String>,
-) -> Option<MaboAdaptiveDecision> {
+) -> MaboAdaptiveFrontierCompilation {
     let expansion_frontier = diagnose_mabo_context_expansion_frontier(
         baseline,
         world,
@@ -328,7 +335,17 @@ pub fn select_next_mabo_adaptive_decision(
 
     let mut candidates = identity_moves(diagnosis);
     candidates.extend(context_expansion_moves(&expansion_frontier));
-    let selected = select_frontier_move(&frontier, &candidates, 1)?;
+    MaboAdaptiveFrontierCompilation {
+        frontier,
+        candidates,
+    }
+}
+
+fn decision_from_compilation(
+    diagnosis: &MaboConsumerDiagnosis,
+    compiled: &MaboAdaptiveFrontierCompilation,
+) -> Option<MaboAdaptiveDecision> {
+    let selected = select_frontier_move(&compiled.frontier, &compiled.candidates, 1)?;
     let residual_ref = selected.target_residual_refs.first()?.clone();
 
     if let Some(row) = diagnosis.rows.iter().find(|row| row.residual_ref == residual_ref) {
@@ -350,6 +367,29 @@ pub fn select_next_mabo_adaptive_decision(
             shared_dependency_gain: selected.shared_dependency_gain,
         },
     ))
+}
+
+/// Rank the current semantic work before looking at review manifests.
+///
+/// The review manifest is an execution authority, not a scheduler prior. Both
+/// identity gaps and durable-source expansion gaps are projected into one fresh
+/// frontier and one canonical Pareto selection on every iteration.
+#[must_use]
+pub fn select_next_mabo_adaptive_decision(
+    diagnosis: &MaboConsumerDiagnosis,
+    baseline: &DiscoveryIdentityBaseline,
+    world: &LatentWorldRows,
+    expanded_source_refs: &BTreeSet<String>,
+    frontier_ref: impl Into<String>,
+) -> Option<MaboAdaptiveDecision> {
+    let compiled = compile_mabo_adaptive_frontier(
+        diagnosis,
+        baseline,
+        world,
+        expanded_source_refs,
+        frontier_ref,
+    );
+    decision_from_compilation(diagnosis, &compiled)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
