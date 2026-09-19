@@ -1218,6 +1218,7 @@ dependencies = [
 name = "sensiblaw-pg-source-store"
 version = "0.1.0"
 dependencies = [
+ "sensiblaw-core",
  "dotenvy",
  "postgres",
  "sensiblaw-evidence-payment",
@@ -1231,6 +1232,7 @@ dependencies = [
 name = "sensiblaw-proof-search-loop"
 version = "0.1.0"
 dependencies = [
+ "sensiblaw-core",
  "sensiblaw-evidential-reopen",
  "sensiblaw-governed-legal-provider",
  "sensiblaw-nsw-legislation-provider",
@@ -1342,6 +1344,7 @@ dependencies = [
 name = "sensiblaw-world-compiler"
 version = "0.1.0"
 dependencies = [
+ "sensiblaw-core",
  "sensiblaw-world-store",
  "sha2 0.10.9",
  "thiserror 1.0.69",
