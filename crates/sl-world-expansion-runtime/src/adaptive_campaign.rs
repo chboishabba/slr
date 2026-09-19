@@ -246,9 +246,79 @@ pub fn select_next_mabo_context_expansion(
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MaboTypedProducerSelection {
+    pub residual_ref: String,
+    pub residual_class: sensiblaw_proof_search_loop::world_expansion::ResidualClass,
+    pub producer_lane: sensiblaw_proof_search_loop::world_expansion::ProducerLane,
+    pub move_ref: String,
+    pub source_ref: Option<String>,
+    pub provider_operation_ref: String,
+    pub shared_dependency_gain: u64,
+    pub diagnosis_reference: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MaboAdaptiveDecision {
     Identity(MaboAdaptiveSelection),
     ContextExpansion(MaboContextExpansionSelection),
+    TypedProducer(MaboTypedProducerSelection),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TypedAdaptiveResidualMove {
+    pub residual: ProofResidual,
+    pub residual_class: sensiblaw_proof_search_loop::world_expansion::ResidualClass,
+    pub producer_lane: sensiblaw_proof_search_loop::world_expansion::ProducerLane,
+    pub move_ref: String,
+    pub source_ref: Option<String>,
+    pub provider_operation_ref: String,
+    pub expected_whole_frontier_reduction: u64,
+    pub shared_dependency_gain: u64,
+    pub network_requests: u64,
+    pub operator_review_cost: u64,
+    pub admissible: bool,
+    pub diagnosis_reference: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum DurableAdaptiveNegativeKind {
+    WrongType,
+    Duplicate,
+    IrrelevantToResidual,
+    FailedFactorsThrough,
+    Inadmissible,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DurableAdaptiveNegativeAssessment {
+    pub residual_ref: String,
+    pub move_ref: String,
+    pub kind: DurableAdaptiveNegativeKind,
+    pub assessment_ref: String,
+    pub source_revision_ref: Option<String>,
+    pub candidate_only: bool,
+    pub creates_semantic_authority: bool,
+    pub applicability_promoted: bool,
+    pub claim_truth_promoted: bool,
+}
+
+impl DurableAdaptiveNegativeAssessment {
+    #[must_use]
+    pub const fn is_non_promoting(&self) -> bool {
+        self.candidate_only
+            && !self.creates_semantic_authority
+            && !self.applicability_promoted
+            && !self.claim_truth_promoted
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct TypedAdaptiveMoveMetadata {
+    residual_class: sensiblaw_proof_search_loop::world_expansion::ResidualClass,
+    producer_lane: sensiblaw_proof_search_loop::world_expansion::ProducerLane,
+    source_ref: Option<String>,
+    provider_operation_ref: String,
+    diagnosis_reference: String,
 }
 
 fn identity_moves(diagnosis: &MaboConsumerDiagnosis) -> Vec<FrontierCandidateMove> {
@@ -290,6 +360,7 @@ fn identity_moves(diagnosis: &MaboConsumerDiagnosis) -> Vec<FrontierCandidateMov
 pub struct MaboAdaptiveFrontierCompilation {
     pub frontier: ProofFrontier,
     pub candidates: Vec<FrontierCandidateMove>,
+    typed_move_metadata: BTreeMap<String, TypedAdaptiveMoveMetadata>,
 }
 
 /// Compile the whole current Mabo adaptive work surface before review lookup.
@@ -338,6 +409,7 @@ pub fn compile_mabo_adaptive_frontier(
     MaboAdaptiveFrontierCompilation {
         frontier,
         candidates,
+        typed_move_metadata: BTreeMap::new(),
     }
 }
 
@@ -356,17 +428,135 @@ fn decision_from_compilation(
             shared_dependency_gain: selected.shared_dependency_gain,
         }));
     }
-    let source_qid = residual_ref
-        .strip_prefix(CONTEXT_EXPANSION_RESIDUAL_PREFIX)?
-        .to_owned();
-    Some(MaboAdaptiveDecision::ContextExpansion(
-        MaboContextExpansionSelection {
-            residual_ref,
-            source_qid,
-            move_ref: selected.move_.move_ref.clone(),
-            shared_dependency_gain: selected.shared_dependency_gain,
-        },
-    ))
+    if let Some(source_qid) = residual_ref
+        .strip_prefix(CONTEXT_EXPANSION_RESIDUAL_PREFIX)
+        .map(ToOwned::to_owned)
+    {
+        return Some(MaboAdaptiveDecision::ContextExpansion(
+            MaboContextExpansionSelection {
+                residual_ref,
+                source_qid,
+                move_ref: selected.move_.move_ref.clone(),
+                shared_dependency_gain: selected.shared_dependency_gain,
+            },
+        ));
+    }
+    let metadata = compiled
+        .typed_move_metadata
+        .get(&selected.move_.move_ref)?;
+    Some(MaboAdaptiveDecision::TypedProducer(MaboTypedProducerSelection {
+        residual_ref,
+        residual_class: metadata.residual_class,
+        producer_lane: metadata.producer_lane,
+        move_ref: selected.move_.move_ref.clone(),
+        source_ref: metadata.source_ref.clone(),
+        provider_operation_ref: metadata.provider_operation_ref.clone(),
+        shared_dependency_gain: selected.shared_dependency_gain,
+        diagnosis_reference: metadata.diagnosis_reference.clone(),
+    }))
+}
+
+/// Add heterogeneous consumer-derived residuals to the exact current Mabo
+/// frontier while preserving the existing canonical Pareto scheduler.
+///
+/// Durable negative assessments are candidate/move constraints only. They do
+/// not mark the target residual satisfied. Invalid/promoting negative receipts
+/// are ignored rather than gaining suppression authority.
+#[must_use]
+pub fn compile_mabo_heterogeneous_frontier(
+    diagnosis: &MaboConsumerDiagnosis,
+    baseline: &DiscoveryIdentityBaseline,
+    world: &LatentWorldRows,
+    expanded_source_refs: &BTreeSet<String>,
+    additional_moves: &[TypedAdaptiveResidualMove],
+    negative_assessments: &[DurableAdaptiveNegativeAssessment],
+    frontier_ref: impl Into<String>,
+) -> MaboAdaptiveFrontierCompilation {
+    let mut compiled = compile_mabo_adaptive_frontier(
+        diagnosis,
+        baseline,
+        world,
+        expanded_source_refs,
+        frontier_ref,
+    );
+
+    let mut residual_refs = compiled
+        .frontier
+        .residuals
+        .iter()
+        .map(|residual| residual.residual_ref.clone())
+        .collect::<BTreeSet<_>>();
+
+    for additional in additional_moves {
+        if residual_refs.insert(additional.residual.residual_ref.clone()) {
+            compiled.frontier.residuals.push(additional.residual.clone());
+        }
+
+        let suppressed = negative_assessments.iter().any(|assessment| {
+            assessment.is_non_promoting()
+                && assessment.residual_ref == additional.residual.residual_ref
+                && assessment.move_ref == additional.move_ref
+        });
+        let admissible = additional.admissible && !suppressed;
+
+        compiled.candidates.push(FrontierCandidateMove {
+            target_residual_refs: vec![additional.residual.residual_ref.clone()],
+            move_: CandidateMove {
+                move_ref: additional.move_ref.clone(),
+                strategy: ExecutionStrategy::GovernedExactAuthorityFetch,
+                source_ref: additional.source_ref.clone(),
+                provider_operation_ref: additional.provider_operation_ref.clone(),
+                cost: ExecutionCostVector {
+                    network_requests: additional.network_requests,
+                    operator_review_cost: additional.operator_review_cost,
+                    ..ExecutionCostVector::default()
+                },
+                value: ProofValueVector {
+                    expected_proof_reduction: additional.expected_whole_frontier_reduction,
+                    discriminative_value: additional.shared_dependency_gain,
+                    coverage_gain: additional.shared_dependency_gain,
+                    ..ProofValueVector::default()
+                },
+                admissible,
+                calibration_ref: "mabo-adaptive-heterogeneous:v1".into(),
+            },
+            expected_whole_frontier_reduction: additional.expected_whole_frontier_reduction,
+            shared_dependency_gain: additional.shared_dependency_gain,
+        });
+        compiled.typed_move_metadata.insert(
+            additional.move_ref.clone(),
+            TypedAdaptiveMoveMetadata {
+                residual_class: additional.residual_class,
+                producer_lane: additional.producer_lane,
+                source_ref: additional.source_ref.clone(),
+                provider_operation_ref: additional.provider_operation_ref.clone(),
+                diagnosis_reference: additional.diagnosis_reference.clone(),
+            },
+        );
+    }
+
+    compiled.frontier.residuals.sort();
+    compiled.frontier.residuals.dedup();
+    compiled.candidates.sort_by(|left, right| {
+        left.move_
+            .move_ref
+            .cmp(&right.move_.move_ref)
+            .then_with(|| left.target_residual_refs.cmp(&right.target_residual_refs))
+    });
+    compiled.candidates.dedup_by(|left, right| {
+        left.move_.move_ref == right.move_.move_ref
+            && left.target_residual_refs == right.target_residual_refs
+    });
+
+    compiled
+}
+
+#[must_use]
+pub fn select_next_mabo_heterogeneous_decision(
+    diagnosis: &MaboConsumerDiagnosis,
+    compiled: &MaboAdaptiveFrontierCompilation,
+) -> Option<MaboAdaptiveDecision> {
+    decision_from_compilation(diagnosis, compiled)
 }
 
 /// Rank the current semantic work before looking at review manifests.
