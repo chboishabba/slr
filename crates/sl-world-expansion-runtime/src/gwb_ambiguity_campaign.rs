@@ -354,22 +354,25 @@ fn execution_strategy(candidate: &GwbInvestigationCandidate) -> ExecutionStrateg
         GwbInvestigationKind::TypeClass
         | GwbInvestigationKind::Superclass
         | GwbInvestigationKind::Property
+        | GwbInvestigationKind::Identity
+        | GwbInvestigationKind::SourceWorkIdentity
             if candidate.source_revision_ref.is_some() =>
         {
             ExecutionStrategy::LocalWorldGraph
         }
-        GwbInvestigationKind::CrossLanguageSurface
+        GwbInvestigationKind::TypeClass
+        | GwbInvestigationKind::Superclass
+        | GwbInvestigationKind::Property
+        | GwbInvestigationKind::Identity
+        | GwbInvestigationKind::SourceWorkIdentity
+        | GwbInvestigationKind::CrossLanguageSurface
         | GwbInvestigationKind::Subclass
         | GwbInvestigationKind::SourceLookup
         | GwbInvestigationKind::ExternalOntologyFallback
         | GwbInvestigationKind::Snowball => ExecutionStrategy::GovernedLiveReferenceSearch,
-        GwbInvestigationKind::Identity
-        | GwbInvestigationKind::SourceWorkIdentity
-        | GwbInvestigationKind::Provenance
-        | GwbInvestigationKind::ParserRepair
-        | GwbInvestigationKind::TypeClass
-        | GwbInvestigationKind::Superclass
-        | GwbInvestigationKind::Property => ExecutionStrategy::LocalWorldGraph,
+        GwbInvestigationKind::Provenance | GwbInvestigationKind::ParserRepair => {
+            ExecutionStrategy::LocalWorldGraph
+        }
     }
 }
 
