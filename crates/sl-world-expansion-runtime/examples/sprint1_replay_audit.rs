@@ -2,7 +2,7 @@ use std::path::Path;
 
 use sensiblaw_world_expansion_runtime::gwb_ambiguity_campaign::GWB_ADAPTIVE_CAMPAIGN_REF;
 use sensiblaw_world_expansion_runtime::sprint1_acquisition_machine::load_and_replay_campaign_head;
-use sensiblaw_world_store::load_database_config;
+use sensiblaw_pg_source_store::load_database_config;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let env_path = Path::new(".env");
