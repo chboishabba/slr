@@ -12,7 +12,9 @@ use sensiblaw_evidence_payment::{
 };
 use sensiblaw_pg_source_store::{PropositionObservationRow, PropositionRows};
 use sensiblaw_proof_search_loop::frontier::{ProofResidual, ResidualStatus};
+use sensiblaw_proof_search_loop::judgment_candidates::CitationOccurrenceCandidate;
 use sensiblaw_proof_search_loop::world_expansion::{ProducerLane, ResidualClass};
+use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 use crate::adaptive_campaign::TypedAdaptiveResidualMove;
@@ -278,4 +280,110 @@ pub fn diagnose_mabo_proposition_research(
         applicability_promoted: false,
         claim_truth_promoted: false,
     })
+}
+
+
+fn short_digest(value: &str) -> String {
+    let digest = Sha256::digest(value.as_bytes());
+    digest[..8]
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
+}
+
+/// Replace generic retained-role LegalFollow moves with concrete source-located
+/// citation moves extracted from the already-reviewed trigger judgment.
+///
+/// Citation occurrences remain candidate-only observations. Lexical treatment
+/// hints do not become CitationUse, authority, applicability, or payment.
+#[must_use]
+pub fn expand_mabo_legal_follow_candidates(
+    diagnosis: &MaboPropositionResearchDiagnosis,
+    citation_candidates: &[CitationOccurrenceCandidate],
+) -> Vec<TypedAdaptiveResidualMove> {
+    let legal_follow = diagnosis
+        .moves
+        .iter()
+        .filter(|move_| {
+            move_.residual_class == ResidualClass::Legal
+                && move_
+                    .provider_operation_ref
+                    .starts_with("legal-follow:proposition-role:")
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+
+    let mut concrete = Vec::new();
+    for base in &legal_follow {
+        for citation in citation_candidates {
+            if !citation.candidate_only
+                || citation.citation_text == "[1992] HCA 23"
+                || citation.citation_text.trim().is_empty()
+            {
+                continue;
+            }
+            let mut move_ = base.clone();
+            let role = base
+                .provider_operation_ref
+                .strip_prefix("legal-follow:proposition-role:")
+                .unwrap_or("research");
+            let identity = format!(
+                "{}\0{}\0{}\0{}",
+                base.residual.residual_ref,
+                citation.source_revision_ref,
+                citation.paragraph_locator_ref,
+                citation.citation_text
+            );
+            move_.move_ref = format!(
+                "move:mabo:legal-follow:{role}:{}",
+                short_digest(&identity)
+            );
+            move_.source_ref = Some(citation.citation_text.clone());
+            move_.provider_operation_ref = "legal-follow:exact-citation".into();
+            move_.shared_dependency_gain = u64::try_from(
+                citation
+                    .anchor_paragraph_locator_refs
+                    .len()
+                    .saturating_add(citation.lexical_treatment_hints.len())
+                    .max(1),
+            )
+            .unwrap_or(u64::MAX);
+            move_.diagnosis_reference = format!(
+                "diagnosis:mabo:citation-candidate:{}:{}",
+                citation.source_revision_ref, citation.paragraph_locator_ref
+            );
+            concrete.push(move_);
+        }
+    }
+
+    // Preserve non-role moves (mandatory source/support and retained PNF
+    // provenance residuals). Generic role moves are retained only when no
+    // concrete source-located citation candidates exist, so the scheduler never
+    // selects an unexecutable placeholder ahead of its concrete children.
+    let mut out = diagnosis
+        .moves
+        .iter()
+        .filter(|move_| {
+            !move_
+                .provider_operation_ref
+                .starts_with("legal-follow:proposition-role:")
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    if concrete.is_empty() {
+        out.extend(legal_follow);
+    } else {
+        out.extend(concrete);
+    }
+    out.sort_by(|left, right| {
+        left.residual
+            .residual_ref
+            .cmp(&right.residual.residual_ref)
+            .then_with(|| left.move_ref.cmp(&right.move_ref))
+    });
+    out.dedup_by(|left, right| {
+        left.residual.residual_ref == right.residual.residual_ref
+            && left.move_ref == right.move_ref
+    });
+    out
 }
