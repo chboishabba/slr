@@ -11,7 +11,7 @@ use sensiblaw_core::canonical_evidence::{
     EvidenceSpan, EvidenceSubstrateError,
 };
 use sensiblaw_governed_legal_provider::OalcLookupReceipt;
-use sensiblaw_pg_source_store::CachedResolvedDocument;
+use sensiblaw_pg_source_store::{CacheFirstResolution, CachedResolvedDocument};
 use sha2::{Digest, Sha256};
 use sensiblaw_proof_search_loop::world_observation::GetterBackend;
 use sensiblaw_proof_search_loop::world_observation_adapters::{
@@ -283,6 +283,85 @@ pub fn normalize_cached_legal_provider(
         "legal:source-manifestation",
         source.citation.clone(),
     )
+}
+
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CacheFirstProviderPath {
+    PgHit,
+    AcquiredPersisted,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CacheFirstCanonicalEvidenceReceipt {
+    pub path: CacheFirstProviderPath,
+    pub acquisition_network_requests: u64,
+    pub verification_network_requests: u64,
+    pub evidence: ProviderCanonicalEvidence,
+}
+
+impl CacheFirstCanonicalEvidenceReceipt {
+    pub fn validate(&self) -> Result<(), ProviderNormalisationError> {
+        self.evidence.validate()?;
+        match self.path {
+            CacheFirstProviderPath::PgHit
+                if self.acquisition_network_requests != 0
+                    || self.verification_network_requests != 0 =>
+            {
+                Err(ProviderNormalisationError::IdentityMismatch(
+                    "pg-hit-network-requests",
+                ))
+            }
+            CacheFirstProviderPath::AcquiredPersisted
+                if self.verification_network_requests != 0 =>
+            {
+                Err(ProviderNormalisationError::IdentityMismatch(
+                    "post-persist-verification-network-requests",
+                ))
+            }
+            _ => Ok(()),
+        }
+    }
+}
+
+pub fn normalize_cache_first_resolution(
+    request_ref: impl Into<String>,
+    resolution: &CacheFirstResolution,
+    revision_receipt_ref: impl Into<String>,
+) -> Result<CacheFirstCanonicalEvidenceReceipt, ProviderNormalisationError> {
+    let request_ref = request_ref.into();
+    let revision_receipt_ref = revision_receipt_ref.into();
+    let receipt = match resolution {
+        CacheFirstResolution::PgHit {
+            source,
+            network_requests,
+        } => CacheFirstCanonicalEvidenceReceipt {
+            path: CacheFirstProviderPath::PgHit,
+            acquisition_network_requests: *network_requests,
+            verification_network_requests: 0,
+            evidence: normalize_cached_legal_provider(
+                request_ref,
+                source,
+                revision_receipt_ref,
+            )?,
+        },
+        CacheFirstResolution::AcquiredPersisted {
+            source,
+            acquisition_network_requests,
+            verification_network_requests,
+        } => CacheFirstCanonicalEvidenceReceipt {
+            path: CacheFirstProviderPath::AcquiredPersisted,
+            acquisition_network_requests: *acquisition_network_requests,
+            verification_network_requests: *verification_network_requests,
+            evidence: normalize_cached_legal_provider(
+                request_ref,
+                source,
+                revision_receipt_ref,
+            )?,
+        },
+    };
+    receipt.validate()?;
+    Ok(receipt)
 }
 
 #[allow(clippy::too_many_arguments)]
