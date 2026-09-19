@@ -4,14 +4,15 @@
 // perform acquisition and they do not create review authority.
 
 use sensiblaw_consumer_residual::EvidenceCoordinateKind;
-use sensiblaw_governed_legal_provider::OalcLookupReceipt;
+use sensiblaw_governed_legal_provider::{LegalProvider, LocalIngestionReceipt, OalcLookupReceipt, RECEIPT_AUTHORITY};
 use sensiblaw_route_executor::{AcquiredSource, AcquiredSourceKind};
 use sensiblaw_route_selector::{ProducerFamily, RouteCandidate, RouteFamily};
 use sensiblaw_wikimedia_candidate_provider::entity_revision_receipt_from_rdf;
 use sensiblaw_world_expansion_runtime::sprint2_provider_normalisation::{
-    normalize_cache_first_resolution, normalize_cached_legal_provider, normalize_oalc_provider,
-    normalize_wikidata_provider, normalize_wikipedia_provider, reduce_reviewed_provider_evidence,
-    CacheFirstProviderPath,
+    normalize_cache_first_resolution, normalize_cached_legal_provider,
+    normalize_local_ingested_document, normalize_oalc_provider, normalize_wikidata_provider,
+    normalize_wikipedia_provider, reduce_reviewed_provider_evidence, CacheFirstProviderPath,
+    LocalDocumentEvidenceFamily,
 };
 use sensiblaw_reviewed_evidence_payment::ReviewedEvidenceCoordinate;
 use sensiblaw_pg_source_store::{
@@ -244,4 +245,65 @@ fn acquired_persisted_path_retains_acquisition_count_and_zero_network_verificati
     assert_eq!(normalized.acquisition_network_requests, 1);
     assert_eq!(normalized.verification_network_requests, 0);
     normalized.validate().unwrap();
+}
+
+
+#[test]
+fn locally_ingested_official_pdf_uses_same_canonical_review_reducer_path() {
+    let receipt = LocalIngestionReceipt {
+        provider: LegalProvider::HighCourtAustralia,
+        source_identity_ref: "document:hca:[2026]-HCA-19:pdf".into(),
+        source_revision_ref: "source-revision:sha256:pdf-fixture".into(),
+        explicit_reference: "https://www.hcourt.gov.au/example/HCA19.pdf".into(),
+        canonical_bytes_digest: "sha256:pdf-fixture".into(),
+        locally_ingested: true,
+        network_requests_used_to_acquire: 1,
+        receipt_authority: RECEIPT_AUTHORITY,
+    };
+    let evidence = normalize_local_ingested_document(
+        "request:m2.4:hca-pdf",
+        &receipt,
+        LocalDocumentEvidenceFamily::PdfDocument,
+        "receipt:revision:hca-pdf",
+    )
+    .unwrap();
+    evidence.validate().unwrap();
+
+    let review = review_for(&evidence.observation.observation_ref);
+    let reduced = reduce_reviewed_provider_evidence(
+        &evidence,
+        &review,
+        "payment:m2.4:hca-pdf",
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+
+    assert_eq!(reduced.source_revision_ref, receipt.source_revision_ref);
+    assert!(reduced.candidate_only);
+    assert!(!reduced.creates_semantic_authority);
+    assert!(!reduced.applicability_promoted);
+    assert!(!reduced.claim_truth_promoted);
+}
+
+#[test]
+fn unpersisted_document_cannot_enter_canonical_provider_path() {
+    let receipt = LocalIngestionReceipt {
+        provider: LegalProvider::HighCourtAustralia,
+        source_identity_ref: "document:hca:unpersisted".into(),
+        source_revision_ref: "source-revision:fixture".into(),
+        explicit_reference: "https://www.hcourt.gov.au/example.docx".into(),
+        canonical_bytes_digest: "sha256:fixture".into(),
+        locally_ingested: false,
+        network_requests_used_to_acquire: 1,
+        receipt_authority: RECEIPT_AUTHORITY,
+    };
+    assert!(normalize_local_ingested_document(
+        "request:m2.4:unpersisted",
+        &receipt,
+        LocalDocumentEvidenceFamily::LegalAuthority,
+        "receipt:revision:unpersisted",
+    )
+    .is_err());
 }
