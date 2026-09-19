@@ -226,3 +226,65 @@ fn persisted_negative_rows_round_trip_into_runtime_constraints() {
     assert_eq!(mapped[0].residual_ref, "residual:mabo:legal:authority");
     assert_eq!(mapped[0].move_ref, "move:oalc:wrong-type");
 }
+
+
+#[test]
+fn durable_negative_can_suppress_builtin_context_move_without_closing_residual() {
+    let diagnosis = empty_diagnosis();
+    let baseline = DiscoveryIdentityBaseline {
+        identity_class_refs: BTreeSet::from(["world-object:q1".into()]),
+        representation_identity_class_refs: BTreeMap::from([
+            ("Q1".into(), "world-object:q1".into()),
+        ]),
+    };
+    let world = LatentWorldRows {
+        seed_ref: "Q1501525".into(),
+        max_hops: 1,
+        requested_max_hops: 1,
+        visited_refs: vec!["Q1501525".into(), "Q1".into()],
+        deepest_observed_hop: 1,
+        frontier_exhausted: true,
+        frontier_refs: vec![],
+        residual_refs: vec![],
+        edges: vec![],
+        creates_semantic_authority: false,
+        applicability_promoted: false,
+        claim_truth_promoted: false,
+    };
+    let negatives = vec![DurableAdaptiveNegativeAssessment {
+        residual_ref: "residual:mabo:context-expansion:Q1".into(),
+        move_ref: "move:mabo-context-expand:Q1".into(),
+        kind: DurableAdaptiveNegativeKind::WrongType,
+        assessment_ref: "assessment:context-q1-wrong-type".into(),
+        source_revision_ref: Some("wikidata:Q1:oldid:1".into()),
+        candidate_only: true,
+        creates_semantic_authority: false,
+        applicability_promoted: false,
+        claim_truth_promoted: false,
+    }];
+
+    let compiled = compile_mabo_heterogeneous_frontier(
+        &diagnosis,
+        &baseline,
+        &world,
+        &BTreeSet::from(["Q1501525".into()]),
+        &[],
+        &negatives,
+        "frontier:mabo:negative-builtin",
+    );
+
+    let residual = compiled
+        .frontier
+        .residuals
+        .iter()
+        .find(|r| r.residual_ref == "residual:mabo:context-expansion:Q1")
+        .unwrap();
+    assert_eq!(residual.status, ResidualStatus::Open);
+    let candidate = compiled
+        .candidates
+        .iter()
+        .find(|c| c.move_.move_ref == "move:mabo-context-expand:Q1")
+        .unwrap();
+    assert!(!candidate.move_.admissible);
+    assert!(select_next_mabo_heterogeneous_decision(&diagnosis, &compiled).is_none());
+}
