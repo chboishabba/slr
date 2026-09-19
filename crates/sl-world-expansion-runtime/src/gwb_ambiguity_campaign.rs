@@ -529,6 +529,12 @@ pub fn seed_gwb_qid_ambiguities(root_qid: &str) -> Vec<GwbAmbiguityStateInput> {
             90u64,
         ),
         (
+            "property-support",
+            format!("residual:gwb:{root_qid}:property-support"),
+            format!("gwb:ambiguity:{root_qid}:property-support"),
+            80u64,
+        ),
+        (
             "cross-language-gap",
             format!("residual:gwb:{root_qid}:cross-language"),
             format!("gwb:ambiguity:{root_qid}:cross-language"),
@@ -706,9 +712,7 @@ pub fn gwb_question_investigations(
     for residual in residuals {
         let root = residual.root_qid.clone();
         match residual.kind {
-            GwbAmbiguityKind::TypeClass
-            | GwbAmbiguityKind::Superclass
-            | GwbAmbiguityKind::PropertySupport => {
+            GwbAmbiguityKind::TypeClass | GwbAmbiguityKind::Superclass => {
                 if let Some(qid) = root {
                     merge_question(
                         &mut questions,
@@ -719,6 +723,21 @@ pub fn gwb_question_investigations(
                         Some(qid),
                         None,
                         1,
+                        0,
+                    );
+                }
+            }
+            GwbAmbiguityKind::PropertySupport => {
+                if let Some(qid) = root {
+                    merge_question(
+                        &mut questions,
+                        residual,
+                        format!("move:gwb:inspect:{qid}:properties"),
+                        GwbInvestigationKind::Property,
+                        "producer:wikidata-property",
+                        Some(qid),
+                        None,
+                        0,
                         0,
                     );
                 }
@@ -850,10 +869,71 @@ pub fn gwb_question_investigations(
         }
     }
 
-    questions
+    let mut active = questions
         .into_values()
         .filter(|candidate| !reviewed_move_refs.contains(&candidate.move_ref))
-        .collect()
+        .collect::<Vec<_>>();
+
+    for residual in residuals {
+        let already_targeted = active.iter().any(|candidate| {
+            candidate
+                .target_residual_refs
+                .iter()
+                .any(|value| value == &residual.residual_ref)
+        });
+        if already_targeted {
+            continue;
+        }
+
+        let external_move_ref = format!("move:gwb:external:{}", residual.residual_ref);
+        if !reviewed_move_refs.contains(&external_move_ref) {
+            active.push(GwbInvestigationCandidate::governed_query(
+                residual.residual_ref.clone(),
+                external_move_ref,
+                GwbInvestigationKind::ExternalOntologyFallback,
+                "producer:external-ontology-advisory",
+                residual.root_qid.clone(),
+                None,
+                "external-ontology:consumer-residual",
+                1,
+                residual.salience.max(1),
+                matches!(
+                    residual.kind,
+                    GwbAmbiguityKind::TypeClass
+                        | GwbAmbiguityKind::Superclass
+                        | GwbAmbiguityKind::Subclass
+                ) as u64,
+                0,
+                u64::try_from(residual.dependency_refs.len())
+                    .unwrap_or(u64::MAX)
+                    .max(1),
+            ));
+            continue;
+        }
+
+        let snowball_move_ref = format!("move:gwb:snowball:{}", residual.residual_ref);
+        if !reviewed_move_refs.contains(&snowball_move_ref) {
+            active.push(GwbInvestigationCandidate::governed_query(
+                residual.residual_ref.clone(),
+                snowball_move_ref,
+                GwbInvestigationKind::Snowball,
+                "producer:snowball",
+                residual.root_qid.clone(),
+                None,
+                "snowball:surviving-consumer-debt",
+                1,
+                residual.salience.max(1),
+                0,
+                0,
+                u64::try_from(residual.dependency_refs.len())
+                    .unwrap_or(u64::MAX)
+                    .max(1),
+            ));
+        }
+    }
+
+    active.sort_by(|left, right| left.move_ref.cmp(&right.move_ref));
+    active
 }
 
 #[must_use]
