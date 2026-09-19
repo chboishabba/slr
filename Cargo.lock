@@ -1218,9 +1218,9 @@ dependencies = [
 name = "sensiblaw-pg-source-store"
 version = "0.1.0"
 dependencies = [
- "sensiblaw-core",
  "dotenvy",
  "postgres",
+ "sensiblaw-core",
  "sensiblaw-evidence-payment",
  "sensiblaw-reader-model",
  "sha2 0.10.9",
