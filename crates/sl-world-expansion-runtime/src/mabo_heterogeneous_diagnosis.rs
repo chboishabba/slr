@@ -235,9 +235,9 @@ pub fn diagnose_mabo_proposition_research(
         moves.push(legal_move(
             residual_ref,
             &rows.proposition_ref,
-            Some("primary-legal-source"),
-            format!("move:mabo:oalc:{suffix}"),
-            format!("governed-legal:proposition-role:{suffix}"),
+            Some("official-primary-case"),
+            format!("move:mabo:legal-follow:{suffix}"),
+            format!("legal-follow:proposition-role:{suffix}"),
             1,
             format!("diagnosis:mabo:explicit-{suffix}-residual"),
         ));
