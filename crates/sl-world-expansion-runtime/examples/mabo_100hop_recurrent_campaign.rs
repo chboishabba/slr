@@ -2,10 +2,11 @@ use std::fs;
 use std::io::Cursor;
 
 use sensiblaw_pg_source_store::{
-    load_database_config, load_discovery_campaign_identity_classes,
-    load_discovery_identity_baseline, load_latent_world_rows_with_budget,
-    load_reviewed_context_expansion_sources, materialize_non_novel_identity_aliases,
-    materialize_reviewed_context_expansion, LatentWorldBudget, NonNovelIdentityAliasInput,
+    discovery_lineage_row, identity_alias_row, load_database_config,
+    load_discovery_campaign_identity_classes, load_discovery_identity_baseline,
+    load_latent_world_rows_with_budget, load_reviewed_context_expansion_sources,
+    materialize_non_novel_identity_aliases, materialize_reviewed_context_expansion,
+    reviewed_source_expansion_row, LatentWorldBudget, NonNovelIdentityAliasInput,
 };
 use sensiblaw_proof_search_loop::world_expansion_runner::{
     run_recurrent_world_expansion, RecurrentRunStopReason, WorldExpansionRunnerConfig,
@@ -18,20 +19,25 @@ use sensiblaw_wikimedia_candidate_provider::{
     fetch_latest_entity_rdf_revision_receipt,
 };
 use sensiblaw_world_expansion_runtime::adaptive_campaign::{
-    mabo_remaining_adaptive_world_expansion_policy, mabo_target_complete,
-    parse_bounded_target_context, select_next_mabo_adaptive_decision, MaboAdaptiveDecision,
+    compile_mabo_heterogeneous_frontier, mabo_remaining_adaptive_world_expansion_policy,
+    mabo_target_complete, parse_bounded_target_context,
+    select_next_mabo_heterogeneous_decision, MaboAdaptiveDecision,
 };
 use sensiblaw_world_expansion_runtime::adaptive_context_review::{
     bounded_context_candidate_set_sha256, matching_context_review,
     parse_mabo_context_review_tsv, pending_context_review_bundle,
     prepare_reviewed_context_expansion,
 };
+use sensiblaw_world_expansion_runtime::adaptive_trajectory::{
+    complete_adaptive_selection_receipt, render_adaptive_selection_receipt,
+    selection_receipt_from_decision, AdaptiveSelectionReceipt,
+};
 use sensiblaw_world_expansion_runtime::reviewed_campaign::{
     self, prepare_reviewed_mabo_identity_cycle, reviewed_acquisition_request,
 };
 use sensiblaw_world_expansion_runtime::{
     apply_known_identity_payment_transaction, diagnose_mabo_context_world_identity,
-    identity_coherence_baseline, mabo_consumer_diagnosis_frontier,
+    discovery_lineage_input, identity_coherence_baseline, mabo_consumer_diagnosis_frontier,
     parse_mabo_identity_review_tsv, MaboPlannedIdentityReview, PgDiscoveryLineageSink,
     ReviewedCycleQueueSource, WorldStoreReviewedPaymentSink, MABO_NOVEL_IDENTITY_TARGET,
 };
@@ -143,11 +149,38 @@ fn print_context_review_required(
     );
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct CompletedAdaptiveTransition {
+    commit_ref: String,
+    review_or_payment_ref: String,
+    world_delta_ref: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum ContextExpansionExecution {
+    ReviewRequired,
+    Committed(CompletedAdaptiveTransition),
+}
+
+fn write_trajectory_receipt(
+    receipt: &AdaptiveSelectionReceipt,
+    phase: &str,
+) -> Result<std::path::PathBuf, Box<dyn std::error::Error>> {
+    let directory = std::path::PathBuf::from("artifacts/mabo/trajectory");
+    fs::create_dir_all(&directory)?;
+    let path = directory.join(format!(
+        "cycle-{:03}-{}.tsv",
+        receipt.cycle_index, phase
+    ));
+    fs::write(&path, render_adaptive_selection_receipt(receipt))?;
+    Ok(path)
+}
+
 fn complete_context_expansion(
     pg_config: &sensiblaw_pg_source_store::DatabaseConfig,
     source_qid: &str,
     context_reviews: &[sensiblaw_world_expansion_runtime::adaptive_context_review::ContextExpansionReviewAssignment],
-) -> Result<bool, Box<dyn std::error::Error>> {
+) -> Result<ContextExpansionExecution, Box<dyn std::error::Error>> {
     let acquired = fetch_latest_entity_rdf_revision_receipt(source_qid)?;
     if acquired.qid != source_qid || !acquired.candidate_only || acquired.semantic_promotion {
         return Err(std::io::Error::other("target source acquisition violated candidate-only exact-QID contract").into());
@@ -176,10 +209,11 @@ fn complete_context_expansion(
             &digest,
             &candidates,
         );
-        return Ok(false);
+        return Ok(ContextExpansionExecution::ReviewRequired);
     };
 
     let prepared = prepare_reviewed_context_expansion(&candidates, review)?;
+    let durable_row = reviewed_source_expansion_row(&prepared.expansion)?;
     let receipt = materialize_reviewed_context_expansion(
         pg_config,
         &prepared.edges,
@@ -191,7 +225,19 @@ fn complete_context_expansion(
         "context_expansion_receipt_materialized={}",
         receipt.materialized_count
     );
-    Ok(true)
+    Ok(ContextExpansionExecution::Committed(
+        CompletedAdaptiveTransition {
+            commit_ref: format!(
+                "pg:reviewed-source-expansion:{}",
+                durable_row.receipt_sha256
+            ),
+            review_or_payment_ref: review.review_ref.clone(),
+            world_delta_ref: format!(
+                "world-delta:bounded-context:{}:{}",
+                source_qid, acquired.source_revision_ref
+            ),
+        },
+    ))
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -210,6 +256,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let pg_config = load_database_config(None)?;
     let world_config = load_world_database_config(None)?;
     let mut adaptive_cycles_completed = 0usize;
+    let mut prior_commit_ref: Option<String> = None;
     let mut identity_admissions_committed = 0usize;
     let mut known_identity_alias_payments = 0usize;
 
@@ -274,17 +321,42 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("diagnosed_identity_requirements={}", diagnosis.rows.len());
         println!("reviewed_expanded_sources={}", expanded_sources.len());
 
-        let Some(decision) = select_next_mabo_adaptive_decision(
+        let compiled = compile_mabo_heterogeneous_frontier(
             &diagnosis,
             &baseline,
             &world,
             &expanded_sources,
+            &[],
+            &[],
             format!("frontier:mabo:adaptive:{adaptive_cycles_completed}"),
+        );
+        let Some(decision) = select_next_mabo_heterogeneous_decision(
+            &diagnosis,
+            &compiled,
         ) else {
             println!("stop_reason=FrontierExhausted");
             println!("adaptive_cycles_completed={adaptive_cycles_completed}");
             break;
         };
+
+        let selection_receipt = selection_receipt_from_decision(
+            adaptive_cycles_completed,
+            prior_commit_ref.clone(),
+            &world,
+            &compiled.frontier,
+            &decision,
+        );
+        let selected_path = write_trajectory_receipt(&selection_receipt, "selected")?;
+        println!("trajectory_selection_path={}", selected_path.display());
+        println!("trajectory_world_digest={}", selection_receipt.world_digest);
+        println!(
+            "trajectory_frontier_digest={}",
+            selection_receipt.frontier_digest
+        );
+        println!(
+            "trajectory_prior_commit_ref={}",
+            selection_receipt.prior_commit_ref.as_deref().unwrap_or("")
+        );
 
         match decision {
             MaboAdaptiveDecision::ContextExpansion(selection) => {
@@ -293,15 +365,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("selected_move={}", selection.move_ref);
                 println!("selected_source_qid={}", selection.source_qid);
                 println!("selected_shared_dependency_gain={}", selection.shared_dependency_gain);
-                if !complete_context_expansion(
+                match complete_context_expansion(
                     &pg_config,
                     &selection.source_qid,
                     &context_reviews,
                 )? {
-                    break;
+                    ContextExpansionExecution::ReviewRequired => break,
+                    ContextExpansionExecution::Committed(transition) => {
+                        let completed = complete_adaptive_selection_receipt(
+                            &selection_receipt,
+                            transition.commit_ref.clone(),
+                            transition.review_or_payment_ref,
+                            transition.world_delta_ref,
+                        );
+                        let committed_path =
+                            write_trajectory_receipt(&completed, "committed")?;
+                        println!("trajectory_commit_path={}", committed_path.display());
+                        println!("trajectory_commit_ref={}", transition.commit_ref);
+                        prior_commit_ref = Some(transition.commit_ref);
+                        adaptive_cycles_completed += 1;
+                        println!("cycle_commit=context-expansion");
+                    }
                 }
-                adaptive_cycles_completed += 1;
-                println!("cycle_commit=context-expansion");
             }
             MaboAdaptiveDecision::Identity(selection) => {
                 println!("selected_kind=identity");
