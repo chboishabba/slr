@@ -174,10 +174,10 @@ pub fn adaptive_trajectory_row(
         return Err(AdaptiveTrajectoryError::UnexpectedPriorCommitAtCycleZero);
     }
     if input.cycle_index > 0
-        && input
-            .prior_commit_ref
-            .as_deref()
-            .is_none_or(|value| value.trim().is_empty())
+        && match input.prior_commit_ref.as_deref() {
+            Some(value) => value.trim().is_empty(),
+            None => true,
+        }
     {
         return Err(AdaptiveTrajectoryError::MissingPriorCommit);
     }
