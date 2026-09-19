@@ -584,13 +584,13 @@ impl ZelphHfTypeProvider {
     }
 
     fn property_query(qid: &str, pid: &str) -> String {
-        format!("sparql\\nSELECT ?value WHERE {{ wd:{qid} wdt:{pid} ?value . }}")
+        format!("sparql\nSELECT ?value WHERE {{ wd:{qid} wdt:{pid} ?value . }}")
     }
 
     fn parse_qids(section: &str) -> Vec<String> {
         let mut rows = Vec::new();
         for raw in section.lines() {
-            let value = raw.trim().split('\\t').next().unwrap_or("").trim();
+            let value = raw.trim().split('\t').next().unwrap_or("").trim();
             let qid = value.split_whitespace().next().unwrap_or("");
             if valid_qid(qid) && !rows.iter().any(|existing| existing == qid) {
                 rows.push(qid.to_owned());
@@ -602,7 +602,7 @@ impl ZelphHfTypeProvider {
 
     fn digest_rows(qid: &str, p31: &[String], p279: &[String], source_ref: &str) -> String {
         let mut hasher = Sha256::new();
-        hasher.update(b"gwb-zelph-hf-type-node:v1\\0");
+        hasher.update(b"gwb-zelph-hf-type-node:v1\0");
         for value in [qid, source_ref] {
             hasher.update((value.len() as u64).to_be_bytes());
             hasher.update(value.as_bytes());
@@ -657,7 +657,7 @@ impl TypeClosureNodeProvider for ZelphHfTypeProvider {
                 )))
             })?;
         if let Some(stdin) = child.stdin.as_mut() {
-            stdin.write_all(commands.join("\\n").as_bytes()).map_err(|error| {
+            stdin.write_all(commands.join("\n").as_bytes()).map_err(|error| {
                 TypeClosureError::Provider(ProviderError::Io(error))
             })?;
         }
@@ -666,7 +666,7 @@ impl TypeClosureNodeProvider for ZelphHfTypeProvider {
         })?;
         self.stats.provider_calls = self.stats.provider_calls.saturating_add(1);
         let combined = format!(
-            "{}\\n{}",
+            "{}\n{}",
             String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr)
         );
@@ -676,7 +676,7 @@ impl TypeClosureNodeProvider for ZelphHfTypeProvider {
                 combined.chars().rev().take(2000).collect::<String>().chars().rev().collect::<String>()
             ))));
         }
-        let sections = combined.split("?value\\n").skip(1).collect::<Vec<_>>();
+        let sections = combined.split("?value\n").skip(1).collect::<Vec<_>>();
         let p31 = sections
             .first()
             .map(|section| Self::parse_qids(section.split("--").next().unwrap_or(section)))
