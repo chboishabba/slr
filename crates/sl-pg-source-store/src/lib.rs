@@ -1,3 +1,4 @@
+mod cache_first;
 mod candidate_pnf;
 mod context_federation;
 mod discovery_identity_baseline;
@@ -12,6 +13,11 @@ mod proposition_rows;
 mod reviewed_pnf;
 mod reviewed_source_expansion;
 
+pub use cache_first::{
+    resolve_cache_first, AcquiredSourceBundle, CacheFirstAcquirer, CacheFirstError,
+    CacheFirstResolution, CacheLookupDemand, CachedResolvedDocument,
+    ExactResolutionReceiptOwned, ResolvedExternalDocumentOwned,
+};
 pub use candidate_pnf::{
     CandidatePnfBatch, CandidatePnfError, CandidatePnfFactor, CandidatePnfProducer,
     CandidatePnfRole, ExactSourceSpan, SpacyTsvAdapter,
