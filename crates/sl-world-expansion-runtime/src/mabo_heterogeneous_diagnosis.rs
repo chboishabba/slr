@@ -24,6 +24,8 @@ pub const MABO_RADICAL_TITLE_PROPOSITION: &str =
 pub const MABO_RADICAL_TITLE_SPAN: &str =
     "span:mabo:brennan:radical-title:no-automatic-beneficial-ownership";
 pub const MABO_RADICAL_TITLE_OALC_SOURCE: &str = "case:[1992]-HCA-23";
+pub const MABO_RADICAL_TITLE_SOURCE_REVISION: &str =
+    "source-revision:mabo:1992:hca:23:wikisource:page-39:rev-16058297:2026-06-29";
 
 fn support_observation(row: &PropositionObservationRow) -> PropositionEvidenceObservation {
     PropositionEvidenceObservation {
