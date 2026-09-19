@@ -972,23 +972,6 @@ pub fn residuals_opened_by_reviewed_routes(
                         row.opened_by_hop = Some(hop_index);
                         opened.push(row);
                     }
-                    if route.property_ref == "P279" {
-                        opened.push(GwbAmbiguityStateInput {
-                            campaign_ref: GWB_ADAPTIVE_CAMPAIGN_REF.into(),
-                            residual_ref: format!("residual:gwb:{target}:subclass"),
-                            subject_ref: target.into(),
-                            proposition_ref: format!("gwb:ambiguity:{target}:subclass"),
-                            kind_ref: "subclass".into(),
-                            root_qid: Some(target.into()),
-                            salience: 65,
-                            dependency_refs: vec![selected.move_ref.clone()],
-                            opened_by_hop: Some(hop_index),
-                            candidate_only: true,
-                            creates_semantic_authority: false,
-                            applicability_promoted: false,
-                            claim_truth_promoted: false,
-                        });
-                    }
                 }
             }
             RouteFamily::WikipediaArticle => {
