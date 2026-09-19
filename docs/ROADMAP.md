@@ -88,14 +88,12 @@ Milestones:
   - `world_before(n+1) == world_after(n)`;
   - replay reconstructs the exact latest production head before continuation.
 
-**Current state:** implementation is source-written. Sprint 1 remains open until
-the exact Rust head has a passing deterministic test receipt, persisted replay
-receipt and matching exact-head Agda kernel receipt.
+**Current state:** **certified closed** at `4bc8ce04eee4d79ccf15ef9131d80c8e19647bfb` with a green workspace test receipt, live PostgreSQL replay receipt, and matching Agda kernel receipt on the golden Sprint-1 head.
 
 After Sprint 1, transport is infrastructure unless telemetry supplies a concrete
 counterexample.
 
-# Sprint 2 — Canonical evidence convergence
+# Sprint 2 — Canonical evidence convergence — ACTIVE
 
 **Goal:** anything SensibLaw learns enters one evidence/provenance substrate.
 
@@ -187,8 +185,19 @@ Sprint 4 yields a usable SensibLaw product.
 ## Current critical path
 
 ```text
-finish acquisition machine
-  -> unify evidence machine
+unify evidence machine
   -> build legal reasoning machine
   -> ship product
 ```
+
+
+## Sprint 2 current cut
+
+M2.1 is now source-written on the stacked Sprint-2 branch:
+
+- `sensiblaw-core::canonical_evidence::EvidenceManifestation` owns one revision/digest/receipt-pinned manifestation envelope;
+- the existing Wikidata, Wikipedia and OALC observation adapters lower into that same envelope;
+- the envelope is candidate-only and cannot carry semantic authority, applicability promotion or claim-truth promotion;
+- M2.2 source/revision/span/observation convergence remains the next min-cut.
+
+This does **not** declare Sprint 2 or M2.2 paid.
