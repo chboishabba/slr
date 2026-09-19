@@ -3,7 +3,8 @@ use crate::world_observation::{
     FreshnessStatus, GetterBackend, ProvenanceClass, RetrievalStatus, WorldObservation,
 };
 use sensiblaw_core::canonical_evidence::{
-    EvidenceManifestation, EvidenceManifestationError, EvidenceManifestationFamily,
+    manifestation_ref_for_revision, EvidenceManifestation, EvidenceManifestationError,
+    EvidenceManifestationFamily,
 };
 use sensiblaw_governed_legal_provider::OalcLookupReceipt;
 use sensiblaw_route_executor::AcquiredSource;
@@ -166,7 +167,7 @@ pub fn wikidata_evidence_manifestation(
     acquisition_receipt_ref: impl Into<String>,
 ) -> Result<EvidenceManifestation, EvidenceManifestationError> {
     validated_manifestation(EvidenceManifestation {
-        manifestation_ref: format!("manifestation:wikidata:{}", source.source_revision_ref),
+        manifestation_ref: manifestation_ref_for_revision(&source.source_revision_ref),
         family: EvidenceManifestationFamily::Wikidata,
         source_ref: format!("wikidata:{}", source.qid),
         source_revision_ref: source.source_revision_ref.clone(),
@@ -184,10 +185,7 @@ pub fn wikipedia_evidence_manifestation(
     acquisition_receipt_ref: impl Into<String>,
 ) -> Result<EvidenceManifestation, EvidenceManifestationError> {
     validated_manifestation(EvidenceManifestation {
-        manifestation_ref: format!(
-            "manifestation:wikipedia:{}:{}",
-            source.revision_ref, source.document_ref
-        ),
+        manifestation_ref: manifestation_ref_for_revision(&source.revision_ref),
         family: EvidenceManifestationFamily::Wikipedia,
         source_ref: source.source_ref.clone(),
         source_revision_ref: source.revision_ref.clone(),
@@ -205,7 +203,7 @@ pub fn oalc_evidence_manifestation(
     acquisition_receipt_ref: impl Into<String>,
 ) -> Result<EvidenceManifestation, EvidenceManifestationError> {
     validated_manifestation(EvidenceManifestation {
-        manifestation_ref: format!("manifestation:oalc:{}", receipt.source_revision_ref),
+        manifestation_ref: manifestation_ref_for_revision(&receipt.source_revision_ref),
         family: EvidenceManifestationFamily::Oalc,
         source_ref: receipt.source_identity_ref.clone(),
         source_revision_ref: receipt.source_revision_ref.clone(),
