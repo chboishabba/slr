@@ -8,14 +8,14 @@ fn main() {
 
 #[cfg(feature = "live-network")]
 mod live {
-    use oalc_legislation_contract::{
+    use super::oalc_legislation_contract::{
         OalcLegislationDemand, OalcResolvedDocumentReceipt, OalcTemporalCoverage,
-        PinnedOalcDatasetSelection, CULLEN_CLA_CITATION, CULLEN_VICARIOUS_CITATION,
-        OALC_CONFIG, OALC_DATASET_ID, OALC_RECEIPT_AUTHORITY, OALC_SPLIT,
+        PinnedOalcDatasetSelection, CULLEN_CLA_CITATION, CULLEN_VICARIOUS_CITATION, OALC_CONFIG,
+        OALC_DATASET_ID, OALC_RECEIPT_AUTHORITY, OALC_SPLIT,
     };
     use sensiblaw_governed_legal_provider::{
         classify_http_status, GovernedExecutionContext, HttpRequest, HttpResponse, HttpTransport,
-        LiveGovernanceBounds, ProviderAccessStatus, SENSIBLAW_UA, UreqTransport,
+        LiveGovernanceBounds, ProviderAccessStatus, UreqTransport, SENSIBLAW_UA,
     };
     use sensiblaw_legal_follow_plan::{
         exact_oalc_legislation_demand, plan_legal_sources, AuthorityLevel, LegalSourceDemand,
@@ -40,17 +40,22 @@ mod live {
     }
 
     #[derive(Debug, Deserialize)]
-    struct FilterResponse {
-        rows: Vec<FilterRow>,
+    pub(super) struct FilterResponse {
+        pub(super) rows: Vec<FilterRow>,
+        /// Dataset Viewer sets this when `/filter` searched only its partial
+        /// index (large datasets may be indexed only through the first 5GB).
+        /// A zero-row result is therefore not an absence proof in that case.
+        #[serde(default)]
+        pub(super) partial: bool,
     }
 
     #[derive(Debug, Deserialize)]
-    struct FilterRow {
+    pub(super) struct FilterRow {
         row: OalcRow,
     }
 
     #[derive(Debug, Deserialize)]
-    struct OalcRow {
+    pub(super) struct OalcRow {
         version_id: String,
         #[serde(rename = "type")]
         document_type: String,
@@ -66,6 +71,42 @@ mod live {
         text: String,
     }
 
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    enum ResolutionPath {
+        FilterExact,
+        RevisionPinnedStreaming,
+    }
+
+    impl ResolutionPath {
+        const fn receipt_value(self) -> &'static str {
+            match self {
+                Self::FilterExact => "filter_exact",
+                Self::RevisionPinnedStreaming => "revision_pinned_streaming",
+            }
+        }
+    }
+
+    pub(super) enum FilterDisposition {
+        Found(Box<OalcRow>),
+        CompleteIndexAbsent,
+        RequireStreamingFallback,
+    }
+
+    pub(super) fn classify_filter_response(
+        response: FilterResponse,
+    ) -> Result<FilterDisposition, String> {
+        match response.rows.len() {
+            1 => Ok(FilterDisposition::Found(Box::new(
+                response.rows.into_iter().next().expect("length checked").row,
+            ))),
+            0 if response.partial => Ok(FilterDisposition::RequireStreamingFallback),
+            0 => Ok(FilterDisposition::CompleteIndexAbsent),
+            count => Err(format!(
+                "OALC exact citation filter returned {count} rows; refusing ambiguous source identity"
+            )),
+        }
+    }
+
     fn sha256(bytes: &[u8]) -> String {
         format!("sha256:{:x}", Sha256::digest(bytes))
     }
@@ -73,7 +114,13 @@ mod live {
     fn slug(citation: &str) -> String {
         citation
             .chars()
-            .map(|c| if c.is_ascii_alphanumeric() { c.to_ascii_lowercase() } else { '-' })
+            .map(|c| {
+                if c.is_ascii_alphanumeric() {
+                    c.to_ascii_lowercase()
+                } else {
+                    '-'
+                }
+            })
             .collect::<String>()
             .split('-')
             .filter(|part| !part.is_empty())
@@ -128,6 +175,39 @@ mod live {
         value.replace(['\t', '\r', '\n'], " ")
     }
 
+    /// Ask the maintained Python datasets client to scan precisely the pinned
+    /// revision. This is deliberately only a fallback for a *partial* Viewer
+    /// index: it never turns a partial zero-row result into an absence claim.
+    fn streaming_fallback(
+        citation: &str,
+        revision_sha: &str,
+    ) -> Result<OalcRow, Box<dyn std::error::Error>> {
+        let helper = env::var("SENSIBLAW_OALC_STREAMING_HELPER")
+            .unwrap_or_else(|_| "script/stream_oalc_exact_record.py".into());
+        let output = std::process::Command::new("python3")
+            .arg(helper)
+            .arg("--dataset-id")
+            .arg(OALC_DATASET_ID)
+            .arg("--config")
+            .arg(OALC_CONFIG)
+            .arg("--split")
+            .arg(OALC_SPLIT)
+            .arg("--revision")
+            .arg(revision_sha)
+            .arg("--citation")
+            .arg(citation)
+            .env("HF_HUB_DISABLE_TELEMETRY", "1")
+            .output()?;
+        if !output.status.success() {
+            return Err(format!(
+                "OALC streaming fallback residual for {citation}: {}",
+                String::from_utf8_lossy(&output.stderr).trim()
+            )
+            .into());
+        }
+        Ok(serde_json::from_slice(&output.stdout)?)
+    }
+
     struct GovernedOalc<T> {
         transport: T,
         context: GovernedExecutionContext,
@@ -141,8 +221,15 @@ mod live {
         T::Error: ToString,
     {
         fn new(transport: T, context: GovernedExecutionContext) -> Result<Self, String> {
-            context.validate().map_err(|err| format!("governance: {err:?}"))?;
-            Ok(Self { transport, context, last_request: None, requests: 0 })
+            context
+                .validate()
+                .map_err(|err| format!("governance: {err:?}"))?;
+            Ok(Self {
+                transport,
+                context,
+                last_request: None,
+                requests: 0,
+            })
         }
 
         fn get(&mut self, url: &str) -> Result<HttpResponse, String> {
@@ -175,7 +262,9 @@ mod live {
         }
     }
 
-    fn legal_follow_demand(citation: &str) -> Result<sensiblaw_legal_follow_plan::ExactLegislationSourceDemand, String> {
+    fn legal_follow_demand(
+        citation: &str,
+    ) -> Result<sensiblaw_legal_follow_plan::ExactLegislationSourceDemand, String> {
         let demand = LegalSourceDemand {
             demand_ref: format!("cullen:oalc:{citation}"),
             origin_ref: "consumer:Cullen:governing-legislation-pnf".into(),
@@ -226,6 +315,9 @@ mod live {
                 burst: 1,
                 max_depth: 1,
                 max_new_documents: 2,
+                // metadata + one filter request per bounded target. The Python
+                // streaming fallback, if needed, is itself bounded to one exact
+                // demand and revision, but its transport is owned by `datasets`.
                 max_network_requests: 3,
             },
         };
@@ -252,7 +344,7 @@ mod live {
 
         let receipt_path = output_dir.join("oalc_legislation_receipts.tsv");
         let mut receipt = String::from(
-            "citation\tversion_id\tcorpus_revision\tsource\tjurisdiction\ttype\tdate\turl\twhen_scraped\tcanonical_text_digest\tlocal_artifact_ref\ttemporal_status\tnetwork_requests\treceipt_authority\n",
+            "citation\tversion_id\tcorpus_revision\tsource\tjurisdiction\ttype\tdate\turl\twhen_scraped\tcanonical_text_digest\tlocal_artifact_ref\ttemporal_status\tresolution_path\tnetwork_requests\treceipt_authority\n",
         );
 
         for citation in TARGETS {
@@ -262,14 +354,19 @@ mod live {
                 .get(&filter_url(citation))
                 .map_err(|err| format!("OALC exact row fetch failed for {citation}: {err}"))?;
             let filtered: FilterResponse = serde_json::from_slice(&response.body)?;
-            if filtered.rows.len() != 1 {
-                return Err(format!(
-                    "OALC exact citation must resolve to one row, got {} for {citation}",
-                    filtered.rows.len()
-                )
-                .into());
-            }
-            let record = filtered.rows.into_iter().next().expect("length checked").row;
+            let (record, resolution_path) = match classify_filter_response(filtered)? {
+                FilterDisposition::Found(record) => (*record, ResolutionPath::FilterExact),
+                FilterDisposition::CompleteIndexAbsent => {
+                    return Err(format!(
+                        "OALC source residual for {citation}: complete Dataset Viewer index found no exact record"
+                    )
+                    .into())
+                }
+                FilterDisposition::RequireStreamingFallback => (
+                    streaming_fallback(citation, &info.sha)?,
+                    ResolutionPath::RevisionPinnedStreaming,
+                ),
+            };
             if record.citation != citation || record.text.trim().is_empty() {
                 return Err(format!("OALC returned wrong or empty record for {citation}").into());
             }
@@ -307,6 +404,7 @@ mod live {
                 digest,
                 artifact.to_string_lossy().into_owned(),
                 "latest_known_only".to_string(),
+                resolution_path.receipt_value().to_string(),
                 "1".to_string(),
                 OALC_RECEIPT_AUTHORITY.to_string(),
             ]
@@ -325,6 +423,48 @@ mod live {
             receipt_path.display()
         );
         Ok(())
+    }
+}
+
+#[cfg(all(test, feature = "live-network"))]
+mod tests {
+    use super::live::{classify_filter_response, FilterDisposition, FilterResponse};
+
+    #[test]
+    fn partial_zero_row_filter_requires_streaming_not_absence() {
+        let disposition = classify_filter_response(FilterResponse {
+            rows: Vec::new(),
+            partial: true,
+        })
+        .expect("partial zero rows has a defined residual route");
+        assert!(matches!(
+            disposition,
+            FilterDisposition::RequireStreamingFallback
+        ));
+    }
+
+    #[test]
+    fn partial_index_row_is_still_a_usable_positive_source_receipt() {
+        let response: FilterResponse = serde_json::from_str(
+            r#"{"partial":true,"rows":[{"row":{"version_id":"v1","type":"primary_legislation","jurisdiction":"new_south_wales","source":"nsw_legislation","citation":"Civil Liability Act 2002 (NSW)","text":"fixture"}}]}"#,
+        )
+        .expect("fixture is a Dataset Viewer response");
+        let disposition = classify_filter_response(response)
+            .expect("one exact row is usable even when the index is partial");
+        assert!(matches!(disposition, FilterDisposition::Found(_)));
+    }
+
+    #[test]
+    fn complete_zero_row_filter_is_an_explicit_source_residual() {
+        let disposition = classify_filter_response(FilterResponse {
+            rows: Vec::new(),
+            partial: false,
+        })
+        .expect("complete zero rows has a defined residual route");
+        assert!(matches!(
+            disposition,
+            FilterDisposition::CompleteIndexAbsent
+        ));
     }
 }
 

@@ -404,6 +404,7 @@ dependencies = [
 name = "sensiblaw-governed-legal-provider"
 version = "0.1.0"
 dependencies = [
+ "sensiblaw-legal-follow-plan",
  "serde",
  "serde_json",
  "sha2",
