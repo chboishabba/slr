@@ -49,6 +49,12 @@ fn decode_candidates(bytes: Vec<u8>) -> Result<Vec<RouteCandidate>, Box<dyn std:
     Ok(rows)
 }
 
+fn gwb_peer_wikipedia_surface(url: &str) -> bool {
+    ["en", "es", "fr", "de", "simple"].iter().any(|language| {
+        url.starts_with(&format!("https://{language}.wikipedia.org/"))
+    })
+}
+
 fn selected_route_observations(
     selected: &GwbInvestigationCandidate,
     rdf_bytes: &[u8],
@@ -78,7 +84,9 @@ fn selected_route_observations(
                     && route.property_ref == "P31"
             }
             GwbInvestigationKind::CrossLanguageSurface => {
-                selected.target_ref.is_none() && route.route_family == RouteFamily::WikipediaArticle
+                selected.target_ref.is_none()
+                    && route.route_family == RouteFamily::WikipediaArticle
+                    && gwb_peer_wikipedia_surface(&route.target_ref)
             }
             _ => false,
         })
