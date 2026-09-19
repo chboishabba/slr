@@ -1,6 +1,7 @@
 use sensiblaw_world_expansion_runtime::gwb_supervised_type_closure::{
     acquire_supervised_type_closure_with, evaluate_observed_type_closure,
-    TieredTypeClosureProvider, TypeClosureDisposition, TypeClosureError,
+    PredicateSliceTypeProvider, ThreeTierTypeClosureProvider, TieredTypeClosureProvider,
+    TypeClosureDisposition, TypeClosureError,
     TypeClosureNodeProvider, TypeClosureQuestion, TypeClosureRequest, TypeNodeAcquisition,
     TypeNodeReceipt, TypeObservation, TypeObservationProperty, TypeProviderStats,
 };
@@ -353,4 +354,116 @@ fn provider_gap_abstains_by_marking_closure_truncated() {
     assert!(closure.truncated);
     assert_eq!(closure.disposition, TypeClosureDisposition::Truncated);
     assert!(!closure.superclass_residual_paid);
+}
+
+
+#[test]
+fn specialised_p31_p279_slice_is_first_tier_and_suppresses_general_and_live() {
+    let preferred = PredicateSliceTypeProvider::from_json(
+        r#"{"nodes":{"Q1":{"P31":["Q10"],"P279":[]},"Q10":{"P31":[],"P279":[]}}}"#,
+        "slice:fixture:v1",
+    )
+    .unwrap();
+
+    let general = FixtureProvider::new(vec![], true);
+    let live = FixtureProvider::new(vec![], false);
+    let mut provider = ThreeTierTypeClosureProvider::new(preferred, general, live);
+
+    let closure = acquire_supervised_type_closure_with(
+        &TypeClosureRequest {
+            root_qid: "Q1".into(),
+            question: TypeClosureQuestion::TypeClass,
+            max_depth: 4,
+            max_nodes: 16,
+        },
+        &mut provider,
+    )
+    .unwrap();
+
+    assert_eq!(closure.direct_instance_types, vec!["Q10"]);
+    assert!(closure.snapshot_simultaneous);
+    assert_eq!(provider.stats().preferred_slice_hits, 2);
+    assert_eq!(provider.stats().snapshot_hits, 0);
+    assert_eq!(provider.stats().live_fallbacks, 0);
+}
+
+#[test]
+fn specialised_slice_miss_may_use_general_snapshot_without_becoming_live_mix() {
+    let preferred = PredicateSliceTypeProvider::from_json(
+        r#"{"nodes":{}}"#,
+        "slice:fixture:v1",
+    )
+    .unwrap();
+    let general = FixtureProvider::new(
+        vec![
+            node(
+                "Q1",
+                vec![obs(
+                    "Q1",
+                    TypeObservationProperty::SubclassOf,
+                    "Q2",
+                    "zelph-hf:snapshot-1:Q1",
+                )],
+                "zelph-hf:snapshot-1:Q1",
+            ),
+            node("Q2", vec![], "zelph-hf:snapshot-1:Q2"),
+        ],
+        true,
+    );
+    let live = FixtureProvider::new(vec![], false);
+    let mut provider = ThreeTierTypeClosureProvider::new(preferred, general, live);
+
+    let closure = acquire_supervised_type_closure_with(
+        &TypeClosureRequest {
+            root_qid: "Q1".into(),
+            question: TypeClosureQuestion::Superclass,
+            max_depth: 4,
+            max_nodes: 16,
+        },
+        &mut provider,
+    )
+    .unwrap();
+
+    assert!(closure.snapshot_simultaneous);
+    assert_eq!(provider.stats().preferred_slice_hits, 0);
+    assert_eq!(provider.stats().snapshot_hits, 2);
+    assert_eq!(provider.stats().live_fallbacks, 0);
+}
+
+#[test]
+fn three_tier_live_fallback_is_the_only_event_that_revokes_simultaneity() {
+    let preferred = PredicateSliceTypeProvider::from_json(
+        r#"{"nodes":{}}"#,
+        "slice:fixture:v1",
+    )
+    .unwrap();
+    let general = FixtureProvider::new(vec![], true);
+    let live = FixtureProvider::new(
+        vec![node(
+            "Q1",
+            vec![obs(
+                "Q1",
+                TypeObservationProperty::SubclassOf,
+                "Q2",
+                "wikidata:Q1:oldid:42",
+            )],
+            "wikidata:Q1:oldid:42",
+        ), node("Q2", vec![], "wikidata:Q2:oldid:43")],
+        false,
+    );
+    let mut provider = ThreeTierTypeClosureProvider::new(preferred, general, live);
+
+    let closure = acquire_supervised_type_closure_with(
+        &TypeClosureRequest {
+            root_qid: "Q1".into(),
+            question: TypeClosureQuestion::Superclass,
+            max_depth: 4,
+            max_nodes: 16,
+        },
+        &mut provider,
+    )
+    .unwrap();
+
+    assert!(!closure.snapshot_simultaneous);
+    assert_eq!(provider.stats().live_fallbacks, 2);
 }
