@@ -54,6 +54,7 @@ fn nominal_subject_compiles_to_actor_candidate_and_world_atom() {
     let mut output = Vec::new();
     let receipt = compile_observation_stream(&mut Cursor::new(input), &mut output, 5).expect("compile");
     assert_eq!(receipt.manifestations, 1);
+    assert_eq!(receipt.canonical_observations, 2);
     assert_eq!(receipt.pnf_candidates, 1);
     assert_eq!(receipt.world_atoms, 1);
     assert!(!receipt.semantic_promotion);
@@ -112,4 +113,39 @@ fn compiler_source_has_no_json_or_regex_dependency() {
     .unwrap();
     assert!(!cargo.contains("serde_json"));
     assert!(!cargo.contains("regex"));
+}
+
+
+#[test]
+fn token_without_preceding_manifestation_revision_fails_closed() {
+    let mut input = Vec::new();
+    encode_observation(
+        &mut input,
+        &token(DependencyShape::NominalSubject, 0, 1, "Bush", "Bush"),
+    )
+    .unwrap();
+    let mut output = Vec::new();
+    let error = compile_observation_stream(&mut Cursor::new(input), &mut output, 11)
+        .expect_err("token without exact manifestation revision must fail");
+    assert!(
+        error
+            .to_string()
+            .contains("no preceding exact manifestation revision")
+    );
+}
+
+#[test]
+fn conflicting_revisions_for_one_document_fail_closed() {
+    let first = manifestation();
+    let mut second = manifestation();
+    if let ObservationRecord::Manifestation { revision_ref, .. } = &mut second {
+        *revision_ref = "457".into();
+    }
+    let mut input = Vec::new();
+    encode_observation(&mut input, &first).unwrap();
+    encode_observation(&mut input, &second).unwrap();
+    let mut output = Vec::new();
+    let error = compile_observation_stream(&mut Cursor::new(input), &mut output, 12)
+        .expect_err("one document may not switch revisions inside a compile stream");
+    assert!(error.to_string().contains("changed revision"));
 }
