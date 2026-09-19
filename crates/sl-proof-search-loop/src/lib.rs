@@ -33,6 +33,7 @@ pub mod review_units;
 pub mod transition;
 pub mod world;
 pub mod world_acquisition;
+pub mod world_expansion;
 
 #[path = "legacy.rs"]
 mod legacy;

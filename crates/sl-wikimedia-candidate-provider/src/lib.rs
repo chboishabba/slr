@@ -25,7 +25,9 @@ pub enum ProviderError {
 }
 
 impl From<ureq::Error> for ProviderError {
-    fn from(error: ureq::Error) -> Self { Self::Network(Box::new(error)) }
+    fn from(error: ureq::Error) -> Self {
+        Self::Network(Box::new(error))
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -57,6 +59,19 @@ pub fn entity_data_rdf_url(qid: &str) -> Result<String, ProviderError> {
     ))
 }
 
+/// Return the RDF/XML representation for one exact Wikidata entity revision.
+/// The revision coordinate belongs to acquisition provenance; it does not turn
+/// the returned statements into legal authority or semantic payment.
+pub fn entity_data_rdf_revision_url(qid: &str, revision_id: u64) -> Result<String, ProviderError> {
+    if revision_id == 0 {
+        return Err(ProviderError::InvalidInput(
+            "revision ID must be greater than zero".into(),
+        ));
+    }
+    let base = entity_data_rdf_url(qid)?;
+    Ok(format!("{base}?revision={revision_id}"))
+}
+
 fn attribute_value(start: &BytesStart<'_>, key: &[u8]) -> Result<Option<String>, ProviderError> {
     for attribute in start.attributes().with_checks(false) {
         let attribute =
@@ -78,9 +93,9 @@ fn qid_from_entity_uri(uri: &str) -> Option<String> {
 
 fn property_specificity(property: &str) -> Option<u32> {
     match property {
-        "P31" | "P279" => Some(5),
+        "P31" | "P279" | "P4006" => Some(5),
         "P361" | "P527" => Some(4),
-        "P131" | "P17" | "P1269" => Some(3),
+        "P131" | "P17" | "P1269" | "P1001" | "P710" | "P4884" | "P1594" => Some(3),
         _ => None,
     }
 }
@@ -88,7 +103,10 @@ fn property_specificity(property: &str) -> Option<u32> {
 fn property_producer(property: &str) -> Option<ProducerFamily> {
     match property {
         "P31" | "P279" => Some(ProducerFamily::ClassificationEvidence),
-        "P361" | "P527" | "P131" | "P17" | "P1269" => Some(ProducerFamily::IdentitySource),
+        "P4006" => Some(ProducerFamily::AuthoritySource),
+        "P361" | "P527" | "P131" | "P17" | "P1269" | "P1001" | "P710" | "P4884" | "P1594" => {
+            Some(ProducerFamily::IdentitySource)
+        }
         _ => None,
     }
 }
@@ -355,9 +373,8 @@ pub fn emit_candidates_from_rdf<R: Read, W: Write>(
     })
 }
 
-pub fn fetch_entity_rdf(qid: &str) -> Result<Vec<u8>, ProviderError> {
-    let url = entity_data_rdf_url(qid)?;
-    let response = ureq::get(&url)
+fn fetch_entity_rdf_at_url(url: &str) -> Result<Vec<u8>, ProviderError> {
+    let response = ureq::get(url)
         .set("Accept", "application/rdf+xml")
         .set(
             "User-Agent",
@@ -377,10 +394,28 @@ pub fn fetch_entity_rdf(qid: &str) -> Result<Vec<u8>, ProviderError> {
     Ok(bytes)
 }
 
+pub fn fetch_entity_rdf(qid: &str) -> Result<Vec<u8>, ProviderError> {
+    fetch_entity_rdf_at_url(&entity_data_rdf_url(qid)?)
+}
+
+/// Fetch an entity through an explicitly pinned revision URL.
+pub fn fetch_entity_rdf_revision(qid: &str, revision_id: u64) -> Result<Vec<u8>, ProviderError> {
+    fetch_entity_rdf_at_url(&entity_data_rdf_revision_url(qid, revision_id)?)
+}
+
 pub fn fetch_and_emit<W: Write>(
     qid: &str,
     writer: &mut W,
 ) -> Result<ProviderReceipt, ProviderError> {
     let bytes = fetch_entity_rdf(qid)?;
+    emit_candidates_from_rdf(qid, std::io::Cursor::new(bytes), writer)
+}
+
+pub fn fetch_and_emit_revision<W: Write>(
+    qid: &str,
+    revision_id: u64,
+    writer: &mut W,
+) -> Result<ProviderReceipt, ProviderError> {
+    let bytes = fetch_entity_rdf_revision(qid, revision_id)?;
     emit_candidates_from_rdf(qid, std::io::Cursor::new(bytes), writer)
 }
