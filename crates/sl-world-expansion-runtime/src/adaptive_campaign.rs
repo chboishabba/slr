@@ -11,7 +11,8 @@ use std::io::Cursor;
 
 use sensiblaw_pg_source_store::{
     bounded_wikidata_relation_type, review_bounded_wikidata_candidate,
-    ContextReviewDecision, DiscoveryIdentityBaseline, LatentWorldRows, ReviewedContextEdge,
+    AdaptiveNegativeAssessmentRow, ContextReviewDecision, DiscoveryIdentityBaseline,
+    LatentWorldRows, ReviewedContextEdge,
 };
 use sensiblaw_proof_search_loop::frontier::{
     select_frontier_move, FrontierCandidateMove, ProofFrontier, ProofResidual, ResidualStatus,
@@ -310,6 +311,44 @@ impl DurableAdaptiveNegativeAssessment {
             && !self.applicability_promoted
             && !self.claim_truth_promoted
     }
+}
+
+#[must_use]
+pub fn durable_negative_assessments_from_rows(
+    rows: &[AdaptiveNegativeAssessmentRow],
+) -> Vec<DurableAdaptiveNegativeAssessment> {
+    rows.iter()
+        .filter_map(|row| {
+            if !row.candidate_only
+                || !row.makes_move_inadmissible
+                || row.satisfies_residual
+                || row.creates_semantic_authority
+                || row.applicability_promoted
+                || row.claim_truth_promoted
+            {
+                return None;
+            }
+            let kind = match row.kind_ref.as_str() {
+                "wrong-type" => DurableAdaptiveNegativeKind::WrongType,
+                "duplicate" => DurableAdaptiveNegativeKind::Duplicate,
+                "irrelevant-to-residual" => DurableAdaptiveNegativeKind::IrrelevantToResidual,
+                "failed-factors-through" => DurableAdaptiveNegativeKind::FailedFactorsThrough,
+                "inadmissible" => DurableAdaptiveNegativeKind::Inadmissible,
+                _ => return None,
+            };
+            Some(DurableAdaptiveNegativeAssessment {
+                residual_ref: row.residual_ref.clone(),
+                move_ref: row.move_ref.clone(),
+                kind,
+                assessment_ref: row.assessment_ref.clone(),
+                source_revision_ref: row.source_revision_ref.clone(),
+                candidate_only: true,
+                creates_semantic_authority: false,
+                applicability_promoted: false,
+                claim_truth_promoted: false,
+            })
+        })
+        .collect()
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
