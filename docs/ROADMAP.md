@@ -1,14 +1,13 @@
 # SensibLaw / SLR Production Roadmap
 
-**Status:** current production roadmap  
 **Production implementation:** `chboishabba/slr`  
 **Golden semantic/reference contracts:** `chboishabba/dashi_agda`
 
-SLR is SensibLaw in production. DASHI/Agda is the golden reference layer: it owns typed semantic, promotion, epistemic, and architectural contracts that the Rust runtime must implement or conservatively refine. The Python SensibLaw repository remains useful as historical/product/reference material, but it is not the production runtime authority.
+SLR is the production SensibLaw runtime. DASHI/Agda is the golden semantic and
+architectural reference. The old Python SensibLaw code remains useful product
+and historical evidence, but it is not the production runtime authority.
 
-## Product invariant
-
-The production path is:
+## Program invariant
 
 ```text
 source/evidence
@@ -24,249 +23,172 @@ source/evidence
   -> source-backed reasoning/explanation
 ```
 
-No transport, parser, ontology provider, cache hit, graph adjacency, classifier output, or review artifact may silently create claim truth, legal authority, applicability, or publication authority.
+Transport, parsers, ontology providers, caches, graph adjacency, classifiers and
+acquisition receipts never silently create claim truth, legal applicability or
+publication authority.
 
-## What is already paid
-
-The roadmap must not reopen these as greenfield work unless a regression demonstrates a real defect:
-
-- canonical source revisions, spans, exact provenance and append-only receipts;
-- binary world store / compiler / consumer-residual pipeline;
-- typed ConsumerRequirement v2 separation between parser/PNF debt and substantive evidence debt;
-- residual-driven producer planning with distinct producer families;
-- route selection and bounded route execution;
-- explicit reviewed evidence payment;
-- append-only active residual frontier and restart-safe recurrent expansion;
-- PostgreSQL persistence/replay and durable hop lineage;
-- CandidateWorld projection and review/promotion firewalls;
-- GWB adaptive residual selection, post-hop re-diagnosis and producer switching;
-- supervised bounded P31/P279 closure with truncation -> abstention;
-- snapshot-first -> live-fallback type provider seam;
-- external-ontology fallback as advisory candidate evidence only;
-- legal-source/provider contracts and PG-backed source storage already present in the workspace.
-
-The architectural problem is now **composition and throughput**, not another isolated extractor.
-
-## Sprint A — Bounded ontology transport closure
-
-**Purpose:** make GWB cheap and deterministic enough that transport no longer dominates world-expansion behaviour.
-
-Deliver as one capability tranche:
-
-1. specialised P31/P279 predicate-slice provider;
-2. general Zelph/HF route-aware fallback using `nodeRouteIndex`;
-3. physical-object planning after logical QID/name resolution;
-4. deduplication/coalescing by physical HF object;
-5. bounded remote scheduler with an initial cap of five distinct cold objects in flight;
-6. cache-hit = zero network I/O;
-7. transport receipt with semantic targets, internal nodes, shard/object plan, cache hits/misses, coalesced gets, remote gets, bytes, fallback count and closure observations;
-8. preserve snapshot/live provenance and revoke snapshot simultaneity if any live fallback occurs;
-9. truncation/retrieval gap remains abstention, never ontology negation.
-
-### Sprint A exit gate
-
-A representative GWB replay must demonstrate all of:
-
-- repeated logical requests sharing a physical object cause at most one SLR acquisition;
-- six distinct cold objects never exceed five concurrent remote fills;
-- cached replay performs zero remote object fetches;
-- ordinary P31/P279 classification does not pull the complete adjacency surface;
-- mixed snapshot/live evidence is visibly mixed;
-- no new semantic-authority or claim-truth path exists;
-- transport cost is reported independently of semantic payoff.
-
-After this gate, **stop optimising Wikidata/HF unless campaign telemetry identifies transport as the dominant residual cost again**.
-
-## Sprint B — Generic epistemic scheduler
-
-**Purpose:** promote the successful GWB controller from a Wikidata-oriented experiment into the generic SensibLaw acquisition control plane.
-
-Unify the existing Rust/Agda machinery around:
+## Roadmap hierarchy
 
 ```text
-ConsumerRequirement
-  -> ResidualFamily
+PROGRAM
+  └─ Sprint
+       └─ Milestone
+            └─ implementation tranches / PRs / commits
+```
+
+Milestones are capability gates. A provider, enum, migration, fixture, telemetry
+counter or one-file bridge is not a milestone by itself.
+
+# Sprint 1 — Complete the recurrent acquisition machine
+
+**Goal:** SensibLaw autonomously and safely executes bounded evidence-gathering
+cycles and can stop/restart without changing production-relevant state.
+
+```text
+Residual
   -> ProducerPlan
-  -> boundedness/cost declaration
-  -> execution
-  -> EvidenceManifestation
-  -> review/payment
-  -> residual recomputation
+  -> bounded physical acquisition
+  -> candidate evidence
+  -> explicit review/payment
+  -> W(n+1)
+  -> fresh diagnosis
+  -> repeat
 ```
 
-Required producer capabilities include:
+Milestones:
 
-- local deterministic/parser repair;
-- PostgreSQL replay;
-- specialist snapshot/slice;
-- general snapshot;
-- identity/source discovery;
-- authority/legal-source acquisition;
-- classification/ontology evidence;
-- mechanism/measurement/comparator evidence;
-- live authoritative source;
-- human review handoff.
+- **M1.1 Canonical physical acquisition plan**
+  - P31/P279 specialised slice first;
+  - route-aware Zelph/HF general snapshot second;
+  - governed live fallback third;
+  - semantic requests resolve to physical objects before scheduling;
+  - no ordinary path means "load all adjacency".
+- **M1.2 Bounded transport**
+  - physical-object dedupe/coalescing before concurrency;
+  - cache hit = zero network;
+  - at most five distinct cold objects per batch;
+  - six cold objects => 5 + 1;
+  - truncation => abstain;
+  - transport receipts expose logical requests, nodes, object refs, cache,
+    coalescing, remote gets, bytes, live fallback and peak cold width.
+- **M1.3 Generic producer execution**
+  - one controller ABI executes at least classification, identity/source and
+    authority/legal-source producer families;
+  - route selection owns producer choice;
+  - acquisition remains candidate-only; review owns semantic payment.
+- **M1.4 Reviewed recurrent world expansion**
+  - reviewed hop -> persist -> fresh re-diagnosis;
+  - producer family may change;
+  - new residuals may emerge;
+  - rejected/blocked evidence remains recorded;
+  - no fixed queue masquerades as adaptivity.
+- **M1.5 Restart/replay equivalence**
+  - durable hop indexes are consecutive;
+  - each nonzero hop names the prior receipt;
+  - `world_before(n+1) == world_after(n)`;
+  - replay reconstructs the exact latest production head before continuation.
 
-The planner selects evidence-producing work. It does not decide truth.
+**Current state:** implementation is source-written. Sprint 1 remains open until
+the exact Rust head has a passing deterministic test receipt, persisted replay
+receipt and matching exact-head Agda kernel receipt.
 
-### Sprint B exit gate
+After Sprint 1, transport is infrastructure unless telemetry supplies a concrete
+counterexample.
 
-One recurrent campaign must traverse at least three producer families through the same scheduler ABI, persist every hop, restart from PostgreSQL without changing the active frontier, and distinguish:
+# Sprint 2 — Canonical evidence convergence
 
-- producer unavailable;
-- retrieval failure;
-- candidate absence;
-- reviewed rejection;
-- paid requirement.
+**Goal:** anything SensibLaw learns enters one evidence/provenance substrate.
 
-No family-specific GWB control loop may be required for the campaign.
+Milestones:
 
-## Sprint C — Canonical evidence reducer + legal acquisition convergence
+- **M2.1 One manifestation envelope** for HF/Wikidata/Wikipedia/OALC/legal
+  sources/PDFs/transcripts/user evidence.
+- **M2.2 One source/span substrate**
+  `EvidenceManifestation -> SourceRevision -> TextSpan -> Observation`.
+- **M2.3 Shared reducer production ABI** feeding world, matter and law
+  projections without internal shortcuts.
+- **M2.4 Legal source providers become ordinary producers**
+  (PG hit/no-network; miss/acquire/persist; second request reuses exact
+  revision).
+- **M2.5 Cross-family replay capstone** over classification evidence, an
+  Australian authority revision and matter/narrative evidence through the same
+  source/revision/span/observation/review/projection spine.
 
-**Purpose:** make world evidence and legal-source evidence enter one canonical evidence substrate without creating parallel identity stores.
+Sprint 2 yields the **evidence machine**.
 
-Production contract:
+# Sprint 3 — Full legal issue reasoning
+
+**Goal:** given reviewed matter evidence and law valid at the relevant time,
+produce a reviewable legal issue graph.
+
+Milestones:
+
+- **M3.1 Reviewed factual state** preserving asserted/supported/contradicted/
+  unknown and contestation.
+- **M3.2 Authoritative rule state** from pinned source -> provision -> duty/rule
+  -> WrongElementRequirement with jurisdiction and temporal validity.
+- **M3.3 Fact -> element candidate projection**, never fact -> conclusion.
+- **M3.4 Ternary issue state**:
+  `supported | contradicted | unknown`, with provenance.
+- **M3.5 Conditions, exceptions and defences** as typed structural roles.
+- **M3.6 Temporal + jurisdictional applicability** using as-at source state.
+- **M3.7 Authority topology** (cites/applies/distinguishes/overrules/amends)
+  without citation-graph rank becoming legal priority.
+- **M3.8 Full Australian issue capstone**:
+  matter evidence + as-at law -> issue/elements -> support/contradiction/unknown
+  -> conditions/defences -> provisional analysis -> remaining acquisition
+  residuals.
+
+Permanent firewalls:
 
 ```text
-acquisition manifestations
-   -> canonical reducer
-   -> source/span/observation/evidence state
-   -> lawful projections
-        - world model
-        - matter/timeline
-        - legal/normative model
+event existence       != wrong
+harm                  != wrong
+Wikidata class         != legal category
+source presence        != applicability
+candidate element match != satisfied element
+unknown                != false
 ```
 
-Converge the existing source-store/provider work so OALC/official/Jade/other jurisdictional providers are ordinary producer capabilities:
+Sprint 3 yields the **legal reasoning machine**.
 
-```text
-SourceRequirement
- -> PG exact revision hit ? replay
- -> otherwise governed acquisition
- -> revision identity + receipt
- -> persist
- -> canonical TextSpan/observation
-```
+# Sprint 4 — Product
 
-### Sprint C exit gate
+**Goal:** expose the reasoning machine without introducing a second UI ontology.
 
-The same canonical reducer must ingest and replay:
+Milestones:
 
-- one Wikidata/Wikimedia evidence manifestation;
-- one legal authority/source revision;
-- one narrative/matter observation;
+- **M4.1 Matter workspace** — people/events/documents/claims/timeline.
+- **M4.2 Issue workspace** — claim -> issues -> elements/status.
+- **M4.3 Evidence drill-down** — conclusion -> reasoning edge -> observation ->
+  span -> exact source revision.
+- **M4.4 As-at/change view** — legal position at date X and amendment deltas.
+- **M4.5 Residual-driven research UX** — what is missing, possible acquisition,
+  expected residual reduction, without promising proof.
+- **M4.6 Receipt/export surface** — sources, exact revisions, spans, reasoning
+  edges, review state and hashes.
+- **M4.7 Cross-jurisdiction projection** over one factual/world state and
+  multiple normative systems.
 
-with no duplicate canonical identity substrate and with provenance drill-down to the exact acquired revision/span for each.
+Sprint 4 yields a usable SensibLaw product.
 
-## Sprint D — Reviewed world -> legal issue weld
+## Sprint discipline
 
-**Purpose:** connect the already-existing L0-L6 legal model to reviewed world evidence by typed projection rather than inference-by-association.
-
-Target relation:
-
-```text
-ReviewedObservation
- -> EventCandidate
- -> reviewed Event
- -> ClaimEvent / ActorConstraint / HarmInstance evidence
- -> candidate WrongElementRequirement satisfaction
-```
-
-Separately:
-
-```text
-revision-pinned legal source
- -> Provision
- -> duty / WrongTypeSourceLink / WrongElementRequirement
-```
-
-Firewalls:
-
-- event existence != wrong;
-- harm != wrong;
-- Wikidata class != legal category;
-- source presence != legal applicability;
-- candidate element match != satisfied element;
-- one jurisdiction's rule != another's rule.
-
-### Sprint D exit gate
-
-Run one complete Australian legal issue from matter evidence plus pinned authority to an element-by-element **support / contradiction / unknown** issue state, where every support edge is source-addressable and no unknown is silently coerced to false.
-
-## Sprint E — Legal reasoning kernel
-
-**Purpose:** make SensibLaw useful as a legal reasoning system rather than merely a world/evidence graph.
-
-Implement composition across:
-
-- elements;
-- conditions and exceptions;
-- defences;
-- temporal applicability / as-at law;
-- jurisdiction;
-- competing authorities;
-- authority/citation topology;
-- burden/standard metadata where represented;
-- remedy candidates;
-- unresolved and contested fibres.
-
-Outputs remain inspectable proof/explanation graphs, not opaque LLM verdicts.
-
-### Sprint E exit gate
-
-A reviewer can inspect a complete issue graph and answer:
-
-- what proposition is being tested?
-- what authoritative source supplies the rule?
-- what evidence supports or contradicts each element?
-- what is still unknown?
-- what defence/exception changes the result?
-- what source revision/date was used?
-- what acquisition would most reduce the remaining residual?
-
-## Sprint F — Productisation
-
-Build the human-facing surface over the same receipts and typed state:
-
-- matter/timeline;
-- source viewer;
-- issue/element graph;
-- "why?";
-- "show evidence";
-- "what changed as at date X?";
-- "which element is disputed?";
-- "what source controls this?";
-- "what should we acquire next?";
-- cross-jurisdiction comparison;
-- exportable receipt packs.
-
-No separate UI reasoning ontology.
-
-## Sprint discipline: stop taking baby steps
-
-A sprint is not "add a struct", "add a provider", or "add one adapter". A sprint must close an **observable end-to-end capability** with a receipt.
-
-Use these rules:
-
-1. **Work by min-cut, not file count.** Identify the smallest set of missing capabilities blocking the next end-to-end behaviour and implement the whole cut.
-2. **Parallelise independent owners.** Transport, formal contract, storage/replay, and validation can advance in parallel where their ABI is already fixed.
-3. **Do not reopen paid architecture.** Reuse existing Agda owners and Rust crates unless an executable counterexample proves the contract inadequate.
-4. **No speculative provider expansion.** Add providers only when a live residual family demands them.
-5. **No transport rabbit holes.** Once boundedness/replay/cost gates pass, move upward to scheduler, reducer, and law.
-6. **Every sprint ends in a campaign receipt.** Static types and unit tests are necessary but not the product milestone.
-7. **Golden parity is continuous.** Any production semantic contract change either:
-   - already refines an existing Agda owner, or
-   - lands with the corresponding Agda golden update before the sprint is called complete.
+1. Work by min-cut, not file count.
+2. Parallelise independent owners once their ABI is fixed.
+3. Do not reopen paid architecture without an executable counterexample.
+4. Add providers only for live residual demand.
+5. Stop transport optimisation once boundedness/replay/cost gates pass.
+6. Every sprint ends in a persisted/replayable end-to-end campaign receipt.
+7. Golden parity is continuous.
+8. Compile-only or unit-only work is progress inside a milestone, never sprint
+   completion.
 
 ## Current critical path
 
 ```text
-A  bounded HF/P31-P279 transport
- -> B generic epistemic scheduler
- -> C canonical reducer + legal source convergence
- -> D reviewed world-to-law weld
- -> E legal reasoning kernel
- -> F product surface
+finish acquisition machine
+  -> unify evidence machine
+  -> build legal reasoning machine
+  -> ship product
 ```
-
-The next sprint is **A as a complete tranche**, not five separate mini-projects.
