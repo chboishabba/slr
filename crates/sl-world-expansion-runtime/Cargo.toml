@@ -6,6 +6,7 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+sensiblaw-core = { path = "../sl-core" }
 sensiblaw-consumer-residual = { path = "../sl-consumer-residual" }
 sensiblaw-governed-legal-provider = { path = "../sl-governed-legal-provider" }
 sensiblaw-proof-search-loop = { path = "../sl-proof-search-loop" }
