@@ -9,10 +9,13 @@ use sensiblaw_route_executor::{AcquiredSource, AcquiredSourceKind};
 use sensiblaw_route_selector::{ProducerFamily, RouteCandidate, RouteFamily};
 use sensiblaw_wikimedia_candidate_provider::entity_revision_receipt_from_rdf;
 use sensiblaw_world_expansion_runtime::sprint2_provider_normalisation::{
-    normalize_oalc_provider, normalize_wikidata_provider, normalize_wikipedia_provider,
-    reduce_reviewed_provider_evidence,
+    normalize_cached_legal_provider, normalize_oalc_provider, normalize_wikidata_provider,
+    normalize_wikipedia_provider, reduce_reviewed_provider_evidence,
 };
 use sensiblaw_reviewed_evidence_payment::ReviewedEvidenceCoordinate;
+use sensiblaw_pg_source_store::{
+    CachedResolvedDocument, ResolutionPath, TemporalCoverage,
+};
 
 fn review_for(observation_ref: &str) -> ReviewedEvidenceCoordinate {
     ReviewedEvidenceCoordinate {
@@ -122,4 +125,50 @@ fn existing_wikidata_wikipedia_and_oalc_artifacts_lower_to_one_canonical_carrier
         assert!(!reduced.applicability_promoted);
         assert!(!reduced.claim_truth_promoted);
     }
+}
+
+
+#[test]
+fn cache_first_legal_source_enters_the_same_canonical_review_reducer_path() {
+    let cached = CachedResolvedDocument {
+        document_ref: "document:cache:mabo".into(),
+        external_source_revision_ref: "legal:revision:mabo".into(),
+        source_resolution_ref: "resolution:mabo".into(),
+        provider_ref: "oalc".into(),
+        dataset_ref: "isaacus/open-australian-legal-corpus".into(),
+        dataset_revision_ref: "dataset:fixture".into(),
+        external_version_ref: "version:fixture".into(),
+        citation: "Mabo v Queensland (No 2) [1992] HCA 23".into(),
+        source_ref: "case:[1992]-HCA-23".into(),
+        jurisdiction_ref: "AU".into(),
+        document_type_ref: "primary_case".into(),
+        temporal_coverage: TemporalCoverage::HistoricallyVerified,
+        resolution_path: ResolutionPath::OfflineJsonlReplay,
+        source_url: None,
+        canonical_text: "fixture canonical legal text".into(),
+    };
+    let evidence = normalize_cached_legal_provider(
+        "request:m2.4:cached-legal",
+        &cached,
+        "receipt:revision:cached-legal",
+    )
+    .unwrap();
+    evidence.validate().unwrap();
+
+    let review = review_for(&evidence.observation.observation_ref);
+    let reduced = reduce_reviewed_provider_evidence(
+        &evidence,
+        &review,
+        "payment:m2.4:cached-legal",
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+
+    assert_eq!(reduced.observation_ref, evidence.observation.observation_ref);
+    assert_eq!(reduced.source_revision_ref, cached.external_source_revision_ref);
+    assert!(!reduced.creates_semantic_authority);
+    assert!(!reduced.applicability_promoted);
+    assert!(!reduced.claim_truth_promoted);
 }
