@@ -570,7 +570,8 @@ impl ZelphHfTypeProvider {
     }
 
     fn quote(value: &str) -> String {
-        format!("\\\"{}\\\"", value.replace('\\\\', "\\\\\\\\").replace('\\\"', "\\\\\\\""))
+        let escaped = value.replace('\\', "\\\\").replace('"', "\\\"");
+        format!("\"{escaped}\"")
     }
 
     fn load_command(&self) -> String {
