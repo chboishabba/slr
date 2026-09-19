@@ -149,9 +149,9 @@ Certified at exact SLR head `4bc8ce04eee4d79ccf15ef9131d80c8e19647bfb`: workspac
 one canonical evidence/provenance substrate.
 
 Work package:
-- **M2.1 one evidence manifestation envelope — source-written awaiting runtime certification**;
-- one SourceRevision -> TextSpan -> Observation substrate;
-- `shared_reducer` as the supported production ABI;
+- **M2.1 one evidence manifestation envelope — paid**;
+- **M2.2 one SourceRevision -> exact-anchor -> Observation substrate — paid**;
+- **M2.3 shared reviewed-evidence reducer ABI — source-written awaiting fresh runtime/kernel receipts**;
 - legal providers as ordinary producer implementations;
 - PG-hit/no-network, PG-miss/acquire/persist/reuse;
 - cross-family exact replay.
@@ -186,4 +186,6 @@ The first convergence owner is `sensiblaw-core::canonical_evidence::EvidenceMani
 
 Existing Wikidata, Wikipedia and OALC producer artifacts now lower into that carrier through the current world-observation adapters. This is a convergence adapter over already-paid acquisition paths, not a new producer or scheduler.
 
-M2.1 and M2.2 are source-written awaiting executable receipts. M2.2 uses one exact-anchor ABI: character ranges for text and structured coordinates for graph evidence, with compiler tokens revision-bound and persisted PG legal slices projected into the same carrier. M2.3 shared reducer is now the next structural min-cut.
+M2.1 and M2.2 are paid with exact Rust and Agda receipts. M2.2 uses one exact-anchor ABI: character ranges for text and structured coordinates for graph evidence, with compiler tokens revision-bound and persisted PG legal slices projected into the same carrier.
+
+M2.3 is now source-written in `sl-reviewed-evidence-payment::shared_reducer`. It wraps one canonical `EvidenceObservation` with explicit review/payment identity, offers optional world/matter/legal projection slots, permits explicit abstention, and repeats the exact observation/revision/span/review/payment coordinates in each projection receipt. It remains `implementedAwaitingRuntime` until the new exact Rust and Agda heads receive fresh execution receipts.
