@@ -651,3 +651,295 @@ pub fn project_open_gwb_state_after_review(
     rows.dedup_by(|left, right| left.residual_ref == right.residual_ref);
     Ok(rows)
 }
+
+
+fn merge_question(
+    questions: &mut BTreeMap<String, GwbInvestigationCandidate>,
+    residual: &GwbAmbiguityResidual,
+    move_ref: String,
+    kind: GwbInvestigationKind,
+    producer_ref: &str,
+    source_ref: Option<String>,
+    target_ref: Option<String>,
+    base_type_gain: u64,
+    base_surface_gain: u64,
+) {
+    let question = questions.entry(move_ref.clone()).or_insert_with(|| {
+        GwbInvestigationCandidate::governed_query(
+            residual.residual_ref.clone(),
+            move_ref,
+            kind,
+            producer_ref,
+            source_ref,
+            target_ref,
+            "gwb:selected-question",
+            1,
+            residual.salience.max(1),
+            base_type_gain,
+            base_surface_gain,
+            u64::try_from(residual.dependency_refs.len()).unwrap_or(u64::MAX).max(1),
+        )
+    });
+    if !question
+        .target_residual_refs
+        .iter()
+        .any(|value| value == &residual.residual_ref)
+    {
+        question.target_residual_refs.push(residual.residual_ref.clone());
+        question.target_residual_refs.sort();
+    }
+    question.ambiguity_reduction = question.ambiguity_reduction.max(residual.salience);
+    question.shared_dependency_gain = question.shared_dependency_gain.max(
+        u64::try_from(residual.dependency_refs.len())
+            .unwrap_or(u64::MAX)
+            .max(1),
+    );
+}
+
+#[must_use]
+pub fn gwb_question_investigations(
+    residuals: &[GwbAmbiguityResidual],
+    reviewed_move_refs: &BTreeSet<String>,
+) -> Vec<GwbInvestigationCandidate> {
+    let mut questions = BTreeMap::new();
+
+    for residual in residuals {
+        let root = residual.root_qid.clone();
+        match residual.kind {
+            GwbAmbiguityKind::TypeClass
+            | GwbAmbiguityKind::Superclass
+            | GwbAmbiguityKind::PropertySupport => {
+                if let Some(qid) = root {
+                    merge_question(
+                        &mut questions,
+                        residual,
+                        format!("move:gwb:inspect:{qid}:classification"),
+                        GwbInvestigationKind::TypeClass,
+                        "producer:wikidata-classification",
+                        Some(qid),
+                        None,
+                        1,
+                        0,
+                    );
+                }
+            }
+            GwbAmbiguityKind::CrossLanguageGap => {
+                if residual.subject_ref.starts_with("https://")
+                    && residual.subject_ref.contains(".wikipedia.org/")
+                {
+                    merge_question(
+                        &mut questions,
+                        residual,
+                        format!("move:gwb:acquire:{}", residual.residual_ref),
+                        GwbInvestigationKind::CrossLanguageSurface,
+                        "producer:wikipedia-surface",
+                        root,
+                        Some(residual.subject_ref.clone()),
+                        0,
+                        1,
+                    );
+                } else if let Some(qid) = root {
+                    merge_question(
+                        &mut questions,
+                        residual,
+                        format!("move:gwb:inspect:{qid}:wikipedia-surfaces"),
+                        GwbInvestigationKind::CrossLanguageSurface,
+                        "producer:wikidata-sitelink-surface",
+                        Some(qid),
+                        None,
+                        0,
+                        1,
+                    );
+                }
+            }
+            GwbAmbiguityKind::Identity | GwbAmbiguityKind::SourceWorkIdentity => {
+                if let Some(qid) = root {
+                    merge_question(
+                        &mut questions,
+                        residual,
+                        format!("move:gwb:inspect:{qid}:identity"),
+                        GwbInvestigationKind::Identity,
+                        "producer:wikimedia-identity",
+                        Some(qid),
+                        None,
+                        1,
+                        0,
+                    );
+                }
+            }
+            GwbAmbiguityKind::Subclass => {
+                if let Some(qid) = root {
+                    merge_question(
+                        &mut questions,
+                        residual,
+                        format!("move:gwb:query:{qid}:inverse-P279"),
+                        GwbInvestigationKind::Subclass,
+                        "producer:wikidata-classification",
+                        Some(qid),
+                        None,
+                        1,
+                        0,
+                    );
+                }
+            }
+            GwbAmbiguityKind::UnsupportedDependency => {
+                merge_question(
+                    &mut questions,
+                    residual,
+                    format!("move:gwb:repair:{}", residual.residual_ref),
+                    GwbInvestigationKind::ParserRepair,
+                    "producer:parser-repair",
+                    root,
+                    None,
+                    0,
+                    0,
+                );
+            }
+            GwbAmbiguityKind::Provenance => {
+                merge_question(
+                    &mut questions,
+                    residual,
+                    format!("move:gwb:provenance:{}", residual.residual_ref),
+                    GwbInvestigationKind::Provenance,
+                    "producer:source-provenance",
+                    root,
+                    None,
+                    0,
+                    0,
+                );
+            }
+            GwbAmbiguityKind::CompetingAlternatives
+            | GwbAmbiguityKind::ConsumerSemanticGap => {
+                if let Some(qid) = root.clone() {
+                    merge_question(
+                        &mut questions,
+                        residual,
+                        format!("move:gwb:inspect:{qid}:classification"),
+                        GwbInvestigationKind::TypeClass,
+                        "producer:wikidata-classification",
+                        Some(qid.clone()),
+                        None,
+                        1,
+                        0,
+                    );
+                    merge_question(
+                        &mut questions,
+                        residual,
+                        format!("move:gwb:inspect:{qid}:wikipedia-surfaces"),
+                        GwbInvestigationKind::CrossLanguageSurface,
+                        "producer:wikidata-sitelink-surface",
+                        Some(qid),
+                        None,
+                        0,
+                        1,
+                    );
+                } else {
+                    merge_question(
+                        &mut questions,
+                        residual,
+                        format!("move:gwb:snowball:{}", residual.residual_ref),
+                        GwbInvestigationKind::Snowball,
+                        "producer:snowball",
+                        None,
+                        None,
+                        0,
+                        0,
+                    );
+                }
+            }
+        }
+    }
+
+    questions
+        .into_values()
+        .filter(|candidate| !reviewed_move_refs.contains(&candidate.move_ref))
+        .collect()
+}
+
+#[must_use]
+pub fn compile_gwb_question_frontier(
+    residuals: &[GwbAmbiguityResidual],
+    reviewed_move_refs: &BTreeSet<String>,
+    frontier_ref: impl Into<String>,
+) -> GwbCompiledAmbiguityFrontier {
+    let investigations = gwb_question_investigations(residuals, reviewed_move_refs);
+    compile_gwb_ambiguity_frontier(residuals, &investigations, frontier_ref)
+}
+
+#[must_use]
+pub fn residuals_opened_by_reviewed_routes(
+    hop_index: usize,
+    selected: &GwbInvestigationCandidate,
+    outcome_ref: &str,
+    observed_routes: &[RouteCandidate],
+) -> Vec<GwbAmbiguityStateInput> {
+    if matches!(
+        outcome_ref,
+        "wrong-type" | "duplicate" | "irrelevant-to-residual" | "empty" | "no-support" | "abstain"
+    ) {
+        return vec![];
+    }
+    let mut opened = Vec::new();
+    for route in observed_routes {
+        match route.route_family {
+            RouteFamily::WikidataProperty => {
+                let target = route.target_ref.as_str();
+                if target
+                    .strip_prefix('Q')
+                    .is_some_and(|rest| !rest.is_empty() && rest.bytes().all(|byte| byte.is_ascii_digit()))
+                {
+                    for mut row in seed_gwb_qid_ambiguities(target) {
+                        row.opened_by_hop = Some(hop_index);
+                        opened.push(row);
+                    }
+                    if route.property_ref == "P279" {
+                        opened.push(GwbAmbiguityStateInput {
+                            campaign_ref: GWB_ADAPTIVE_CAMPAIGN_REF.into(),
+                            residual_ref: format!("residual:gwb:{target}:subclass"),
+                            subject_ref: target.into(),
+                            proposition_ref: format!("gwb:ambiguity:{target}:subclass"),
+                            kind_ref: "subclass".into(),
+                            root_qid: Some(target.into()),
+                            salience: 65,
+                            dependency_refs: vec![selected.move_ref.clone()],
+                            opened_by_hop: Some(hop_index),
+                            candidate_only: true,
+                            creates_semantic_authority: false,
+                            applicability_promoted: false,
+                            claim_truth_promoted: false,
+                        });
+                    }
+                }
+            }
+            RouteFamily::WikipediaArticle => {
+                let url = route.target_ref.as_str();
+                opened.push(GwbAmbiguityStateInput {
+                    campaign_ref: GWB_ADAPTIVE_CAMPAIGN_REF.into(),
+                    residual_ref: format!(
+                        "residual:gwb:surface:{}",
+                        Sha256::digest(url.as_bytes())
+                            .iter()
+                            .take(8)
+                            .map(|byte| format!("{byte:02x}"))
+                            .collect::<String>()
+                    ),
+                    subject_ref: url.into(),
+                    proposition_ref: format!("gwb:surface-observation:{url}"),
+                    kind_ref: "cross-language-gap".into(),
+                    root_qid: Some(route.source_ref.clone()),
+                    salience: 75,
+                    dependency_refs: vec![selected.move_ref.clone()],
+                    opened_by_hop: Some(hop_index),
+                    candidate_only: true,
+                    creates_semantic_authority: false,
+                    applicability_promoted: false,
+                    claim_truth_promoted: false,
+                });
+            }
+            _ => {}
+        }
+    }
+    opened.sort_by(|left, right| left.residual_ref.cmp(&right.residual_ref));
+    opened.dedup_by(|left, right| left.residual_ref == right.residual_ref);
+    opened
+}
