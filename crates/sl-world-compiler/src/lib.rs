@@ -222,7 +222,7 @@ fn atom_body(candidate_id:&str, pnf_body:&[u8]) -> Result<Vec<u8>,CompilerError>
 
 fn iteration_body(receipt:&CompileReceipt) -> Vec<u8> {
     let mut out=Vec::new(); out.extend_from_slice(b"ITR1");
-    out.extend_from_slice(&receipt.manifestations.to_le_bytes()); out.extend_from_slice(&receipt.canonical_observations.to_le_bytes()); out.extend_from_slice(&receipt.pnf_candidates.to_le_bytes());
+    out.extend_from_slice(&receipt.manifestations.to_le_bytes()); out.extend_from_slice(&receipt.pnf_candidates.to_le_bytes());
     out.extend_from_slice(&receipt.world_atoms.to_le_bytes()); out.extend_from_slice(&receipt.unresolved_dependencies.to_le_bytes());
     out.push(1); out.push(0); out
 }
