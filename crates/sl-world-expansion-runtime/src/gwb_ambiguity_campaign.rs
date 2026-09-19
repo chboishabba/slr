@@ -543,12 +543,6 @@ pub fn seed_gwb_qid_ambiguities(root_qid: &str) -> Vec<GwbAmbiguityStateInput> {
             format!("gwb:ambiguity:{root_qid}:cross-language"),
             70u64,
         ),
-        (
-            "consumer-semantic-gap",
-            format!("residual:gwb:{root_qid}:consumer-semantic-gap"),
-            format!("gwb:ambiguity:{root_qid}:consumer-semantic-gap"),
-            60u64,
-        ),
     ]
     .into_iter()
     .map(|(kind_ref, residual_ref, proposition_ref, salience)| GwbAmbiguityStateInput {
