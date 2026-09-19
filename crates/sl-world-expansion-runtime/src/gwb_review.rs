@@ -264,6 +264,18 @@ pub fn pending_gwb_review_bundle(
         "# investigation_kind={}\n",
         selected.investigation_kind.as_str()
     ));
+    out.push_str(&format!(
+        "# selected_source={}\n",
+        selected.source_ref.as_deref().unwrap_or("")
+    ));
+    out.push_str(&format!(
+        "# selected_target={}\n",
+        selected.target_ref.as_deref().unwrap_or("")
+    ));
+    out.push_str(&format!(
+        "# selected_property={}\n",
+        selected.property_ref.as_deref().unwrap_or("")
+    ));
     out.push_str(&format!("# source_revision={source_revision_ref}\n"));
     out.push_str(&format!("# evidence_digest={evidence_digest_ref}\n"));
     out.push_str(&format!(
