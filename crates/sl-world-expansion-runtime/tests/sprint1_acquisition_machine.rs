@@ -21,6 +21,8 @@ fn object(name: &str, path: AcquisitionPath) -> PlannedPhysicalObject {
         cache_key: format!("cache:{name}"),
         route_ref: format!("nodeRouteIndex:{name}"),
         source_ref: "hf://wikidata".into(),
+        source_range: None,
+        expected_bytes: Some(128),
         acquisition_path: path,
     }
 }
