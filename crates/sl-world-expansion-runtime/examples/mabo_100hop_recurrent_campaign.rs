@@ -5,7 +5,7 @@ use sensiblaw_pg_source_store::{
     discovery_lineage_row, identity_alias_row, load_adaptive_negative_assessments,
     load_database_config, load_discovery_campaign_identity_classes,
     load_discovery_identity_baseline, load_latent_world_rows_with_budget,
-    load_reviewed_context_expansion_sources,
+    load_mabo_proposition_rows, load_reviewed_context_expansion_sources,
     materialize_non_novel_identity_aliases, materialize_reviewed_context_expansion,
     reviewed_source_expansion_row, LatentWorldBudget, NonNovelIdentityAliasInput,
 };
@@ -33,6 +33,10 @@ use sensiblaw_world_expansion_runtime::adaptive_context_review::{
 use sensiblaw_world_expansion_runtime::adaptive_trajectory::{
     complete_adaptive_selection_receipt, render_adaptive_selection_receipt,
     selection_receipt_from_decision, AdaptiveSelectionReceipt,
+};
+use sensiblaw_world_expansion_runtime::mabo_heterogeneous_diagnosis::{
+    diagnose_mabo_proposition_research, MABO_RADICAL_TITLE_PROPOSITION,
+    MABO_RADICAL_TITLE_SPAN,
 };
 use sensiblaw_world_expansion_runtime::reviewed_campaign::{
     self, prepare_reviewed_mabo_identity_cycle, reviewed_acquisition_request,
@@ -307,6 +311,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let expanded_sources = load_reviewed_context_expansion_sources(&pg_config)?;
         let negative_rows = load_adaptive_negative_assessments(&pg_config)?;
         let negative_assessments = durable_negative_assessments_from_rows(&negative_rows);
+        let proposition_rows = load_mabo_proposition_rows(
+            &pg_config,
+            MABO_RADICAL_TITLE_PROPOSITION,
+            MABO_RADICAL_TITLE_SPAN,
+        )?;
+        let proposition_research = diagnose_mabo_proposition_research(&proposition_rows)?;
         let diagnosis = diagnose_mabo_context_world_identity(&world, &baseline);
 
         println!("campaign_cycle_index={adaptive_cycles_completed}");
@@ -328,13 +338,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "durable_negative_constraints={}",
             negative_assessments.len()
         );
+        println!(
+            "mabo_proposition_research_moves={}",
+            proposition_research.moves.len()
+        );
+        println!(
+            "mabo_bounded_why_executable={}",
+            proposition_research.why_executable
+        );
 
         let compiled = compile_mabo_heterogeneous_frontier(
             &diagnosis,
             &baseline,
             &world,
             &expanded_sources,
-            &[],
+            &proposition_research.moves,
             &negative_assessments,
             format!("frontier:mabo:adaptive:{adaptive_cycles_completed}"),
         );
