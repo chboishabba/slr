@@ -186,4 +186,4 @@ The first convergence owner is `sensiblaw-core::canonical_evidence::EvidenceMani
 
 Existing Wikidata, Wikipedia and OALC producer artifacts now lower into that carrier through the current world-observation adapters. This is a convergence adapter over already-paid acquisition paths, not a new producer or scheduler.
 
-M2.1 remains open for the remaining manifestation families and executable receipts; M2.2 remains the next structural min-cut.
+M2.1 and M2.2 are source-written awaiting executable receipts. M2.2 uses one exact-anchor ABI: character ranges for text and structured coordinates for graph evidence, with compiler tokens revision-bound and persisted PG legal slices projected into the same carrier. M2.3 shared reducer is now the next structural min-cut.
