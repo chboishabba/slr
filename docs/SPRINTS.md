@@ -4,7 +4,7 @@ This board is capability-sized. A sprint is not a file, adapter, semaphore or
 provider patch; it closes only when the corresponding production capability is
 demonstrated, persisted and replayable.
 
-## Sprint 1 — Complete the recurrent acquisition machine — ACTIVE
+## Sprint 1 — Complete the recurrent acquisition machine — CERTIFIED CLOSED
 
 **Deliverable**
 
@@ -141,17 +141,15 @@ M1.4 reviewed recurrence      existing generic runner + adaptive capstone test
 M1.5 restart/replay           strict validator + capstone replay + durable PG audit
 ```
 
-The remaining closure requirement is an executable receipt on the exact branch: run the Rust suite/capstone, run the persisted PostgreSQL replay audit against the production campaign, and obtain the matching Agda kernel receipt.
-Until that receipt exists, Sprint 1 is **implemented awaiting runtime
-certification**, not declared closed.
+Certified at exact SLR head `4bc8ce04eee4d79ccf15ef9131d80c8e19647bfb`: workspace tests passed, the persisted PostgreSQL campaign replayed with an intact hop/world chain and non-promotion invariants, and the corresponding Agda golden modules typechecked green. The certified Sprint-1 branch is intentionally left unchanged after those receipts.
 
-## Sprint 2 — Canonical evidence convergence — NEXT
+## Sprint 2 — Canonical evidence convergence — ACTIVE
 
 **Single deliverable:** world, legal-source and narrative evidence converge on
 one canonical evidence/provenance substrate.
 
 Work package:
-- one evidence manifestation envelope;
+- **M2.1 one evidence manifestation envelope — source-written awaiting runtime certification**;
 - one SourceRevision -> TextSpan -> Observation substrate;
 - `shared_reducer` as the supported production ABI;
 - legal providers as ordinary producer implementations;
@@ -180,3 +178,12 @@ A sprint closes only when:
 - semantic/promotion firewalls remain fail-closed.
 
 A compile-only or unit-only tranche is progress inside a sprint, not a sprint.
+
+
+### Current M2.1 tranche
+
+The first convergence owner is `sensiblaw-core::canonical_evidence::EvidenceManifestation`.
+
+Existing Wikidata, Wikipedia and OALC producer artifacts now lower into that carrier through the current world-observation adapters. This is a convergence adapter over already-paid acquisition paths, not a new producer or scheduler.
+
+M2.1 remains open for the remaining manifestation families and executable receipts; M2.2 remains the next structural min-cut.
