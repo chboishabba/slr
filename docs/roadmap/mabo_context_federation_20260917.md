@@ -15,7 +15,7 @@ P7b.1 Wikidata revision-pinned candidate producer     PAID @ bbb155a
 P7b.2 Wikidata candidate -> explicit review gate      PAID @ 9538eec/cc5adfe (5/5 tests green)
 P7b.3 reviewed Wikidata -> live PG materialisation    PAID LIVE RECEIPT (12 relations on TrueNAS PG)
 P7b.4 Wikipedia revision/hash producer/review         UNPAID
-P7b.5 OALC exact legal producer/review                 UNPAID
+P7b.5 OALC exact legal producer/review                 SOURCE-WRITTEN; LIVE RECEIPT UNPAID
 P7c Residual-Driven World Expansion Controller        PAID @ d3f15bf (65/65 tests green, 0 clippy warnings)
 P7d Mabo 100-Novel-Object Discovery Receipt           UNPAID LIVE RECEIPT
 ```
@@ -298,3 +298,51 @@ order.
 
 No new crawler, persistence ontology, legal-IR promotion path, Dioxus semantics,
 or walker network I/O is justified by this frontier.
+
+
+## OALC exact-source federation boundary
+
+The governed legal-provider already emits exact OALC source coordinates including
+source identity, immutable source revision, canonical-text digest, local artifact
+reference, corpus revision and candidate-only receipt authority.
+
+The source-store now exposes:
+
+```text
+review_mabo_oalc_exact_source(...)
+```
+
+with the following contract:
+
+```text
+exact OALC source coordinates
+-> explicit ContextReviewDecision::Reviewed
+-> SourceFamily::Oalc ReviewedContextEdge
+-> context:oalc:exact-mnc
+-> algebra.relation + context.reviewed_relation_receipt
+```
+
+The reviewed relation receipt retains both the exact source revision and the
+canonical-text digest. Mutable aliases such as `latest`, `current`, `head`,
+`main`, and `master` fail closed. Receipt authority must remain exactly
+`experimental_candidate_only`.
+
+This boundary deliberately does not imply:
+
+```text
+governed legal provider != legal authority
+OALC exact source != proposition payment
+reviewed OALC context != applicability
+reviewed OALC context != claim truth
+```
+
+Fresh local verification required for this tranche:
+
+```sh
+cargo test -p sensiblaw-pg-source-store --test context_federation
+cargo clippy -p sensiblaw-pg-source-store --all-targets -- -D warnings
+```
+
+A later live OALC Mabo receipt should supply the exact source revision/digest
+coordinates to this review boundary and then rerun the unchanged latent-world
+walker. Until that happens P7b.5 remains source-written rather than live-paid.
