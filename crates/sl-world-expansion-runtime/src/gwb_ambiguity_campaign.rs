@@ -13,7 +13,10 @@ use sensiblaw_proof_search_loop::frontier::{
 use sensiblaw_proof_search_scheduler::{
     CandidateMove, ExecutionCostVector, ExecutionStrategy, ProofValueVector,
 };
+use sensiblaw_pg_source_store::{GwbAmbiguityStateInput, GwbAmbiguityStateRow};
 use sensiblaw_route_selector::{ProducerFamily, RouteCandidate, RouteFamily};
+use sha2::{Digest, Sha256};
+use thiserror::Error;
 
 pub const GWB_ADAPTIVE_HOP_TARGET: usize = 100;
 pub const GWB_ADAPTIVE_CAMPAIGN_REF: &str = "campaign:gwb-ambiguity-directed-v1";
@@ -461,4 +464,164 @@ pub fn select_gwb_investigation(
 ) -> Option<&GwbInvestigationCandidate> {
     let selected = select_frontier_move(&compiled.frontier, &compiled.candidates, 1)?;
     compiled.investigations.get(&selected.move_.move_ref)
+}
+
+
+#[derive(Debug, Error, Clone, PartialEq, Eq)]
+pub enum GwbAmbiguityProjectionError {
+    #[error("invalid durable GWB ambiguity kind: {0}")]
+    InvalidKind(String),
+}
+
+fn parse_kind(value: &str) -> Option<GwbAmbiguityKind> {
+    match value {
+        "identity" => Some(GwbAmbiguityKind::Identity),
+        "source-work-identity" => Some(GwbAmbiguityKind::SourceWorkIdentity),
+        "type-class" => Some(GwbAmbiguityKind::TypeClass),
+        "superclass" => Some(GwbAmbiguityKind::Superclass),
+        "subclass" => Some(GwbAmbiguityKind::Subclass),
+        "property-support" => Some(GwbAmbiguityKind::PropertySupport),
+        "cross-language-gap" => Some(GwbAmbiguityKind::CrossLanguageGap),
+        "unsupported-dependency" => Some(GwbAmbiguityKind::UnsupportedDependency),
+        "provenance" => Some(GwbAmbiguityKind::Provenance),
+        "competing-alternatives" => Some(GwbAmbiguityKind::CompetingAlternatives),
+        "consumer-semantic-gap" => Some(GwbAmbiguityKind::ConsumerSemanticGap),
+        _ => None,
+    }
+}
+
+pub fn ambiguity_residuals_from_rows(
+    rows: &[GwbAmbiguityStateRow],
+) -> Result<Vec<GwbAmbiguityResidual>, GwbAmbiguityProjectionError> {
+    rows.iter()
+        .map(|row| {
+            let kind = parse_kind(&row.kind_ref)
+                .ok_or_else(|| GwbAmbiguityProjectionError::InvalidKind(row.kind_ref.clone()))?;
+            Ok(GwbAmbiguityResidual {
+                residual_ref: row.residual_ref.clone(),
+                subject_ref: row.subject_ref.clone(),
+                proposition_ref: row.proposition_ref.clone(),
+                kind,
+                root_qid: row.root_qid.clone(),
+                salience: row.salience,
+                dependency_refs: row.dependency_refs.clone(),
+            })
+        })
+        .collect()
+}
+
+#[must_use]
+pub fn seed_gwb_qid_ambiguities(root_qid: &str) -> Vec<GwbAmbiguityStateInput> {
+    [
+        (
+            "type-class",
+            format!("residual:gwb:{root_qid}:type-class"),
+            format!("gwb:ambiguity:{root_qid}:type-class"),
+            100u64,
+        ),
+        (
+            "superclass",
+            format!("residual:gwb:{root_qid}:superclass"),
+            format!("gwb:ambiguity:{root_qid}:superclass"),
+            90u64,
+        ),
+        (
+            "cross-language-gap",
+            format!("residual:gwb:{root_qid}:cross-language"),
+            format!("gwb:ambiguity:{root_qid}:cross-language"),
+            70u64,
+        ),
+        (
+            "consumer-semantic-gap",
+            format!("residual:gwb:{root_qid}:consumer-semantic-gap"),
+            format!("gwb:ambiguity:{root_qid}:consumer-semantic-gap"),
+            60u64,
+        ),
+    ]
+    .into_iter()
+    .map(|(kind_ref, residual_ref, proposition_ref, salience)| GwbAmbiguityStateInput {
+        campaign_ref: GWB_ADAPTIVE_CAMPAIGN_REF.into(),
+        residual_ref,
+        subject_ref: root_qid.into(),
+        proposition_ref,
+        kind_ref: kind_ref.into(),
+        root_qid: Some(root_qid.into()),
+        salience,
+        dependency_refs: vec![format!("dependency:gwb:{root_qid}")],
+        opened_by_hop: None,
+        candidate_only: true,
+        creates_semantic_authority: false,
+        applicability_promoted: false,
+        claim_truth_promoted: false,
+    })
+    .collect()
+}
+
+#[must_use]
+pub fn residuals_opened_by_reviewed_investigation(
+    hop_index: usize,
+    selected: &GwbInvestigationCandidate,
+    outcome_ref: &str,
+) -> Vec<GwbAmbiguityStateInput> {
+    let Some(target) = selected.target_ref.as_deref() else {
+        return vec![];
+    };
+    let is_qid = target
+        .strip_prefix('Q')
+        .is_some_and(|rest| !rest.is_empty() && rest.bytes().all(|byte| byte.is_ascii_digit()));
+    if !is_qid {
+        return vec![];
+    }
+    let opens_target = matches!(
+        outcome_ref,
+        "new-related-object" | "new-conceptual-parent" | "same-object"
+    );
+    if !opens_target {
+        return vec![];
+    }
+
+    seed_gwb_qid_ambiguities(target)
+        .into_iter()
+        .map(|mut row| {
+            row.opened_by_hop = Some(hop_index);
+            row
+        })
+        .collect()
+}
+
+#[must_use]
+pub fn gwb_ambiguity_world_sha256(rows: &[GwbAmbiguityStateRow]) -> String {
+    let mut rows = rows.to_vec();
+    rows.sort_by(|left, right| left.residual_ref.cmp(&right.residual_ref));
+    let mut hasher = Sha256::new();
+    hasher.update(b"gwb-ambiguity-world:v1\0");
+    for row in rows {
+        for value in [
+            row.campaign_ref.as_str(),
+            row.residual_ref.as_str(),
+            row.subject_ref.as_str(),
+            row.proposition_ref.as_str(),
+            row.kind_ref.as_str(),
+            row.root_qid.as_deref().unwrap_or(""),
+            &row.salience.to_string(),
+        ] {
+            hasher.update((value.len() as u64).to_be_bytes());
+            hasher.update(value.as_bytes());
+        }
+        let mut dependencies = row.dependency_refs.clone();
+        dependencies.sort();
+        dependencies.dedup();
+        for dependency in dependencies {
+            hasher.update((dependency.len() as u64).to_be_bytes());
+            hasher.update(dependency.as_bytes());
+        }
+    }
+    let digest = hasher.finalize();
+    format!(
+        "sha256:{}",
+        digest
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>()
+    )
 }
