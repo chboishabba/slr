@@ -14,6 +14,7 @@
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::env;
+use std::fs;
 use std::io::{Cursor, Write};
 use std::process::{Command, Stdio};
 use std::thread::sleep;
@@ -408,6 +409,7 @@ pub struct TypeProviderStats {
     pub provider_calls: usize,
     pub retries: usize,
     pub rate_limit_retries: usize,
+    pub preferred_slice_hits: usize,
     pub snapshot_hits: usize,
     pub live_fallbacks: usize,
 }
@@ -522,6 +524,153 @@ impl TypeClosureNodeProvider for RevisionPinnedLiveTypeProvider {
             }
         }
         unreachable!("bounded retry loop must return")
+    }
+
+    fn stats(&self) -> TypeProviderStats {
+        self.stats
+    }
+}
+
+
+/// Preferred local/revisioned P31/P279 slice.
+///
+/// Schema:
+/// {
+///   "nodes": {
+///     "Q1": { "P31": ["Q2"], "P279": ["Q3"] }
+///   }
+/// }
+///
+/// This deliberately carries only the two classification predicates. A miss
+/// is not a negative ontology fact; it falls through to the general snapshot
+/// or governed live provider.
+pub struct PredicateSliceTypeProvider {
+    snapshot_ref: String,
+    nodes: BTreeMap<String, (Vec<String>, Vec<String>)>,
+    stats: TypeProviderStats,
+}
+
+impl PredicateSliceTypeProvider {
+    pub fn from_json(
+        json: &str,
+        snapshot_ref: impl Into<String>,
+    ) -> Result<Self, TypeClosureError> {
+        let value: serde_json::Value = serde_json::from_str(json).map_err(|error| {
+            TypeClosureError::Provider(ProviderError::InvalidInput(format!(
+                "invalid P31/P279 slice JSON: {error}"
+            )))
+        })?;
+        let object = value
+            .get("nodes")
+            .and_then(serde_json::Value::as_object)
+            .ok_or_else(|| {
+                TypeClosureError::Provider(ProviderError::InvalidInput(
+                    "P31/P279 slice must contain an object field named nodes".into(),
+                ))
+            })?;
+        let mut nodes = BTreeMap::new();
+        for (qid, row) in object {
+            if !valid_qid(qid) {
+                return Err(TypeClosureError::InvalidQid(qid.clone()));
+            }
+            let parse = |pid: &str| -> Result<Vec<String>, TypeClosureError> {
+                let mut values = row
+                    .get(pid)
+                    .and_then(serde_json::Value::as_array)
+                    .map(|rows| {
+                        rows.iter()
+                            .filter_map(serde_json::Value::as_str)
+                            .map(str::to_owned)
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default();
+                if let Some(invalid) = values.iter().find(|value| !valid_qid(value)) {
+                    return Err(TypeClosureError::InvalidQid(invalid.clone()));
+                }
+                values.sort();
+                values.dedup();
+                Ok(values)
+            };
+            nodes.insert(qid.clone(), (parse("P31")?, parse("P279")?));
+        }
+        Ok(Self {
+            snapshot_ref: snapshot_ref.into(),
+            nodes,
+            stats: TypeProviderStats::default(),
+        })
+    }
+
+    pub fn from_env() -> Result<Option<Self>, TypeClosureError> {
+        let Ok(path) = env::var("SLR_WIKIDATA_P31_P279_SLICE") else {
+            return Ok(None);
+        };
+        if path.trim().is_empty() {
+            return Ok(None);
+        }
+        let snapshot_ref = env::var("SLR_WIKIDATA_P31_P279_SLICE_REF").map_err(|_| {
+            TypeClosureError::Provider(ProviderError::InvalidInput(
+                "SLR_WIKIDATA_P31_P279_SLICE_REF is required when the specialised slice is configured"
+                    .into(),
+            ))
+        })?;
+        if snapshot_ref.trim().is_empty() {
+            return Err(TypeClosureError::Provider(ProviderError::InvalidInput(
+                "SLR_WIKIDATA_P31_P279_SLICE_REF must not be empty".into(),
+            )));
+        }
+        let json = fs::read_to_string(&path).map_err(|error| {
+            TypeClosureError::Provider(ProviderError::InvalidInput(format!(
+                "failed to read P31/P279 slice {path}: {error}"
+            )))
+        })?;
+        Self::from_json(&json, snapshot_ref).map(Some)
+    }
+}
+
+impl TypeClosureNodeProvider for PredicateSliceTypeProvider {
+    fn acquire_type_node(
+        &mut self,
+        qid: &str,
+    ) -> Result<Option<TypeNodeAcquisition>, TypeClosureError> {
+        self.stats.provider_calls = self.stats.provider_calls.saturating_add(1);
+        let Some((p31, p279)) = self.nodes.get(qid) else {
+            return Ok(None);
+        };
+        let source_revision_ref = format!("wikidata-p31-p279-slice:{}:{qid}", self.snapshot_ref);
+        let evidence_digest_ref =
+            ZelphHfTypeProvider::digest_rows(qid, p31, p279, &source_revision_ref);
+        let mut observations = Vec::new();
+        for target_qid in p31 {
+            observations.push(TypeObservation {
+                subject_qid: qid.to_owned(),
+                property: TypeObservationProperty::InstanceOf,
+                target_qid: target_qid.clone(),
+                source_revision_ref: source_revision_ref.clone(),
+                evidence_digest_ref: evidence_digest_ref.clone(),
+            });
+        }
+        for target_qid in p279 {
+            observations.push(TypeObservation {
+                subject_qid: qid.to_owned(),
+                property: TypeObservationProperty::SubclassOf,
+                target_qid: target_qid.clone(),
+                source_revision_ref: source_revision_ref.clone(),
+                evidence_digest_ref: evidence_digest_ref.clone(),
+            });
+        }
+        Ok(Some(TypeNodeAcquisition {
+            qid: qid.to_owned(),
+            observations,
+            node_receipt: TypeNodeReceipt {
+                qid: qid.to_owned(),
+                source_revision_ref,
+                evidence_digest_ref,
+            },
+        }))
+    }
+
+    fn snapshot_simultaneous(&self) -> bool {
+        true
     }
 
     fn stats(&self) -> TypeProviderStats {
@@ -687,7 +836,7 @@ impl ZelphHfTypeProvider {
         rows
     }
 
-    fn digest_rows(qid: &str, p31: &[String], p279: &[String], source_ref: &str) -> String {
+    pub(crate) fn digest_rows(qid: &str, p31: &[String], p279: &[String], source_ref: &str) -> String {
         let mut hasher = Sha256::new();
         hasher.update(b"gwb-zelph-hf-type-node:v1\0");
         for value in [qid, source_ref] {
@@ -853,6 +1002,9 @@ where
             rate_limit_retries: snapshot
                 .rate_limit_retries
                 .saturating_add(live.rate_limit_retries),
+            preferred_slice_hits: snapshot
+                .preferred_slice_hits
+                .saturating_add(live.preferred_slice_hits),
             snapshot_hits: self.stats.snapshot_hits,
             live_fallbacks: self.stats.live_fallbacks,
         }
@@ -949,19 +1101,106 @@ where
 /// Each visited entity is fetched at an exact revision and carries its own
 /// digest. The aggregate is therefore reproducible as a manifest, but it is
 /// deliberately *not* described as a simultaneous global Wikidata snapshot.
+
+pub struct ThreeTierTypeClosureProvider<P, S, L> {
+    preferred_slice: P,
+    snapshot: S,
+    live: L,
+    stats: TypeProviderStats,
+}
+
+impl<P, S, L> ThreeTierTypeClosureProvider<P, S, L> {
+    #[must_use]
+    pub fn new(preferred_slice: P, snapshot: S, live: L) -> Self {
+        Self {
+            preferred_slice,
+            snapshot,
+            live,
+            stats: TypeProviderStats::default(),
+        }
+    }
+}
+
+impl<P, S, L> TypeClosureNodeProvider for ThreeTierTypeClosureProvider<P, S, L>
+where
+    P: TypeClosureNodeProvider,
+    S: TypeClosureNodeProvider,
+    L: TypeClosureNodeProvider,
+{
+    fn acquire_type_node(
+        &mut self,
+        qid: &str,
+    ) -> Result<Option<TypeNodeAcquisition>, TypeClosureError> {
+        if let Some(acquired) = self.preferred_slice.acquire_type_node(qid)? {
+            self.stats.preferred_slice_hits =
+                self.stats.preferred_slice_hits.saturating_add(1);
+            return Ok(Some(acquired));
+        }
+        if let Some(acquired) = self.snapshot.acquire_type_node(qid)? {
+            self.stats.snapshot_hits = self.stats.snapshot_hits.saturating_add(1);
+            return Ok(Some(acquired));
+        }
+        self.stats.live_fallbacks = self.stats.live_fallbacks.saturating_add(1);
+        self.live.acquire_type_node(qid)
+    }
+
+    fn snapshot_simultaneous(&self) -> bool {
+        self.stats.live_fallbacks == 0
+            && self.preferred_slice.snapshot_simultaneous()
+            && self.snapshot.snapshot_simultaneous()
+    }
+
+    fn stats(&self) -> TypeProviderStats {
+        let preferred = self.preferred_slice.stats();
+        let snapshot = self.snapshot.stats();
+        let live = self.live.stats();
+        TypeProviderStats {
+            provider_calls: preferred
+                .provider_calls
+                .saturating_add(snapshot.provider_calls)
+                .saturating_add(live.provider_calls),
+            retries: preferred
+                .retries
+                .saturating_add(snapshot.retries)
+                .saturating_add(live.retries),
+            rate_limit_retries: preferred
+                .rate_limit_retries
+                .saturating_add(snapshot.rate_limit_retries)
+                .saturating_add(live.rate_limit_retries),
+            preferred_slice_hits: self.stats.preferred_slice_hits,
+            snapshot_hits: self.stats.snapshot_hits,
+            live_fallbacks: self.stats.live_fallbacks,
+        }
+    }
+}
+
 pub fn acquire_supervised_type_closure(
     request: &TypeClosureRequest,
 ) -> Result<ObservedTypeClosure, TypeClosureError> {
     let live = RevisionPinnedLiveTypeProvider::default();
-    if let Some(snapshot) = ZelphHfTypeProvider::from_env() {
-        let mut provider = TieredTypeClosureProvider::new(snapshot, live);
-        acquire_supervised_type_closure_with(request, &mut provider)
-    } else {
-        let mut provider = live;
-        acquire_supervised_type_closure_with(request, &mut provider)
+    let preferred_slice = PredicateSliceTypeProvider::from_env()?;
+    let snapshot = ZelphHfTypeProvider::from_env();
+
+    match (preferred_slice, snapshot) {
+        (Some(preferred_slice), Some(snapshot)) => {
+            let mut provider =
+                ThreeTierTypeClosureProvider::new(preferred_slice, snapshot, live);
+            acquire_supervised_type_closure_with(request, &mut provider)
+        }
+        (Some(preferred_slice), None) => {
+            let mut provider = TieredTypeClosureProvider::new(preferred_slice, live);
+            acquire_supervised_type_closure_with(request, &mut provider)
+        }
+        (None, Some(snapshot)) => {
+            let mut provider = TieredTypeClosureProvider::new(snapshot, live);
+            acquire_supervised_type_closure_with(request, &mut provider)
+        }
+        (None, None) => {
+            let mut provider = live;
+            acquire_supervised_type_closure_with(request, &mut provider)
+        }
     }
 }
-
 
 #[must_use]
 pub fn type_closure_route_candidates(closure: &ObservedTypeClosure) -> Vec<RouteCandidate> {
