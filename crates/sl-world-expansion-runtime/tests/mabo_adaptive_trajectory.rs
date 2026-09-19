@@ -1,7 +1,12 @@
 use sensiblaw_pg_source_store::{LatentWorldEdgeRow, LatentWorldRows};
 use sensiblaw_proof_search_loop::frontier::{ProofFrontier, ProofResidual, ResidualStatus};
+use sensiblaw_world_expansion_runtime::adaptive_campaign::{
+    MaboAdaptiveDecision, MaboTypedProducerSelection,
+};
 use sensiblaw_world_expansion_runtime::adaptive_trajectory::{
-    latent_world_digest, proof_frontier_digest, AdaptiveSelectionReceipt,
+    complete_adaptive_selection_receipt, latent_world_digest,
+    proof_frontier_digest, render_adaptive_selection_receipt,
+    selection_receipt_from_decision, AdaptiveSelectionReceipt,
     AdaptiveTrajectoryLinkError, link_adaptive_cycles,
 };
 
@@ -147,4 +152,52 @@ fn stale_or_unlinked_next_selection_fails_closed() {
         link_adaptive_cycles(&previous, &stale),
         Err(AdaptiveTrajectoryLinkError::PriorCommitMismatch { .. })
     ));
+}
+
+
+#[test]
+fn selection_receipt_binds_exact_world_frontier_and_typed_lane_before_commit() {
+    let w = world(vec![]);
+    let f = frontier(vec![residual("r:legal")]);
+    let decision = MaboAdaptiveDecision::TypedProducer(MaboTypedProducerSelection {
+        residual_ref: "r:legal".into(),
+        residual_class: sensiblaw_proof_search_loop::world_expansion::ResidualClass::Legal,
+        producer_lane: sensiblaw_proof_search_loop::world_expansion::ProducerLane::GovernedLegal,
+        move_ref: "move:oalc".into(),
+        source_ref: Some("source:oalc".into()),
+        provider_operation_ref: "oalc:exact".into(),
+        shared_dependency_gain: 3,
+        diagnosis_reference: "diagnosis:legal".into(),
+    });
+
+    let pending = selection_receipt_from_decision(
+        7,
+        Some("commit:6".into()),
+        &w,
+        &f,
+        &decision,
+    );
+    assert_eq!(pending.world_digest, latent_world_digest(&w));
+    assert_eq!(pending.frontier_digest, proof_frontier_digest(&f));
+    assert_eq!(pending.selected_residual_ref, "r:legal");
+    assert_eq!(pending.selected_move_ref, "move:oalc");
+    assert_eq!(pending.selected_producer_lane_ref, "governed-legal");
+    assert_eq!(pending.prior_commit_ref.as_deref(), Some("commit:6"));
+    assert!(pending.commit_ref.is_none());
+
+    let completed = complete_adaptive_selection_receipt(
+        &pending,
+        "commit:7",
+        "review:7",
+        "delta:7",
+    );
+    assert_eq!(completed.commit_ref.as_deref(), Some("commit:7"));
+    assert_eq!(completed.review_or_payment_ref.as_deref(), Some("review:7"));
+    assert_eq!(completed.world_delta_ref.as_deref(), Some("delta:7"));
+
+    let rendered = render_adaptive_selection_receipt(&completed);
+    assert!(rendered.contains("cycle_index\t7"));
+    assert!(rendered.contains("frontier_digest\tsha256:"));
+    assert!(rendered.contains("selected_producer_lane\tgoverned-legal"));
+    assert!(rendered.contains("commit_ref\tcommit:7"));
 }
