@@ -24,6 +24,15 @@ From-scratch Rust foundation for SensibLaw, built against the current DASHI/Sens
 
 The parser sidecar never owns canonical semantic state; Rust owns deterministic compilation and publication boundaries.
 
+## Roadmap
+
+SLR is the production SensibLaw runtime; DASHI/Agda is the golden semantic/reference layer.
+
+- [Production roadmap](docs/ROADMAP.md)
+- [Capability-sized sprint board](docs/SPRINTS.md)
+
+The current critical path is bounded GWB transport -> generic epistemic scheduler -> canonical evidence reducer/legal-source convergence -> reviewed world-to-law weld -> legal reasoning kernel -> product surface. A compile-only, one-file, or one-adapter tranche is progress inside a sprint, not a completed sprint.
+
 ## Build
 
 ```sh
