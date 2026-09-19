@@ -8,7 +8,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use sensiblaw_pg_source_store::{load_gwb_hops, DatabaseConfig, GwbHopLedgerRow};
-use sensiblaw_route_selector::ProducerFamily;
+use sensiblaw_route_selector::{ProducerFamily, RouteCandidate};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
@@ -433,6 +433,22 @@ pub struct ProducerExecutionPlan {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+/// Lower an actually selected route candidate into the shared Sprint 1
+/// producer-execution ABI.  Route selection remains the owner of producer
+/// choice; the controller does not re-rank or reinterpret it.
+#[must_use]
+pub fn producer_execution_plan_from_candidate(
+    residual_ref: impl Into<String>,
+    candidate: &RouteCandidate,
+) -> ProducerExecutionPlan {
+    ProducerExecutionPlan {
+        residual_ref: residual_ref.into(),
+        move_ref: candidate.candidate_id.clone(),
+        producer: candidate.producer,
+        target_ref: candidate.target_ref.clone(),
+    }
+}
+
 pub struct CandidateProducerEvidence {
     pub producer: ProducerFamily,
     pub evidence_ref: String,
