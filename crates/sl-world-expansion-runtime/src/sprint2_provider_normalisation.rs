@@ -6,10 +6,13 @@
 //! enters the already-paid SharedEvidenceReducer.
 
 use sensiblaw_core::canonical_evidence::{
-    EvidenceManifestation, EvidenceManifestationError, EvidenceObservation,
-    EvidenceSourceRevision, EvidenceSpan, EvidenceSubstrateError,
+    manifestation_ref_for_revision, EvidenceManifestation, EvidenceManifestationError,
+    EvidenceManifestationFamily, EvidenceObservation, EvidenceSourceRevision,
+    EvidenceSpan, EvidenceSubstrateError,
 };
 use sensiblaw_governed_legal_provider::OalcLookupReceipt;
+use sensiblaw_pg_source_store::CachedResolvedDocument;
+use sha2::{Digest, Sha256};
 use sensiblaw_proof_search_loop::world_observation::GetterBackend;
 use sensiblaw_proof_search_loop::world_observation_adapters::{
     oalc_evidence_manifestation, oalc_source_observation,
@@ -238,6 +241,47 @@ pub fn normalize_oalc_provider(
         format!("observation:{request_ref}"),
         world.relation_ref,
         world.value_ref,
+    )
+}
+
+
+fn sha256_ref(text: &str) -> String {
+    let digest = Sha256::digest(text.as_bytes());
+    format!("sha256:{digest:x}")
+}
+
+pub fn normalize_cached_legal_provider(
+    request_ref: impl Into<String>,
+    source: &CachedResolvedDocument,
+    revision_receipt_ref: impl Into<String>,
+) -> Result<ProviderCanonicalEvidence, ProviderNormalisationError> {
+    let request_ref = request_ref.into();
+    let manifestation = EvidenceManifestation {
+        manifestation_ref: manifestation_ref_for_revision(
+            &source.external_source_revision_ref,
+        ),
+        family: EvidenceManifestationFamily::LegalAuthority,
+        source_ref: source.source_ref.clone(),
+        source_revision_ref: source.external_source_revision_ref.clone(),
+        content_digest_ref: sha256_ref(&source.canonical_text),
+        acquisition_receipt_ref: source.source_resolution_ref.clone(),
+        candidate_only: true,
+        creates_semantic_authority: false,
+        applicability_promoted: false,
+        claim_truth_promoted: false,
+    };
+    let span = EvidenceSpan::whole_revision(
+        source.external_source_revision_ref.clone(),
+        format!("span:whole:{}", source.external_source_revision_ref),
+    )?;
+    assemble(
+        format!("provider:{}", source.provider_ref),
+        manifestation,
+        revision_receipt_ref,
+        span,
+        format!("observation:{request_ref}"),
+        "legal:source-manifestation",
+        source.citation.clone(),
     )
 }
 
