@@ -35,6 +35,8 @@ pub struct PlannedPhysicalObject {
     pub cache_key: String,
     pub route_ref: String,
     pub source_ref: String,
+    pub source_range: Option<(u64, u64)>,
+    pub expected_bytes: Option<u64>,
     pub acquisition_path: AcquisitionPath,
 }
 
@@ -263,6 +265,16 @@ fn transport_digest(
             object.cache_key.as_str(),
             object.route_ref.as_str(),
             object.source_ref.as_str(),
+            object
+                .source_range
+                .map(|(start, end)| format!("{start}-{end}"))
+                .unwrap_or_default()
+                .as_str(),
+            object
+                .expected_bytes
+                .map(|bytes| bytes.to_string())
+                .unwrap_or_default()
+                .as_str(),
         ] {
             hasher.update((value.len() as u64).to_be_bytes());
             hasher.update(value.as_bytes());
