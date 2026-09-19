@@ -14,6 +14,8 @@
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::io::Cursor;
+use std::thread::sleep;
+use std::time::{Duration, Instant};
 
 use sensiblaw_route_selector::{decode_route_candidate, ProducerFamily, RouteCandidate, RouteFamily};
 use sensiblaw_wikimedia_candidate_provider::{
@@ -380,14 +382,217 @@ fn type_observations_from_rdf(
     Ok(out)
 }
 
-/// Acquire one bounded multi-revision type-closure view.
-///
-/// Each visited entity is fetched at an exact revision and carries its own
-/// digest. The aggregate is therefore reproducible as a manifest, but it is
-/// deliberately *not* described as a simultaneous global Wikidata snapshot.
-pub fn acquire_supervised_type_closure(
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LiveAcquisitionPolicy {
+    pub max_retries: usize,
+    pub backoff_base_seconds: f64,
+    pub max_backoff_seconds: f64,
+    pub min_request_interval_seconds: f64,
+}
+
+impl Default for LiveAcquisitionPolicy {
+    fn default() -> Self {
+        Self {
+            max_retries: 5,
+            backoff_base_seconds: 2.0,
+            max_backoff_seconds: 60.0,
+            min_request_interval_seconds: 0.35,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct TypeProviderStats {
+    pub provider_calls: usize,
+    pub retries: usize,
+    pub rate_limit_retries: usize,
+    pub snapshot_hits: usize,
+    pub live_fallbacks: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TypeNodeAcquisition {
+    pub qid: String,
+    pub observations: Vec<TypeObservation>,
+    pub node_receipt: TypeNodeReceipt,
+}
+
+pub trait TypeClosureNodeProvider {
+    fn acquire_type_node(
+        &mut self,
+        qid: &str,
+    ) -> Result<Option<TypeNodeAcquisition>, TypeClosureError>;
+
+    fn snapshot_simultaneous(&self) -> bool {
+        false
+    }
+
+    fn stats(&self) -> TypeProviderStats {
+        TypeProviderStats::default()
+    }
+}
+
+pub struct RevisionPinnedLiveTypeProvider {
+    policy: LiveAcquisitionPolicy,
+    last_request_at: Option<Instant>,
+    stats: TypeProviderStats,
+}
+
+impl RevisionPinnedLiveTypeProvider {
+    #[must_use]
+    pub fn new(policy: LiveAcquisitionPolicy) -> Self {
+        Self {
+            policy,
+            last_request_at: None,
+            stats: TypeProviderStats::default(),
+        }
+    }
+
+    fn throttle(&mut self) {
+        let minimum = self.policy.min_request_interval_seconds.max(0.0);
+        if minimum == 0.0 {
+            return;
+        }
+        if let Some(last) = self.last_request_at {
+            let elapsed = last.elapsed().as_secs_f64();
+            if elapsed < minimum {
+                sleep(Duration::from_secs_f64(minimum - elapsed));
+            }
+        }
+    }
+
+    fn backoff_seconds(&self, attempt: usize) -> f64 {
+        let exponential = self.policy.backoff_base_seconds.max(0.0)
+            * 2f64.powi(attempt.min(i32::MAX as usize) as i32);
+        exponential.min(self.policy.max_backoff_seconds.max(0.0))
+    }
+}
+
+impl Default for RevisionPinnedLiveTypeProvider {
+    fn default() -> Self {
+        Self::new(LiveAcquisitionPolicy::default())
+    }
+}
+
+impl TypeClosureNodeProvider for RevisionPinnedLiveTypeProvider {
+    fn acquire_type_node(
+        &mut self,
+        qid: &str,
+    ) -> Result<Option<TypeNodeAcquisition>, TypeClosureError> {
+        for attempt in 0..=self.policy.max_retries {
+            self.throttle();
+            self.stats.provider_calls = self.stats.provider_calls.saturating_add(1);
+            self.last_request_at = Some(Instant::now());
+            match fetch_latest_entity_rdf_revision_receipt(qid) {
+                Ok(acquired) => {
+                    let rows = type_observations_from_rdf(
+                        qid,
+                        &acquired.source_revision_ref,
+                        &acquired.content_digest_ref,
+                        &acquired.rdf_bytes,
+                    )?;
+                    return Ok(Some(TypeNodeAcquisition {
+                        qid: qid.to_owned(),
+                        observations: rows,
+                        node_receipt: TypeNodeReceipt {
+                            qid: qid.to_owned(),
+                            source_revision_ref: acquired.source_revision_ref,
+                            evidence_digest_ref: acquired.content_digest_ref,
+                        },
+                    }));
+                }
+                Err(error @ ProviderError::Network(_)) if attempt < self.policy.max_retries => {
+                    self.stats.retries = self.stats.retries.saturating_add(1);
+                    if error.to_string().contains("429") {
+                        self.stats.rate_limit_retries =
+                            self.stats.rate_limit_retries.saturating_add(1);
+                    }
+                    let delay = self.backoff_seconds(attempt);
+                    if delay > 0.0 {
+                        sleep(Duration::from_secs_f64(delay));
+                    }
+                }
+                Err(error) => return Err(TypeClosureError::Provider(error)),
+            }
+        }
+        unreachable!("bounded retry loop must return")
+    }
+
+    fn stats(&self) -> TypeProviderStats {
+        self.stats
+    }
+}
+
+pub struct TieredTypeClosureProvider<S, L> {
+    snapshot: S,
+    live: L,
+    stats: TypeProviderStats,
+}
+
+impl<S, L> TieredTypeClosureProvider<S, L> {
+    #[must_use]
+    pub fn new(snapshot: S, live: L) -> Self {
+        Self {
+            snapshot,
+            live,
+            stats: TypeProviderStats::default(),
+        }
+    }
+
+    #[must_use]
+    pub fn snapshot(&self) -> &S {
+        &self.snapshot
+    }
+
+    #[must_use]
+    pub fn live(&self) -> &L {
+        &self.live
+    }
+}
+
+impl<S, L> TypeClosureNodeProvider for TieredTypeClosureProvider<S, L>
+where
+    S: TypeClosureNodeProvider,
+    L: TypeClosureNodeProvider,
+{
+    fn acquire_type_node(
+        &mut self,
+        qid: &str,
+    ) -> Result<Option<TypeNodeAcquisition>, TypeClosureError> {
+        if let Some(acquired) = self.snapshot.acquire_type_node(qid)? {
+            self.stats.snapshot_hits = self.stats.snapshot_hits.saturating_add(1);
+            return Ok(Some(acquired));
+        }
+        self.stats.live_fallbacks = self.stats.live_fallbacks.saturating_add(1);
+        self.live.acquire_type_node(qid)
+    }
+
+    fn snapshot_simultaneous(&self) -> bool {
+        self.snapshot.snapshot_simultaneous()
+    }
+
+    fn stats(&self) -> TypeProviderStats {
+        let snapshot = self.snapshot.stats();
+        let live = self.live.stats();
+        TypeProviderStats {
+            provider_calls: snapshot.provider_calls.saturating_add(live.provider_calls),
+            retries: snapshot.retries.saturating_add(live.retries),
+            rate_limit_retries: snapshot
+                .rate_limit_retries
+                .saturating_add(live.rate_limit_retries),
+            snapshot_hits: self.stats.snapshot_hits,
+            live_fallbacks: self.stats.live_fallbacks,
+        }
+    }
+}
+
+pub fn acquire_supervised_type_closure_with<P>(
     request: &TypeClosureRequest,
-) -> Result<ObservedTypeClosure, TypeClosureError> {
+    provider: &mut P,
+) -> Result<ObservedTypeClosure, TypeClosureError>
+where
+    P: TypeClosureNodeProvider,
+{
     if !valid_qid(&request.root_qid) {
         return Err(TypeClosureError::InvalidQid(request.root_qid.clone()));
     }
@@ -414,18 +619,12 @@ pub fn acquire_supervised_type_closure(
         }
         visited.insert(qid.clone());
 
-        let acquired = fetch_latest_entity_rdf_revision_receipt(&qid)?;
-        let rows = type_observations_from_rdf(
-            &qid,
-            &acquired.source_revision_ref,
-            &acquired.content_digest_ref,
-            &acquired.rdf_bytes,
-        )?;
-        node_receipts.push(TypeNodeReceipt {
-            qid: qid.clone(),
-            source_revision_ref: acquired.source_revision_ref.clone(),
-            evidence_digest_ref: acquired.content_digest_ref.clone(),
-        });
+        let Some(acquired) = provider.acquire_type_node(&qid)? else {
+            truncated = true;
+            continue;
+        };
+        let rows = acquired.observations;
+        node_receipts.push(acquired.node_receipt);
 
         let expand = depth < request.max_depth;
         for row in &rows {
@@ -458,6 +657,7 @@ pub fn acquire_supervised_type_closure(
     node_receipts.sort_by(|left, right| left.qid.cmp(&right.qid));
     node_receipts.dedup_by(|left, right| left.qid == right.qid);
     closure.node_receipts = node_receipts;
+    closure.snapshot_simultaneous = provider.snapshot_simultaneous();
     closure.evidence_digest_ref = aggregate_digest(
         request,
         &closure.observations,
@@ -469,6 +669,18 @@ pub fn acquire_supervised_type_closure(
         request.root_qid, closure.evidence_digest_ref
     );
     Ok(closure)
+}
+
+/// Acquire one bounded multi-revision type-closure view.
+///
+/// Each visited entity is fetched at an exact revision and carries its own
+/// digest. The aggregate is therefore reproducible as a manifest, but it is
+/// deliberately *not* described as a simultaneous global Wikidata snapshot.
+pub fn acquire_supervised_type_closure(
+    request: &TypeClosureRequest,
+) -> Result<ObservedTypeClosure, TypeClosureError> {
+    let mut provider = RevisionPinnedLiveTypeProvider::default();
+    acquire_supervised_type_closure_with(request, &mut provider)
 }
 
 
