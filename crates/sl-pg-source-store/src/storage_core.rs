@@ -579,4 +579,63 @@ mod tests {
         };
         assert!(!receipt.exact_demand_match);
     }
+    #[test]
+    fn persisted_legal_source_projects_to_canonical_revision_and_text_span() {
+        use sensiblaw_core::canonical_evidence::{
+            manifestation_ref_for_revision, EvidenceManifestationFamily, EvidenceSpanKind,
+        };
+
+        let document = ResolvedExternalDocument {
+            provider_ref: "provider:oalc",
+            dataset_ref: "isaacus/open-australian-legal-corpus",
+            dataset_revision_ref: "dataset:fixture",
+            external_version_ref: "version:fixture",
+            citation: "Fixture [2026] HCA 1",
+            source_ref: "case",
+            jurisdiction_ref: "AU",
+            document_type_ref: "judgment",
+            temporal_coverage: TemporalCoverage::LatestKnownOnly,
+            resolution_path: ResolutionPath::NativeParquetScan,
+            source_url: None,
+            canonical_text: "fixture legal text",
+        };
+        let refs = PersistedSourceRefs {
+            document_ref: "document:sha256:fixture".into(),
+            external_source_revision_ref: "external-source-revision:sha256:fixture".into(),
+            source_resolution_ref: "source-resolution:sha256:fixture".into(),
+            source_slice_refs: vec!["source-slice:sha256:fixture".into()],
+        };
+        let slices = [SourceSlice {
+            locator_ref: "paragraph:1",
+            start_char: 0,
+            end_char: 7,
+            projection_ref: "projection:fixture",
+            slice_sha256_hex: "sha256:unused-by-projection-helper",
+            parser_authority_ref: "parser:fixture",
+        }];
+
+        let canonical =
+            canonical_evidence_from_persisted_source(&document, &refs, &slices).unwrap();
+        assert_eq!(canonical.manifestation.family, EvidenceManifestationFamily::Oalc);
+        assert_eq!(
+            canonical.manifestation.manifestation_ref,
+            manifestation_ref_for_revision(&refs.external_source_revision_ref)
+        );
+        assert_eq!(
+            canonical.revision.source_revision_ref,
+            refs.external_source_revision_ref
+        );
+        assert_eq!(canonical.spans.len(), 1);
+        assert!(matches!(
+            canonical.spans[0].kind,
+            EvidenceSpanKind::TextRange {
+                start_char: 0,
+                end_char: 7
+            }
+        ));
+        assert!(canonical.manifestation.validate().is_ok());
+        assert!(canonical.revision.validate().is_ok());
+        assert!(canonical.spans[0].validate().is_ok());
+    }
+
 }
