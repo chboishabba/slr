@@ -121,7 +121,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             disposition: compiled.disposition,
             reviewer_ref: compiled.reviewer_ref,
             review_evidence_refs: compiled.review_evidence_refs,
-            payments_emitted: compiled.payment_receipt.payments_emitted,
+            payments_emitted: compiled
+                .payment_receipt
+                .as_ref()
+                .map_or(0, |receipt| receipt.payments_emitted),
             candidate_only: compiled.candidate_only,
             creates_legal_authority: compiled.creates_legal_authority,
             applicability_promoted: compiled.applicability_promoted,
