@@ -591,6 +591,64 @@ mod tests {
     }
 
     #[test]
+    fn generic_reviewed_proposition_compiler_handles_mann_without_waltons_role() {
+        let trace = sensiblaw_legal_follow_plan::mann_paterson_trace();
+        let receipt = ReviewedContractPropositionReceipt {
+            review_ref: "review:mann:repudiation".into(),
+            authority_ref: "matter:au:hca:2019:32".into(),
+            target_ref: "doctrine:au:contract:repudiation-termination".into(),
+            proposition_ref: "prop:mann:repudiation-termination".into(),
+            source_revision_ref: "source:mann:revision".into(),
+            span_ref: "case:mann#paragraph-1".into(),
+            disposition: ContractPropositionDisposition::Supports,
+            reviewer_ref: "reviewer:fixture".into(),
+            evidence_refs: vec!["evidence:mann:fixture".into()],
+            evidence_coordinate_paid: true,
+            candidate_only: true,
+            creates_legal_authority: false,
+            creates_current_law_conclusion: false,
+        };
+        let compiled =
+            compile_reviewed_contract_proposition_receipts_to_hops(&trace, &[receipt]);
+        assert_eq!(compiled.deltas.len(), 1);
+        assert!(compiled.residuals.is_empty());
+        let edge = &compiled.deltas[0].discovered_edges[0];
+        assert_eq!(edge.from_ref, "matter:au:hca:2019:32");
+        assert_eq!(
+            edge.to_ref,
+            "doctrine:au:contract:repudiation-termination"
+        );
+        assert_eq!(edge.treatment, TreatmentKind::Supports);
+    }
+
+    #[test]
+    fn generic_contested_contract_proposition_remains_residual() {
+        let trace = sensiblaw_legal_follow_plan::mann_paterson_trace();
+        let receipt = ReviewedContractPropositionReceipt {
+            review_ref: "review:mann:contested".into(),
+            authority_ref: "matter:au:hca:2019:32".into(),
+            target_ref: "doctrine:au:contract:restitution-after-termination".into(),
+            proposition_ref: "prop:mann:restitution".into(),
+            source_revision_ref: "source:mann:revision".into(),
+            span_ref: "case:mann#paragraph-2".into(),
+            disposition: ContractPropositionDisposition::Contests,
+            reviewer_ref: "reviewer:fixture".into(),
+            evidence_refs: vec!["evidence:mann:fixture".into()],
+            evidence_coordinate_paid: false,
+            candidate_only: true,
+            creates_legal_authority: false,
+            creates_current_law_conclusion: false,
+        };
+        let compiled =
+            compile_reviewed_contract_proposition_receipts_to_hops(&trace, &[receipt]);
+        assert!(compiled.deltas.is_empty());
+        assert_eq!(
+            compiled.residuals[0].kind,
+            ContractReviewedHopResidualKind::PropositionContested
+        );
+    }
+
+    #[test]
     fn reviewed_source_identity_can_bind_compatible_seeded_authority() {
         let trace = waltons_estoppel_trace();
         let reviewed = ReviewedContractAuthorityIdentity {
