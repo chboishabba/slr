@@ -120,7 +120,10 @@ pub enum OalcCaseFollowError {
 
 #[cfg(feature = "live-network")]
 mod live {
-    use super::{OalcCaseFollowError, OalcCaseFollowRequest, OalcCaseFollowRunReceipt};
+    use super::{
+        OalcCaseFollowError, OalcCaseFollowRequest, OalcCaseFollowRunReceipt,
+        OalcCitationMatch, OalcCorpusRow, PinnedOalcStreamRequest,
+    };
     use crate::{
         classify_exact_filter, classify_http_status, oalc_filter_predicate,
         GovernedExecutionContext, HttpRequest, HttpResponse, HttpTransport, LiveGovernanceBounds,
@@ -159,24 +162,7 @@ mod live {
 
     #[derive(Debug, Deserialize)]
     struct FilterRow {
-        row: OalcRow,
-    }
-
-    #[derive(Debug, Clone, Deserialize)]
-    struct OalcRow {
-        version_id: String,
-        #[serde(rename = "type")]
-        document_type: String,
-        jurisdiction: String,
-        source: String,
-        citation: String,
-        #[serde(default)]
-        date: Option<String>,
-        #[serde(default)]
-        url: Option<String>,
-        #[serde(default)]
-        when_scraped: Option<String>,
-        text: String,
+        row: OalcCorpusRow,
     }
 
     struct GovernedOalc<T> {
@@ -315,26 +301,37 @@ mod live {
             .map_err(|error| OalcCaseFollowError::Validation(format!("{error:?}")))
     }
 
-    fn stream_fallback(
-        provider: &mut GovernedOalc<UreqTransport>,
-        request: &OalcCaseFollowRequest,
-        revision: &str,
-    ) -> Result<OalcRow, OalcCaseFollowError> {
-        if provider.requests >= provider.context.bounds.max_network_requests {
-            return Err(OalcCaseFollowError::Governance(
-                "OALC request budget exceeded before pinned stream".into(),
+    fn row_matches(request: &PinnedOalcStreamRequest, row: &OalcCorpusRow) -> bool {
+        let citation_matches = match request.citation_match {
+            OalcCitationMatch::Exact => row.citation == request.citation,
+            OalcCitationMatch::Contains => row.citation.contains(&request.citation),
+        };
+        citation_matches
+            && row.document_type == request.document_type
+            && request
+                .source
+                .as_deref()
+                .map_or(true, |source| row.source == source)
+            && request
+                .jurisdiction
+                .as_deref()
+                .map_or(true, |jurisdiction| row.jurisdiction == jurisdiction)
+    }
+
+    fn stream_pinned_corpus(
+        request: &PinnedOalcStreamRequest,
+    ) -> Result<OalcCorpusRow, OalcCaseFollowError> {
+        if request.revision.trim().is_empty()
+            || request.citation.trim().is_empty()
+            || request.document_type.trim().is_empty()
+        {
+            return Err(OalcCaseFollowError::InvalidRequest(
+                "pinned stream requires revision, citation and document_type".into(),
             ));
         }
-        if let Some(last) = provider.last_request {
-            let minimum = Duration::from_secs(provider.context.bounds.minimum_pacing_seconds);
-            let elapsed = last.elapsed();
-            if elapsed < minimum {
-                thread::sleep(minimum - elapsed);
-            }
-        }
-
         let url = format!(
-            "https://huggingface.co/datasets/{OALC_DATASET_ID}/resolve/{revision}/corpus.jsonl?download=true"
+            "https://huggingface.co/datasets/{OALC_DATASET_ID}/resolve/{}/corpus.jsonl?download=true",
+            request.revision
         );
         let agent = ureq::AgentBuilder::new()
             .timeout(Duration::from_secs(120))
@@ -351,9 +348,6 @@ mod live {
                 return Err(OalcCaseFollowError::StreamingFallback(error.to_string()))
             }
         };
-        provider.requests += 1;
-        provider.last_request = Some(Instant::now());
-
         let status = classify_http_status(response.status());
         if status != ProviderAccessStatus::Available {
             return Err(OalcCaseFollowError::StreamingFallback(format!(
@@ -361,18 +355,14 @@ mod live {
             )));
         }
 
-        let mut match_row: Option<OalcRow> = None;
+        let mut match_row: Option<OalcCorpusRow> = None;
         let reader = BufReader::new(response.into_reader());
         for line in reader.lines() {
             let line = line
                 .map_err(|error| OalcCaseFollowError::StreamingFallback(error.to_string()))?;
-            let row: OalcRow = serde_json::from_str(&line)
+            let row: OalcCorpusRow = serde_json::from_str(&line)
                 .map_err(|error| OalcCaseFollowError::Json(error.to_string()))?;
-            if row.document_type != "decision"
-                || !row.citation.contains(&request.citation)
-                || (!request.oalc_jurisdiction.is_empty()
-                    && row.jurisdiction != request.oalc_jurisdiction)
-            {
+            if !row_matches(request, &row) {
                 continue;
             }
             if match_row.is_some() {
@@ -386,10 +376,52 @@ mod live {
 
         match_row.ok_or_else(|| {
             OalcCaseFollowError::SourceResidual(format!(
-                "revision-pinned corpus stream completed with no {} decision",
+                "revision-pinned corpus stream completed with no bounded row for {}",
                 request.citation
             ))
         })
+    }
+
+    pub fn run_pinned(
+        request: &PinnedOalcStreamRequest,
+    ) -> Result<OalcCorpusRow, OalcCaseFollowError> {
+        stream_pinned_corpus(request)
+    }
+
+    fn stream_fallback(
+        provider: &mut GovernedOalc<UreqTransport>,
+        request: &OalcCaseFollowRequest,
+        revision: &str,
+    ) -> Result<OalcCorpusRow, OalcCaseFollowError> {
+        if provider.requests >= provider.context.bounds.max_network_requests {
+            return Err(OalcCaseFollowError::Governance(
+                "OALC request budget exceeded before pinned stream".into(),
+            ));
+        }
+        if let Some(last) = provider.last_request {
+            let minimum = Duration::from_secs(provider.context.bounds.minimum_pacing_seconds);
+            let elapsed = last.elapsed();
+            if elapsed < minimum {
+                thread::sleep(minimum - elapsed);
+            }
+        }
+
+        let stream_request = PinnedOalcStreamRequest {
+            revision: revision.to_string(),
+            citation: request.citation.clone(),
+            citation_match: OalcCitationMatch::Contains,
+            document_type: "decision".into(),
+            source: None,
+            jurisdiction: if request.oalc_jurisdiction.is_empty() {
+                None
+            } else {
+                Some(request.oalc_jurisdiction.clone())
+            },
+        };
+        let result = stream_pinned_corpus(&stream_request);
+        provider.requests += 1;
+        provider.last_request = Some(Instant::now());
+        result
     }
 
     pub fn run(
