@@ -1,3 +1,4 @@
+mod case_follow;
 mod waltons;
 
 use std::env;
@@ -9,6 +10,7 @@ fn usage() {
         "SensibLaw native CLI
 
 USAGE:
+  sensiblaw legal-follow case acquire --citation "[YYYY] COURT N" [options]
   sensiblaw legal-follow waltons [--base PATH] status
   sensiblaw legal-follow waltons [--base PATH] acquire
   sensiblaw legal-follow waltons [--base PATH] materialise
@@ -117,6 +119,9 @@ fn run() -> Result<(), String> {
     match args.as_slice() {
         [domain, matter, rest @ ..] if domain == "legal-follow" && matter == "waltons" => {
             waltons_command(rest.to_vec())
+        }
+        [domain, matter, rest @ ..] if domain == "legal-follow" && matter == "case" => {
+            case_follow::run(rest.to_vec())
         }
         _ => {
             usage();
