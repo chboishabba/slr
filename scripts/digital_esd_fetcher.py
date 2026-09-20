@@ -349,11 +349,24 @@ class ERICFetcher:
             "status": "fetched",
         }
 
-    def fetch_all(self, *, dry_run: bool = False) -> dict[str, Any]:
+    def fetch_all(
+        self,
+        *,
+        dry_run: bool = False,
+        force: bool = False,
+        query_nums: set[int] | None = None,
+    ) -> dict[str, Any]:
         plans = self.plan()
         results: list[dict[str, Any]] = []
         for plan in plans:
-            if not plan["needs_fetch"]:
+            if query_nums is not None and plan["query_num"] not in query_nums:
+                results.append({
+                    "query": plan["query"],
+                    "query_dir": plan["query_dir"],
+                    "status": "not-selected",
+                })
+                continue
+            if not force and not plan["needs_fetch"]:
                 results.append({
                     "query": plan["query"],
                     "query_dir": plan["query_dir"],
@@ -369,6 +382,10 @@ class ERICFetcher:
             "dry_run": dry_run,
             "network_enabled": self.network_enabled,
             "query_families": len(results),
+            "selected_query_families": sum(
+                1 for r in results if r["status"] != "not-selected"
+            ),
+            "force": force,
             "total_docs": total_docs,
             "api_key_used": False,
             "results": results,
@@ -763,6 +780,8 @@ def main() -> int:
     e.add_argument("--query-config", type=Path, default=DEFAULT_QUERY_CONFIG)
     e.add_argument("--live", action="store_true", help="explicitly permit network requests")
     e.add_argument("--request-interval-seconds", type=float, default=DEFAULT_REQUEST_INTERVAL_SECONDS)
+    e.add_argument("--query", action="append", choices=[f"Q{n}" for n in range(1, 8)])
+    e.add_argument("--force", action="store_true", help="re-fetch selected query families even if retained exports exist")
     e.add_argument("--dry-run", action="store_true")
     e.add_argument("--json", action="store_true")
 
@@ -808,7 +827,16 @@ def main() -> int:
             network_enabled=args.live,
             request_interval_seconds=args.request_interval_seconds,
         )
-        result = fetcher.fetch_all(dry_run=args.dry_run)
+        selected = (
+            {int(q[1:]) for q in args.query}
+            if args.query
+            else None
+        )
+        result = fetcher.fetch_all(
+            dry_run=args.dry_run,
+            force=args.force,
+            query_nums=selected,
+        )
         if args.json:
             print(json.dumps(result, indent=2, sort_keys=True))
         else:
