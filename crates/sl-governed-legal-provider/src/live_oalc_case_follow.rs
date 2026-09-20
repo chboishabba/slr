@@ -488,6 +488,19 @@ mod live {
         let (row, resolution_path) = match classify_exact_filter(rows, index_state) {
             OalcExactLookupDisposition::Found(row) => (row, "filter_exact"),
             OalcExactLookupDisposition::RequireRevisionPinnedStreaming => {
+                if provider.requests >= provider.context.bounds.max_network_requests {
+                    return Err(OalcCaseFollowError::Governance(
+                        "OALC request budget exceeded before pinned stream".into(),
+                    ));
+                }
+                if let Some(last) = provider.last_request {
+                    let minimum =
+                        Duration::from_secs(provider.context.bounds.minimum_pacing_seconds);
+                    let elapsed = last.elapsed();
+                    if elapsed < minimum {
+                        thread::sleep(minimum - elapsed);
+                    }
+                }
                 let pinned = PinnedOalcStreamRequest {
                     revision: info.sha.clone(),
                     citation: request.citation.clone(),
@@ -498,6 +511,7 @@ mod live {
                 };
                 let result = stream_pinned_corpus(&pinned)?;
                 provider.requests += 1;
+                provider.last_request = Some(Instant::now());
                 (result, "revision_pinned_streaming")
             }
             OalcExactLookupDisposition::CompleteIndexAbsent => {
