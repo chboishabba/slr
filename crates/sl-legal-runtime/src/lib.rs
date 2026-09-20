@@ -1051,6 +1051,7 @@ pub enum LegalResidualKind {
     MatterEvidence,
     Element,
     ExceptionOrDefeater,
+    FormalRuleDerivation,
     Burden,
     JurisdictionOrTime,
     Remedy,
@@ -1135,6 +1136,14 @@ fn residuals_for_evaluation(
             source_refs: evaluation.source_span_refs.clone(),
         });
     }
+    if evaluation.applicability == ApplicabilityStatus::Contested {
+        residuals.push(LegalResidual {
+            residual_ref: format!("residual:{}:formal-rule-derivation", evaluation.rule_ref),
+            kind: LegalResidualKind::FormalRuleDerivation,
+            target_ref: evaluation.rule_ref.clone(),
+            source_refs: evaluation.source_span_refs.clone(),
+        });
+    }
     if evaluation.applicability == ApplicabilityStatus::Unresolved {
         residuals.push(LegalResidual {
             residual_ref: format!("residual:{}:applicability", evaluation.rule_ref),
@@ -1177,11 +1186,12 @@ fn residuals_for_evaluation(
 fn action_for_residual(residual: &LegalResidual) -> Option<InformationAction> {
     let kind = match residual.kind {
         LegalResidualKind::Source | LegalResidualKind::MatterEvidence => InformationActionKind::Look,
+        LegalResidualKind::FormalRuleDerivation => InformationActionKind::Think,
         LegalResidualKind::Element
-        | LegalResidualKind::ExceptionOrDefeater
         | LegalResidualKind::Burden
-        | LegalResidualKind::JurisdictionOrTime
         | LegalResidualKind::Remedy => InformationActionKind::Review,
+        LegalResidualKind::ExceptionOrDefeater
+        | LegalResidualKind::JurisdictionOrTime => InformationActionKind::Think,
         LegalResidualKind::ClosedForConsumer => return None,
     };
     Some(InformationAction {
