@@ -60,12 +60,27 @@ def test_eric_fetcher_plan_lists_seven_query_families(export_root: Path):
 
 
 def test_eric_fetcher_plan_skips_exported_families(export_root: Path):
-    (export_root / "Q3").mkdir(parents=True, exist_ok=True)
-    (export_root / "Q3" / "page-000000.json").write_text("{}", encoding="utf-8")
+    q3 = export_root / "Q3"
+    q3.mkdir(parents=True, exist_ok=True)
+    (q3 / "page-000000.json").write_text("{}", encoding="utf-8")
+    (q3 / "summary.json").write_text(
+        json.dumps({"pagination_complete": True, "numFound": 0, "pages": []}),
+        encoding="utf-8",
+    )
     fetcher = ERICFetcher(export_root=export_root)
     by_query = {p["query"]: p for p in fetcher.plan()}
     assert by_query["Q3"]["needs_fetch"] is False
     assert by_query["Q1"]["needs_fetch"] is True
+
+
+def test_eric_fetcher_plan_orphan_page_without_summary_still_needs_fetch(
+    export_root: Path,
+):
+    (export_root / "Q2").mkdir(parents=True, exist_ok=True)
+    (export_root / "Q2" / "page-000000.json").write_text("{}", encoding="utf-8")
+    fetcher = ERICFetcher(export_root=export_root)
+    by_query = {p["query"]: p for p in fetcher.plan()}
+    assert by_query["Q2"]["needs_fetch"] is True
 
 
 def test_eric_dry_run_writes_nothing(export_root: Path):
@@ -116,7 +131,7 @@ def test_fulltext_dry_run_writes_no_artifacts(cache_dir: Path, tmp_path: Path):
     fetcher = FullTextFetcher(cache_dir=cache_dir)
     plan = fetcher.plan(worklist=worklist, max_items=20)
     result = fetcher.fetch(plan, dry_run=True)
-    assert result["schema"] == "sensiblaw.digital-esd-fulltext-fetch.v0_1"
+    assert result["schema"] == "sensiblaw.digital-esd-fulltext-fetch.v0_2"
     assert result["dry_run"] is True
     assert result["downloaded_count"] == 0
     assert result["results"][0]["status"] == "dry-run"
