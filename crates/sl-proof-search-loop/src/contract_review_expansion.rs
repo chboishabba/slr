@@ -27,6 +27,7 @@ pub struct ReviewedContractAuthorityIdentity {
     pub doctrine: Option<ContractDoctrine>,
     pub jurisdiction_ref: String,
     pub court_ref: Option<String>,
+    pub decision_or_effective_date: Option<String>,
     pub source_role: SourceRole,
     pub authority_level: AuthorityLevel,
     pub reviewer_ref: String,
@@ -226,7 +227,10 @@ pub fn compile_reviewed_authority_identity_to_contract_hop(
         doctrine: reviewed.doctrine,
         jurisdiction_ref: reviewed.jurisdiction_ref.clone(),
         court_ref: reviewed.court_ref.clone(),
-        decision_or_effective_date: reviewed.source_receipt.date.clone(),
+        decision_or_effective_date: reviewed
+            .decision_or_effective_date
+            .clone()
+            .or_else(|| reviewed.source_receipt.date.clone()),
         valid_from: None,
         valid_to: None,
         source_role: reviewed.source_role,
