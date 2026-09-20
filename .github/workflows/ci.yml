@@ -54,6 +54,7 @@ jobs:
           cargo run -p sensiblaw-cli --bin sensiblaw -- legal-follow waltons --base /tmp/waltons-native-cli status
           cargo test -p sensiblaw-governed-legal-provider
           cargo test -p sensiblaw-cli
+          cargo check -p sensiblaw-cli --features live-network
 
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
