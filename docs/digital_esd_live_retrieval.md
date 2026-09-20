@@ -42,7 +42,27 @@ Its strings are copied from the formal DASHI owner:
 
 `DASHI/Education/DigitalESDDatabaseTranslatedQueriesExact.agda`
 
-on the Digital-ESD methodology branch.
+The fixture now pins that authority immutably:
+
+```text
+repository: chboishabba/dashi_agda
+commit:     67dc63f51b7efd5014f7ed8b64edc143da25cc7b
+blob SHA:   0683c1a275159614410ddd6489f583a3b3b373db
+path:       DASHI/Education/DigitalESDDatabaseTranslatedQueriesExact.agda
+```
+
+Offline pin validation:
+
+```bash
+python3 scripts/verify_digital_esd_query_authority.py
+```
+
+Opt-in live cross-repo verification fetches that exact immutable blob and
+compares ERIC Q1-Q7 byte-for-byte:
+
+```bash
+python3 scripts/verify_digital_esd_query_authority.py --live
+```
 
 The fetcher hashes the exact unencoded query and records it in each retained
 query summary.
@@ -251,9 +271,15 @@ so the next scholarly parser handoff is same-object rather than title-based.
 
 ## 11. ESD-4 parser
 
-The first validation format is PDF using the parser already in the repo.
+The first validation format is PDF.
 
-No PyMuPDF dependency is introduced in this tranche.
+PDF bytes are **not** decoded as UTF-8. The generic domain-neutral adapter
+`interop_scripts/document_text.py` requires a real `pdftotext` executable
+and fails closed when none is available. It retains a separate extracted-text
+SHA-256 and extractor reference while the original PDF digest/revision remains
+the source identity.
+
+No ESD-specific PDF parser and no PyMuPDF dependency are introduced.
 
 The existing ESD-4 wrapper accepts the registered/handoff ledger:
 
@@ -346,3 +372,67 @@ Then run the normal workspace tests / clippy before merge.
 
 A GitHub status or draft-review bot is not a substitute for these execution
 receipts.
+
+
+## 16. First real reviewed ERIC study capstone
+
+The branch includes one conservative title/abstract-reviewed fixture:
+
+```text
+ERIC:EJ1083370
+Promoting Online Students' Engagement and Learning in Science and
+Sustainability Preservice Teacher Education
+decision: probable
+```
+
+The decision is explicit and review-provenanced; it is not an automatic
+promotion of the candidate-assessment layer.
+
+Inspect the review packet manually with:
+
+```bash
+python3 scripts/review_one_digital_esd_packet.py \
+  --packets artifacts/digital-esd/real-eric/review/review_packets.jsonl \
+  --source-ref ERIC:EJ1083370
+```
+
+The checked-in capstone fixture can then be exercised without network:
+
+```bash
+python3 scripts/run_digital_esd_first_reviewed_study.py
+```
+
+This applies the reviewed `probable` overlay, proves the 43,996-record
+denominator is unchanged, prepares exactly one P0-G work item and stops at the
+network gate.
+
+To actually retrieve and parse the ERIC-hosted PDF:
+
+```bash
+command -v pdftotext
+python3 scripts/run_digital_esd_first_reviewed_study.py --live
+```
+
+Expected live path:
+
+```text
+reviewed probable
+-> files.eric.ed.gov/fulltext/EJ1083370.pdf
+-> retrieval SHA-256 / source revision
+-> cache registration re-hash
+-> verified P0-G full-text gate
+-> pdftotext extraction + extracted-text SHA-256
+-> ESD scholarly structure/facet candidates
+-> parser verification receipt
+```
+
+The final receipt is:
+
+`artifacts/digital-esd/first-reviewed-study/first-reviewed-study-capstone.json`
+
+and still records:
+
+```text
+creates_source_truth = false
+creates_source_audit_admission = false
+```
