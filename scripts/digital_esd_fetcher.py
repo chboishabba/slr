@@ -492,6 +492,37 @@ class FullTextFetcher:
         parsed = urllib.parse.urlparse(url)
         return parsed.scheme == "https" and (parsed.hostname or "").lower() in self.allowed_hosts
 
+    def _merge_retrieved_manifest(
+        self,
+        downloaded_rows: list[dict[str, Any]],
+    ) -> Path:
+        manifest_path = self.output_dir / "retrieved-manifest.jsonl"
+        existing = read_jsonl(manifest_path)
+        by_ref = {
+            str(row.get("source_identity_reference") or ""): row
+            for row in existing
+            if str(row.get("source_identity_reference") or "")
+        }
+        for row in downloaded_rows:
+            ref = str(row.get("source_identity_reference") or "")
+            if ref:
+                by_ref[ref] = {
+                    "source_identity_reference": ref,
+                    "artifact_path": row["artifact_path"],
+                    "sha256": row["sha256"],
+                    "retrieval_reference": row["retrieval_reference"],
+                    "retrieval_timestamp": row["retrieval_timestamp"],
+                    "source_revision_reference": row["source_revision_reference"],
+                    "candidate_only": True,
+                    "creates_source_truth": False,
+                    "creates_source_audit_admission": False,
+                }
+        write_jsonl(
+            manifest_path,
+            [by_ref[key] for key in sorted(by_ref)],
+        )
+        return manifest_path
+
     def fetch(
         self,
         fetch_plan: dict[str, Any],
@@ -582,6 +613,10 @@ class FullTextFetcher:
             "download-failed", "network-disabled", "no-fulltext-url",
             "host-not-allowlisted",
         }
+        downloaded_rows = [r for r in results if r["status"] == "downloaded"]
+        manifest_path: Path | None = None
+        if downloaded_rows and not dry_run:
+            manifest_path = self._merge_retrieved_manifest(downloaded_rows)
         return {
             "schema": "sensiblaw.digital-esd-fulltext-fetch.v0_2",
             "fetched_at": now_iso(),
@@ -596,6 +631,7 @@ class FullTextFetcher:
             ),
             "total_bytes": total_bytes,
             "total_bytes_fmt": fmt_bytes(total_bytes),
+            "retrieved_manifest_path": str(manifest_path) if manifest_path else None,
             "results": results,
             "creates_source_truth": False,
             "creates_source_audit_admission": False,
@@ -649,6 +685,7 @@ def retrieve_all(
     eric_export_root: Path = DEFAULT_EXPORT_ROOT,
     fulltext_cache_dir: Path = DEFAULT_CACHE_DIR,
     api_key: str = "",
+    api_base: str = DEFAULT_API_BASE,
     dry_run: bool = False,
     live: bool = False,
     query_config: Path = DEFAULT_QUERY_CONFIG,
@@ -664,6 +701,7 @@ def retrieve_all(
     eric_fetcher = ERICFetcher(
         export_root=eric_export_root,
         api_key=api_key,
+        api_base=api_base,
         query_config=query_config,
         network_enabled=live,
     )
@@ -678,7 +716,7 @@ def retrieve_all(
     eric_needs_fetch = any(p["needs_fetch"] for p in eric_plan)
 
     eric_result = eric_fetcher.fetch_all(dry_run=dry_run) if eric_needs_fetch else {
-        "schema": "sensiblaw.digital-esd-eric-fetch.v0_1",
+        "schema": "sensiblaw.digital-esd-eric-fetch.v0_2",
         "fetched_at": now_iso(),
         "dry_run": dry_run,
         "query_families": len(eric_plan),
@@ -690,7 +728,7 @@ def retrieve_all(
     ft_result = ft_fetcher.fetch(ft_plan, dry_run=dry_run)
 
     return {
-        "schema": "sensiblaw.digital-esd-retrieval.v0_1",
+        "schema": "sensiblaw.digital-esd-retrieval.v0_2",
         "retrieved_at": now_iso(),
         "dry_run": dry_run,
         "eric": eric_result,
