@@ -44,7 +44,9 @@ jobs:
             done
             test -s "/tmp/legal-runtime-capstone/$matter.m8-runtime.txt"
           done
-          grep -q 'capability.*m2_5=true.*m3_a=true.*m3_b=true.*m3_c=true.*m3_c_replay=true.*m4_a=true.*m6=true.*m6_reverse=true.*m7=true.*m7_identity=true.*s8=true.*s8_reducer=true.*s8_reader=true.*candidate_only=true.*semantic_authority=false' /tmp/legal-runtime-capstone/capability-report.tsv
+          test -s /tmp/legal-runtime-capstone/mann.m8-unseen-contract-runtime.txt
+          test -s /tmp/legal-runtime-capstone/waltons.estoppel-follow-trace.txt
+          grep -q 'capability.*m2_5=true.*m3_a=true.*m3_b=true.*m3_c=true.*m3_c_replay=true.*m4_a=true.*m6=true.*m6_reverse=true.*m7=true.*m7_identity=true.*s8=true.*s8_reducer=true.*s8_reader=true.*s8_unseen_contract=true.*s8_contract_follow=true.*candidate_only=true.*semantic_authority=false' /tmp/legal-runtime-capstone/capability-report.tsv
 
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
