@@ -6,6 +6,7 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+sensiblaw-legal-follow-plan = { path = "../sl-legal-follow-plan" }
 sensiblaw-reviewed-evidence-payment = { path = "../sl-reviewed-evidence-payment" }
 sensiblaw-consumer-residual = { path = "../sl-consumer-residual" }
 sensiblaw-core = { path = "../sl-core" }
