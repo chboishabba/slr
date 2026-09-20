@@ -301,3 +301,31 @@ in `artifacts/digital_esd/`. Digital-ESD is now a regression/capstone workload:
 large-corpus denominator integrity, adaptive review, duplicate/report-family
 handling, generic PDF/full-text ingestion and candidate-vs-review authority.
 It must not become an ESD-specific core evidence subsystem.
+
+
+## Consolidated legal-runtime implementation — SOURCE-WRITTEN 2026-09-20
+
+One crate now spans the remaining pre-product min-cut:
+
+- **M2.5** — three-family canonical evidence replay over structured Wikidata,
+  legal authority and matter/document evidence; exact manifestation/revision/
+  span/observation/review/payment/projection identity is persisted and replayed
+  without promotion.
+- **M3.A** — reviewed canonical evidence projects to WrongType element
+  evaluations using `Satisfied | Unsatisfied | Contested | Unresolved`.
+- **M3.B** — source-realised rule evaluation retains premises, exceptions,
+  defeaters, burdens, jurisdiction/time, applicability, violation, liability
+  and remedy. Live negative structure can reopen conclusions.
+- **M3.C** — Mabo/Pabai/Cullen+NSW CLA/GLJ share one campaign ABI with
+  residual→Look/Think/Review routing, previous-receipt linkage and restart
+  replay.
+- **M4.A** — matter/issue workspace is a read-only projection over those
+  source-addressable objects and residuals.
+
+The implementation emits a single `LegalRuntimeCapabilityReceipt` only after
+the in-process M2.5 replay and all four calibration campaign constructions
+succeed. It remains candidate-only/non-promoting.
+
+This tranche is not yet an execution receipt. Exact-head Cargo/Clippy/workspace
+execution and the corresponding Agda kernel check are still required before
+changing these gates from source-written to runtime-certified.
