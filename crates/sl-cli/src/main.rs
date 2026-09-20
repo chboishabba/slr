@@ -15,7 +15,7 @@ fn usage() {
 USAGE:
   sensiblaw legal-follow case acquire --citation '[YYYY] COURT N' [options]
   sensiblaw legal-follow cullen pnf --operator-opt-in [--output-dir PATH] [--spacy-model MODEL]
-  sensiblaw legal-follow contracts landscape <plan|status|acquire> [--as-at YYYY-MM-DD] [--jurisdiction AU-QLD]
+  sensiblaw legal-follow contracts landscape <plan|status|expand|acquire> [--as-at YYYY-MM-DD] [--jurisdiction AU-QLD]
   sensiblaw legal-follow oalc stream-pinned --revision SHA --citation TEXT [options]
   sensiblaw legal-follow waltons [--base PATH] status
   sensiblaw legal-follow waltons [--base PATH] acquire
