@@ -14,6 +14,10 @@ use sensiblaw_legal_follow_plan::{
 use sensiblaw_reviewed_evidence_payment::{
     ReviewedCanonicalEvidence, ReviewedEvidenceCoordinate,
 };
+use sensiblaw_proof_search_loop::waltons_proposition_review::{
+    EstoppelRequirementRole, PropositionEvidenceDisposition,
+    ReviewedWaltonsPropositionEvidenceReceipt,
+};
 
 use crate::{
     action_for_residual, compile_matter_runtime_from_state, evaluate_source_realised_rule,
@@ -62,6 +66,74 @@ fn reviewed_text(
         format!("payment:{observation_ref}"),
     )
     .map_err(|error| LegalRuntimeError::InvalidEvidence(format!("{error:?}")))
+}
+
+fn waltons_element_ref(role: EstoppelRequirementRole) -> &'static str {
+    match role {
+        EstoppelRequirementRole::AssumptionOrExpectation => "element:estoppel:assumption",
+        EstoppelRequirementRole::Reliance => "element:estoppel:reliance",
+        EstoppelRequirementRole::Detriment => "element:estoppel:detriment",
+        EstoppelRequirementRole::Unconscionability => "element:estoppel:unconscionability",
+    }
+}
+
+pub fn waltons_estoppel_bundle() -> WrongTypeRuleBundle {
+    WrongTypeRuleBundle {
+        wrong_type_ref: "wrong:contract:estoppel:waltons".into(),
+        elements: vec![
+            WrongElementRequirement {
+                element_ref: waltons_element_ref(EstoppelRequirementRole::AssumptionOrExpectation).into(),
+                kind: LegalElementKind::Other,
+                proposition_ref: EstoppelRequirementRole::AssumptionOrExpectation.proposition_ref().into(),
+                required: true,
+            },
+            WrongElementRequirement {
+                element_ref: waltons_element_ref(EstoppelRequirementRole::Reliance).into(),
+                kind: LegalElementKind::Other,
+                proposition_ref: EstoppelRequirementRole::Reliance.proposition_ref().into(),
+                required: true,
+            },
+            WrongElementRequirement {
+                element_ref: waltons_element_ref(EstoppelRequirementRole::Detriment).into(),
+                kind: LegalElementKind::Damage,
+                proposition_ref: EstoppelRequirementRole::Detriment.proposition_ref().into(),
+                required: true,
+            },
+            WrongElementRequirement {
+                element_ref: waltons_element_ref(EstoppelRequirementRole::Unconscionability).into(),
+                kind: LegalElementKind::Other,
+                proposition_ref: EstoppelRequirementRole::Unconscionability.proposition_ref().into(),
+                required: true,
+            },
+        ],
+        source_rule_refs: vec!["case:au:hca:1988:7".into()],
+    }
+}
+
+fn waltons_evidence_disposition(
+    value: PropositionEvidenceDisposition,
+) -> EvidenceDisposition {
+    match value {
+        PropositionEvidenceDisposition::Supports => EvidenceDisposition::Supports,
+        PropositionEvidenceDisposition::Contests => EvidenceDisposition::Contests,
+        PropositionEvidenceDisposition::ContextOnly => EvidenceDisposition::DoesNotAddress,
+    }
+}
+
+pub fn project_waltons_reviewed_receipts_to_issue(
+    receipts: &[ReviewedWaltonsPropositionEvidenceReceipt],
+) -> Result<WrongTypeIssueState, LegalRuntimeError> {
+    let links = receipts
+        .iter()
+        .map(|receipt| {
+            (
+                &receipt.reviewed_evidence,
+                waltons_element_ref(receipt.role),
+                waltons_evidence_disposition(receipt.disposition),
+            )
+        })
+        .collect::<Vec<_>>();
+    project_reviewed_world_to_wrong_type(&waltons_estoppel_bundle(), &links)
 }
 
 fn mann_bundle() -> WrongTypeRuleBundle {
@@ -277,6 +349,18 @@ pub fn waltons_estoppel_materialisation_specimen() -> AustralianContractTrace {
 mod tests {
     use super::*;
     use crate::MatterCommand;
+
+    #[test]
+    fn waltons_wrong_type_bundle_is_generic_and_unpaid_until_reviewed_evidence_arrives() {
+        let issue = project_waltons_reviewed_receipts_to_issue(&[]).unwrap();
+        assert_eq!(issue.elements.len(), 4);
+        assert!(issue
+            .elements
+            .iter()
+            .all(|element| element.disposition == crate::ElementDisposition::Unresolved));
+        assert!(!issue.applicability_promoted);
+        assert!(!issue.liability_promoted);
+    }
 
     #[test]
     fn waltons_estoppel_enters_as_follow_trace_not_new_runtime_semantics() {
