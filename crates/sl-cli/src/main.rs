@@ -28,6 +28,9 @@ USAGE:
   sensiblaw legal-follow waltons [--base PATH] cited-by import PROVIDER_RESULTS.json
   sensiblaw legal-follow waltons [--base PATH] cited-by worklist
   sensiblaw legal-follow waltons [--base PATH] cited-by acquire
+  sensiblaw legal-follow waltons [--base PATH] identity prepare
+  sensiblaw legal-follow waltons [--base PATH] identity finalize
+  sensiblaw legal-follow waltons [--base PATH] identity compile
   sensiblaw legal-follow waltons [--base PATH] treatment queue
   sensiblaw legal-follow waltons [--base PATH] treatment merge
   sensiblaw legal-follow waltons [--base PATH] treatment prepare
@@ -97,6 +100,17 @@ fn waltons_command(mut args: Vec<String>) -> Result<(), String> {
         }
         [group, command] if group == "cited-by" && command == "acquire" => {
             waltons::cited_by_acquire(&paths)
+        }
+        [group, command] if group == "identity" && command == "prepare" => {
+            waltons::identity_prepare(&paths)
+        }
+        [group, command]
+            if group == "identity" && (command == "finalize" || command == "finalise") =>
+        {
+            waltons::identity_finalize(&paths)
+        }
+        [group, command] if group == "identity" && command == "compile" => {
+            waltons::identity_compile(&paths)
         }
         [group, command] if group == "treatment" && command == "queue" => {
             waltons::treatment_queue(&paths)
