@@ -8,6 +8,17 @@ type CliResult<T = ()> = Result<T, String>;
 
 const STATE_SCHEMA: &str = "sl.waltons.live_pipeline_state.v0_1";
 
+fn require_live_network_feature() -> CliResult {
+    if cfg!(feature = "live-network") {
+        Ok(())
+    } else {
+        Err(
+            "Waltons live OALC acquisition requires sensiblaw-cli built with --features live-network"
+                .into(),
+        )
+    }
+}
+
 fn state_path(paths: &WaltonsPaths) -> PathBuf {
     paths.base.join("waltons-live-pipeline-state.json")
 }
@@ -86,6 +97,7 @@ pub fn status(paths: &WaltonsPaths) -> CliResult {
 /// Live OALC entrypoint.  This performs every deterministic source-side step
 /// through generation of the first human paragraph-review worksheet.
 pub fn prepare(paths: &WaltonsPaths) -> CliResult {
+    require_live_network_feature()?;
     waltons::acquire(paths)?;
     waltons::materialise(paths)?;
     waltons::review_prepare(paths)?;
@@ -233,6 +245,7 @@ fn reacquire_cited_by_candidates_resilient(paths: &WaltonsPaths) -> CliResult<Va
 }
 
 pub fn cited_by(paths: &WaltonsPaths, provider_results: &Path) -> CliResult {
+    require_live_network_feature()?;
     require(&paths.citedby_manifest, "Waltons cited-by manifest")?;
     waltons::cited_by_import(paths, provider_results)?;
     waltons::cited_by_worklist(paths)?;
