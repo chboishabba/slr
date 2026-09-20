@@ -87,6 +87,49 @@ pub enum ExternalIdentityLookupPriority {
     HighValue,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum ExternalIdentityKind {
+    WikidataQid,
+    CanonicalUrl,
+    OfficialIdentifier,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum ExternalIdentityStatus {
+    Candidate,
+    Verified,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExternalIdentityAttachment {
+    pub semantic_ref: String,
+    pub kind: ExternalIdentityKind,
+    pub value: String,
+    pub status: ExternalIdentityStatus,
+    pub verification_ref: String,
+    pub supplemental_only: bool,
+    pub creates_legal_authority: bool,
+    pub creates_applicability: bool,
+}
+
+impl ExternalIdentityAttachment {
+    pub fn validate_for(&self, node: &ContractTraceNode) -> Result<(), String> {
+        if self.semantic_ref != node.semantic_ref {
+            return Err("external identity attached to the wrong semantic object".into());
+        }
+        if self.value.trim().is_empty() || self.verification_ref.trim().is_empty() {
+            return Err("external identity requires non-empty value and verification reference".into());
+        }
+        if !self.supplemental_only
+            || self.creates_legal_authority
+            || self.creates_applicability
+        {
+            return Err("external identity crossed the legal authority/applicability boundary".into());
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExternalIdentityLookupHint {
     pub semantic_ref: String,
@@ -519,6 +562,23 @@ mod tests {
         assert!(!trace.active_at("legislation:qld:property-law-act-1974:s55", "2025-08-01"));
         assert!(!trace.active_at("legislation:qld:property-law-act-2023:s68", "2025-07-31"));
         assert!(trace.active_at("legislation:qld:property-law-act-2023:s68", "2025-08-01"));
+    }
+
+    #[test]
+    fn verified_qid_attachment_is_supplemental_to_legal_source_identity() {
+        let trace = waltons_estoppel_trace();
+        let waltons = &trace.nodes["case:au:hca:1988:7"];
+        let attachment = ExternalIdentityAttachment {
+            semantic_ref: waltons.semantic_ref.clone(),
+            kind: ExternalIdentityKind::WikidataQid,
+            value: "QID:fixture-not-a-claim".into(),
+            status: ExternalIdentityStatus::Candidate,
+            verification_ref: "wikidata-lookup:fixture".into(),
+            supplemental_only: true,
+            creates_legal_authority: false,
+            creates_applicability: false,
+        };
+        assert!(attachment.validate_for(waltons).is_ok());
     }
 
     #[test]
