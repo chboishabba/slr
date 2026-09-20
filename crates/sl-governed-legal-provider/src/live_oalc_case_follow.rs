@@ -5,6 +5,7 @@
 //! acquisition yields candidate-only source material and never legal truth.
 
 use serde::{Deserialize, Serialize};
+use std::io::BufRead;
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -93,6 +94,49 @@ pub fn oalc_corpus_row_matches(request: &PinnedOalcStreamRequest, row: &OalcCorp
             .jurisdiction
             .as_deref()
             .map_or(true, |jurisdiction| row.jurisdiction == jurisdiction)
+}
+
+pub fn scan_pinned_oalc_jsonl<R: BufRead>(
+    mut reader: R,
+    request: &PinnedOalcStreamRequest,
+) -> Result<PinnedOalcStreamReceipt, OalcCaseFollowError> {
+    let mut line = String::new();
+    let mut rows_examined = 0u64;
+    let mut bytes_read = 0u64;
+
+    loop {
+        line.clear();
+        let read = reader.read_line(&mut line).map_err(|error| {
+            OalcCaseFollowError::StreamingFallback(format!(
+                "pinned corpus stream interrupted after {rows_examined} rows and {bytes_read} bytes: {error}"
+            ))
+        })?;
+        if read == 0 {
+            return Err(OalcCaseFollowError::SourceResidual(format!(
+                "revision-pinned corpus stream completed with no exact row for {} after {rows_examined} rows and {bytes_read} bytes",
+                request.citation
+            )));
+        }
+
+        rows_examined += 1;
+        bytes_read = bytes_read.saturating_add(read as u64);
+        let row: OalcCorpusRow = serde_json::from_str(line.trim_end()).map_err(|error| {
+            OalcCaseFollowError::Json(format!(
+                "decode pinned corpus row {rows_examined}: {error}"
+            ))
+        })?;
+        if !oalc_corpus_row_matches(request, &row) {
+            continue;
+        }
+
+        return Ok(PinnedOalcStreamReceipt {
+            row,
+            rows_examined,
+            bytes_read,
+            terminated_after_match: true,
+            uniqueness_exhaustively_verified: false,
+        });
+    }
 }
 
 pub fn oalc_exact_source_filter_predicate(
@@ -259,7 +303,7 @@ mod live {
     use serde::Deserialize;
     use sha2::{Digest, Sha256};
     use std::fs;
-    use std::io::{BufRead, BufReader};
+    use std::io::BufReader;
     use std::path::Path;
     use std::thread;
     use std::time::{Duration, Instant};
@@ -470,44 +514,9 @@ mod live {
             )));
         }
 
-        let mut reader = BufReader::new(response.into_reader());
-        let mut line = String::new();
-        let mut rows_examined = 0u64;
-        let mut bytes_read = 0u64;
-        loop {
-            line.clear();
-            let read = reader
-                .read_line(&mut line)
-                .map_err(|error| OalcCaseFollowError::StreamingFallback(format!(
-                    "pinned corpus stream interrupted after {rows_examined} rows and {bytes_read} bytes: {error}"
-                )))?;
-            if read == 0 {
-                return Err(OalcCaseFollowError::SourceResidual(format!(
-                    "revision-pinned corpus stream completed with no exact row for {} after {rows_examined} rows and {bytes_read} bytes",
-                    request.citation
-                )));
-            }
-            rows_examined += 1;
-            bytes_read = bytes_read.saturating_add(read as u64);
-            let row: OalcCorpusRow = serde_json::from_str(line.trim_end())
-                .map_err(|error| OalcCaseFollowError::Json(format!(
-                    "decode pinned corpus row {rows_examined}: {error}"
-                )))?;
-            if !super::oalc_corpus_row_matches(request, &row) {
-                continue;
-            }
+        let reader = BufReader::new(response.into_reader());
+        super::scan_pinned_oalc_jsonl(reader, request)
 
-            return Ok(PinnedOalcStreamReceipt {
-                row,
-                rows_examined,
-                bytes_read,
-                terminated_after_match: true,
-                // Stopping at the first exact terminal-MNC match is deliberate.
-                // The reviewed identity gate is downstream; the source layer
-                // does not pretend it exhaustively proved corpus-wide uniqueness.
-                uniqueness_exhaustively_verified: false,
-            });
-        }
     }
 
     pub fn run_pinned(
@@ -1007,6 +1016,74 @@ mod tests {
         assert!(receipt.terminated_after_match);
         assert!(!receipt.uniqueness_exhaustively_verified);
         assert_eq!(receipt.rows_examined, 42);
+    }
+
+
+    #[test]
+    fn pinned_jsonl_scanner_stops_at_first_exact_mnc_and_records_cost() {
+        use std::io::Cursor;
+
+        let request = PinnedOalcStreamRequest {
+            revision: "deadbeef".into(),
+            citation: "[1999] HCA 10".into(),
+            citation_match: OalcCitationMatch::Contains,
+            document_type: "decision".into(),
+            source: None,
+            jurisdiction: Some("commonwealth".into()),
+        };
+        let before = serde_json::to_string(&row(
+            "Example v Example [1998] HCA 1",
+            "decision",
+            "high_court_of_australia",
+            "commonwealth",
+        ))
+        .unwrap();
+        let target = serde_json::to_string(&row(
+            "Giumelli v Giumelli [1999] HCA 10",
+            "decision",
+            "high_court_of_australia",
+            "commonwealth",
+        ))
+        .unwrap();
+
+        // The malformed third line must never be parsed: exact-MNC acquisition
+        // terminates immediately after the target row.
+        let jsonl = format!("{before}\\n{target}\\n{{malformed\\n");
+        let receipt = scan_pinned_oalc_jsonl(Cursor::new(jsonl.as_bytes()), &request).unwrap();
+
+        assert_eq!(receipt.row.citation, "Giumelli v Giumelli [1999] HCA 10");
+        assert_eq!(receipt.rows_examined, 2);
+        assert_eq!(
+            receipt.bytes_read,
+            (before.len() + 1 + target.len() + 1) as u64
+        );
+        assert!(receipt.terminated_after_match);
+        assert!(!receipt.uniqueness_exhaustively_verified);
+    }
+
+    #[test]
+    fn completed_pinned_scan_without_match_is_source_residual() {
+        use std::io::Cursor;
+
+        let request = PinnedOalcStreamRequest {
+            revision: "deadbeef".into(),
+            citation: "[1999] HCA 10".into(),
+            citation_match: OalcCitationMatch::Contains,
+            document_type: "decision".into(),
+            source: None,
+            jurisdiction: Some("commonwealth".into()),
+        };
+        let other = serde_json::to_string(&row(
+            "Example v Example [1998] HCA 1",
+            "decision",
+            "high_court_of_australia",
+            "commonwealth",
+        ))
+        .unwrap();
+        let error =
+            scan_pinned_oalc_jsonl(Cursor::new(format!("{other}\\n").into_bytes()), &request)
+                .unwrap_err();
+        assert!(matches!(error, OalcCaseFollowError::SourceResidual(_)));
     }
 
 }
