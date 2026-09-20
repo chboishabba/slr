@@ -19,6 +19,7 @@ Nothing here creates screening decisions, source truth, or SourceAuditAdmission.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -40,6 +41,112 @@ def write_json(path: Path, payload: dict[str, Any]) -> None:
         json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True) + "\n",
         encoding="utf-8",
     )
+
+
+
+
+def read_jsonl(path: Path) -> list[dict[str, Any]]:
+    if not path.exists():
+        return []
+    rows: list[dict[str, Any]] = []
+    with path.open("r", encoding="utf-8") as fh:
+        for n, line in enumerate(fh, 1):
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            if not isinstance(row, dict):
+                raise ValueError(f"{path}:{n}: expected JSON object")
+            rows.append(row)
+    return rows
+
+
+def write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as fh:
+        for row in rows:
+            fh.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
+
+
+def stable_receipt_name(source_ref: str) -> str:
+    digest = hashlib.sha256(source_ref.encode("utf-8")).hexdigest()[:16]
+    return f"{digest}.json"
+
+
+def merge_parsed_receipts(
+    artifact_root: Path,
+    scholarly_result: dict[str, Any] | None,
+) -> dict[str, Any]:
+    fulltext_dir = artifact_root / "fulltext"
+    parsed_manifest = fulltext_dir / "parsed-manifest.jsonl"
+    existing = {
+        str(row.get("source_identity_reference") or ""): row
+        for row in read_jsonl(parsed_manifest)
+        if str(row.get("source_identity_reference") or "")
+    }
+
+    receipts_dir = fulltext_dir / "study-receipts"
+    receipts_dir.mkdir(parents=True, exist_ok=True)
+
+    newly_verified = 0
+    if scholarly_result is not None:
+        for row in scholarly_result.get("verified", []):
+            ref = str(row.get("source_identity_reference") or "")
+            if not ref:
+                continue
+            cumulative = {
+                "schema": "sensiblaw.digital-esd-parsed-study-receipt.v1",
+                **row,
+                "verified": True,
+                "creates_source_truth": False,
+                "creates_source_audit_admission": False,
+            }
+            existing[ref] = cumulative
+            write_json(receipts_dir / stable_receipt_name(ref), cumulative)
+            newly_verified += 1
+
+    write_jsonl(
+        parsed_manifest,
+        [existing[key] for key in sorted(existing)],
+    )
+    return {
+        "parsed_manifest_reference": str(parsed_manifest),
+        "cumulative_parsed_verified": len(existing),
+        "newly_parsed_verified": newly_verified,
+        "study_receipts_dir": str(receipts_dir),
+    }
+
+
+def cumulative_progress(
+    artifact_root: Path,
+    *,
+    eligible: int,
+    selected: int,
+    fetch_result: dict[str, Any],
+    verified_gate: dict[str, Any],
+    parse_merge: dict[str, Any],
+) -> dict[str, Any]:
+    fulltext_dir = artifact_root / "fulltext"
+    retrieved = read_jsonl(fulltext_dir / "retrieved-manifest.jsonl")
+    parsed = read_jsonl(fulltext_dir / "parsed-manifest.jsonl")
+    progress = {
+        "schema": "sensiblaw.digital-esd-reviewed-study-progress.v1",
+        "eligible_for_fulltext": eligible,
+        "selected_this_run": selected,
+        "retrieved_cumulative": len(retrieved),
+        "downloaded_this_run": int(fetch_result.get("downloaded_count", 0)),
+        "cache_hits_this_run": int(fetch_result.get("cache_hit_count", 0)),
+        "fetch_failed_this_run": int(fetch_result.get("failed_count", 0)),
+        "verified_fulltext_this_run": int(verified_gate.get("verified", 0)),
+        "fulltext_failed_this_run": int(verified_gate.get("failed", 0)),
+        "parsed_verified_cumulative": len(parsed),
+        "parsed_verified_this_run": int(parse_merge.get("newly_parsed_verified", 0)),
+        "remaining_unparsed": max(0, eligible - len(parsed)),
+        "creates_screening_decision": False,
+        "creates_source_truth": False,
+        "creates_source_audit_admission": False,
+    }
+    write_json(artifact_root / "reviewed-study-progress.json", progress)
+    return progress
 
 
 def main() -> int:
@@ -194,6 +301,16 @@ def main() -> int:
             allow_partial=args.allow_partial_parse,
         )
 
+    parse_merge = merge_parsed_receipts(args.artifact_root, scholarly_result)
+    progress = cumulative_progress(
+        args.artifact_root,
+        eligible=int(initial_gate["eligible_for_fulltext"]),
+        selected=len(selected_refs),
+        fetch_result=fetch_result,
+        verified_gate=verified_gate,
+        parse_merge=parse_merge,
+    )
+
     result = {
         "schema": "sensiblaw.digital-esd-reviewed-study-ingestion.v1",
         "status": (
@@ -205,6 +322,7 @@ def main() -> int:
         "eligible_for_fulltext": initial_gate["eligible_for_fulltext"],
         "selected_for_fetch": len(selected_refs),
         "downloaded": fetch_result["downloaded_count"],
+        "cache_hits": fetch_result.get("cache_hit_count", 0),
         "fetch_failed": fetch_result["failed_count"],
         "registered": registration["registered_count"],
         "registration_rejected": registration["rejected_count"],
@@ -212,6 +330,8 @@ def main() -> int:
         "fulltext_failed": verified_gate["failed"],
         "handed_to_scholarly_parser": handoff["retained_for_slr"],
         "scholarly": scholarly_result,
+        "parse_merge": parse_merge,
+        "progress": progress,
         "creates_screening_decision": False,
         "creates_source_truth": False,
         "creates_source_audit_admission": False,
@@ -230,8 +350,11 @@ def main() -> int:
         print(
             "reviewed-study-ingestion: "
             f"downloaded={result['downloaded']} "
+            f"cache_hits={result['cache_hits']} "
             f"verified_fulltext={result['verified_fulltext']} "
-            f"parsed_verified={verified_parse}"
+            f"parsed_verified_this_run={verified_parse} "
+            f"parsed_verified_cumulative={progress['parsed_verified_cumulative']} "
+            f"remaining_unparsed={progress['remaining_unparsed']}"
         )
 
     return 0 if result["fetch_failed"] == 0 and result["fulltext_failed"] == 0 else 2
