@@ -18,9 +18,9 @@ use sensiblaw_reviewed_evidence_payment::{
 use crate::{
     action_for_residual, compile_matter_runtime_from_state, evaluate_source_realised_rule,
     project_matter_issue_workbench_from_state, project_reviewed_world_to_wrong_type,
-    residuals_for_evaluation, AuthorityRole, ElementDisposition, EvidenceDisposition,
+    residuals_for_evaluation, AuthorityRole, EvidenceDisposition,
     InformationAction, LegalElementKind, LegalEvaluationContext, LegalProjectionState,
-    LegalRuntimeError, MatterCommand, MatterEventProjection, MatterRuntime, MatterWorkbenchSeed,
+    LegalRuntimeError, MatterEventProjection, MatterRuntime, MatterWorkbenchSeed,
     ProjectionContext, PropositionState, PropositionStatus, SourceRealisedLegalRule,
     WrongElementRequirement, WrongTypeIssueState, WrongTypeRuleBundle,
 };
@@ -276,6 +276,7 @@ pub fn waltons_estoppel_materialisation_specimen() -> AustralianContractTrace {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::MatterCommand;
 
     #[test]
     fn waltons_estoppel_enters_as_follow_trace_not_new_runtime_semantics() {
