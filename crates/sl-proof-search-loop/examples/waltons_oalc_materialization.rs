@@ -58,9 +58,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .filter(|paragraph| !paragraph.matched_research_criterion_refs.is_empty())
         .map(|paragraph| {
             json!({
-                "paragraph_locator_ref": paragraph.paragraph_locator_ref,
-                "reported_paragraph_label": paragraph.reported_paragraph_label,
-                "matched_research_criterion_refs": paragraph.matched_research_criterion_refs,
+                "paragraph_locator_ref": paragraph.paragraph_locator_ref.clone(),
+                "reported_paragraph_label": paragraph.reported_paragraph_label.clone(),
+                "matched_research_criterion_refs": paragraph.matched_research_criterion_refs.clone(),
                 "candidate_only": paragraph.candidate_only,
                 "creates_legal_authority": paragraph.creates_legal_authority,
                 "creates_claim_truth": paragraph.creates_claim_truth,
@@ -74,9 +74,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .map(|candidate| {
             let follow = exact_mnc_candidate_follow_demand(candidate, "AU");
             json!({
-                "paragraph_locator_ref": candidate.paragraph_locator_ref,
-                "reported_paragraph_label": candidate.reported_paragraph_label,
-                "citation_text": candidate.citation_text,
+                "paragraph_locator_ref": candidate.paragraph_locator_ref.clone(),
+                "reported_paragraph_label": candidate.reported_paragraph_label.clone(),
+                "citation_text": candidate.citation_text.clone(),
                 "lexical_treatment_hints": format!("{:?}", candidate.lexical_treatment_hints),
                 "candidate_only": candidate.candidate_only,
                 "reviewed": candidate.reviewed,
