@@ -3,7 +3,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::{InformationActionKind, LegalCampaignState, MatterIssueWorkbench, WrongTypeIssueState};
+use crate::{InformationActionKind, LegalCampaignState, LegalProjectionState, MatterIssueWorkbench, WrongTypeIssueState};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ExplainableKind {
@@ -106,10 +106,10 @@ fn evidence_type(kind: crate::LegalResidualKind) -> &'static str {
     }
 }
 
-pub fn compile_explanation_index(
+pub fn compile_explanation_index_from_state(
     workbench: &MatterIssueWorkbench,
     issue: &WrongTypeIssueState,
-    campaign: &LegalCampaignState,
+    state: &LegalProjectionState,
 ) -> Result<ExplanationIndex, String> {
     workbench.validate_projection_boundary()?;
     let mut records = BTreeMap::new();
@@ -194,7 +194,7 @@ pub fn compile_explanation_index(
     }
 
     let mut residual_explanations = BTreeMap::new();
-    for residual in &campaign.residuals {
+    for residual in &state.residuals {
         if !records.contains_key(&residual.target_ref) {
             insert(&mut records, bare(
                 &residual.target_ref,
@@ -202,7 +202,7 @@ pub fn compile_explanation_index(
                 ExplanationClass::SystemMetadata,
             ));
         }
-        let route = campaign.selected_action.as_ref()
+        let route = state.selected_action.as_ref()
             .filter(|a| a.residual_ref == residual.residual_ref).map(|a| a.kind);
         residual_explanations.insert(residual.residual_ref.clone(), ResidualExplanation {
             residual_ref: residual.residual_ref.clone(),
@@ -216,7 +216,7 @@ pub fn compile_explanation_index(
         insert(&mut records, r);
     }
 
-    if let Some(action) = &campaign.selected_action {
+    if let Some(action) = &state.selected_action {
         let mut r = bare(&action.action_ref, ExplainableKind::Action, ExplanationClass::SystemMetadata);
         r.dependencies.push(action.residual_ref.clone());
         insert(&mut records, r);
@@ -255,6 +255,15 @@ pub fn compile_explanation_index(
     let index = ExplanationIndex { records, residual_explanations, candidate_only: true, creates_semantic_authority: false };
     index.validate()?;
     Ok(index)
+}
+
+pub fn compile_explanation_index(
+    workbench: &MatterIssueWorkbench,
+    issue: &WrongTypeIssueState,
+    campaign: &LegalCampaignState,
+) -> Result<ExplanationIndex, String> {
+    let state = LegalProjectionState::from(campaign);
+    compile_explanation_index_from_state(workbench, issue, &state)
 }
 
 impl ExplanationIndex {
