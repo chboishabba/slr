@@ -341,6 +341,7 @@ struct WaltonsReviewWorksheet {
     schema_version: String,
     source_queue: String,
     candidate_only: bool,
+    #[serde(default)]
     review_complete: bool,
     rows: Vec<WaltonsReviewWorksheetRow>,
 }
@@ -1068,6 +1069,7 @@ struct TreatmentReviewWorksheet {
     source_queue: String,
     root_authority_ref: String,
     candidate_only: bool,
+    #[serde(default)]
     review_complete: bool,
     rows: Vec<TreatmentReviewWorksheetRow>,
 }
