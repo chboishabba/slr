@@ -48,10 +48,14 @@ def main() -> int:
         "sensiblaw-cli",
         "--bin",
         "sensiblaw",
+    ]
+    if args.command in {"acquire", "citedby-oalc"}:
+        native.extend(["--features", "live-network"])
+    native.extend([
         "--",
         "legal-follow",
         "waltons",
-    ]
+    ])
     if args.base:
         native.extend(["--base", args.base])
 
@@ -61,7 +65,8 @@ def main() -> int:
         native.extend(["cited-by", "import", args.extra[0]])
     else:
         native.extend(ALIASES[args.command])
-        if args.extra:
+        tolerated = args.command == "citedby-oalc" and args.extra == ["--execute"]
+        if args.extra and not tolerated:
             parser.error(f"{args.command} does not accept extra arguments")
 
     print("compatibility wrapper ->", " ".join(native), file=sys.stderr)
