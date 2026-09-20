@@ -23,6 +23,29 @@ jobs:
         run: cargo run -p sensiblaw-proof-search-loop --example offline_pabai_loop
       - name: Offline research engine v0.1
         run: cargo run -p sensiblaw-proof-search-loop --example offline_research_engine_v01
+      - name: Legal runtime capstone M2.5 through M4.A
+        run: |
+          rm -rf /tmp/legal-runtime-capstone
+          cargo test -p sensiblaw-legal-runtime
+          cargo run -p sensiblaw-legal-runtime --example legal_runtime_capstone -- /tmp/legal-runtime-capstone
+          test -s /tmp/legal-runtime-capstone/m2_5_mixed_family_replay.tsv
+          test -s /tmp/legal-runtime-capstone/mabo.legal-campaign.tsv
+          test -s /tmp/legal-runtime-capstone/pabai.legal-campaign.tsv
+          test -s /tmp/legal-runtime-capstone/cullennswcla.legal-campaign.tsv
+          test -s /tmp/legal-runtime-capstone/glj.legal-campaign.tsv
+          grep -q       - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Source-contract checks
+        run: |
+          python3 scripts/verify_source_contract.py
+          python3 scripts/verify_semantic_status_contract.py
+          python3 scripts/verify_legal_counterfactual_contract.py
+          python3 scripts/verify_proof_search_scheduler_contract.py
+          python3 scripts/verify_proof_search_loop_contract.py
+          python3 scripts/verify_offline_research_engine_contract.py
+      - name: Python syntax checks
+        run: python3 -m py_compile python/spacy_stream.py python/gwb_tranche.py python/gwb_prepare.py python/gwb_full_run.py python/gwb_certify.py python/gwb_expanded_certify.py scripts/bench_stream.py scripts/verify_source_contract.py scripts/verify_semantic_status_contract.py scripts/verify_legal_counterfactual_contract.py scripts/verify_proof_search_scheduler_contract.py scripts/verify_proof_search_loop_contract.py scripts/verify_offline_research_engine_contract.py
+capability\tm2_5=true\tm3_a=true\tm3_b=true\tm3_c=true\tm3_c_replay=true\tm4_a=true\tcandidate_only=true\tsemantic_authority=false' /tmp/legal-runtime-capstone/capability-report.tsv
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Source-contract checks
