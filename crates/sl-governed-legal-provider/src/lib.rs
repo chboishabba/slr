@@ -11,6 +11,8 @@ pub mod live_oalc_case_follow;
 pub use live_oalc_case_follow::*;
 pub mod oalc_source_contract;
 pub use oalc_source_contract::*;
+pub mod oalc_legislation_contract;
+pub use oalc_legislation_contract::*;
 
 use std::collections::BTreeMap;
 use std::thread;
