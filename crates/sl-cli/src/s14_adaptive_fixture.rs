@@ -155,9 +155,17 @@ pub fn build_three_hop_adaptive_fixture_receipt() -> CliResult<Value> {
         }
     }
 
+    if trajectory["campaign_runtime"] != "ContractFollowCampaign"
+        || trajectory.get("final_trace").is_none()
+    {
+        return Err("adaptive fixture did not run through resumable ContractFollowCampaign".into());
+    }
+
     Ok(json!({
-        "schema_version": "sl.australian_contracts.three_hop_adaptive_fixture.v0_1",
+        "schema_version": "sl.australian_contracts.three_hop_adaptive_fixture.v0_2",
         "calibration_fixture_only": true,
+        "campaign_runtime": "ContractFollowCampaign",
+        "resumable_final_trace": true,
         "claims_live_human_reviewed_campaign": false,
         "hop_count": 3,
         "fresh_frontier_after_every_hop": true,
@@ -212,6 +220,8 @@ mod tests {
         assert_eq!(receipt["hop_count"], 3);
         assert_eq!(receipt["fresh_frontier_after_every_hop"], true);
         assert_eq!(receipt["fixed_upfront_queue_consumed"], false);
+        assert_eq!(receipt["campaign_runtime"], "ContractFollowCampaign");
+        assert_eq!(receipt["resumable_final_trace"], true);
         assert_eq!(receipt["calibration_fixture_only"], true);
         assert_eq!(receipt["claims_live_human_reviewed_campaign"], false);
         assert_eq!(receipt["creates_legal_authority"], false);
