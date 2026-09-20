@@ -305,3 +305,47 @@ That capstone must traverse structured Wikidata evidence, legal authority/OALC
 evidence and PDF/narrative/document evidence through one canonical
 manifestation/revision/span/observation/review/reducer path, persist it, restart,
 and replay exact identities/outcomes without semantic promotion.
+
+
+## 2026-09-20 legal-runtime capstone tranche
+
+The consolidated production implementation is now source-written in
+`sensiblaw-legal-runtime` rather than split across new micro-crates.
+
+It composes the existing canonical evidence/review substrate into:
+
+```text
+M2.5 mixed-family canonical evidence persist/replay
+  -> M3.A reviewed world -> WrongType/element state
+  -> M3.B source-realised rule evaluator
+  -> M3.C one adaptive/persisted Australian campaign ABI
+  -> M4.A projection-only matter/issue workspace
+```
+
+The runtime surface keeps four Australian calibration shapes behind one runner:
+Mabo, Pabai, Cullen/NSW CLA and GLJ. These are calibration coordinates over
+existing repository machinery; the new crate does not manufacture new external
+legal propositions.
+
+The M3.B evaluator retains premises, exceptions, defeaters, burdens,
+jurisdiction, temporal scope, applicability, violation, liability and remedy as
+distinct coordinates. A later live exception/defeater can reopen an earlier
+result; all elements being satisfied does not erase negative legal structure.
+
+The M4.A workspace is explicitly projection-only. Its nodes retain source
+revision/span references, dependencies, downstream uses and residuals.
+
+**Certification state:** source-written/static-audited in the connector session.
+Do not mark M2.5/M3.A/M3.B/M3.C/M4.A runtime-certified until the exact branch
+head passes:
+
+```bash
+cargo test -p sensiblaw-legal-runtime
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
+cargo run -p sensiblaw-legal-runtime --example legal_runtime_capstone -- \
+  artifacts/legal-runtime-capstone
+```
+
+The operator writes the M2.5 persisted replay artifact, one legal-campaign
+ledger per calibration, and a consolidated capability report.
