@@ -11,7 +11,7 @@ use std::collections::BTreeSet;
 use sensiblaw_reader_model::ReaderIntent;
 
 use crate::{
-    compile_explanation_index, compile_explanation_index_from_state, compile_projection,
+    compile_explanation_index_from_state, compile_projection,
     ExplanationIndex, LegalCampaignState, LegalProjectionState, MatterIssueWorkbench,
     ProjectionContext, ProjectionGraph, ProjectionKind, ProjectionQuery, ProvenanceAddress,
     WrongTypeIssueState,
