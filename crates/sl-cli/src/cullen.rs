@@ -3,8 +3,7 @@ use sensiblaw_governed_legal_provider::{
         OalcSectionSliceReceipt, OalcTemporalCoverage, CULLEN_CLA_CITATION,
         CULLEN_VICARIOUS_CITATION, OALC_PARSER_AUTHORITY,
     },
-    resolve_oalc_dataset_revision, run_pinned_oalc_stream, OalcCitationMatch,
-    PinnedOalcStreamRequest,
+    resolve_live_oalc_exact_source, OalcCitationMatch, OalcExactSourceRequest,
 };
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
@@ -135,16 +134,11 @@ struct ParentDocument {
 fn acquire_parent_documents(materialised: &Path) -> CliResult<Vec<ParentDocument>> {
     fs::create_dir_all(materialised)
         .map_err(|error| format!("create {}: {error}", materialised.display()))?;
-    let revision = resolve_oalc_dataset_revision()
-        .map_err(|error| format!("resolve OALC dataset revision: {error:?}"))?;
-    let corpus_revision = format!(
-        "isaacus/open-australian-legal-corpus@{revision}"
-    );
 
     let mut parents = Vec::new();
+    let mut common_revision: Option<String> = None;
     for (citation, _) in TARGETS {
-        let row = run_pinned_oalc_stream(&PinnedOalcStreamRequest {
-            revision: revision.clone(),
+        let resolved = resolve_live_oalc_exact_source(&OalcExactSourceRequest {
             citation: citation.to_string(),
             citation_match: OalcCitationMatch::Exact,
             document_type: "primary_legislation".into(),
@@ -152,7 +146,21 @@ fn acquire_parent_documents(materialised: &Path) -> CliResult<Vec<ParentDocument
             jurisdiction: Some("new_south_wales".into()),
         })
         .map_err(|error| format!("acquire {citation}: {error:?}"))?;
+        let corpus_revision = format!(
+            "isaacus/open-australian-legal-corpus@{}",
+            resolved.corpus_revision_sha
+        );
+        if let Some(existing) = common_revision.as_deref() {
+            if existing != corpus_revision {
+                return Err(format!(
+                    "Cullen source acquisition crossed OALC revisions: {existing} vs {corpus_revision}"
+                ));
+            }
+        } else {
+            common_revision = Some(corpus_revision.clone());
+        }
 
+        let row = resolved.row;
         if row.citation != citation || row.text.trim().is_empty() {
             return Err(format!("OALC returned wrong or empty record for {citation}"));
         }
@@ -162,7 +170,7 @@ fn acquire_parent_documents(materialised: &Path) -> CliResult<Vec<ParentDocument
         parents.push(ParentDocument {
             citation: citation.to_string(),
             version_id: row.version_id,
-            corpus_revision: corpus_revision.clone(),
+            corpus_revision,
             canonical_text_digest: digest,
             artifact,
             text: row.text,
