@@ -23,5 +23,9 @@
     "Q6": 293,
     "Q7": 1675
   },
-  "note": "Historical counts are provenance only; a fresh public-API execution may legitimately drift. Retained page hashes and observed numFound are authoritative for each run."
+  "note": "Historical counts are provenance only; a fresh public-API execution may legitimately drift. Retained page hashes and observed numFound are authoritative for each run.",
+  "source_repository": "chboishabba/dashi_agda",
+  "source_commit": "67dc63f51b7efd5014f7ed8b64edc143da25cc7b",
+  "source_blob_sha": "0683c1a275159614410ddd6489f583a3b3b373db",
+  "source_path": "DASHI/Education/DigitalESDDatabaseTranslatedQueriesExact.agda"
 }
