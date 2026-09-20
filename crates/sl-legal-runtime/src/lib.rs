@@ -1433,6 +1433,274 @@ pub fn calibration_refs(kind: AustralianCalibrationKind) -> &'static [&'static s
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CalibrationCapstone {
+    pub kind: AustralianCalibrationKind,
+    pub issue: WrongTypeIssueState,
+    pub rule: SourceRealisedLegalRule,
+    pub context: LegalEvaluationContext,
+    pub campaign: PersistedLegalCampaign,
+}
+
+fn calibration_reviewed_observation(
+    kind: AustralianCalibrationKind,
+    suffix: &str,
+) -> Result<ReviewedCanonicalEvidence, LegalRuntimeError> {
+    let case = match kind {
+        AustralianCalibrationKind::Mabo => "mabo",
+        AustralianCalibrationKind::Pabai => "pabai",
+        AustralianCalibrationKind::CullenNswCla => "cullen",
+        AustralianCalibrationKind::Glj => "glj",
+    };
+    let revision = format!("matter:{case}:revision:1");
+    let observation = EvidenceObservation {
+        observation_ref: format!("observation:{case}:{suffix}"),
+        source_revision_ref: revision.clone(),
+        span: EvidenceSpan::text(
+            revision.clone(),
+            format!("span:{case}:{suffix}"),
+            0,
+            32,
+        )
+        .map_err(|error| LegalRuntimeError::InvalidEvidence(format!("{error:?}")))?,
+        predicate_ref: format!("predicate:{case}:{suffix}"),
+        value_ref: format!("value:{case}:{suffix}"),
+        candidate_only: true,
+        creates_semantic_authority: false,
+        applicability_promoted: false,
+        claim_truth_promoted: false,
+    };
+    canonical_review(
+        observation,
+        &format!("manifestation:{revision}"),
+        &format!("review:{case}:{suffix}"),
+        &format!("payment:{case}:{suffix}"),
+        EvidenceCoordinateKind::Mechanism,
+    )
+}
+
+fn calibration_bundle(kind: AustralianCalibrationKind) -> WrongTypeRuleBundle {
+    let case = match kind {
+        AustralianCalibrationKind::Mabo => "mabo",
+        AustralianCalibrationKind::Pabai => "pabai",
+        AustralianCalibrationKind::CullenNswCla => "cullen",
+        AustralianCalibrationKind::Glj => "glj",
+    };
+    WrongTypeRuleBundle {
+        wrong_type_ref: format!("wrong:{case}:calibration"),
+        elements: vec![
+            WrongElementRequirement {
+                element_ref: format!("element:{case}:primary"),
+                kind: LegalElementKind::Statutory,
+                proposition_ref: format!("prop:{case}:primary"),
+                required: true,
+            },
+            WrongElementRequirement {
+                element_ref: format!("element:{case}:secondary"),
+                kind: LegalElementKind::Causation,
+                proposition_ref: format!("prop:{case}:secondary"),
+                required: true,
+            },
+            WrongElementRequirement {
+                element_ref: format!("element:{case}:remedy"),
+                kind: LegalElementKind::Remedy,
+                proposition_ref: format!("prop:{case}:remedy"),
+                required: false,
+            },
+        ],
+        source_rule_refs: vec![format!("rule:{case}:calibration")],
+    }
+}
+
+pub fn build_australian_calibration_capstone(
+    kind: AustralianCalibrationKind,
+) -> Result<CalibrationCapstone, LegalRuntimeError> {
+    let case = match kind {
+        AustralianCalibrationKind::Mabo => "mabo",
+        AustralianCalibrationKind::Pabai => "pabai",
+        AustralianCalibrationKind::CullenNswCla => "cullen",
+        AustralianCalibrationKind::Glj => "glj",
+    };
+    let evidence = calibration_reviewed_observation(kind, "reviewed-world")?;
+    let bundle = calibration_bundle(kind);
+    let primary = format!("element:{case}:primary");
+    let secondary = format!("element:{case}:secondary");
+    let remedy = format!("element:{case}:remedy");
+
+    let element_evidence = match kind {
+        AustralianCalibrationKind::Mabo => vec![
+            (&evidence, primary.as_str(), EvidenceDisposition::Supports),
+            (&evidence, secondary.as_str(), EvidenceDisposition::Supports),
+            (&evidence, remedy.as_str(), EvidenceDisposition::Supports),
+        ],
+        AustralianCalibrationKind::Pabai => vec![
+            (&evidence, primary.as_str(), EvidenceDisposition::Supports),
+            (&evidence, secondary.as_str(), EvidenceDisposition::Supports),
+        ],
+        AustralianCalibrationKind::CullenNswCla => vec![
+            (&evidence, primary.as_str(), EvidenceDisposition::Supports),
+        ],
+        AustralianCalibrationKind::Glj => vec![
+            (&evidence, primary.as_str(), EvidenceDisposition::Contests),
+            (&evidence, secondary.as_str(), EvidenceDisposition::Supports),
+        ],
+    };
+    let issue = project_reviewed_world_to_wrong_type(&bundle, &element_evidence)?;
+
+    let rule = SourceRealisedLegalRule {
+        rule_ref: format!("rule:{case}:calibration"),
+        source_revision_ref: format!("authority:{case}:revision:1"),
+        source_span_refs: calibration_refs(kind)
+            .iter()
+            .map(|reference| (*reference).to_owned())
+            .collect(),
+        conclusion_ref: format!("prop:{case}:conclusion"),
+        premise_refs: vec![format!("prop:{case}:rule-enabled")],
+        exception_refs: vec![format!("prop:{case}:exception")],
+        defeater_refs: vec![format!("prop:{case}:defeater")],
+        burden_refs: vec![format!("prop:{case}:burden")],
+        jurisdiction_ref: if kind == AustralianCalibrationKind::CullenNswCla {
+            "AU-NSW".into()
+        } else {
+            "AU".into()
+        },
+        valid_from: "1901-01-01".into(),
+        valid_to: None,
+        authority_role: AuthorityRole::Binding,
+        source_realised: true,
+        candidate_only: true,
+    };
+
+    let mut propositions = BTreeMap::new();
+    for (reference, status) in [
+        (
+            format!("prop:{case}:rule-enabled"),
+            PropositionStatus::Established,
+        ),
+        (
+            format!("prop:{case}:exception"),
+            PropositionStatus::Failed,
+        ),
+        (
+            format!("prop:{case}:burden"),
+            PropositionStatus::Established,
+        ),
+    ] {
+        propositions.insert(
+            reference.clone(),
+            PropositionState {
+                proposition_ref: reference,
+                status,
+                source_refs: rule.source_span_refs.clone(),
+            },
+        );
+    }
+    let defeater_status = match kind {
+        AustralianCalibrationKind::Pabai => PropositionStatus::Established,
+        AustralianCalibrationKind::Glj => PropositionStatus::Contested,
+        AustralianCalibrationKind::Mabo | AustralianCalibrationKind::CullenNswCla => {
+            PropositionStatus::Failed
+        }
+    };
+    let defeater_ref = format!("prop:{case}:defeater");
+    propositions.insert(
+        defeater_ref.clone(),
+        PropositionState {
+            proposition_ref: defeater_ref,
+            status: defeater_status,
+            source_refs: rule.source_span_refs.clone(),
+        },
+    );
+
+    let context = LegalEvaluationContext {
+        jurisdiction_ref: rule.jurisdiction_ref.clone(),
+        as_at: "2026-09-20".into(),
+        propositions,
+        wrong_type: issue.clone(),
+    };
+
+    let state = compile_legal_campaign_state(
+        format!("campaign:{case}:legal-capstone"),
+        kind,
+        0,
+        &rule,
+        &context,
+        None,
+    )?;
+    let mut campaign = PersistedLegalCampaign::new(state.campaign_ref.clone());
+    campaign.append(state)?;
+    campaign.validate_restart_replay()?;
+
+    Ok(CalibrationCapstone {
+        kind,
+        issue,
+        rule,
+        context,
+        campaign,
+    })
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LegalRuntimeCapabilityReceipt {
+    pub m2_5_mixed_family_replay: bool,
+    pub m3_a_reviewed_world_to_wrong_type: bool,
+    pub m3_b_source_realised_evaluator: bool,
+    pub m3_c_all_calibrations_one_runner: bool,
+    pub m3_c_restart_replay: bool,
+    pub m4_a_matter_issue_projection: bool,
+    pub candidate_only: bool,
+    pub creates_semantic_authority: bool,
+    pub receipt_digest: String,
+}
+
+pub fn compile_capability_receipt() -> Result<LegalRuntimeCapabilityReceipt, LegalRuntimeError> {
+    let mixed = build_m2_5_mixed_family_campaign()?;
+    mixed.validate_exact_replay(&MixedFamilyReplayReceipt::decode(&mixed.encode())?)?;
+
+    let mut capstones = Vec::new();
+    for kind in [
+        AustralianCalibrationKind::Mabo,
+        AustralianCalibrationKind::Pabai,
+        AustralianCalibrationKind::CullenNswCla,
+        AustralianCalibrationKind::Glj,
+    ] {
+        capstones.push(build_australian_calibration_capstone(kind)?);
+    }
+    for capstone in &capstones {
+        capstone.campaign.validate_restart_replay()?;
+        let last = capstone
+            .campaign
+            .hops
+            .last()
+            .ok_or_else(|| LegalRuntimeError::ReplayFormat("missing legal campaign hop".into()))?;
+        let workspace =
+            project_matter_issue_workspace(format!("matter:{:?}", capstone.kind), &capstone.issue, last);
+        if !workspace.projection_only || workspace.creates_semantic_authority {
+            return Err(LegalRuntimeError::Projection(
+                "matter/issue workspace must remain projection-only".into(),
+            ));
+        }
+    }
+
+    let receipt_digest = digest(
+        std::iter::once(LEGAL_RUNTIME_VERSION)
+            .chain(std::iter::once(mixed.receipt_head.as_str()))
+            .chain(capstones.iter().map(|capstone| capstone.campaign.receipt_head.as_str())),
+    );
+
+    Ok(LegalRuntimeCapabilityReceipt {
+        m2_5_mixed_family_replay: true,
+        m3_a_reviewed_world_to_wrong_type: true,
+        m3_b_source_realised_evaluator: true,
+        m3_c_all_calibrations_one_runner: true,
+        m3_c_restart_replay: true,
+        m4_a_matter_issue_projection: true,
+        candidate_only: true,
+        creates_semantic_authority: false,
+        receipt_digest,
+    })
+}
+
 // -------------------------------------------------------------------------
 // M4.A — read-only matter + issue workspace.
 // -------------------------------------------------------------------------
