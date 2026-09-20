@@ -160,6 +160,58 @@ pub struct ExternalIdentityAttachment {
     pub creates_applicability: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ContractExternalIdentityLedger {
+    pub attachments: BTreeMap<(String, ExternalIdentityKind), ExternalIdentityAttachment>,
+    pub supplemental_only: bool,
+    pub creates_legal_authority: bool,
+    pub creates_applicability: bool,
+}
+
+impl Default for ContractExternalIdentityLedger {
+    fn default() -> Self {
+        Self {
+            attachments: BTreeMap::new(),
+            supplemental_only: true,
+            creates_legal_authority: false,
+            creates_applicability: false,
+        }
+    }
+}
+
+pub fn record_contract_external_identity(
+    trace: &AustralianContractTrace,
+    ledger: &ContractExternalIdentityLedger,
+    attachment: ExternalIdentityAttachment,
+) -> Result<ContractExternalIdentityLedger, String> {
+    trace.validate()?;
+    if !ledger.supplemental_only
+        || ledger.creates_legal_authority
+        || ledger.creates_applicability
+    {
+        return Err("external identity ledger crossed legal semantic boundary".into());
+    }
+    let node = trace
+        .nodes
+        .get(&attachment.semantic_ref)
+        .ok_or_else(|| "external identity cannot create missing contract semantic identity".to_string())?;
+    attachment.validate_for(node)?;
+
+    let key = (attachment.semantic_ref.clone(), attachment.kind);
+    let mut next = ledger.clone();
+    if let Some(existing) = next.attachments.get(&key) {
+        if existing != &attachment {
+            return Err(format!(
+                "conflicting external identity attachment for {} {:?}",
+                key.0, key.1
+            ));
+        }
+        return Ok(next);
+    }
+    next.attachments.insert(key, attachment);
+    Ok(next)
+}
+
 impl ExternalIdentityAttachment {
     pub fn validate_for(&self, node: &ContractTraceNode) -> Result<(), String> {
         if self.semantic_ref != node.semantic_ref {
@@ -1243,6 +1295,38 @@ mod tests {
         assert!(!receipt.old_conclusions_frozen);
         assert!(!receipt.creates_legal_authority);
         assert!(!receipt.creates_current_law_conclusion);
+    }
+
+    #[test]
+    fn verified_qid_attachment_is_sidecar_only_and_cannot_create_semantic_identity() {
+        let trace = australian_contract_landscape_seed();
+        let before = trace.clone();
+        let ledger = ContractExternalIdentityLedger::default();
+        let attachment = ExternalIdentityAttachment {
+            semantic_ref: "case:au:hca:1988:7".into(),
+            kind: ExternalIdentityKind::WikidataQid,
+            value: "Q123456".into(),
+            status: ExternalIdentityStatus::Verified,
+            verification_ref: "wikidata:reviewed:fixture".into(),
+            supplemental_only: true,
+            creates_legal_authority: false,
+            creates_applicability: false,
+        };
+        let ledger = record_contract_external_identity(&trace, &ledger, attachment).unwrap();
+        assert_eq!(ledger.attachments.len(), 1);
+        assert_eq!(trace, before);
+
+        let missing = ExternalIdentityAttachment {
+            semantic_ref: "case:au:hca:2099:999".into(),
+            kind: ExternalIdentityKind::WikidataQid,
+            value: "Q999".into(),
+            status: ExternalIdentityStatus::Verified,
+            verification_ref: "wikidata:reviewed:fixture".into(),
+            supplemental_only: true,
+            creates_legal_authority: false,
+            creates_applicability: false,
+        };
+        assert!(record_contract_external_identity(&trace, &ledger, missing).is_err());
     }
 
     #[test]
