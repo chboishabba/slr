@@ -36,6 +36,30 @@ pub struct ReviewedContractAuthorityIdentity {
     pub creates_legal_authority: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ContractPropositionDisposition {
+    Supports,
+    Contests,
+    ContextOnly,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReviewedContractPropositionReceipt {
+    pub review_ref: String,
+    pub authority_ref: String,
+    pub target_ref: String,
+    pub proposition_ref: String,
+    pub source_revision_ref: String,
+    pub span_ref: String,
+    pub disposition: ContractPropositionDisposition,
+    pub reviewer_ref: String,
+    pub evidence_refs: Vec<String>,
+    pub evidence_coordinate_paid: bool,
+    pub candidate_only: bool,
+    pub creates_legal_authority: bool,
+    pub creates_current_law_conclusion: bool,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub enum ContractReviewedHopResidualKind {
     PropositionContested,
@@ -265,77 +289,87 @@ pub fn compile_reviewed_authority_identity_to_contract_hop(
     }
 }
 
-pub fn compile_waltons_proposition_receipts_to_contract_hops(
+pub fn compile_reviewed_contract_proposition_receipts_to_hops(
     trace: &AustralianContractTrace,
-    authority_ref: &str,
-    receipts: &[ReviewedWaltonsPropositionEvidenceReceipt],
+    receipts: &[ReviewedContractPropositionReceipt],
 ) -> ContractReviewedHopCompilation {
     let mut deltas = Vec::new();
     let mut residuals = Vec::new();
 
     for receipt in receipts {
-        if !receipt.candidate_only || receipt.creates_legal_authority {
+        if receipt.review_ref.trim().is_empty()
+            || receipt.authority_ref.trim().is_empty()
+            || receipt.target_ref.trim().is_empty()
+            || receipt.proposition_ref.trim().is_empty()
+            || receipt.source_revision_ref.trim().is_empty()
+            || receipt.span_ref.trim().is_empty()
+            || receipt.reviewer_ref.trim().is_empty()
+            || receipt.evidence_refs.is_empty()
+            || receipt.evidence_refs.iter().any(|value| value.trim().is_empty())
+            || !receipt.candidate_only
+            || receipt.creates_legal_authority
+            || receipt.creates_current_law_conclusion
+        {
             residuals.push(residual(
                 ContractReviewedHopResidualKind::ReceiptPromotedAuthority,
                 &receipt.review_ref,
-                Some(authority_ref.to_string()),
-                Some(waltons_requirement_ref(receipt.role).to_string()),
+                Some(receipt.authority_ref.clone()),
+                Some(receipt.target_ref.clone()),
                 &receipt.reviewer_ref,
             ));
             continue;
         }
 
-        let requirement_ref = waltons_requirement_ref(receipt.role);
         match receipt.disposition {
-            PropositionEvidenceDisposition::Contests => {
+            ContractPropositionDisposition::Contests => {
                 residuals.push(residual(
                     ContractReviewedHopResidualKind::PropositionContested,
                     &receipt.review_ref,
-                    Some(authority_ref.to_string()),
-                    Some(requirement_ref.to_string()),
+                    Some(receipt.authority_ref.clone()),
+                    Some(receipt.target_ref.clone()),
                     &receipt.reviewer_ref,
                 ));
                 continue;
             }
-            PropositionEvidenceDisposition::ContextOnly => {
+            ContractPropositionDisposition::ContextOnly => {
                 residuals.push(residual(
                     ContractReviewedHopResidualKind::PropositionContextOnly,
                     &receipt.review_ref,
-                    Some(authority_ref.to_string()),
-                    Some(requirement_ref.to_string()),
+                    Some(receipt.authority_ref.clone()),
+                    Some(receipt.target_ref.clone()),
                     &receipt.reviewer_ref,
                 ));
                 continue;
             }
-            PropositionEvidenceDisposition::Supports => {}
+            ContractPropositionDisposition::Supports => {}
         }
 
-        if receipt.reviewed_evidence.is_none() || receipt.payment_receipt.is_none() {
+        if !receipt.evidence_coordinate_paid {
             residuals.push(residual(
                 ContractReviewedHopResidualKind::SupportingPropositionUnpaid,
                 &receipt.review_ref,
-                Some(authority_ref.to_string()),
-                Some(requirement_ref.to_string()),
+                Some(receipt.authority_ref.clone()),
+                Some(receipt.target_ref.clone()),
                 &receipt.reviewer_ref,
             ));
             continue;
         }
-        if !trace.nodes.contains_key(authority_ref) {
+        if !trace.nodes.contains_key(&receipt.authority_ref) {
             residuals.push(residual(
                 ContractReviewedHopResidualKind::MissingAuthorityIdentity,
                 &receipt.review_ref,
-                Some(authority_ref.to_string()),
-                Some(requirement_ref.to_string()),
+                Some(receipt.authority_ref.clone()),
+                Some(receipt.target_ref.clone()),
                 &receipt.reviewer_ref,
             ));
             continue;
         }
-        if !trace.nodes.contains_key(requirement_ref) {
+        if !trace.nodes.contains_key(&receipt.target_ref) {
             residuals.push(residual(
                 ContractReviewedHopResidualKind::MissingRequirementIdentity,
                 &receipt.review_ref,
-                Some(authority_ref.to_string()),
-                Some(requirement_ref.to_string()),
+                Some(receipt.authority_ref.clone()),
+                Some(receipt.target_ref.clone()),
                 &receipt.reviewer_ref,
             ));
             continue;
@@ -344,8 +378,8 @@ pub fn compile_waltons_proposition_receipts_to_contract_hops(
         deltas.push(ContractLandscapeExpansionDelta {
             discovered_nodes: Vec::new(),
             discovered_edges: vec![ContractTraceEdge {
-                from_ref: authority_ref.to_string(),
-                to_ref: requirement_ref.to_string(),
+                from_ref: receipt.authority_ref.clone(),
+                to_ref: receipt.target_ref.clone(),
                 treatment: TreatmentKind::Supports,
                 candidate_only: true,
                 creates_legal_authority: false,
@@ -363,6 +397,39 @@ pub fn compile_waltons_proposition_receipts_to_contract_hops(
         creates_legal_authority: false,
         creates_current_law_conclusion: false,
     }
+}
+
+pub fn compile_waltons_proposition_receipts_to_contract_hops(
+    trace: &AustralianContractTrace,
+    authority_ref: &str,
+    receipts: &[ReviewedWaltonsPropositionEvidenceReceipt],
+) -> ContractReviewedHopCompilation {
+    let generic = receipts
+        .iter()
+        .map(|receipt| ReviewedContractPropositionReceipt {
+            review_ref: receipt.review_ref.clone(),
+            authority_ref: authority_ref.to_string(),
+            target_ref: waltons_requirement_ref(receipt.role).to_string(),
+            proposition_ref: receipt.proposition_ref.clone(),
+            source_revision_ref: receipt.source_revision_ref.clone(),
+            span_ref: receipt.paragraph_locator_ref.clone(),
+            disposition: match receipt.disposition {
+                PropositionEvidenceDisposition::Supports => ContractPropositionDisposition::Supports,
+                PropositionEvidenceDisposition::Contests => ContractPropositionDisposition::Contests,
+                PropositionEvidenceDisposition::ContextOnly => {
+                    ContractPropositionDisposition::ContextOnly
+                }
+            },
+            reviewer_ref: receipt.reviewer_ref.clone(),
+            evidence_refs: receipt.review_evidence_refs.clone(),
+            evidence_coordinate_paid: receipt.reviewed_evidence.is_some()
+                && receipt.payment_receipt.is_some(),
+            candidate_only: receipt.candidate_only,
+            creates_legal_authority: receipt.creates_legal_authority,
+            creates_current_law_conclusion: receipt.claim_truth_promoted,
+        })
+        .collect::<Vec<_>>();
+    compile_reviewed_contract_proposition_receipts_to_hops(trace, &generic)
 }
 
 pub fn compile_treatment_receipts_to_contract_hops(
