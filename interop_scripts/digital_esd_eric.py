@@ -1,6 +1,14 @@
 #!/usr/bin/env python3
 """Real ERIC study metadata parser — Digital-ESD P0-A screening universe.
 
+ERIC API syntax/source attribution:
+  Institute of Education Sciences / ERIC,
+  "Using the ERIC API for Research Topics",
+  https://eric.ed.gov/pdf/Using_ERIC_API_for_Research_Topics.pdf
+
+This is the runtime counterpart of the ERIC syntax receipt formalised in
+DigitalESDDatabaseTranslationSyntaxExact.agda.
+
 Reads retained Q1-Q7 JSON pages from the ERIC database, verifies every
 page SHA-256, validates pagination/count completeness, normalises ERIC
 bibliographic fields, preserves all query memberships, and deduplicates
