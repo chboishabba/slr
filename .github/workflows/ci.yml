@@ -54,6 +54,13 @@ jobs:
           cargo run -p sensiblaw-cli --bin sensiblaw -- legal-follow waltons --base /tmp/waltons-native-cli status
           cargo test -p sensiblaw-governed-legal-provider
           cargo test -p sensiblaw-cli
+          cargo run -p sensiblaw-cli --bin sensiblaw -- legal-follow contracts landscape status --as-at 2026-09-20 --jurisdiction AU-QLD
+          cargo run -p sensiblaw-cli --bin sensiblaw -- legal-follow contracts landscape plan --as-at 2026-09-20 --jurisdiction AU-QLD --output /tmp/contracts-landscape-qld.json
+          test -s /tmp/contracts-landscape-qld.json
+          grep -q '"bounded_seed_only": true' /tmp/contracts-landscape-qld.json
+          grep -q '"creates_current_law_conclusion": false' /tmp/contracts-landscape-qld.json
+          grep -q 'legislation:qld:property-law-act-1974:s55' /tmp/contracts-landscape-qld.json
+          grep -q 'legislation:qld:property-law-act-2023:s68' /tmp/contracts-landscape-qld.json
           cargo check -p sensiblaw-cli --features live-network
           cargo check -p sensiblaw-governed-legal-provider --features live-network --examples
 
