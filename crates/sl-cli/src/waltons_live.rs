@@ -237,18 +237,21 @@ fn reacquire_cited_by_candidates_resilient(paths: &WaltonsPaths) -> CliResult<Va
         let text_path = output_dir.join("judgment.txt");
 
         if receipt_path.exists() && text_path.exists() {
-            let receipt_bytes = fs::read(&receipt_path)
-                .map_err(|error| format!("read {}: {error}", receipt_path.display()))?;
-            let receipt: OalcResolvedSourceReceipt = serde_json::from_slice(&receipt_bytes)
-                .map_err(|error| format!("decode {}: {error}", receipt_path.display()))?;
-            let text = fs::read_to_string(&text_path)
-                .map_err(|error| format!("read {}: {error}", text_path.display()))?;
-            let citation_matches = receipt.citation.contains(citation);
-            let retained_pair_valid = citation_matches
-                && receipt.candidate_only
-                && !receipt.creates_legal_authority
-                && !receipt.creates_claim_truth
-                && materialize_oalc_judgment(&receipt, &text, &[]).is_ok();
+            let retained_pair_valid = fs::read(&receipt_path)
+                .ok()
+                .and_then(|bytes| serde_json::from_slice::<OalcResolvedSourceReceipt>(&bytes).ok())
+                .and_then(|receipt| {
+                    fs::read_to_string(&text_path)
+                        .ok()
+                        .map(|text| (receipt, text))
+                })
+                .map_or(false, |(receipt, text)| {
+                    receipt.citation.contains(citation)
+                        && receipt.candidate_only
+                        && !receipt.creates_legal_authority
+                        && !receipt.creates_claim_truth
+                        && materialize_oalc_judgment(&receipt, &text, &[]).is_ok()
+                });
             if retained_pair_valid {
                 resolved.push(json!({
                     "citation": citation,
@@ -261,21 +264,12 @@ fn reacquire_cited_by_candidates_resilient(paths: &WaltonsPaths) -> CliResult<Va
                 }));
                 continue;
             }
-            residuals.push(json!({
-                "citation": citation,
-                "state": "source_residual",
-                "reason": "existing retained OALC pair failed citation/candidate/digest validation",
-                "missing_source_is_negative_legal_evidence": false,
-                "candidate_only": true,
-                "creates_legal_authority": false,
-            }));
-            continue;
         }
 
         for partial in [&receipt_path, &text_path] {
             if partial.exists() {
                 fs::remove_file(partial)
-                    .map_err(|error| format!("remove incomplete {}: {error}", partial.display()))?;
+                    .map_err(|error| format!("remove stale/incomplete {}: {error}", partial.display()))?;
             }
         }
 
