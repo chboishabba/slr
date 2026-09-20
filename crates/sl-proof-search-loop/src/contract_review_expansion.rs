@@ -536,6 +536,29 @@ mod tests {
     }
 
     #[test]
+    fn reviewed_document_alias_resolves_treatment_identity() {
+        let mut receipt = treatment_receipt(CitationUse::Followed);
+        receipt.edge.citing_document_ref =
+            "document:oalc:high_court_of_australia:2014-hca-19".into();
+        let aliases = BTreeMap::from([(
+            "document:oalc:high_court_of_australia:2014-hca-19".into(),
+            "case:au:hca:2014:19".into(),
+        )]);
+        let trace = waltons_estoppel_trace();
+        let compiled = compile_treatment_receipts_to_contract_hops_with_aliases(
+            &trace,
+            &[receipt],
+            &aliases,
+        );
+        assert_eq!(compiled.deltas.len(), 1);
+        assert!(compiled.residuals.is_empty());
+        let edge = &compiled.deltas[0].discovered_edges[0];
+        assert_eq!(edge.from_ref, "case:au:hca:2014:19");
+        assert_eq!(edge.to_ref, "case:au:hca:1988:7");
+        assert_eq!(edge.treatment, TreatmentKind::Follows);
+    }
+
+    #[test]
     fn mere_mention_remains_residual_not_treatment() {
         let trace = waltons_estoppel_trace();
         let compiled =
