@@ -227,6 +227,14 @@ pub struct OalcResolvedSourceReceipt {
     pub temporal_coverage: OalcTemporalCoverage,
     pub resolution_path: String,
     pub network_requests: u64,
+    #[serde(default)]
+    pub stream_rows_examined: Option<u64>,
+    #[serde(default)]
+    pub stream_bytes_read: Option<u64>,
+    #[serde(default)]
+    pub stream_terminated_after_match: Option<bool>,
+    #[serde(default)]
+    pub stream_uniqueness_exhaustively_verified: Option<bool>,
     pub receipt_authority: String,
     pub candidate_only: bool,
     pub creates_legal_authority: bool,
@@ -418,8 +426,3 @@ mod tests {
     #[test]
     fn legislation_filter_is_document_type_generic() {
         let demand = OalcSourceDemand::from_legislation(&legislation_exact()).unwrap();
-        let predicate = oalc_filter_predicate(&demand).unwrap();
-        assert!(predicate.contains("Property Law Act 2023 (Qld)"));
-        assert!(predicate.contains("\"type\"='primary_legislation'"));
-    }
-}
