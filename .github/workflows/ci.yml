@@ -55,6 +55,7 @@ jobs:
           cargo test -p sensiblaw-governed-legal-provider
           cargo test -p sensiblaw-cli
           cargo check -p sensiblaw-cli --features live-network
+          cargo check -p sensiblaw-governed-legal-provider --features live-network --examples
 
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
