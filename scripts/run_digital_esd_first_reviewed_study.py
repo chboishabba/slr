@@ -6,8 +6,16 @@ Fixture study:
   Promoting Online Students' Engagement and Learning in Science and
   Sustainability Preservice Teacher Education
 
+The base screening ledger is the real 43,996-record ERIC universe retained
+under artifacts/digital-esd/real-eric.  It is produced by:
+
+  python3 scripts/digital_esd_fetcher.py eric --live
+  python3 -m scripts.run_digital_esd_real_eric \
+      --export-root artifacts/digital-esd/eric \
+      --output-root artifacts/digital-esd/real-eric
+
 This capstone is application-only.  It:
-  1. applies the explicit reviewed probable overlay to the exact 43,996 ledger;
+  1. applies the explicit reviewed probable overlay to the real ledger;
   2. preserves the denominator;
   3. runs the ordinary reviewed-study ingestion controller with max_items=1.
 
@@ -24,7 +32,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-BASE_LEDGER = ROOT / "fixtures" / "digital_esd_ledger.tsv"
+BASE_LEDGER = ROOT / "artifacts" / "digital-esd" / "real-eric" / "screening_ledger.tsv"
 OVERLAY = ROOT / "fixtures" / "digital_esd_first_reviewed_study_overlay.jsonl"
 TARGET = "ERIC:EJ1083370"
 
@@ -64,6 +72,15 @@ def main() -> int:
     args = ap.parse_args()
 
     args.artifact_root.mkdir(parents=True, exist_ok=True)
+    if not BASE_LEDGER.exists():
+        raise SystemExit(
+            f"real screening ledger not found: {BASE_LEDGER}\n"
+            "fetch the live Q1-Q7 exports first:\n"
+            "  python3 scripts/digital_esd_fetcher.py eric --live\n"
+            "  python3 -m scripts.run_digital_esd_real_eric \\\n"
+            "      --export-root artifacts/digital-esd/eric \\\n"
+            "      --output-root artifacts/digital-esd/real-eric"
+        )
     reviewed_ledger = args.artifact_root / "screening_ledger_reviewed.tsv"
     application_manifest = args.artifact_root / "screening_decision_application.json"
 

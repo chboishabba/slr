@@ -7,14 +7,21 @@ from pathlib import Path
 import pytest
 
 from interop_scripts.document_text import DocumentTextError, extract_document_text
-from scripts.apply_digital_esd_screening_decisions import apply_decisions
+from scripts.apply_digital_esd_screening_decisions import apply_decisions, write_tsv
 from scripts.prepare_digital_esd_fulltext_index import DigitalESDFulltextIndexer
 
 
 ROOT = Path(__file__).resolve().parents[1]
-LEDGER = ROOT / "fixtures" / "digital_esd_ledger.tsv"
+LEDGER = ROOT / "artifacts" / "digital-esd" / "real-eric" / "screening_ledger.tsv"
 OVERLAY = ROOT / "fixtures" / "digital_esd_first_reviewed_study_overlay.jsonl"
 TARGET = "ERIC:EJ1083370"
+
+REAL_LEDGER_MISSING = (
+    "real ERIC screening ledger not retained; build it via "
+    "`python3 scripts/digital_esd_fetcher.py eric --live` and "
+    "`python3 -m scripts.run_digital_esd_real_eric --export-root "
+    "artifacts/digital-esd/eric --output-root artifacts/digital-esd/real-eric`"
+)
 
 
 def read_tsv(path: Path) -> list[dict[str, str]]:
@@ -22,6 +29,11 @@ def read_tsv(path: Path) -> list[dict[str, str]]:
         return [dict(row) for row in csv.DictReader(fh, delimiter="\t")]
 
 
+def _ledger_present() -> bool:
+    return LEDGER.exists() and LEDGER.stat().st_size > 0
+
+
+@pytest.mark.skipif(not _ledger_present(), reason=REAL_LEDGER_MISSING)
 def test_first_reviewed_study_belongs_to_exact_denominator() -> None:
     rows = read_tsv(LEDGER)
     assert len(rows) == 43_996
@@ -30,6 +42,7 @@ def test_first_reviewed_study_belongs_to_exact_denominator() -> None:
     assert matches[0]["decision"] == "unresolved"
 
 
+@pytest.mark.skipif(not _ledger_present(), reason=REAL_LEDGER_MISSING)
 def test_first_review_overlay_preserves_denominator_and_opens_p0g(tmp_path: Path) -> None:
     ledger_rows = read_tsv(LEDGER)
     overlay = [
@@ -50,11 +63,7 @@ def test_first_review_overlay_preserves_denominator_and_opens_p0g(tmp_path: Path
     assert counts["probable"] == 1
 
     reviewed_ledger = tmp_path / "screening_ledger_reviewed.tsv"
-    fields = list(reviewed_rows[0])
-    with reviewed_ledger.open("w", newline="", encoding="utf-8") as fh:
-        writer = csv.DictWriter(fh, fieldnames=fields, delimiter="\t")
-        writer.writeheader()
-        writer.writerows(reviewed_rows)
+    write_tsv(reviewed_ledger, reviewed_rows)
 
     gate = DigitalESDFulltextIndexer(
         ledger_path=reviewed_ledger,

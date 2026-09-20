@@ -385,8 +385,8 @@ Sustainability Preservice Teacher Education
 decision: probable
 ```
 
-The decision is explicit and review-provenanced; it is not an automatic
-promotion of the candidate-assessment layer.
+The overlay is an explicit, review-provenanced decision; it is not an
+automatic promotion of the candidate-assessment layer.
 
 Inspect the review packet manually with:
 
@@ -396,7 +396,17 @@ python3 scripts/review_one_digital_esd_packet.py \
   --source-ref ERIC:EJ1083370
 ```
 
-The checked-in capstone fixture can then be exercised without network:
+The capstone base is the real 43,996-record ERIC screening ledger under
+`artifacts/digital-esd/real-eric/screening_ledger.tsv`.  Build it first:
+
+```bash
+python3 scripts/digital_esd_fetcher.py eric --live
+python3 -m scripts.run_digital_esd_real_eric \
+    --export-root artifacts/digital-esd/eric \
+    --output-root artifacts/digital-esd/real-eric
+```
+
+The dry-run can then be exercised without further network:
 
 ```bash
 python3 scripts/run_digital_esd_first_reviewed_study.py
