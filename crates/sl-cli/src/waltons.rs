@@ -1038,6 +1038,15 @@ fn compile_identity_reviews(
                 decision.semantic_ref
             ));
         }
+        let expected_source_document_ref = format!("document:oalc:{}", receipt.version_id);
+        if decision.source_document_ref != expected_source_document_ref {
+            return Err(format!(
+                "identity review source document mismatch for {}: expected {}, got {}",
+                decision.semantic_ref,
+                expected_source_document_ref,
+                decision.source_document_ref,
+            ));
+        }
         let reviewed = ReviewedContractAuthorityIdentity {
             semantic_ref: decision.semantic_ref.clone(),
             label: decision.label,
@@ -1054,6 +1063,7 @@ fn compile_identity_reviews(
         };
         let compiled =
             compile_reviewed_authority_identity_to_contract_hop(&trace, &reviewed);
+        let identity_admitted = compiled.residuals.is_empty();
         residuals.extend(compiled.residuals);
         for delta in compiled.deltas {
             let (next, _) = apply_contract_landscape_expansion(&trace, &delta)
@@ -1061,7 +1071,9 @@ fn compile_identity_reviews(
             trace = next;
             deltas.push(delta);
         }
-        aliases.insert(decision.source_document_ref, decision.semantic_ref);
+        if identity_admitted {
+            aliases.insert(decision.source_document_ref, decision.semantic_ref);
+        }
     }
 
     Ok((
