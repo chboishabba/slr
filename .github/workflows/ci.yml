@@ -29,7 +29,7 @@ jobs:
       - name: Offline research engine v0.1
         run: cargo run -p sensiblaw-proof-search-loop --example offline_research_engine_v01
 
-      - name: Legal runtime capstone M2.5 through Sprint 7
+      - name: Legal runtime capstone M2.5 through Sprint 8
         run: |
           rm -rf /tmp/legal-runtime-capstone
           cargo test -p sensiblaw-legal-runtime
@@ -42,8 +42,9 @@ jobs:
             for projection in sourceview timeline issueproof entityrelationship citationauthority flow comparative; do
               test -s "/tmp/legal-runtime-capstone/$matter.m7-$projection.txt"
             done
+            test -s "/tmp/legal-runtime-capstone/$matter.m8-runtime.txt"
           done
-          grep -q 'capability.*m2_5=true.*m3_a=true.*m3_b=true.*m3_c=true.*m3_c_replay=true.*m4_a=true.*m6=true.*m6_reverse=true.*m7=true.*m7_identity=true.*candidate_only=true.*semantic_authority=false' /tmp/legal-runtime-capstone/capability-report.tsv
+          grep -q 'capability.*m2_5=true.*m3_a=true.*m3_b=true.*m3_c=true.*m3_c_replay=true.*m4_a=true.*m6=true.*m6_reverse=true.*m7=true.*m7_identity=true.*s8=true.*s8_reducer=true.*s8_reader=true.*candidate_only=true.*semantic_authority=false' /tmp/legal-runtime-capstone/capability-report.tsv
 
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
