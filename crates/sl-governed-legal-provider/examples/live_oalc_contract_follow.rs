@@ -19,7 +19,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         env::var("SENSIBLAW_OALC_OUTPUT")
             .unwrap_or_else(|_| "artifacts/oalc/contracts/waltons".into()),
     );
-    let mut request = OalcCaseFollowRequest::for_citation("[1988] HCA 7", &output_dir);
+    let mut request = OalcCaseFollowRequest::for_citation("[1988] HCA 7", output_dir.clone());
     request.court_ref = "court:HCA".into();
     request.oalc_jurisdiction = "commonwealth".into();
     request.legal_jurisdiction = "AU".into();
