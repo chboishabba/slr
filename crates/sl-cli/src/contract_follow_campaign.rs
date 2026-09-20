@@ -7,7 +7,7 @@
 
 use sensiblaw_governed_legal_provider::{
     run_live_oalc_case_follow_with_mode, OalcCaseAcquisitionMode, OalcCaseFollowRequest,
-    OalcResolvedSourceReceipt,
+    OalcResolvedSourceReceipt, OALC_RANGE_MAX_REQUESTS_PER_ACQUISITION,
 };
 use sensiblaw_legal_follow_plan::{
     apply_contract_landscape_expansion, compile_australian_contract_landscape_worklist,
@@ -27,7 +27,8 @@ use std::path::{Path, PathBuf};
 
 pub type CampaignResult<T> = Result<T, String>;
 
-const RECURSIVE_OALC_MAX_REQUESTS_PER_ACQUISITION: u64 = 3;
+const RECURSIVE_OALC_MAX_REQUESTS_PER_ACQUISITION: u64 =
+    2 + OALC_RANGE_MAX_REQUESTS_PER_ACQUISITION;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CampaignBudget {
@@ -854,7 +855,7 @@ pub fn acquire_outbound_citation(
     request.as_at = as_at.into();
     let run = run_live_oalc_case_follow_with_mode(
         &request,
-        OalcCaseAcquisitionMode::IndexedThenPinnedStream,
+        OalcCaseAcquisitionMode::IndexedThenPinnedRangeIndex,
     )
     .map_err(|error| format!("recursive OALC acquisition: {error:?}"))?;
     let bytes = fs::read(&run.source_receipt_path)
@@ -1184,6 +1185,14 @@ pub fn run(args: Vec<String>) -> CampaignResult<()> {
                 "stream_terminated_after_match": receipt.stream_terminated_after_match,
                 "stream_uniqueness_exhaustively_verified":
                     receipt.stream_uniqueness_exhaustively_verified,
+                "range_index_hit": receipt.range_index_hit,
+                "range_index_requests": receipt.range_index_requests,
+                "range_index_rows_indexed_this_run":
+                    receipt.range_index_rows_indexed_this_run,
+                "range_index_bytes_indexed_this_run":
+                    receipt.range_index_bytes_indexed_this_run,
+                "range_index_byte_start": receipt.range_index_byte_start,
+                "range_index_byte_len": receipt.range_index_byte_len,
                 "campaign_source_acquisition_count": campaign.source_acquisitions,
                 "campaign_network_request_count": campaign.network_requests,
                 "campaign_budget": campaign.config.budget,
