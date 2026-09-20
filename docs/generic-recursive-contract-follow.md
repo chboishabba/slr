@@ -255,3 +255,67 @@ The index stores metadata and byte coordinates, not judgment text. An index hit
 still performs an exact byte-range GET, validates the recorded row digest,
 re-runs the exact citation/type/jurisdiction matcher, retains the source, and
 then stops at the ordinary human identity-review gate.
+
+## Live Giumelli recursive-source capstone
+
+The generic recursive controller has now crossed the source-acquisition portion
+of the Phase-IV capstone without a Giumelli-specific runtime.
+
+Observed retained authority:
+
+```text
+source frontier       case:nsw:nswca:2016:105
+selected citation     [1999] HCA 10
+retained title        Giumelli v Giumelli
+semantic suggestion   case:au:hca:1999:10
+OALC revision         ef45e3fec41a960919a31149eee6dab9aa39f725
+judgment sha256       e0e3620527821c84206cec85d6d698320bba04ce3c575fe90e443d52404cf03e
+```
+
+The first range-index build observed:
+
+```text
+resolution_path =
+  revision_pinned_range_index_build_after_index_provider_failure
+
+byte_start               3,332,218,339
+byte_len                  52,046
+range_index_requests      13
+network_requests          15
+rows_indexed              77,230
+bytes_indexed             3,332,270,385
+range_index_hit           false
+```
+
+An identical reacquisition against the same immutable revision then observed:
+
+```text
+resolution_path =
+  revision_pinned_range_index_hit_after_index_provider_failure
+
+network_requests          3
+range_index_requests      1
+range_index_hit           true
+rows_indexed_this_run     0
+bytes_indexed_this_run    0
+```
+
+Both retained judgment artifacts had the same canonical SHA-256 above.  The
+source remained candidate-only and created neither legal authority nor a
+current-law conclusion.
+
+The empirical capstone is therefore presently:
+
+```text
+generic fresh Giumelli selection                  observed
+governed revision-pinned acquisition              observed
+resumable range-index build                       observed
+direct exact-byte-range replay                    observed
+authority identity review artifact                prepared
+reviewed identity compiled into trajectory        open
+Doueihi -> Giumelli treatment review              open
+reviewed treatment delta + next frontier          open
+```
+
+This distinction is deliberate.  Successful transport does not satisfy the
+identity or treatment review gates.
