@@ -23,6 +23,17 @@ fn value(args: &[String], flag: &str) -> Option<String> {
         .cloned()
 }
 
+fn values(args: &[String], flag: &str) -> Vec<String> {
+    args.iter()
+        .enumerate()
+        .filter_map(|(index, arg)| {
+            (arg == flag)
+                .then(|| args.get(index + 1).cloned())
+                .flatten()
+        })
+        .collect()
+}
+
 fn work_item_json(item: &ContractLandscapeWorkItem) -> serde_json::Value {
     json!({
         "work_ref": item.work_ref,
@@ -524,39 +535,68 @@ pub fn run(args: Vec<String>) -> CliResult {
             Ok(())
         }
         [scope, command, rest @ ..] if scope == "landscape" && command == "expand" => {
-            let delta_path = value(rest, "--delta")
+            let delta_paths = values(rest, "--delta")
+                .into_iter()
                 .map(PathBuf::from)
-                .ok_or_else(|| "landscape expand requires --delta PATH".to_string())?;
+                .collect::<Vec<_>>();
+            if delta_paths.is_empty() {
+                return Err("landscape expand requires at least one --delta PATH".into());
+            }
             let as_at = value(rest, "--as-at").unwrap_or_else(|| "2026-09-20".into());
             let jurisdiction = value(rest, "--jurisdiction");
-            let delta = load_expansion_delta(&delta_path)?;
-            let seed = australian_contract_landscape_seed();
-            let (expanded, receipt) =
-                apply_contract_landscape_expansion(&seed, &delta)?;
+            let mut expanded = australian_contract_landscape_seed();
+            let mut trajectory = Vec::new();
+
+            for (hop_index, delta_path) in delta_paths.iter().enumerate() {
+                let delta = load_expansion_delta(delta_path)?;
+                let (next, receipt) =
+                    apply_contract_landscape_expansion(&expanded, &delta)?;
+                expanded = next;
+                let work = compile_australian_contract_landscape_worklist(
+                    &expanded,
+                    &as_at,
+                    jurisdiction.as_deref(),
+                )?;
+                trajectory.push(json!({
+                    "hop_index": hop_index + 1,
+                    "delta_path": delta_path,
+                    "expansion_receipt": expansion_receipt_json(&receipt),
+                    "frontier_counts": {
+                        "primary_source_acquisition": work.source_items.len(),
+                        "authority_treatment_review": work.treatment_items.len(),
+                        "context_expansion": work.context_items.len(),
+                        "temporal_alternatives": work.temporal_alternatives.len(),
+                    },
+                }));
+            }
+
             let work = compile_australian_contract_landscape_worklist(
                 &expanded,
                 &as_at,
                 jurisdiction.as_deref(),
             )?;
             let output = json!({
-                "schema_version": "sl.australian_contract_landscape_adaptive_step.v0_1",
-                "expansion_receipt": expansion_receipt_json(&receipt),
-                "recomputed_worklist": plan_json(&expanded, &work),
+                "schema_version": "sl.australian_contract_landscape_adaptive_trajectory.v0_1",
+                "hop_count": trajectory.len(),
+                "trajectory": trajectory,
+                "final_recomputed_worklist": plan_json(&expanded, &work),
+                "candidate_only": true,
+                "creates_legal_authority": false,
+                "creates_current_law_conclusion": false,
             });
             if let Some(path) = value(rest, "--output").map(PathBuf::from) {
                 write_output(&path, &output)?;
-                println!("contracts_landscape_adaptive_step={}", path.display());
+                println!("contracts_landscape_adaptive_trajectory={}", path.display());
             } else {
                 println!(
                     "{}",
                     serde_json::to_string_pretty(&output)
-                        .map_err(|error| format!("encode adaptive step: {error}"))?
+                        .map_err(|error| format!("encode adaptive trajectory: {error}"))?
                 );
             }
             println!(
-                "contracts_landscape_recomputed added_nodes={} added_edges={} source={} treatment={} context={} temporal={} authority=false current_law_conclusion=false",
-                receipt.added_node_count,
-                receipt.added_edge_count,
+                "contracts_landscape_recomputed hops={} source={} treatment={} context={} temporal={} authority=false current_law_conclusion=false",
+                output["hop_count"],
                 work.source_items.len(),
                 work.treatment_items.len(),
                 work.context_items.len(),
