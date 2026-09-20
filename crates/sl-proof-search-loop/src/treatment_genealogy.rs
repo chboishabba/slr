@@ -7,8 +7,9 @@
 
 use crate::reasoning::{CitationUse, PropositionReasoningEdge};
 use crate::review_unit_review::ReviewedCitationReviewUnitReceipt;
+use serde::Serialize;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct TemporalTreatmentEdge {
     pub citing_document_ref: String,
     pub cited_document_ref: String,
@@ -25,7 +26,7 @@ pub struct TemporalTreatmentEdge {
     pub creates_legal_authority: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct TemporalTreatmentGenealogy {
     pub root_authority_ref: String,
     pub as_at: String,
