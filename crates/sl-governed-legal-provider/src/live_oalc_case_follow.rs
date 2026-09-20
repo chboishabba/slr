@@ -43,6 +43,23 @@ pub struct OalcCorpusRow {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OalcExactSourceRequest {
+    pub citation: String,
+    pub citation_match: OalcCitationMatch,
+    pub document_type: String,
+    pub source: Option<String>,
+    pub jurisdiction: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OalcExactSourceRunReceipt {
+    pub corpus_revision_sha: String,
+    pub row: OalcCorpusRow,
+    pub resolution_path: String,
+    pub network_requests: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OalcCaseFollowRequest {
     pub citation: String,
     pub court_ref: String,
