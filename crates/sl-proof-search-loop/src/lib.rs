@@ -32,6 +32,7 @@ pub mod residual_review_shortlist;
 pub mod review_unit_review;
 pub mod review_units;
 pub mod transition;
+pub mod waltons_proposition_review;
 pub mod world;
 pub mod world_acquisition;
 pub mod world_expansion;
