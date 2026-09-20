@@ -1,3 +1,4 @@
+use crate::contracts::{run_native_expansion_trajectory, NativeExpansionBatch};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sensiblaw_governed_legal_provider::{
@@ -1307,6 +1308,103 @@ pub fn genealogy(paths: &WaltonsPaths) -> CliResult {
         "waltons_genealogy={} contract_hops={}",
         paths.genealogy.display(),
         paths.treatment_hops.display()
+    );
+    Ok(())
+}
+
+
+pub fn s14_sync(paths: &WaltonsPaths) -> CliResult {
+    let landscape = australian_contract_landscape_seed();
+    let waltons_trace = waltons_estoppel_trace();
+    let bootstrap = trace_extension_delta(
+        &landscape,
+        &waltons_trace,
+        "bootstrap:waltons-estoppel-materialisation",
+    )?;
+
+    let mut batches = vec![NativeExpansionBatch {
+        source_ref: "bootstrap:waltons-estoppel-materialisation".into(),
+        deltas: vec![bootstrap],
+        reviewed_residuals: Vec::new(),
+    }];
+
+    let (identity_trace, identity_hops, aliases) = if paths.identity_decisions.exists() {
+        compile_identity_reviews(paths)?
+    } else {
+        (
+            waltons_trace.clone(),
+            ContractReviewedHopCompilation {
+                deltas: Vec::new(),
+                residuals: Vec::new(),
+                candidate_only: true,
+                creates_legal_authority: false,
+                creates_current_law_conclusion: false,
+            },
+            BTreeMap::new(),
+        )
+    };
+    if !identity_hops.deltas.is_empty() || !identity_hops.residuals.is_empty() {
+        batches.push(NativeExpansionBatch {
+            source_ref: paths.identity_hops.display().to_string(),
+            deltas: identity_hops.deltas,
+            reviewed_residuals: identity_hops.residuals,
+        });
+    }
+
+    if paths.decisions.exists() {
+        let reviewed = compile_waltons_reviewed(paths)?;
+        let proposition_hops = compile_waltons_proposition_receipts_to_contract_hops(
+            &identity_trace,
+            WALTONS_AUTHORITY_REF,
+            &reviewed,
+        );
+        if !proposition_hops.deltas.is_empty() || !proposition_hops.residuals.is_empty() {
+            batches.push(NativeExpansionBatch {
+                source_ref: paths.proposition_hops.display().to_string(),
+                deltas: proposition_hops.deltas,
+                reviewed_residuals: proposition_hops.residuals,
+            });
+        }
+    }
+
+    if paths.treatment_decisions.exists() {
+        let treatment_receipts = compile_treatment_review_receipts(paths)?;
+        let treatment_hops = compile_treatment_receipts_to_contract_hops_with_aliases(
+            &identity_trace,
+            &treatment_receipts,
+            &aliases,
+        );
+        if !treatment_hops.deltas.is_empty() || !treatment_hops.residuals.is_empty() {
+            batches.push(NativeExpansionBatch {
+                source_ref: paths.treatment_hops.display().to_string(),
+                deltas: treatment_hops.deltas,
+                reviewed_residuals: treatment_hops.residuals,
+            });
+        }
+    }
+
+    let mut output = run_native_expansion_trajectory(
+        landscape,
+        batches,
+        DEFAULT_AS_AT,
+        None,
+    )?;
+    output["schema_version"] =
+        Value::String("sl.waltons_s14_reviewed_sync.v0_1".into());
+    output["waltons_bootstrap_included"] = Value::Bool(true);
+    output["identity_review_present"] = Value::Bool(paths.identity_decisions.exists());
+    output["proposition_review_present"] = Value::Bool(paths.decisions.exists());
+    output["treatment_review_present"] = Value::Bool(paths.treatment_decisions.exists());
+    output["reviewed_residuals_preserved"] = Value::Bool(true);
+    output["transport"] = Value::String("typed_rust_in_process".into());
+    output["json_is_semantic_command_transport"] = Value::Bool(false);
+
+    write_json(&paths.s14_trajectory, &output)?;
+    println!(
+        "waltons_s14_trajectory={} hops={} reviewed_residuals={} authority=false current_law_conclusion=false",
+        paths.s14_trajectory.display(),
+        output["hop_count"],
+        output["reviewed_residual_count"],
     );
     Ok(())
 }
