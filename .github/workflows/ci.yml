@@ -61,6 +61,10 @@ jobs:
           grep -q '"transport": "typed_rust_in_process"' /tmp/waltons-s14-sync/waltons-s14-adaptive-trajectory.json
           grep -q '"json_is_semantic_command_transport": false' /tmp/waltons-s14-sync/waltons-s14-adaptive-trajectory.json
           grep -q '"reviewed_residuals_preserved": true' /tmp/waltons-s14-sync/waltons-s14-adaptive-trajectory.json
+          grep -q '"waltons_bootstrap"' /tmp/waltons-s14-sync/waltons-s14-adaptive-trajectory.json
+          grep -q '"reviewed_identity"' /tmp/waltons-s14-sync/waltons-s14-adaptive-trajectory.json
+          grep -q '"reviewed_proposition"' /tmp/waltons-s14-sync/waltons-s14-adaptive-trajectory.json
+          grep -q '"reviewed_treatment"' /tmp/waltons-s14-sync/waltons-s14-adaptive-trajectory.json
           grep -q '"creates_legal_authority": false' /tmp/waltons-s14-sync/waltons-s14-adaptive-trajectory.json
           grep -q '"creates_current_law_conclusion": false' /tmp/waltons-s14-sync/waltons-s14-adaptive-trajectory.json
           cargo run -p sensiblaw-cli --bin sensiblaw -- legal-follow contracts landscape status --as-at 2026-09-20 --jurisdiction AU-QLD
