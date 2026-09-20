@@ -75,7 +75,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .map_err(|error| format!("Waltons review {} failed: {error:?}", index + 1))?,
         );
     }
-    let issue = project_waltons_reviewed_receipts_to_issue(&reviewed)?;
+    let issue = project_waltons_reviewed_receipts_to_issue(&reviewed)
+        .map_err(|error| format!("Waltons WrongType projection failed: {error:?}"))?;
 
     let elements = issue
         .elements
