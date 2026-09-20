@@ -1582,6 +1582,14 @@ mod tests {
     }
 
     #[test]
+    fn full_case_citation_yields_reviewed_semantic_ref_suggestion() {
+        let (semantic_ref, jurisdiction) =
+            semantic_ref_suggestion("Sidhu v Van Dyke [2014] HCA 19").unwrap();
+        assert_eq!(semantic_ref, "case:au:hca:2014:19");
+        assert_eq!(jurisdiction, "AU");
+    }
+
+    #[test]
     fn requirement_roles_are_typed_and_not_inferred_from_arbitrary_strings() {
         assert_eq!(
             role_for_requirement("requirement:estoppel:reliance"),
