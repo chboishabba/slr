@@ -1,4 +1,5 @@
 use crate::waltons::{self, WaltonsPaths};
+use sensiblaw_governed_legal_provider::{run_live_oalc_case_follow, OalcCaseFollowRequest};
 use serde_json::{json, Value};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -151,11 +152,91 @@ pub fn paragraph_reviewed(paths: &WaltonsPaths) -> CliResult {
 
 /// Consume a sanctioned cited-by provider result, re-acquire every candidate
 /// through live OALC, and materialise the reviewed authority-identity gate.
+fn safe_citation_dir(citation: &str) -> String {
+    citation
+        .replace('[', "")
+        .replace(']', "")
+        .replace(' ', "-")
+        .to_ascii_lowercase()
+}
+
+fn reacquire_cited_by_candidates_resilient(paths: &WaltonsPaths) -> CliResult<Value> {
+    let normalized = read_json(&paths.citedby_candidates)?;
+    let candidates = normalized["candidates"]
+        .as_array()
+        .ok_or_else(|| "normalized cited-by candidates missing candidates array".to_string())?;
+
+    fs::create_dir_all(&paths.later_dir)
+        .map_err(|error| format!("create {}: {error}", paths.later_dir.display()))?;
+
+    let mut resolved = Vec::new();
+    let mut residuals = Vec::new();
+    for candidate in candidates {
+        let Some(citation) = candidate["medium_neutral_citation"].as_str() else {
+            residuals.push(json!({
+                "citation": null,
+                "state": "source_residual",
+                "reason": "candidate missing medium_neutral_citation",
+                "missing_source_is_negative_legal_evidence": false,
+            }));
+            continue;
+        };
+        let output_dir = paths.later_dir.join(safe_citation_dir(citation));
+        let mut request = OalcCaseFollowRequest::for_citation(citation, output_dir);
+        request.as_at = waltons::DEFAULT_AS_AT.into();
+        match run_live_oalc_case_follow(&request) {
+            Ok(run) => resolved.push(json!({
+                "citation": citation,
+                "state": "source_resolved",
+                "source_receipt": run.source_receipt_path,
+                "canonical_text": run.canonical_text_path,
+                "candidate_only": true,
+                "creates_legal_authority": false,
+            })),
+            Err(error) => residuals.push(json!({
+                "citation": citation,
+                "state": "source_residual",
+                "reason": format!("{error:?}"),
+                "missing_source_is_negative_legal_evidence": false,
+                "candidate_only": true,
+                "creates_legal_authority": false,
+            })),
+        }
+    }
+
+    let report = json!({
+        "schema_version": "sl.waltons.cited_by_oalc_acquisition.v0_1",
+        "candidate_count": candidates.len(),
+        "resolved_count": resolved.len(),
+        "residual_count": residuals.len(),
+        "missing_source_is_negative_legal_evidence": false,
+        "candidate_only": true,
+        "creates_legal_authority": false,
+        "resolved": resolved,
+        "residuals": residuals,
+    });
+    let report_path = paths.later_dir.join("oalc-acquisition-report.json");
+    fs::write(
+        &report_path,
+        serde_json::to_vec_pretty(&report)
+            .map_err(|error| format!("encode cited-by OALC acquisition report: {error}"))?,
+    )
+    .map_err(|error| format!("write {}: {error}", report_path.display()))?;
+
+    if report["resolved_count"].as_u64().unwrap_or_default() == 0 {
+        return Err(format!(
+            "no cited-by candidates resolved through OALC; inspect {}. Source misses are residuals, not negative legal evidence.",
+            report_path.display()
+        ));
+    }
+    Ok(report)
+}
+
 pub fn cited_by(paths: &WaltonsPaths, provider_results: &Path) -> CliResult {
     require(&paths.citedby_manifest, "Waltons cited-by manifest")?;
     waltons::cited_by_import(paths, provider_results)?;
     waltons::cited_by_worklist(paths)?;
-    waltons::cited_by_acquire(paths)?;
+    let acquisition = reacquire_cited_by_candidates_resilient(paths)?;
     waltons::identity_prepare(paths)?;
 
     require(&paths.citedby_candidates, "normalized cited-by candidates")?;
@@ -176,6 +257,8 @@ pub fn cited_by(paths: &WaltonsPaths, provider_results: &Path) -> CliResult {
             "later_authorities_dir": paths.later_dir,
             "identity_review_worksheet": paths.identity_worksheet,
             "later_authorities_reacquired_via_oalc": true,
+            "oalc_acquisition": acquisition,
+            "missing_source_is_negative_legal_evidence": false,
             "provider_candidates_create_treatment": false,
             "raw_oalc_identity_creates_trace_alias": false,
         }),
