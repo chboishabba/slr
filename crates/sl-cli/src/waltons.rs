@@ -4,7 +4,13 @@ use sensiblaw_governed_legal_provider::{
     citation_traversal_plan, run_live_oalc_case_follow, OalcCaseFollowRequest,
     OalcResolvedSourceReceipt,
 };
+use sensiblaw_legal_follow_plan::waltons_estoppel_trace;
 use sensiblaw_legal_runtime::project_waltons_reviewed_receipts_to_issue;
+use sensiblaw_proof_search_loop::contract_review_expansion::{
+    compile_treatment_receipts_to_contract_hops,
+    compile_waltons_proposition_receipts_to_contract_hops,
+    ContractReviewedHopCompilation,
+};
 use sensiblaw_proof_search_loop::judgment_candidates::CitationOccurrenceCandidate;
 use sensiblaw_proof_search_loop::oalc_judgment_materialization::{
     later_treatment_cited_by_demand, materialize_oalc_judgment,
@@ -48,6 +54,7 @@ pub struct WaltonsPaths {
     pub reviewed: PathBuf,
     pub payments: PathBuf,
     pub frontier: PathBuf,
+    pub proposition_hops: PathBuf,
     pub citedby_manifest: PathBuf,
     pub citedby_candidates: PathBuf,
     pub later_dir: PathBuf,
@@ -55,6 +62,7 @@ pub struct WaltonsPaths {
     pub treatment_worksheet: PathBuf,
     pub treatment_decisions: PathBuf,
     pub genealogy: PathBuf,
+    pub treatment_hops: PathBuf,
 }
 
 impl WaltonsPaths {
@@ -68,6 +76,7 @@ impl WaltonsPaths {
             reviewed: base.join("waltons-reviewed-proposition-receipts.json"),
             payments: base.join("waltons-reviewed-evidence-payments.slrw"),
             frontier: base.join("waltons-wrongtype-frontier.json"),
+            proposition_hops: base.join("waltons-reviewed-proposition-contract-hops.json"),
             citedby_manifest: base.join("waltons-cited-by-work-manifest.json"),
             citedby_candidates: base.join("waltons-cited-by-candidates.json"),
             later_dir: base.join("later-authorities"),
@@ -75,6 +84,7 @@ impl WaltonsPaths {
             treatment_worksheet: base.join("waltons-treatment-review-worksheet.json"),
             treatment_decisions: base.join("waltons-treatment-reviewed-decisions.json"),
             genealogy: base.join("waltons-temporal-treatment-genealogy.json"),
+            treatment_hops: base.join("waltons-reviewed-treatment-contract-hops.json"),
             base,
         }
     }
@@ -106,6 +116,51 @@ fn write_json<T: Serialize>(path: &Path, value: &T) -> CliResult {
     fs::write(path, bytes).map_err(|error| format!("write {}: {error}", path.display()))
 }
 
+fn contract_hop_json(compiled: &ContractReviewedHopCompilation) -> Value {
+    let deltas = compiled
+        .deltas
+        .iter()
+        .map(|delta| {
+            json!({
+                "provenance_ref": delta.provenance_ref,
+                "candidate_only": delta.candidate_only,
+                "creates_legal_authority": delta.creates_legal_authority,
+                "nodes": delta.discovered_nodes.iter().map(|node| json!({
+                    "semantic_ref": node.semantic_ref,
+                    "label": node.label,
+                    "kind": format!("{:?}", node.kind),
+                    "doctrine": node.doctrine.map(|value| format!("{value:?}")),
+                    "jurisdiction_ref": node.jurisdiction_ref,
+                    "court_ref": node.court_ref,
+                    "decision_or_effective_date": node.decision_or_effective_date,
+                    "valid_from": node.valid_from,
+                    "valid_to": node.valid_to,
+                    "source_role": format!("{:?}", node.source_role),
+                    "authority_level": format!("{:?}", node.authority_level),
+                    "source_citation": node.source_citation,
+                })).collect::<Vec<_>>(),
+                "edges": delta.discovered_edges.iter().map(|edge| json!({
+                    "from_ref": edge.from_ref,
+                    "to_ref": edge.to_ref,
+                    "treatment": format!("{:?}", edge.treatment),
+                    "candidate_only": edge.candidate_only,
+                    "creates_legal_authority": edge.creates_legal_authority,
+                })).collect::<Vec<_>>(),
+            })
+        })
+        .collect::<Vec<_>>();
+    json!({
+        "schema_version": "sl.australian_contracts.reviewed_hops.v0_1",
+        "delta_count": deltas.len(),
+        "residual_count": compiled.residuals.len(),
+        "candidate_only": compiled.candidate_only,
+        "creates_legal_authority": compiled.creates_legal_authority,
+        "creates_current_law_conclusion": compiled.creates_current_law_conclusion,
+        "deltas": deltas,
+        "residuals": compiled.residuals,
+    })
+}
+
 fn load_waltons_materialisation(paths: &WaltonsPaths) -> CliResult<OalcJudgmentMaterialisation> {
     let receipt: OalcResolvedSourceReceipt = read_json(&paths.receipt)?;
     let text = fs::read_to_string(&receipt.local_artifact_ref).map_err(|error| {
@@ -128,12 +183,14 @@ pub fn status(paths: &WaltonsPaths) {
         ("3 reviewed receipts", &paths.reviewed),
         ("3 payment wire", &paths.payments),
         ("4/5 WrongType frontier", &paths.frontier),
+        ("5 proposition S14 hops", &paths.proposition_hops),
         ("6 cited-by manifest", &paths.citedby_manifest),
         ("6 cited-by candidates", &paths.citedby_candidates),
         ("7 merged treatment queue", &paths.merged_treatment_queue),
         ("7 treatment worksheet", &paths.treatment_worksheet),
         ("7 treatment decisions", &paths.treatment_decisions),
         ("8 genealogy", &paths.genealogy),
+        ("8 treatment S14 hops", &paths.treatment_hops),
     ];
     for (label, path) in rows {
         println!(
