@@ -65,18 +65,15 @@ fn section_token(line: &str) -> Option<&str> {
         return None;
     }
     let suffix = &bytes[digit_count..];
-    let valid_suffix = suffix.is_empty()
-        || (suffix.len() == 1 && suffix[0].is_ascii_uppercase());
+    let valid_suffix = suffix.is_empty() || (suffix.len() == 1 && suffix[0].is_ascii_uppercase());
     valid_suffix.then_some(token)
 }
 
 fn section_spans(text: &str) -> BTreeMap<String, (usize, usize)> {
     let mut headings = Vec::new();
     let mut offset = 0usize;
-    for line in text.split_inclusive('
-') {
-        let logical = line.strip_suffix('
-').unwrap_or(line);
+    for line in text.split_inclusive('\n') {
+        let logical = line.strip_suffix('\n').unwrap_or(line);
         if let Some(section) = section_token(logical) {
             headings.push((section.to_string(), offset));
         }
@@ -101,9 +98,7 @@ fn section_spans(text: &str) -> BTreeMap<String, (usize, usize)> {
     }
     occurrences
         .into_iter()
-        .filter_map(|(section, spans)| {
-            (spans.len() == 1).then(|| (section, spans[0]))
-        })
+        .filter_map(|(section, spans)| (spans.len() == 1).then(|| (section, spans[0])))
         .collect()
 }
 
@@ -170,7 +165,9 @@ fn acquire_parent_documents(materialised: &Path) -> CliResult<Vec<ParentDocument
 
         let row = resolved.row;
         if row.citation != citation || row.text.trim().is_empty() {
-            return Err(format!("OALC returned wrong or empty record for {citation}"));
+            return Err(format!(
+                "OALC returned wrong or empty record for {citation}"
+            ));
         }
         let digest = sha256(row.text.as_bytes());
         let artifact = materialised.join(format!("{}.txt", slug(citation)));
@@ -285,8 +282,8 @@ fn run_parser_and_pnf(
 }
 
 fn repo_root() -> CliResult<PathBuf> {
-    let mut path = std::env::current_dir()
-        .map_err(|error| format!("read current directory: {error}"))?;
+    let mut path =
+        std::env::current_dir().map_err(|error| format!("read current directory: {error}"))?;
     loop {
         if path.join("Cargo.toml").is_file() && path.join("crates").is_dir() {
             return Ok(path);
@@ -310,8 +307,7 @@ pub fn run(args: Vec<String>) -> CliResult {
     let output = value(&args, "--output-dir")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("artifacts/oalc/cullen-governing-law"));
-    let spacy_model = value(&args, "--spacy-model")
-        .unwrap_or_else(|| "en_core_web_sm".into());
+    let spacy_model = value(&args, "--spacy-model").unwrap_or_else(|| "en_core_web_sm".into());
 
     let materialised = output.join("materialised");
     let slices_dir = output.join("slices");
@@ -451,7 +447,10 @@ mod tests {
     #[test]
     fn section_heading_parser_matches_number_and_suffix_only() {
         assert_eq!(section_token("5B General principles"), Some("5B"));
-        assert_eq!(section_token("  43A Proceedings against public authority"), Some("43A"));
+        assert_eq!(
+            section_token("  43A Proceedings against public authority"),
+            Some("43A")
+        );
         assert_eq!(section_token("Definitions"), None);
         assert_eq!(section_token("5B"), None);
         assert_eq!(section_token("5AB Invalid"), None);

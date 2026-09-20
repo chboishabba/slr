@@ -4,8 +4,8 @@
 //! an example binary.  It preserves the same authority firewall: successful
 //! acquisition yields candidate-only source material and never legal truth.
 
-use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OalcCitationMatch {
@@ -59,13 +59,14 @@ pub struct OalcExactSourceRunReceipt {
     pub network_requests: u64,
 }
 
-pub fn oalc_corpus_row_matches(
-    request: &PinnedOalcStreamRequest,
-    row: &OalcCorpusRow,
-) -> bool {
+pub fn oalc_corpus_row_matches(request: &PinnedOalcStreamRequest, row: &OalcCorpusRow) -> bool {
     let citation_matches = match request.citation_match {
         OalcCitationMatch::Exact => row.citation == request.citation,
-        OalcCitationMatch::Contains => row.citation.contains(&request.citation),
+        // OALC case citations include a party-name prefix, while the medium-neutral
+        // citation itself is the terminal coordinate.  A raw substring test makes
+        // `[1988] HCA 7` spuriously match `[1988] HCA 72` and turns a unique
+        // authority into a false ambiguity.
+        OalcCitationMatch::Contains => row.citation.ends_with(&request.citation),
     };
     citation_matches
         && row.document_type == request.document_type
@@ -93,15 +94,9 @@ pub fn oalc_exact_source_filter_predicate(
         OalcCitationMatch::Exact => format!("\"citation\"='{citation}'"),
         OalcCitationMatch::Contains => format!("\"citation\" LIKE '%{citation}%'"),
     };
-    let mut clauses = vec![
-        citation_clause,
-        format!("\"type\"='{document_type}'"),
-    ];
+    let mut clauses = vec![citation_clause, format!("\"type\"='{document_type}'")];
     if let Some(source) = request.source.as_deref() {
-        clauses.push(format!(
-            "\"source\"='{}'",
-            source.replace('\'', "''")
-        ));
+        clauses.push(format!("\"source\"='{}'", source.replace('\'', "''")));
     }
     if let Some(jurisdiction) = request.jurisdiction.as_deref() {
         clauses.push(format!(
@@ -221,9 +216,8 @@ pub enum OalcCaseFollowError {
 #[cfg(feature = "live-network")]
 mod live {
     use super::{
-        OalcCaseFollowError, OalcCaseFollowRequest, OalcCaseFollowRunReceipt,
-        OalcCitationMatch, OalcCorpusRow, OalcExactSourceRequest,
-        OalcExactSourceRunReceipt, PinnedOalcStreamRequest,
+        OalcCaseFollowError, OalcCaseFollowRequest, OalcCaseFollowRunReceipt, OalcCitationMatch,
+        OalcCorpusRow, OalcExactSourceRequest, OalcExactSourceRunReceipt, PinnedOalcStreamRequest,
     };
     use crate::{
         classify_exact_filter, classify_http_status, oalc_filter_predicate,
@@ -305,7 +299,8 @@ mod live {
             let status = classify_http_status(response.status_code);
             if status != ProviderAccessStatus::Available {
                 return Err(OalcCaseFollowError::Provider(format!(
-                    "OALC provider unavailable: {status:?}"
+                    "OALC provider unavailable: {status:?} (HTTP {})",
+                    response.status_code,
                 )));
             }
             Ok(response)
@@ -402,7 +397,6 @@ mod live {
             .map_err(|error| OalcCaseFollowError::Validation(format!("{error:?}")))
     }
 
-
     fn stream_pinned_corpus(
         request: &PinnedOalcStreamRequest,
     ) -> Result<OalcCorpusRow, OalcCaseFollowError> {
@@ -429,9 +423,7 @@ mod live {
         {
             Ok(response) => response,
             Err(ureq::Error::Status(_, response)) => response,
-            Err(error) => {
-                return Err(OalcCaseFollowError::StreamingFallback(error.to_string()))
-            }
+            Err(error) => return Err(OalcCaseFollowError::StreamingFallback(error.to_string())),
         };
         let status = classify_http_status(response.status());
         if status != ProviderAccessStatus::Available {
@@ -443,8 +435,8 @@ mod live {
         let mut match_row: Option<OalcCorpusRow> = None;
         let reader = BufReader::new(response.into_reader());
         for line in reader.lines() {
-            let line = line
-                .map_err(|error| OalcCaseFollowError::StreamingFallback(error.to_string()))?;
+            let line =
+                line.map_err(|error| OalcCaseFollowError::StreamingFallback(error.to_string()))?;
             let row: OalcCorpusRow = serde_json::from_str(&line)
                 .map_err(|error| OalcCaseFollowError::Json(error.to_string()))?;
             if !super::oalc_corpus_row_matches(request, &row) {
@@ -526,7 +518,20 @@ mod live {
         } else {
             OalcFilterIndexState::Complete
         };
-        let rows = response.rows.into_iter().map(|row| row.row).collect();
+        let bounded_request = PinnedOalcStreamRequest {
+            revision: info.sha.clone(),
+            citation: request.citation.clone(),
+            citation_match: request.citation_match,
+            document_type: request.document_type.clone(),
+            source: request.source.clone(),
+            jurisdiction: request.jurisdiction.clone(),
+        };
+        let rows = response
+            .rows
+            .into_iter()
+            .map(|row| row.row)
+            .filter(|row| super::oalc_corpus_row_matches(&bounded_request, row))
+            .collect();
         let (row, resolution_path) = match classify_exact_filter(rows, index_state) {
             OalcExactLookupDisposition::Found(row) => (row, "filter_exact"),
             OalcExactLookupDisposition::RequireRevisionPinnedStreaming => {
@@ -623,7 +628,6 @@ mod live {
         }
         Ok(info.sha)
     }
-
 
     fn stream_fallback(
         provider: &mut GovernedOalc<UreqTransport>,
@@ -729,15 +733,30 @@ mod live {
         } else {
             OalcFilterIndexState::Complete
         };
-        let rows = response.rows.into_iter().map(|row| row.row).collect();
+        let bounded_request = PinnedOalcStreamRequest {
+            revision: info.sha.clone(),
+            citation: request.citation.clone(),
+            citation_match: OalcCitationMatch::Contains,
+            document_type: "decision".into(),
+            source: None,
+            jurisdiction: if request.oalc_jurisdiction.is_empty() {
+                None
+            } else {
+                Some(request.oalc_jurisdiction.clone())
+            },
+        };
+        let rows = response
+            .rows
+            .into_iter()
+            .map(|row| row.row)
+            .filter(|row| super::oalc_corpus_row_matches(&bounded_request, row))
+            .collect();
         let (record, resolution_path) = match classify_exact_filter(rows, index_state) {
             OalcExactLookupDisposition::Found(row) => (row, "filter_exact"),
-            OalcExactLookupDisposition::RequireRevisionPinnedStreaming => {
-                (
-                    stream_fallback(&mut provider, request, &info.sha)?,
-                    "revision_pinned_streaming",
-                )
-            }
+            OalcExactLookupDisposition::RequireRevisionPinnedStreaming => (
+                stream_fallback(&mut provider, request, &info.sha)?,
+                "revision_pinned_streaming",
+            ),
             OalcExactLookupDisposition::CompleteIndexAbsent => {
                 return Err(OalcCaseFollowError::SourceResidual(format!(
                     "complete OALC index found no {}",
@@ -752,7 +771,7 @@ mod live {
             }
         };
 
-        if !record.citation.contains(&request.citation)
+        if !record.citation.ends_with(&request.citation)
             || record.document_type != "decision"
             || record.text.trim().is_empty()
         {
@@ -760,8 +779,7 @@ mod live {
                 "OALC result failed decision/citation/text validation".into(),
             ));
         }
-        if !request.oalc_jurisdiction.is_empty()
-            && record.jurisdiction != request.oalc_jurisdiction
+        if !request.oalc_jurisdiction.is_empty() && record.jurisdiction != request.oalc_jurisdiction
         {
             return Err(OalcCaseFollowError::Validation(format!(
                 "OALC jurisdiction mismatch: expected {} got {}",
@@ -824,8 +842,7 @@ mod live {
 #[cfg(feature = "live-network")]
 pub use live::{
     resolve_dataset_revision as resolve_oalc_dataset_revision,
-    resolve_exact_source as resolve_live_oalc_exact_source,
-    run as run_live_oalc_case_follow,
+    resolve_exact_source as resolve_live_oalc_exact_source, run as run_live_oalc_case_follow,
     run_pinned as run_pinned_oalc_stream,
 };
 
@@ -854,7 +871,6 @@ pub fn resolve_live_oalc_exact_source(
 ) -> Result<OalcExactSourceRunReceipt, OalcCaseFollowError> {
     Err(OalcCaseFollowError::LiveNetworkFeatureDisabled)
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -916,7 +932,11 @@ mod tests {
             ("[2020] WASC 1", "court:WASC", "western_australia"),
             ("[2020] SASC 1", "court:SASC", "south_australia"),
             ("[2020] TASSC 1", "court:TASSC", "tasmania"),
-            ("[2020] ACTSC 1", "court:ACTSC", "australian_capital_territory"),
+            (
+                "[2020] ACTSC 1",
+                "court:ACTSC",
+                "australian_capital_territory",
+            ),
             ("[2020] NTSC 1", "court:NTSC", "northern_territory"),
         ];
         for (citation, court, jurisdiction) in cases {
@@ -941,6 +961,15 @@ mod tests {
             &request,
             &row(
                 "Waltons Stores (Interstate) Ltd v Maher [1988] HCA 7",
+                "decision",
+                "high_court_of_australia",
+                "commonwealth",
+            ),
+        ));
+        assert!(!oalc_corpus_row_matches(
+            &request,
+            &row(
+                "Re Griffin; Ex parte Professional Radio and Electronics Institute (Aust.) [1988] HCA 72",
                 "decision",
                 "high_court_of_australia",
                 "commonwealth",
