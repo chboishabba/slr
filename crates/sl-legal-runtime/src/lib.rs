@@ -2263,7 +2263,13 @@ mod tests {
             assert!(!calibration_refs(kind).is_empty());
             let capstone = build_australian_calibration_capstone(kind).unwrap();
             assert_eq!(capstone.kind, kind);
-            assert_eq!(capstone.campaign.hops.len(), 1);
+            let expected_hops = match kind {
+                AustralianCalibrationKind::Mabo => 1,
+                AustralianCalibrationKind::Pabai => 2,
+                AustralianCalibrationKind::CullenNswCla => 2,
+                AustralianCalibrationKind::Glj => 3,
+            };
+            assert_eq!(capstone.campaign.hops.len(), expected_hops);
             capstone.campaign.validate_restart_replay().unwrap();
             let last = capstone.campaign.hops.last().unwrap();
             let workspace =
@@ -2271,6 +2277,37 @@ mod tests {
             assert!(workspace.projection_only);
             assert!(!workspace.creates_semantic_authority);
         }
+    }
+
+    #[test]
+    fn calibration_suite_exercises_look_think_review_and_rerun() {
+        let pabai =
+            build_australian_calibration_capstone(AustralianCalibrationKind::Pabai).unwrap();
+        assert_eq!(
+            pabai.campaign.hops[0].selected_action.as_ref().unwrap().kind,
+            InformationActionKind::Look
+        );
+        assert!(pabai.campaign.hops[1].selected_action.is_none());
+
+        let cullen =
+            build_australian_calibration_capstone(AustralianCalibrationKind::CullenNswCla).unwrap();
+        assert_eq!(
+            cullen.campaign.hops[0].selected_action.as_ref().unwrap().kind,
+            InformationActionKind::Review
+        );
+        assert!(cullen.campaign.hops[1].selected_action.is_none());
+
+        let glj =
+            build_australian_calibration_capstone(AustralianCalibrationKind::Glj).unwrap();
+        assert_eq!(
+            glj.campaign.hops[0].selected_action.as_ref().unwrap().kind,
+            InformationActionKind::Think
+        );
+        assert_eq!(
+            glj.campaign.hops[1].selected_action.as_ref().unwrap().kind,
+            InformationActionKind::Review
+        );
+        assert!(glj.campaign.hops[2].selected_action.is_none());
     }
 
     #[test]
