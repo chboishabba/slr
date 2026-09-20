@@ -1,3 +1,4 @@
+mod contracts;
 mod cullen;
 mod oalc;
 mod case_follow;
@@ -14,6 +15,7 @@ fn usage() {
 USAGE:
   sensiblaw legal-follow case acquire --citation '[YYYY] COURT N' [options]
   sensiblaw legal-follow cullen pnf --operator-opt-in [--output-dir PATH] [--spacy-model MODEL]
+  sensiblaw legal-follow contracts landscape <plan|status> [--as-at YYYY-MM-DD] [--jurisdiction AU-QLD]
   sensiblaw legal-follow oalc stream-pinned --revision SHA --citation TEXT [options]
   sensiblaw legal-follow waltons [--base PATH] status
   sensiblaw legal-follow waltons [--base PATH] acquire
@@ -133,9 +135,12 @@ fn run() -> Result<(), String> {
         [domain, matter, rest @ ..] if domain == "legal-follow" && matter == "cullen" => {
             cullen::run(rest.to_vec())
         }
+        [domain, matter, rest @ ..] if domain == "legal-follow" && matter == "contracts" => {
+            contracts::run(rest.to_vec())
+        }
         _ => {
             usage();
-            Err("expected: sensiblaw legal-follow <case|oalc|waltons|cullen> ...".into())
+            Err("expected: sensiblaw legal-follow <case|oalc|waltons|cullen|contracts> ...".into())
         }
     }
 }
