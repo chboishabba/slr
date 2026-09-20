@@ -7,6 +7,10 @@ use sensiblaw_legal_runtime::{
     AustralianCalibrationKind, MixedFamilyReplayReceipt,
 };
 
+fn runtime_error(label: &str, error: impl std::fmt::Debug) -> std::io::Error {
+    std::io::Error::other(format!("{label}: {error:?}"))
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let output = std::env::args()
         .nth(1)
@@ -16,16 +20,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     fs::create_dir_all(&output)?;
 
     let mixed = build_m2_5_mixed_family_campaign()
-        .map_err(|error| format!("M2.5 campaign failed: {error:?}"))?;
+        .map_err(|error| runtime_error("M2.5 campaign failed", error))?;
     let mixed_payload = mixed.encode();
     fs::write(output.join("m2_5_mixed_family_replay.tsv"), &mixed_payload)?;
     let mixed_reloaded = MixedFamilyReplayReceipt::decode(
         &fs::read_to_string(output.join("m2_5_mixed_family_replay.tsv"))?,
     )
-    .map_err(|error| format!("M2.5 reload failed: {error:?}"))?;
+    .map_err(|error| runtime_error("M2.5 reload failed", error))?;
     mixed
         .validate_exact_replay(&mixed_reloaded)
-        .map_err(|error| format!("M2.5 replay identity failed: {error:?}"))?;
+        .map_err(|error| runtime_error("M2.5 replay identity failed", error))?;
 
     let mut report = Vec::new();
     for kind in [
@@ -35,11 +39,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         AustralianCalibrationKind::Glj,
     ] {
         let capstone = build_australian_calibration_capstone(kind)
-            .map_err(|error| format!("{kind:?} capstone failed: {error:?}"))?;
+            .map_err(|error| runtime_error(&format!("{kind:?} capstone failed"), error))?;
         capstone
             .campaign
             .validate_restart_replay()
-            .map_err(|error| format!("{kind:?} replay failed: {error:?}"))?;
+            .map_err(|error| runtime_error(&format!("{kind:?} replay failed"), error))?;
 
         let campaign_payload = capstone.campaign.encode();
         let campaign_path =
@@ -49,7 +53,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         capstone
             .campaign
             .validate_persisted_payload(&reloaded_campaign)
-            .map_err(|error| format!("{kind:?} disk replay failed: {error:?}"))?;
+            .map_err(|error| runtime_error(&format!("{kind:?} disk replay failed"), error))?;
 
         let last = capstone
             .campaign
@@ -72,7 +76,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let receipt = compile_capability_receipt()
-        .map_err(|error| format!("capability receipt failed: {error:?}"))?;
+        .map_err(|error| runtime_error("capability receipt failed", error))?;
     report.push(format!(
         "capability\tm2_5={}\tm3_a={}\tm3_b={}\tm3_c={}\tm3_c_replay={}\tm4_a={}\tcandidate_only={}\tsemantic_authority={}\tdigest={}",
         receipt.m2_5_mixed_family_replay,
