@@ -2579,3 +2579,7 @@ pub use projection_fabric::*;
 
 pub mod matter_runtime;
 pub use matter_runtime::*;
+
+
+pub mod contract_specimens;
+pub use contract_specimens::*;
