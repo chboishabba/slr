@@ -6,7 +6,8 @@
 //! authority.  A selected frontier item is a research action, not a truth rank.
 
 use sensiblaw_governed_legal_provider::{
-    run_live_oalc_case_follow_filter_only, OalcCaseFollowRequest, OalcResolvedSourceReceipt,
+    run_live_oalc_case_follow_with_mode, OalcCaseAcquisitionMode, OalcCaseFollowRequest,
+    OalcResolvedSourceReceipt,
 };
 use sensiblaw_legal_follow_plan::{
     apply_contract_landscape_expansion, compile_australian_contract_landscape_worklist,
@@ -851,8 +852,11 @@ pub fn acquire_outbound_citation(
     let mut request =
         OalcCaseFollowRequest::for_citation(&residual.medium_neutral_citation, output_dir);
     request.as_at = as_at.into();
-    let run = run_live_oalc_case_follow_filter_only(&request)
-        .map_err(|error| format!("recursive OALC acquisition: {error:?}"))?;
+    let run = run_live_oalc_case_follow_with_mode(
+        &request,
+        OalcCaseAcquisitionMode::IndexedThenPinnedStream,
+    )
+    .map_err(|error| format!("recursive OALC acquisition: {error:?}"))?;
     let bytes = fs::read(&run.source_receipt_path)
         .map_err(|error| format!("read {}: {error}", run.source_receipt_path.display()))?;
     serde_json::from_slice(&bytes)
