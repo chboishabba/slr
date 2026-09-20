@@ -585,11 +585,18 @@ mod live {
 }
 
 #[cfg(feature = "live-network")]
-pub use live::run as run_live_oalc_case_follow;
+pub use live::{run as run_live_oalc_case_follow, run_pinned as run_pinned_oalc_stream};
 
 #[cfg(not(feature = "live-network"))]
 pub fn run_live_oalc_case_follow(
     _request: &OalcCaseFollowRequest,
 ) -> Result<OalcCaseFollowRunReceipt, OalcCaseFollowError> {
+    Err(OalcCaseFollowError::LiveNetworkFeatureDisabled)
+}
+
+#[cfg(not(feature = "live-network"))]
+pub fn run_pinned_oalc_stream(
+    _request: &PinnedOalcStreamRequest,
+) -> Result<OalcCorpusRow, OalcCaseFollowError> {
     Err(OalcCaseFollowError::LiveNetworkFeatureDisabled)
 }
