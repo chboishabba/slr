@@ -13,6 +13,21 @@ pub enum OalcCitationMatch {
     Contains,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OalcCaseAcquisitionMode {
+    IndexedOnly,
+    IndexedThenPinnedStream,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PinnedOalcStreamReceipt {
+    pub row: OalcCorpusRow,
+    pub rows_examined: u64,
+    pub bytes_read: u64,
+    pub terminated_after_match: bool,
+    pub uniqueness_exhaustively_verified: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PinnedOalcStreamRequest {
     pub revision: String,
@@ -199,6 +214,10 @@ pub struct OalcCaseFollowRunReceipt {
     pub version_id: String,
     pub resolution_path: String,
     pub network_requests: u64,
+    pub stream_rows_examined: Option<u64>,
+    pub stream_bytes_read: Option<u64>,
+    pub stream_terminated_after_match: Option<bool>,
+    pub stream_uniqueness_exhaustively_verified: Option<bool>,
     pub candidate_only: bool,
     pub creates_legal_authority: bool,
     pub creates_claim_truth: bool,
@@ -221,8 +240,9 @@ pub enum OalcCaseFollowError {
 #[cfg(feature = "live-network")]
 mod live {
     use super::{
-        OalcCaseFollowError, OalcCaseFollowRequest, OalcCaseFollowRunReceipt, OalcCitationMatch,
-        OalcCorpusRow, OalcExactSourceRequest, OalcExactSourceRunReceipt, PinnedOalcStreamRequest,
+        OalcCaseAcquisitionMode, OalcCaseFollowError, OalcCaseFollowRequest,
+        OalcCaseFollowRunReceipt, OalcCitationMatch, OalcCorpusRow, OalcExactSourceRequest,
+        OalcExactSourceRunReceipt, PinnedOalcStreamReceipt, PinnedOalcStreamRequest,
     };
     use crate::{
         classify_exact_filter, classify_http_status, oalc_filter_predicate,
@@ -417,7 +437,7 @@ mod live {
 
     fn stream_pinned_corpus(
         request: &PinnedOalcStreamRequest,
-    ) -> Result<OalcCorpusRow, OalcCaseFollowError> {
+    ) -> Result<PinnedOalcStreamReceipt, OalcCaseFollowError> {
         if request.revision.trim().is_empty()
             || request.citation.trim().is_empty()
             || request.document_type.trim().is_empty()
@@ -450,36 +470,49 @@ mod live {
             )));
         }
 
-        let mut match_row: Option<OalcCorpusRow> = None;
-        let reader = BufReader::new(response.into_reader());
-        for line in reader.lines() {
-            let line =
-                line.map_err(|error| OalcCaseFollowError::StreamingFallback(error.to_string()))?;
-            let row: OalcCorpusRow = serde_json::from_str(&line)
-                .map_err(|error| OalcCaseFollowError::Json(error.to_string()))?;
-            if !super::oalc_corpus_row_matches(request, &row) {
-                continue;
-            }
-            if match_row.is_some() {
+        let mut reader = BufReader::new(response.into_reader());
+        let mut line = String::new();
+        let mut rows_examined = 0u64;
+        let mut bytes_read = 0u64;
+        loop {
+            line.clear();
+            let read = reader
+                .read_line(&mut line)
+                .map_err(|error| OalcCaseFollowError::StreamingFallback(format!(
+                    "pinned corpus stream interrupted after {rows_examined} rows and {bytes_read} bytes: {error}"
+                )))?;
+            if read == 0 {
                 return Err(OalcCaseFollowError::SourceResidual(format!(
-                    "revision-pinned corpus stream returned multiple candidates for {}",
+                    "revision-pinned corpus stream completed with no exact row for {} after {rows_examined} rows and {bytes_read} bytes",
                     request.citation
                 )));
             }
-            match_row = Some(row);
-        }
+            rows_examined += 1;
+            bytes_read = bytes_read.saturating_add(read as u64);
+            let row: OalcCorpusRow = serde_json::from_str(line.trim_end())
+                .map_err(|error| OalcCaseFollowError::Json(format!(
+                    "decode pinned corpus row {rows_examined}: {error}"
+                )))?;
+            if !super::oalc_corpus_row_matches(request, &row) {
+                continue;
+            }
 
-        match_row.ok_or_else(|| {
-            OalcCaseFollowError::SourceResidual(format!(
-                "revision-pinned corpus stream completed with no bounded row for {}",
-                request.citation
-            ))
-        })
+            return Ok(PinnedOalcStreamReceipt {
+                row,
+                rows_examined,
+                bytes_read,
+                terminated_after_match: true,
+                // Stopping at the first exact terminal-MNC match is deliberate.
+                // The reviewed identity gate is downstream; the source layer
+                // does not pretend it exhaustively proved corpus-wide uniqueness.
+                uniqueness_exhaustively_verified: false,
+            });
+        }
     }
 
     pub fn run_pinned(
         request: &PinnedOalcStreamRequest,
-    ) -> Result<OalcCorpusRow, OalcCaseFollowError> {
+    ) -> Result<PinnedOalcStreamReceipt, OalcCaseFollowError> {
         stream_pinned_corpus(request)
     }
 
@@ -594,7 +627,7 @@ mod live {
                 let result = stream_pinned_corpus(&pinned)?;
                 provider.requests += 1;
                 provider.last_request = Some(Instant::now());
-                (result, "revision_pinned_streaming")
+                (result.row, "revision_pinned_streaming")
             }
             OalcExactLookupDisposition::CompleteIndexAbsent => {
                 return Err(OalcCaseFollowError::SourceResidual(format!(
@@ -668,7 +701,7 @@ mod live {
         provider: &mut GovernedOalc<UreqTransport>,
         request: &OalcCaseFollowRequest,
         revision: &str,
-    ) -> Result<OalcCorpusRow, OalcCaseFollowError> {
+    ) -> Result<PinnedOalcStreamReceipt, OalcCaseFollowError> {
         if provider.requests >= provider.context.bounds.max_network_requests {
             return Err(OalcCaseFollowError::Governance(
                 "OALC request budget exceeded before pinned stream".into(),
@@ -700,9 +733,9 @@ mod live {
         result
     }
 
-    fn run_with_stream_fallback(
+    fn run_with_mode(
         request: &OalcCaseFollowRequest,
-        allow_revision_pinned_streaming: bool,
+        mode: OalcCaseAcquisitionMode,
     ) -> Result<OalcCaseFollowRunReceipt, OalcCaseFollowError> {
         validate_request(request)?;
         fs::create_dir_all(&request.output_dir)
@@ -789,18 +822,33 @@ mod live {
             .map(|row| row.row)
             .filter(|row| super::oalc_corpus_row_matches(&bounded_request, row))
             .collect();
-        let (record, resolution_path) = match classify_exact_filter(rows, index_state) {
-            OalcExactLookupDisposition::Found(row) => (row, "search_exact_mnc"),
+        let (record, resolution_path, stream_receipt) = match classify_exact_filter(rows, index_state) {
+            OalcExactLookupDisposition::Found(row) => (row, "search_exact_mnc", None),
             OalcExactLookupDisposition::RequireRevisionPinnedStreaming
-                if allow_revision_pinned_streaming => (
-                    stream_fallback(&mut provider, request, &info.sha)?,
-                    "revision_pinned_streaming",
-                ),
+                if mode == OalcCaseAcquisitionMode::IndexedThenPinnedStream =>
+            {
+                let streamed = stream_fallback(&mut provider, request, &info.sha)?;
+                (
+                    streamed.row.clone(),
+                    "revision_pinned_streaming_first_exact_mnc",
+                    Some(streamed),
+                )
+            }
             OalcExactLookupDisposition::RequireRevisionPinnedStreaming => {
                 return Err(OalcCaseFollowError::SourceResidual(format!(
-                    "bounded OALC search was incomplete for {}; revision-pinned whole-corpus streaming is disabled for this batch",
+                    "bounded OALC search was incomplete for {}; acquisition mode is IndexedOnly",
                     request.citation
                 )))
+            }
+            OalcExactLookupDisposition::CompleteIndexAbsent
+                if mode == OalcCaseAcquisitionMode::IndexedThenPinnedStream =>
+            {
+                let streamed = stream_fallback(&mut provider, request, &info.sha)?;
+                (
+                    streamed.row.clone(),
+                    "revision_pinned_streaming_after_index_absence",
+                    Some(streamed),
+                )
             }
             OalcExactLookupDisposition::CompleteIndexAbsent => {
                 return Err(OalcCaseFollowError::SourceResidual(format!(
@@ -877,26 +925,40 @@ mod live {
             version_id: receipt.version_id,
             resolution_path: receipt.resolution_path,
             network_requests: receipt.network_requests,
+            stream_rows_examined: stream_receipt.as_ref().map(|value| value.rows_examined),
+            stream_bytes_read: stream_receipt.as_ref().map(|value| value.bytes_read),
+            stream_terminated_after_match: stream_receipt
+                .as_ref()
+                .map(|value| value.terminated_after_match),
+            stream_uniqueness_exhaustively_verified: stream_receipt
+                .as_ref()
+                .map(|value| value.uniqueness_exhaustively_verified),
             candidate_only: true,
             creates_legal_authority: false,
             creates_claim_truth: false,
         })
     }
 
-    /// Resolve a single root authority.  The explicit root path can use the
-    /// revision-pinned stream fallback when the index is incomplete.
+    pub fn run_with_acquisition_mode(
+        request: &OalcCaseFollowRequest,
+        mode: OalcCaseAcquisitionMode,
+    ) -> Result<OalcCaseFollowRunReceipt, OalcCaseFollowError> {
+        run_with_mode(request, mode)
+    }
+
+    /// Resolve a single authority with the durable HF-only fallback: the
+    /// Dataset Server index is an accelerator, not the source boundary.
     pub fn run(
         request: &OalcCaseFollowRequest,
     ) -> Result<OalcCaseFollowRunReceipt, OalcCaseFollowError> {
-        run_with_stream_fallback(request, true)
+        run_with_mode(request, OalcCaseAcquisitionMode::IndexedThenPinnedStream)
     }
 
-    /// Resolve one member of a multi-authority batch without downloading the
-    /// entire corpus.  An incomplete index is a source residual, not evidence.
+    /// Strict indexed-only mode retained for explicitly bounded callers.
     pub fn run_filter_only(
         request: &OalcCaseFollowRequest,
     ) -> Result<OalcCaseFollowRunReceipt, OalcCaseFollowError> {
-        run_with_stream_fallback(request, false)
+        run_with_mode(request, OalcCaseAcquisitionMode::IndexedOnly)
     }
 }
 
@@ -904,7 +966,9 @@ mod live {
 pub use live::{
     resolve_dataset_revision as resolve_oalc_dataset_revision,
     resolve_exact_source as resolve_live_oalc_exact_source, run as run_live_oalc_case_follow,
-    run_filter_only as run_live_oalc_case_follow_filter_only, run_pinned as run_pinned_oalc_stream,
+    run_filter_only as run_live_oalc_case_follow_filter_only,
+    run_pinned as run_pinned_oalc_stream,
+    run_with_acquisition_mode as run_live_oalc_case_follow_with_mode,
 };
 
 #[cfg(not(feature = "live-network"))]
@@ -922,9 +986,17 @@ pub fn run_live_oalc_case_follow_filter_only(
 }
 
 #[cfg(not(feature = "live-network"))]
+pub fn run_live_oalc_case_follow_with_mode(
+    _request: &OalcCaseFollowRequest,
+    _mode: OalcCaseAcquisitionMode,
+) -> Result<OalcCaseFollowRunReceipt, OalcCaseFollowError> {
+    Err(OalcCaseFollowError::LiveNetworkFeatureDisabled)
+}
+
+#[cfg(not(feature = "live-network"))]
 pub fn run_pinned_oalc_stream(
     _request: &PinnedOalcStreamRequest,
-) -> Result<OalcCorpusRow, OalcCaseFollowError> {
+) -> Result<PinnedOalcStreamReceipt, OalcCaseFollowError> {
     Err(OalcCaseFollowError::LiveNetworkFeatureDisabled)
 }
 
@@ -1095,6 +1167,34 @@ mod tests {
         let predicate = oalc_exact_source_filter_predicate(&request).unwrap();
         assert!(predicate.contains("\"citation\"='Example v Example [1999] HCA 10'"));
         assert!(!predicate.contains("LIKE"));
+    }
+
+
+    #[test]
+    fn recursive_acquisition_mode_allows_index_then_pinned_stream() {
+        assert_ne!(
+            OalcCaseAcquisitionMode::IndexedOnly,
+            OalcCaseAcquisitionMode::IndexedThenPinnedStream
+        );
+    }
+
+    #[test]
+    fn pinned_stream_receipt_does_not_overclaim_uniqueness() {
+        let receipt = PinnedOalcStreamReceipt {
+            row: row(
+                "Giumelli v Giumelli [1999] HCA 10",
+                "decision",
+                "high_court_of_australia",
+                "commonwealth",
+            ),
+            rows_examined: 42,
+            bytes_read: 4096,
+            terminated_after_match: true,
+            uniqueness_exhaustively_verified: false,
+        };
+        assert!(receipt.terminated_after_match);
+        assert!(!receipt.uniqueness_exhaustively_verified);
+        assert_eq!(receipt.rows_examined, 42);
     }
 
 }
