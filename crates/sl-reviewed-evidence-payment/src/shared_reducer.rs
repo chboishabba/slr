@@ -5,6 +5,7 @@ use crate::ReviewedEvidenceCoordinate;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReviewedCanonicalEvidence {
     pub reviewed_evidence_ref: String,
+    pub manifestation_ref: Option<String>,
     pub observation: EvidenceObservation,
     pub review_ref: String,
     pub payment_ref: String,
@@ -30,6 +31,7 @@ pub struct CanonicalProjectionReceipt {
     pub family: ProjectionFamily,
     pub disposition: ProjectionDisposition,
     pub reviewed_evidence_ref: String,
+    pub manifestation_ref: Option<String>,
     pub observation_ref: String,
     pub source_revision_ref: String,
     pub span_ref: String,
@@ -42,6 +44,7 @@ pub struct CanonicalProjectionReceipt {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SharedEvidenceReductionReceipt {
     pub reviewed_evidence_ref: String,
+    pub manifestation_ref: Option<String>,
     pub observation_ref: String,
     pub source_revision_ref: String,
     pub span_ref: String,
@@ -116,6 +119,7 @@ impl ReviewedCanonicalEvidence {
                 &review.review_ref,
                 &observation.observation_ref,
             ),
+            manifestation_ref: review.source_ref.clone(),
             observation,
             review_ref: review.review_ref.clone(),
             payment_ref,
@@ -130,6 +134,10 @@ impl ReviewedCanonicalEvidence {
             reviewed_evidence_ref(&self.review_ref, &self.observation.observation_ref);
         if self.reviewed_evidence_ref != expected_reviewed_evidence_ref {
             return Err(SharedEvidenceReducerError::ReviewedEvidenceIdentityMismatch);
+        }
+
+        if matches!(self.manifestation_ref.as_deref(), Some(value) if value.trim().is_empty()) {
+            return Err(SharedEvidenceReducerError::EmptyCoordinate("manifestation_ref"));
         }
 
         for (name, value) in [
@@ -186,6 +194,7 @@ fn project_one(
         family: expected,
         disposition,
         reviewed_evidence_ref: evidence.reviewed_evidence_ref.clone(),
+        manifestation_ref: evidence.manifestation_ref.clone(),
         observation_ref: evidence.observation.observation_ref.clone(),
         source_revision_ref: evidence.observation.source_revision_ref.clone(),
         span_ref: evidence.observation.span.span_ref.clone(),
@@ -217,6 +226,7 @@ pub fn reduce_reviewed_canonical_evidence(
 
     Ok(SharedEvidenceReductionReceipt {
         reviewed_evidence_ref: evidence.reviewed_evidence_ref.clone(),
+        manifestation_ref: evidence.manifestation_ref.clone(),
         observation_ref: evidence.observation.observation_ref.clone(),
         source_revision_ref: evidence.observation.source_revision_ref.clone(),
         span_ref: evidence.observation.span.span_ref.clone(),
@@ -327,6 +337,7 @@ mod tests {
         assert_eq!(receipt.projections.len(), 3);
         for projection in &receipt.projections {
             assert_eq!(projection.reviewed_evidence_ref, evidence.reviewed_evidence_ref);
+            assert_eq!(projection.manifestation_ref, evidence.manifestation_ref);
             assert_eq!(projection.observation_ref, evidence.observation.observation_ref);
             assert_eq!(projection.source_revision_ref, evidence.observation.source_revision_ref);
             assert_eq!(projection.span_ref, evidence.observation.span.span_ref);

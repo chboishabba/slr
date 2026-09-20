@@ -613,6 +613,7 @@ pub struct WrongTypeRuleBundle {
 pub struct ElementEvidenceLink {
     pub element_ref: String,
     pub reviewed_evidence_ref: String,
+    pub manifestation_ref: Option<String>,
     pub observation_ref: String,
     pub source_revision_ref: String,
     pub span_ref: String,
@@ -696,6 +697,7 @@ pub fn project_reviewed_world_to_wrong_type(
             .push(ElementEvidenceLink {
                 element_ref: (*element_ref).into(),
                 reviewed_evidence_ref: reviewed.reviewed_evidence_ref.clone(),
+                manifestation_ref: reviewed.manifestation_ref.clone(),
                 observation_ref: reviewed.observation.observation_ref.clone(),
                 source_revision_ref: reviewed.observation.source_revision_ref.clone(),
                 span_ref: reviewed.observation.span.span_ref.clone(),
@@ -1796,6 +1798,10 @@ pub struct LegalRuntimeCapabilityReceipt {
     pub m3_c_all_calibrations_one_runner: bool,
     pub m3_c_restart_replay: bool,
     pub m4_a_matter_issue_projection: bool,
+    pub m6_universal_explanation: bool,
+    pub m6_reverse_material_impact: bool,
+    pub m7_projection_fabric: bool,
+    pub m7_same_identity_cross_projection: bool,
     pub candidate_only: bool,
     pub creates_semantic_authority: bool,
     pub receipt_digest: String,
@@ -1828,12 +1834,102 @@ pub fn compile_capability_receipt() -> Result<LegalRuntimeCapabilityReceipt, Leg
                 "matter/issue workspace must remain projection-only".into(),
             ));
         }
+
+        let first_evidence = capstone
+            .issue
+            .elements
+            .iter()
+            .flat_map(|element| element.evidence.iter())
+            .next()
+            .ok_or_else(|| LegalRuntimeError::Projection(
+                "Sprint 6/7 capstone requires one source-addressable observation".into(),
+            ))?;
+        let anchor = first_evidence.observation_ref.clone();
+        let time_ref = "2026-09-20T00:00:00+10:00".to_owned();
+        let workbench = project_matter_issue_workbench(
+            format!("matter:{:?}", capstone.kind),
+            &capstone.issue,
+            last,
+            MatterWorkbenchSeed {
+                events: vec![MatterEventProjection {
+                    event_ref: format!("event:{:?}:m6-m7-capstone", capstone.kind),
+                    label: format!("{:?} Sprint 6/7 capstone event", capstone.kind),
+                    time_ref: time_ref.clone(),
+                    observation_refs: vec![anchor.clone()],
+                    entity_refs: Vec::new(),
+                    candidate_only: true,
+                }],
+                observation_time_refs: BTreeMap::from([(anchor.clone(), time_ref.clone())]),
+                ..MatterWorkbenchSeed::default()
+            },
+        )
+        .map_err(LegalRuntimeError::Projection)?;
+
+        let explanation = compile_explanation_index(&workbench, &capstone.issue, last)
+            .map_err(LegalRuntimeError::Projection)?;
+        let anchor_explanation = explanation.get(&anchor).ok_or_else(|| {
+            LegalRuntimeError::Projection(
+                "Sprint 6 explanation lost the canonical observation anchor".into(),
+            )
+        })?;
+        if anchor_explanation.provenance.is_empty()
+            || !explanation
+                .material_consequences(&anchor)
+                .contains(&format!("event:{:?}:m6-m7-capstone", capstone.kind))
+        {
+            return Err(LegalRuntimeError::Projection(
+                "Sprint 6 backward/forward explanation invariant failed".into(),
+            ));
+        }
+
+        let projection_context = ProjectionContext {
+            temporal_refs: BTreeMap::from([(anchor.clone(), time_ref)]),
+            jurisdiction_refs: BTreeMap::new(),
+        };
+        for projection_kind in [
+            ProjectionKind::SourceView,
+            ProjectionKind::Timeline,
+            ProjectionKind::IssueProof,
+            ProjectionKind::EntityRelationship,
+            ProjectionKind::CitationAuthority,
+            ProjectionKind::Flow,
+            ProjectionKind::Comparative,
+        ] {
+            let mut query = ProjectionQuery::new(projection_kind);
+            query.semantic_selection.insert(anchor.clone());
+            let graph = compile_projection(&workbench, &explanation, &query, &projection_context)
+                .map_err(LegalRuntimeError::Projection)?;
+            let projected = graph
+                .nodes
+                .iter()
+                .find(|node| node.semantic_ref == anchor)
+                .ok_or_else(|| LegalRuntimeError::Projection(format!(
+                    "Sprint 7 projection {projection_kind:?} lost canonical anchor"
+                )))?;
+            let expected_revisions = anchor_explanation
+                .provenance
+                .iter()
+                .map(|provenance| provenance.source_revision_ref.clone())
+                .collect::<BTreeSet<_>>();
+            let projected_revisions = projected
+                .source_revision_refs
+                .iter()
+                .cloned()
+                .collect::<BTreeSet<_>>();
+            if expected_revisions != projected_revisions || graph.creates_semantic_authority {
+                return Err(LegalRuntimeError::Projection(format!(
+                    "Sprint 7 projection {projection_kind:?} rewrote canonical provenance"
+                )));
+            }
+        }
     }
 
     let receipt_digest = digest(
         std::iter::once(LEGAL_RUNTIME_VERSION)
             .chain(std::iter::once(mixed.receipt_head.as_str()))
-            .chain(capstones.iter().map(|capstone| capstone.campaign.receipt_head.as_str())),
+            .chain(capstones.iter().map(|capstone| capstone.campaign.receipt_head.as_str()))
+            .chain(std::iter::once("M6:universal-explanation"))
+            .chain(std::iter::once("M7:projection-fabric")),
     );
 
     Ok(LegalRuntimeCapabilityReceipt {
@@ -1843,6 +1939,10 @@ pub fn compile_capability_receipt() -> Result<LegalRuntimeCapabilityReceipt, Leg
         m3_c_all_calibrations_one_runner: true,
         m3_c_restart_replay: true,
         m4_a_matter_issue_projection: true,
+        m6_universal_explanation: true,
+        m6_reverse_material_impact: true,
+        m7_projection_fabric: true,
+        m7_same_identity_cross_projection: true,
         candidate_only: true,
         creates_semantic_authority: false,
         receipt_digest,
@@ -2377,7 +2477,7 @@ mod tests {
     }
 
     #[test]
-    fn capability_receipt_closes_m2_5_through_m4_a_without_promotion() {
+    fn capability_receipt_closes_m2_5_through_sprint7_without_promotion() {
         let receipt = compile_capability_receipt().unwrap();
         assert!(receipt.m2_5_mixed_family_replay);
         assert!(receipt.m3_a_reviewed_world_to_wrong_type);
@@ -2385,6 +2485,10 @@ mod tests {
         assert!(receipt.m3_c_all_calibrations_one_runner);
         assert!(receipt.m3_c_restart_replay);
         assert!(receipt.m4_a_matter_issue_projection);
+        assert!(receipt.m6_universal_explanation);
+        assert!(receipt.m6_reverse_material_impact);
+        assert!(receipt.m7_projection_fabric);
+        assert!(receipt.m7_same_identity_cross_projection);
         assert!(receipt.candidate_only);
         assert!(!receipt.creates_semantic_authority);
         assert!(receipt.receipt_digest.starts_with("sha256:"));
@@ -2394,3 +2498,9 @@ mod tests {
 
 pub mod workbench;
 pub use workbench::*;
+
+
+pub mod provenance;
+pub use provenance::*;
+pub mod projection_fabric;
+pub use projection_fabric::*;

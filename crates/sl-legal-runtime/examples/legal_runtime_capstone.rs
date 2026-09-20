@@ -3,9 +3,10 @@ use std::path::PathBuf;
 
 use sensiblaw_legal_runtime::{
     build_australian_calibration_capstone, build_m2_5_mixed_family_campaign,
-    compile_capability_receipt, project_matter_issue_workspace, project_matter_issue_workbench,
-    AustralianCalibrationKind, MatterEntityKind, MatterEntityProjection, MatterEventProjection,
-    MatterWorkbenchSeed, MixedFamilyReplayReceipt,
+    compile_capability_receipt, compile_explanation_index, compile_projection,
+    project_matter_issue_workspace, project_matter_issue_workbench, AustralianCalibrationKind,
+    MatterEntityKind, MatterEntityProjection, MatterEventProjection, MatterWorkbenchSeed,
+    MixedFamilyReplayReceipt, ProjectionContext, ProjectionKind, ProjectionQuery,
 };
 
 fn runtime_error(label: &str, error: impl std::fmt::Debug) -> std::io::Error {
@@ -103,8 +104,59 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             format!("{workbench:#?}"),
         )?;
 
+        let explanation = compile_explanation_index(&workbench, &capstone.issue, last)
+            .map_err(|error| std::io::Error::other(format!("M6 explanation failed: {error}")))?;
+        fs::write(
+            output.join(format!("{kind:?}.m6-explanation.txt").to_lowercase()),
+            format!("{explanation:#?}"),
+        )?;
+
+        let projection_context = ProjectionContext {
+            temporal_refs: std::collections::BTreeMap::from([(
+                first_evidence.observation_ref.clone(),
+                "2026-09-20T00:00:00+10:00".into(),
+            )]),
+            jurisdiction_refs: std::collections::BTreeMap::new(),
+        };
+        let mut projection_digests = Vec::new();
+        for projection_kind in [
+            ProjectionKind::SourceView,
+            ProjectionKind::Timeline,
+            ProjectionKind::IssueProof,
+            ProjectionKind::EntityRelationship,
+            ProjectionKind::CitationAuthority,
+            ProjectionKind::Flow,
+            ProjectionKind::Comparative,
+        ] {
+            let mut query = ProjectionQuery::new(projection_kind);
+            query
+                .semantic_selection
+                .insert(first_evidence.observation_ref.clone());
+            let graph = compile_projection(&workbench, &explanation, &query, &projection_context)
+                .map_err(|error| {
+                    std::io::Error::other(format!("M7 projection {projection_kind:?} failed: {error}"))
+                })?;
+            if !graph.contains(&first_evidence.observation_ref) {
+                return Err(std::io::Error::other(format!(
+                    "M7 projection {projection_kind:?} lost canonical anchor {}",
+                    first_evidence.observation_ref
+                ))
+                .into());
+            }
+            fs::write(
+                output.join(
+                    format!("{kind:?}.m7-{projection_kind:?}.txt").to_lowercase(),
+                ),
+                format!("{graph:#?}"),
+            )?;
+            projection_digests.push(format!(
+                "{projection_kind:?}:{}",
+                graph.deterministic_digest
+            ));
+        }
+
         report.push(format!(
-            "{kind:?}\tapplicability={:?}\tviolation={:?}\tliability={:?}\tremedy={:?}\tresiduals={}\tnodes={}\tentities={}\tobservations={}\tevents={}\tdocuments={}\ttimeline={}\treceipt_head={}",
+            "{kind:?}\tapplicability={:?}\tviolation={:?}\tliability={:?}\tremedy={:?}\tresiduals={}\tnodes={}\tentities={}\tobservations={}\tevents={}\tdocuments={}\ttimeline={}\treceipt_head={}\tm6_records={}\tm7_projections={}",
             workspace.applicability,
             workspace.violation,
             workspace.liability,
@@ -117,19 +169,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             workbench.documents.len(),
             workbench.timeline.len(),
             capstone.campaign.receipt_head,
+            explanation.records.len(),
+            projection_digests.join(","),
         ));
     }
 
     let receipt = compile_capability_receipt()
         .map_err(|error| runtime_error("capability receipt failed", error))?;
     report.push(format!(
-        "capability\tm2_5={}\tm3_a={}\tm3_b={}\tm3_c={}\tm3_c_replay={}\tm4_a={}\tcandidate_only={}\tsemantic_authority={}\tdigest={}",
+        "capability\tm2_5={}\tm3_a={}\tm3_b={}\tm3_c={}\tm3_c_replay={}\tm4_a={}\tm6={}\tm6_reverse={}\tm7={}\tm7_identity={}\tcandidate_only={}\tsemantic_authority={}\tdigest={}",
         receipt.m2_5_mixed_family_replay,
         receipt.m3_a_reviewed_world_to_wrong_type,
         receipt.m3_b_source_realised_evaluator,
         receipt.m3_c_all_calibrations_one_runner,
         receipt.m3_c_restart_replay,
         receipt.m4_a_matter_issue_projection,
+        receipt.m6_universal_explanation,
+        receipt.m6_reverse_material_impact,
+        receipt.m7_projection_fabric,
+        receipt.m7_same_identity_cross_projection,
         receipt.candidate_only,
         receipt.creates_semantic_authority,
         receipt.receipt_digest,
