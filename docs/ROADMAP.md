@@ -202,3 +202,32 @@ M2.1 and M2.2 are paid on the stacked Sprint-2 branch:
 - M2.3 shared reducer ABI is now source-written: one reviewed canonical evidence object fans out to optional world/matter/legal projection slots, with exact observation/revision/span/review/payment identity repeated in each projection receipt; abstention is explicit and no projection or reducer creates semantic authority, applicability, or claim truth.
 
 M2.1 and M2.2 have exact Rust and Agda receipts. M2.3 is source-written only on the new head and remains `implementedAwaitingRuntime` until fresh Rust/Agda execution receipts are observed. Sprint 2 remains open pending M2.4, M2.5 and the persisted cross-family replay capstone.
+
+
+## Digital-ESD application workload
+
+Digital-ESD is an application consumer of the canonical evidence machine, not a
+new core substrate.
+
+Its current production frontier is the real ERIC review loop:
+
+```text
+retained Q1-Q7 ERIC API exports
+-> 46,597 query occurrences
+-> 43,996 accession-deduplicated metadata studies
+-> 43,996-row authoritative screening denominator
+-> candidate-only title/abstract assessments
+-> candidate duplicate/report-family fibres
+-> reviewed calibration tranche
+-> non-scalar Pareto reviewer queue
+-> explicit include/probable/exclude/unresolved decisions
+-> real full-text retrieval for include/probable
+-> SHA-verified P0-G gate
+-> canonical SLR evidence / source audit
+```
+
+The 43,996 metadata studies do **not** count as 43,996 verified full texts.
+P0-G is paid only by real retrieved artifacts whose digests match their
+retrieval receipts.
+
+Operational details: `docs/digital-esd-real-eric-screening.md`.
