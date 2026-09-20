@@ -155,6 +155,14 @@ mod live {
             .arg(revision_sha)
             .arg("--citation")
             .arg(WALTONS_MNC)
+            .arg("--citation-match")
+            .arg("contains")
+            .arg("--document-type")
+            .arg("decision")
+            .arg("--source")
+            .arg("")
+            .arg("--jurisdiction")
+            .arg("commonwealth")
             .env("HF_HUB_DISABLE_TELEMETRY", "1")
             .output()?;
         if !output.status.success() {
