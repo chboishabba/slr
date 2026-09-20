@@ -1,27 +1,38 @@
-"""Tests for the Digital-ESD real ERIC execution receipt compiler.
-
-Tests:
-  - valid receipt + matching artifacts → concrete Agda witness emitted
-  - artifact changed after receipt → hard failure
-"""
+"""Tests for the Digital-ESD real ERIC execution receipt compiler."""
 from __future__ import annotations
 
+import hashlib
 import json
 import tempfile
 from pathlib import Path
 
 import pytest
 
-import sys
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from interop_scripts.emit_digital_esd_eric_execution_agda import emit_agda
 
 
 EXPECTED_OCCURRENCES = 46597
 EXPECTED_UNIQUE = 43996
+ARTIFACT_NAMES = (
+    "parsed_metadata_corpus",
+    "parser_manifest",
+    "screening_ledger",
+    "candidate_assessment",
+    "pareto_queue",
+)
 
 
-def _make_receipt(overrides: dict | None = None) -> dict:
+def sha256_file(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _make_receipt(tmp: Path, overrides: dict | None = None) -> tuple[dict, dict[str, Path]]:
+    artifacts: dict[str, Path] = {}
+    for name in ARTIFACT_NAMES:
+        path = tmp / f"{name}.txt"
+        path.write_text(f"artifact:{name}\n", encoding="utf-8")
+        artifacts[name] = path
+
     receipt = {
         "run_id": "test-run-001",
         "started_at": "2026-09-20T00:00:00+00:00",
@@ -36,122 +47,102 @@ def _make_receipt(overrides: dict | None = None) -> dict:
         "creates_source_truth": False,
         "creates_source_audit_admission": False,
         "counts_match": True,
-        "artifact_hashes": {
-            "parsed_metadata_corpus": "abc123",
-            "parser_manifest": "def456",
-            "screening_ledger": "ghi789",
-            "candidate_assessment": "jkl012",
-            "pareto_queue": "mno345",
-        },
+        "artifact_paths": {name: str(path) for name, path in artifacts.items()},
+        "artifact_hashes": {name: sha256_file(path) for name, path in artifacts.items()},
     }
     if overrides:
         receipt.update(overrides)
-    return receipt
+    return receipt, artifacts
+
+
+def _write_receipt(tmp: Path, receipt: dict) -> Path:
+    path = tmp / "receipt.json"
+    path.write_text(json.dumps(receipt), encoding="utf-8")
+    return path
 
 
 def test_valid_receipt_emits_agda():
-    """Valid receipt + matching artifacts → concrete Agda witness emitted."""
-    with tempfile.TemporaryDirectory() as tmp:
-        receipt_path = Path(tmp) / "receipt.json"
-        output_path = Path(tmp) / "DigitalESDERICStudyExecutionObserved.agda"
-        with open(receipt_path, "w") as fh:
-            json.dump(_make_receipt(), fh)
-        receipt = emit_agda(receipt_path, output_path)
-        assert output_path.exists()
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        receipt, _ = _make_receipt(tmp)
+        receipt_path = _write_receipt(tmp, receipt)
+        output_path = tmp / "DigitalESDERICStudyExecutionObserved.agda"
+
+        emit_agda(receipt_path, output_path)
+
         content = output_path.read_text()
         assert "observedRealERICExecution" in content
         assert str(EXPECTED_OCCURRENCES) in content
         assert str(EXPECTED_UNIQUE) in content
 
 
-def test_artifact_changed_after_receipt():
-    """Artifact changed after receipt → hard failure."""
-    with tempfile.TemporaryDirectory() as tmp:
-        receipt_path = Path(tmp) / "receipt.json"
-        output_path = Path(tmp) / "DigitalESDERICStudyExecutionObserved.agda"
-        receipt = _make_receipt(overrides={
-            "observed_raw_occurrences": 99999,
-            "counts_match": False,
-        })
-        with open(receipt_path, "w") as fh:
-            json.dump(receipt, fh)
-        with pytest.raises(ValueError):
-            emit_agda(receipt_path, output_path)
-
-
 def test_count_mismatch_fails():
-    """Count mismatch → hard failure."""
-    with tempfile.TemporaryDirectory() as tmp:
-        receipt_path = Path(tmp) / "receipt.json"
-        output_path = Path(tmp) / "DigitalESDERICStudyExecutionObserved.agda"
-        receipt = _make_receipt(overrides={
-            "observed_raw_occurrences": 99999,
-            "counts_match": False,
-        })
-        with open(receipt_path, "w") as fh:
-            json.dump(receipt, fh)
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        receipt, _ = _make_receipt(
+            tmp,
+            {
+                "observed_raw_occurrences": 99999,
+                "counts_match": False,
+            },
+        )
         with pytest.raises(ValueError):
-            emit_agda(receipt_path, output_path)
+            emit_agda(_write_receipt(tmp, receipt), tmp / "out.agda")
 
 
 def test_non_promotion_violation_fails():
-    """Non-promotion boolean violation → hard failure."""
-    with tempfile.TemporaryDirectory() as tmp:
-        receipt_path = Path(tmp) / "receipt.json"
-        output_path = Path(tmp) / "DigitalESDERICStudyExecutionObserved.agda"
-        receipt = _make_receipt(overrides={
-            "creates_screening_decision": True,
-        })
-        with open(receipt_path, "w") as fh:
-            json.dump(receipt, fh)
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        receipt, _ = _make_receipt(tmp, {"creates_screening_decision": True})
         with pytest.raises(ValueError):
-            emit_agda(receipt_path, output_path)
+            emit_agda(_write_receipt(tmp, receipt), tmp / "out.agda")
 
 
 def test_full_text_stop_violation_fails():
-    """Full-text stop boundary violation → hard failure."""
-    with tempfile.TemporaryDirectory() as tmp:
-        receipt_path = Path(tmp) / "receipt.json"
-        output_path = Path(tmp) / "DigitalESDERICStudyExecutionObserved.agda"
-        receipt = _make_receipt(overrides={
-            "full_text_stop": False,
-        })
-        with open(receipt_path, "w") as fh:
-            json.dump(receipt, fh)
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        receipt, _ = _make_receipt(tmp, {"full_text_stop": False})
         with pytest.raises(ValueError):
-            emit_agda(receipt_path, output_path)
+            emit_agda(_write_receipt(tmp, receipt), tmp / "out.agda")
 
 
 def test_real_eric_flag_violation_fails():
-    """Real ERIC flag violation → hard failure."""
-    with tempfile.TemporaryDirectory() as tmp:
-        receipt_path = Path(tmp) / "receipt.json"
-        output_path = Path(tmp) / "DigitalESDERICStudyExecutionObserved.agda"
-        receipt = _make_receipt(overrides={
-            "real_eric": False,
-        })
-        with open(receipt_path, "w") as fh:
-            json.dump(receipt, fh)
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        receipt, _ = _make_receipt(tmp, {"real_eric": False})
         with pytest.raises(ValueError):
-            emit_agda(receipt_path, output_path)
+            emit_agda(_write_receipt(tmp, receipt), tmp / "out.agda")
 
 
-def test_artifact_drift_after_receipt():
-    """Artifact drift after receipt → hard failure."""
-    with tempfile.TemporaryDirectory() as tmp:
-        receipt_path = Path(tmp) / "receipt.json"
-        output_path = Path(tmp) / "DigitalESDERICStudyExecutionObserved.agda"
-        receipt = _make_receipt()
-        with open(receipt_path, "w") as fh:
-            json.dump(receipt, fh)
-        # First call should succeed
-        emit_agda(receipt_path, output_path)
-        assert output_path.exists()
-        # Now simulate artifact drift by changing the receipt
-        drift_receipt = _make_receipt(overrides={
-            "observed_raw_occurrences": 99999,
-        })
-        with open(receipt_path, "w") as fh:
-            json.dump(drift_receipt, fh)
+def test_missing_artifact_fails_closed():
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        receipt, artifacts = _make_receipt(tmp)
+        artifacts["screening_ledger"].unlink()
         with pytest.raises(ValueError):
-            emit_agda(receipt_path, output_path)
+            emit_agda(_write_receipt(tmp, receipt), tmp / "out.agda")
+
+
+def test_artifact_drift_after_receipt_fails_closed():
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        receipt, artifacts = _make_receipt(tmp)
+        receipt_path = _write_receipt(tmp, receipt)
+
+        # Receipt is valid before drift.
+        emit_agda(receipt_path, tmp / "before.agda")
+
+        # Mutate an exact bound artifact after the receipt.
+        artifacts["pareto_queue"].write_text("drifted\n", encoding="utf-8")
+
+        with pytest.raises(ValueError):
+            emit_agda(receipt_path, tmp / "after.agda")
+
+
+def test_path_hash_key_mismatch_fails_closed():
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        receipt, _ = _make_receipt(tmp)
+        receipt["artifact_paths"].pop("parser_manifest")
+        with pytest.raises(ValueError):
+            emit_agda(_write_receipt(tmp, receipt), tmp / "out.agda")
