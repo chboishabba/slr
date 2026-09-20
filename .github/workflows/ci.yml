@@ -48,6 +48,13 @@ jobs:
           test -s /tmp/legal-runtime-capstone/waltons.estoppel-follow-trace.txt
           grep -q 'capability.*m2_5=true.*m3_a=true.*m3_b=true.*m3_c=true.*m3_c_replay=true.*m4_a=true.*m6=true.*m6_reverse=true.*m7=true.*m7_identity=true.*s8=true.*s8_reducer=true.*s8_reader=true.*s8_unseen_contract=true.*s8_contract_follow=true.*candidate_only=true.*semantic_authority=false' /tmp/legal-runtime-capstone/capability-report.tsv
 
+      - name: Native LegalFollow CLI smoke
+        run: |
+          rm -rf /tmp/waltons-native-cli
+          cargo run -p sensiblaw-cli --bin sensiblaw -- legal-follow waltons --base /tmp/waltons-native-cli status
+          cargo test -p sensiblaw-governed-legal-provider
+          cargo test -p sensiblaw-cli
+
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
 
@@ -76,3 +83,12 @@ jobs:
           scripts/verify_proof_search_scheduler_contract.py
           scripts/verify_proof_search_loop_contract.py
           scripts/verify_offline_research_engine_contract.py
+          scripts/waltons_pipeline.py
+          scripts/waltons_review_decision_template.py
+          scripts/waltons_review_decision_finalize.py
+          scripts/waltons_cited_by_import.py
+          scripts/waltons_cited_by_oalc_worklist.py
+          scripts/merge_treatment_review_queues.py
+          scripts/citation_treatment_review_template.py
+          scripts/citation_treatment_review_finalize.py
+          script/stream_oalc_exact_record.py
