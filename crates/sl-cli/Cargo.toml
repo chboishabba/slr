@@ -14,6 +14,7 @@ default = []
 live-network = ["sensiblaw-governed-legal-provider/live-network"]
 
 [dependencies]
+sensiblaw-legal-follow-plan = { path = "../sl-legal-follow-plan" }
 sensiblaw-governed-legal-provider = { path = "../sl-governed-legal-provider" }
 sensiblaw-legal-runtime = { path = "../sl-legal-runtime" }
 sensiblaw-proof-search-loop = { path = "../sl-proof-search-loop" }
