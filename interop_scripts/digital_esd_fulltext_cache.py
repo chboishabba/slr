@@ -131,14 +131,39 @@ class FullTextCacheWrapper:
 
         retained = [r for r in worklist if str(r.get("decision") or "") in ("include", "probable")]
 
-        by_ref: dict[str, dict[str, Any]] = {str(r.get("source_identity_reference") or ""): r for r in retained}
+        parsed_manifest = self.cache_dir.parent / "parsed-manifest.jsonl"
+        parsed_rows = jsonl(parsed_manifest) if parsed_manifest.exists() else []
+        parsed_refs = {
+            str(r.get("source_identity_reference") or "")
+            for r in parsed_rows
+            if str(r.get("source_identity_reference") or "")
+            and bool(r.get("verified", True))
+        }
+
+        retrieved_manifest = self.cache_dir.parent / "retrieved-manifest.jsonl"
+        retrieved_rows = jsonl(retrieved_manifest) if retrieved_manifest.exists() else []
+        retrieved_refs = {
+            str(r.get("source_identity_reference") or "")
+            for r in retrieved_rows
+            if str(r.get("source_identity_reference") or "")
+        }
+
+        by_ref: dict[str, dict[str, Any]] = {
+            str(r.get("source_identity_reference") or ""): r
+            for r in retained
+            if str(r.get("source_identity_reference") or "") not in parsed_refs
+        }
 
         priority_order: list[str] = []
         for item in priority:
             ref = str(item.get("source_identity_reference") or "")
             if ref in by_ref and ref not in priority_order:
                 priority_order.append(ref)
-        remaining = [r for r in retained if str(r.get("source_identity_reference") or "") not in priority_order]
+        remaining = [
+            r for r in retained
+            if str(r.get("source_identity_reference") or "") not in priority_order
+            and str(r.get("source_identity_reference") or "") not in parsed_refs
+        ]
         remaining.sort(key=lambda r: str(r.get("source_identity_reference") or ""))
         final_order = priority_order + [str(r.get("source_identity_reference") or "") for r in remaining]
 
@@ -160,6 +185,7 @@ class FullTextCacheWrapper:
                 "decision": str(item.get("decision") or ""),
                 "decision_reference": str(item.get("decision_reference") or ""),
                 "estimated_planning_size_bytes": self.planning_size_bytes,
+                "retrieved_cache_present": ref in retrieved_refs,
                 "cache_dir": str(self.cache_dir),
                 "candidate_path": str(self.cache_dir / f"{ref}.pdf"),
             })
@@ -172,6 +198,11 @@ class FullTextCacheWrapper:
             "reserve_gib": self.reserve_gib,
             "planning_size_mb": self.planning_size_mb,
             "retained_worklist_count": len(retained),
+            "already_parsed_count": len(parsed_refs & {
+                str(r.get("source_identity_reference") or "") for r in retained
+            }),
+            "remaining_unparsed_count": len(by_ref),
+            "already_retrieved_unparsed_count": len(retrieved_refs & set(by_ref)),
             "priority_queue_count": len(priority),
             "selected_count": len(batch),
             "estimated_total_bytes": estimated_bytes,
