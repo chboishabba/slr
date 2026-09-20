@@ -42,6 +42,9 @@ NOTES:
   * acquire/cited-by acquire require --features live-network at build time.
   * review prepare/finalize are human-review file surfaces; they do not make
     legal decisions automatically.
+  * Waltons s14-sync is the canonical typed Rust reviewed-hop path.
+  * contracts landscape expand --delta is a compatibility/import surface for
+    reviewed artifacts, not the semantic command ABI.
   * CitedBy provider results are discovery candidates only and must be
     re-acquired through OALC before treatment review.
 "
