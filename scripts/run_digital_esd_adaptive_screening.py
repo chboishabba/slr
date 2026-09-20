@@ -81,16 +81,21 @@ class DigitalESDAdaptiveScreening:
     def stage_p0a(self) -> dict[str, Any]:
         path = self._artifact("screening_ledger.tsv")
         rows = read_tsv(path)
-        unresolved = sum(1 for row in rows if row.get("decision") == "unresolved")
-        paid = bool(rows) and unresolved == len(rows)
+        allowed = {"include", "probable", "exclude", "unresolved"}
+        decision_counts = {
+            decision: sum(1 for row in rows if row.get("decision") == decision)
+            for decision in sorted(allowed)
+        }
+        valid = bool(rows) and all(row.get("decision") in allowed for row in rows)
         return self._stage(
             "P0-A",
-            "paid" if paid else "missing-or-mutated",
+            "paid" if valid else "missing-or-mutated",
             len(rows),
             path if path.exists() else None,
             {
-                "unresolved_count": unresolved,
-                "denominator_integrity": paid,
+                "decision_counts": decision_counts,
+                "denominator_integrity": valid,
+                "all_records_accounted_for": sum(decision_counts.values()) == len(rows),
             },
         )
 
