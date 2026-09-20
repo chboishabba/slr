@@ -6,7 +6,8 @@ use sensiblaw_governed_legal_provider::{
 use sensiblaw_proof_search_loop::contract_review_expansion::ContractReviewedHopResidual;
 use sensiblaw_legal_follow_plan::{
     australian_contract_landscape_seed, compile_australian_contract_landscape_worklist,
-    apply_contract_landscape_expansion, legal_follow_demand_for_trace_node, plan_legal_sources,
+    compile_contract_external_identity_worklist, apply_contract_landscape_expansion,
+    legal_follow_demand_for_trace_node, plan_legal_sources,
     AuthorityLevel, AustralianContractLandscapeWorklist, AustralianContractTrace,
     ContractDoctrine, ContractLandscapeExpansionDelta, ContractLandscapeWorkItem,
     ContractTraceEdge, ContractTraceNode, PlanState, SourceRole, TraceNodeKind, TreatmentKind,
@@ -95,6 +96,23 @@ fn plan_json(
         })
         .collect::<Vec<_>>();
 
+    let supplemental_identity = compile_contract_external_identity_worklist(trace)
+        .expect("validated contracts trace must compile supplemental identity work")
+        .into_iter()
+        .map(|item| {
+            json!({
+                "semantic_ref": item.semantic_ref,
+                "wikidata_qid_priority": format!("{:?}", item.wikidata_qid_priority),
+                "canonical_url_priority": format!("{:?}", item.canonical_url_priority),
+                "wikidata_qid_likelihood": format!("{:?}", item.wikidata_qid_likelihood),
+                "lookup_is_existence_claim": item.lookup_is_existence_claim,
+                "lookup_creates_legal_authority": item.lookup_creates_legal_authority,
+                "lookup_creates_applicability": item.lookup_creates_applicability,
+                "primary_source_precedes_identity_by_default": item.primary_source_precedes_identity_by_default,
+            })
+        })
+        .collect::<Vec<_>>();
+
     json!({
         "schema_version": "sl.australian_contract_landscape_worklist.v0_1",
         "root_ref": work.root_ref,
@@ -114,6 +132,14 @@ fn plan_json(
         "authority_treatment_review": work.treatment_items.iter().map(work_item_json).collect::<Vec<_>>(),
         "context_expansion": work.context_items.iter().map(work_item_json).collect::<Vec<_>>(),
         "temporal_alternatives": work.temporal_alternatives.iter().map(work_item_json).collect::<Vec<_>>(),
+        "supplemental_external_identity": {
+            "legal_frontier": false,
+            "optional": true,
+            "unresolved_is_negative_evidence": false,
+            "qid_creates_legal_authority": false,
+            "qid_creates_applicability": false,
+            "items": supplemental_identity,
+        },
     })
 }
 
@@ -917,6 +943,31 @@ mod tests {
             "case:fixture:reviewed-hop"
         );
         assert!(!deltas[0].creates_legal_authority);
+    }
+
+    #[test]
+    fn plan_exposes_qid_work_only_as_supplemental_identity_sidecar() {
+        let (_, output) = compile(&["--as-at".into(), "2026-09-20".into()]).unwrap();
+        assert_eq!(output["supplemental_external_identity"]["legal_frontier"], false);
+        assert_eq!(output["supplemental_external_identity"]["optional"], true);
+        assert_eq!(
+            output["supplemental_external_identity"]["unresolved_is_negative_evidence"],
+            false
+        );
+        assert_eq!(
+            output["supplemental_external_identity"]["qid_creates_legal_authority"],
+            false
+        );
+        let items = output["supplemental_external_identity"]["items"]
+            .as_array()
+            .unwrap();
+        let waltons = items
+            .iter()
+            .find(|item| item["semantic_ref"] == "case:au:hca:1988:7")
+            .unwrap();
+        assert_eq!(waltons["wikidata_qid_likelihood"], "High");
+        assert_eq!(waltons["lookup_is_existence_claim"], false);
+        assert_eq!(waltons["primary_source_precedes_identity_by_default"], true);
     }
 
     #[test]
