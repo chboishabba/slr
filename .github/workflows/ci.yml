@@ -63,26 +63,39 @@ jobs:
           grep -q 'legislation:qld:property-law-act-2023:s68' /tmp/contracts-landscape-qld.json
           cat > /tmp/contracts-expansion.json <<'JSON'
           {
-            "provenance_ref": "reviewed-hop:fixture:construction",
-            "nodes": [{
-              "semantic_ref": "case:fixture:construction",
-              "label": "fixture construction authority candidate",
-              "kind": "case-authority",
-              "doctrine": "construction",
-              "jurisdiction_ref": "AU",
-              "court_ref": "court:fixture",
-              "decision_or_effective_date": "2000-01-01",
-              "valid_from": null,
-              "valid_to": null,
-              "source_role": "primary-case-law",
-              "authority_level": "official",
-              "source_citation": "fixture:construction-primary-case"
+            "schema_version": "sl.australian_contracts.reviewed_hops.v0_1",
+            "delta_count": 1,
+            "residual_count": 0,
+            "candidate_only": true,
+            "creates_legal_authority": false,
+            "creates_current_law_conclusion": false,
+            "deltas": [{
+              "provenance_ref": "reviewed-hop:fixture:construction",
+              "candidate_only": true,
+              "creates_legal_authority": false,
+              "nodes": [{
+                "semantic_ref": "case:fixture:construction",
+                "label": "fixture construction authority candidate",
+                "kind": "case-authority",
+                "doctrine": "construction",
+                "jurisdiction_ref": "AU",
+                "court_ref": "court:fixture",
+                "decision_or_effective_date": "2000-01-01",
+                "valid_from": null,
+                "valid_to": null,
+                "source_role": "primary-case-law",
+                "authority_level": "official",
+                "source_citation": "fixture:construction-primary-case"
+              }],
+              "edges": [{
+                "from_ref": "landscape:au:contract-law",
+                "to_ref": "case:fixture:construction",
+                "treatment": "seeds",
+                "candidate_only": true,
+                "creates_legal_authority": false
+              }]
             }],
-            "edges": [{
-              "from_ref": "landscape:au:contract-law",
-              "to_ref": "case:fixture:construction",
-              "treatment": "seeds"
-            }]
+            "residuals": []
           }
           JSON
           cargo run -p sensiblaw-cli --bin sensiblaw -- legal-follow contracts landscape expand --delta /tmp/contracts-expansion.json --as-at 2026-09-20 --output /tmp/contracts-expanded.json
