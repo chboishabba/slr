@@ -78,6 +78,17 @@ pub enum CampaignFrontierClass {
     OutboundCitation,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CampaignOperatorGate {
+    PrimarySourceAcquisition,
+    AuthorityTreatmentReview,
+    ContextExpansion,
+    TemporalAlternative,
+    OutboundCitationAcquisition,
+    BudgetExhausted,
+    None,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FreshFrontierItem {
     pub frontier_ref: String,
@@ -89,6 +100,36 @@ pub struct FreshFrontierItem {
     pub candidate_only: bool,
     pub creates_legal_authority: bool,
     pub creates_current_law_conclusion: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CampaignNextStep {
+    pub gate: CampaignOperatorGate,
+    pub selected: Option<FreshFrontierItem>,
+    pub selector_is_legal_truth_rank: bool,
+    pub candidate_only: bool,
+    pub creates_legal_authority: bool,
+    pub creates_current_law_conclusion: bool,
+}
+
+fn frontier_priority(class: CampaignFrontierClass) -> u8 {
+    match class {
+        CampaignFrontierClass::PrimarySource => 0,
+        CampaignFrontierClass::TreatmentReview => 1,
+        CampaignFrontierClass::ContextExpansion => 2,
+        CampaignFrontierClass::TemporalAlternative => 3,
+        CampaignFrontierClass::OutboundCitation => 4,
+    }
+}
+
+pub fn select_fresh_frontier_item(items: &[FreshFrontierItem]) -> Option<FreshFrontierItem> {
+    let mut items = items.to_vec();
+    items.sort_by(|left, right| {
+        frontier_priority(left.class)
+            .cmp(&frontier_priority(right.class))
+            .then_with(|| left.frontier_ref.cmp(&right.frontier_ref))
+    });
+    items.into_iter().next()
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -474,6 +515,65 @@ impl ContractFollowCampaign {
         }));
     }
 
+    pub fn accept_batch(
+        &mut self,
+        source_ref: &str,
+        deltas: Vec<ContractLandscapeExpansionDelta>,
+        reviewed_residuals: Vec<Value>,
+    ) -> CampaignResult<Vec<CampaignHopReceipt>> {
+        for residual in reviewed_residuals {
+            self.preserve_reviewed_residual(source_ref, residual);
+        }
+        let start = self.hops.len();
+        for delta in deltas {
+            self.accept_delta(source_ref, delta)?;
+        }
+        Ok(self.hops[start..].to_vec())
+    }
+
+    pub fn next_fresh_step(&self) -> CampaignNextStep {
+        if self.hops.len() >= self.config.budget.max_accepted_hops {
+            return CampaignNextStep {
+                gate: CampaignOperatorGate::BudgetExhausted,
+                selected: None,
+                selector_is_legal_truth_rank: false,
+                candidate_only: true,
+                creates_legal_authority: false,
+                creates_current_law_conclusion: false,
+            };
+        }
+        let selected = self
+            .hops
+            .last()
+            .and_then(|hop| select_fresh_frontier_item(&hop.fresh_frontier));
+        let gate = match selected.as_ref().map(|item| item.class) {
+            Some(CampaignFrontierClass::PrimarySource) => {
+                CampaignOperatorGate::PrimarySourceAcquisition
+            }
+            Some(CampaignFrontierClass::TreatmentReview) => {
+                CampaignOperatorGate::AuthorityTreatmentReview
+            }
+            Some(CampaignFrontierClass::ContextExpansion) => {
+                CampaignOperatorGate::ContextExpansion
+            }
+            Some(CampaignFrontierClass::TemporalAlternative) => {
+                CampaignOperatorGate::TemporalAlternative
+            }
+            Some(CampaignFrontierClass::OutboundCitation) => {
+                CampaignOperatorGate::OutboundCitationAcquisition
+            }
+            None => CampaignOperatorGate::None,
+        };
+        CampaignNextStep {
+            gate,
+            selected,
+            selector_is_legal_truth_rank: false,
+            candidate_only: true,
+            creates_legal_authority: false,
+            creates_current_law_conclusion: false,
+        }
+    }
+
     pub fn record_source_acquisition(
         &mut self,
         network_requests: u64,
@@ -505,6 +605,7 @@ impl ContractFollowCampaign {
             "reviewed_residual_count": self.reviewed_residuals.len(),
             "reviewed_residuals": self.reviewed_residuals,
             "trajectory": self.hops,
+            "next_fresh_step": self.next_fresh_step(),
             "final_trace": snapshot_trace(&self.trace),
             "final_frontier_counts": {
                 "primary_source_acquisition": work.source_items.len(),
