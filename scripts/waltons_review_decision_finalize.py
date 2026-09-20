@@ -1,54 +1,23 @@
 #!/usr/bin/env python3
-"""Validate an edited Waltons review worksheet and emit compiler decisions."""
+"""Deprecated compatibility shim for native Waltons review finalization."""
 from __future__ import annotations
-import argparse, json
+import argparse, shutil, subprocess
 from pathlib import Path
 
-ALLOWED = {"Supports", "Contests", "ContextOnly"}
+ROOT=Path(__file__).resolve().parents[1]
 
-def main() -> int:
-    p = argparse.ArgumentParser()
+def main()->int:
+    p=argparse.ArgumentParser()
     p.add_argument("worksheet")
-    p.add_argument("output", nargs="?", default="waltons-reviewed-decisions.json")
-    args = p.parse_args()
-    sheet = json.loads(Path(args.worksheet).read_text())
-    if sheet.get("schema_version") != "sl.waltons.review_worksheet.v0_1":
-        raise SystemExit("unsupported Waltons worksheet schema")
-
-    decisions = []
-    for idx, row in enumerate(sheet.get("rows", []), start=1):
-        if not row.get("include"):
-            continue
-        disposition = row.get("disposition")
-        reviewer = (row.get("reviewer_ref") or "").strip()
-        evidence = [x for x in row.get("review_evidence_refs", []) if str(x).strip()]
-        if disposition not in ALLOWED:
-            raise SystemExit(f"row {idx}: disposition must be one of {sorted(ALLOWED)}")
-        if not reviewer:
-            raise SystemExit(f"row {idx}: reviewer_ref required")
-        if not evidence:
-            raise SystemExit(f"row {idx}: at least one review_evidence_ref required")
-        for field in ("paragraph_locator_ref", "source_revision_ref", "canonical_text_sha256", "role"):
-            if not row.get(field):
-                raise SystemExit(f"row {idx}: missing {field}")
-        decisions.append({
-            "paragraph_locator_ref": row["paragraph_locator_ref"],
-            "source_revision_ref": row["source_revision_ref"],
-            "canonical_text_sha256": row["canonical_text_sha256"],
-            "role": row["role"],
-            "disposition": disposition,
-            "reviewer_ref": reviewer,
-            "review_evidence_refs": evidence,
-        })
-
-    out = {
-        "schema_version": "sl.waltons.review_decisions.v0_1",
-        "worksheet": str(args.worksheet),
-        "decisions": decisions,
-    }
-    Path(args.output).write_text(json.dumps(out, indent=2) + "\n")
-    print(f"waltons_review_decisions={args.output} included={len(decisions)}")
+    p.add_argument("output",nargs="?")
+    a=p.parse_args()
+    base=Path(a.worksheet).resolve().parent
+    cmd=["cargo","run","-p","sensiblaw-cli","--bin","sensiblaw","--","legal-follow","waltons","--base",str(base),"review","finalize"]
+    rc=subprocess.run(cmd,cwd=ROOT,check=False).returncode
+    if rc: return rc
+    canonical=base/"waltons-reviewed-decisions.json"
+    if a.output and Path(a.output).resolve()!=canonical.resolve():
+        shutil.copy2(canonical,a.output)
     return 0
-
-if __name__ == "__main__":
+if __name__=="__main__":
     raise SystemExit(main())
