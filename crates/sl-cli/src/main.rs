@@ -1,4 +1,6 @@
+mod contract_follow_campaign;
 mod contract_identity;
+mod contract_treatment;
 mod contracts;
 mod cullen;
 mod oalc;
@@ -20,6 +22,7 @@ USAGE:
   sensiblaw legal-follow cullen pnf --operator-opt-in [--output-dir PATH] [--spacy-model MODEL]
   sensiblaw legal-follow contracts landscape <plan|status|expand|acquire> [--as-at YYYY-MM-DD] [--jurisdiction AU-QLD]
   sensiblaw legal-follow contracts landscape adaptive-fixture [--output PATH]
+  sensiblaw legal-follow contracts campaign <discover|acquire-next|identity-prepare|identity-reviewed|treatment-prepare|treatment-reviewed> ...
   sensiblaw legal-follow oalc stream-pinned --revision SHA --citation TEXT [options]
   sensiblaw legal-follow waltons [--base PATH] status
   sensiblaw legal-follow waltons [--base PATH] acquire
@@ -193,6 +196,11 @@ fn run() -> Result<(), String> {
                 && command == "adaptive-fixture" =>
         {
             s14_adaptive_fixture::run(rest.to_vec())
+        }
+        [domain, matter, scope, rest @ ..]
+            if domain == "legal-follow" && matter == "contracts" && scope == "campaign" =>
+        {
+            contract_follow_campaign::run(rest.to_vec())
         }
         [domain, matter, rest @ ..] if domain == "legal-follow" && matter == "contracts" => {
             contracts::run(rest.to_vec())
