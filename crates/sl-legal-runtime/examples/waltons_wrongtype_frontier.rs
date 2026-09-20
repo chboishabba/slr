@@ -95,6 +95,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         })
         .collect::<Vec<_>>();
 
+    let reviewed_but_unpaid = reviewed
+        .iter()
+        .filter(|receipt| receipt.payment_receipt.is_none())
+        .map(|receipt| {
+            json!({
+                "role": format!("{:?}", receipt.role),
+                "proposition_ref": receipt.proposition_ref.clone(),
+                "paragraph_locator_ref": receipt.paragraph_locator_ref.clone(),
+                "source_revision_ref": receipt.source_revision_ref.clone(),
+                "disposition": format!("{:?}", receipt.disposition),
+                "review_ref": receipt.review_ref.clone(),
+                "observation_ref": receipt.observation_ref.clone(),
+                "evidence_coordinate_paid": false,
+            })
+        })
+        .collect::<Vec<_>>();
+
     let output = json!({
         "schema_version": "sl.waltons.wrongtype_frontier.v0_1",
         "wrong_type_ref": issue.wrong_type_ref,
@@ -105,6 +122,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "violation_promoted": issue.violation_promoted,
         "liability_promoted": issue.liability_promoted,
         "elements": elements,
+        "reviewed_but_unpaid": reviewed_but_unpaid,
     });
     if let Some(parent) = output_path.parent() {
         fs::create_dir_all(parent)?;
