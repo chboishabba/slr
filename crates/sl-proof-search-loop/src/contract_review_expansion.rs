@@ -6,6 +6,7 @@
 //! review into positive doctrine.
 
 use serde::Serialize;
+use std::collections::BTreeMap;
 use sensiblaw_governed_legal_provider::OalcResolvedSourceReceipt;
 use sensiblaw_legal_follow_plan::{
     AuthorityLevel, AustralianContractTrace, ContractDoctrine, ContractLandscapeExpansionDelta,
@@ -338,17 +339,37 @@ pub fn compile_treatment_receipts_to_contract_hops(
     trace: &AustralianContractTrace,
     receipts: &[ReviewedCitationReviewUnitReceipt],
 ) -> ContractReviewedHopCompilation {
+    compile_treatment_receipts_to_contract_hops_with_aliases(
+        trace,
+        receipts,
+        &BTreeMap::new(),
+    )
+}
+
+pub fn compile_treatment_receipts_to_contract_hops_with_aliases(
+    trace: &AustralianContractTrace,
+    receipts: &[ReviewedCitationReviewUnitReceipt],
+    reviewed_document_aliases: &BTreeMap<String, String>,
+) -> ContractReviewedHopCompilation {
     let mut deltas = Vec::new();
     let mut residuals = Vec::new();
 
     for receipt in receipts {
         let edge = &receipt.edge;
+        let citing_document_ref = reviewed_document_aliases
+            .get(&edge.citing_document_ref)
+            .cloned()
+            .unwrap_or_else(|| edge.citing_document_ref.clone());
+        let cited_document_ref = reviewed_document_aliases
+            .get(&edge.cited_document_ref)
+            .cloned()
+            .unwrap_or_else(|| edge.cited_document_ref.clone());
         if !edge.reviewed || !edge.candidate_only {
             residuals.push(residual(
                 ContractReviewedHopResidualKind::ReceiptPromotedAuthority,
                 &receipt.review_unit_ref,
-                Some(edge.citing_document_ref.clone()),
-                Some(edge.cited_document_ref.clone()),
+                Some(citing_document_ref.clone()),
+                Some(cited_document_ref.clone()),
                 &receipt.reviewer_ref,
             ));
             continue;
@@ -357,20 +378,20 @@ pub fn compile_treatment_receipts_to_contract_hops(
             residuals.push(residual(
                 ContractReviewedHopResidualKind::UnsupportedCitationUse,
                 &receipt.review_unit_ref,
-                Some(edge.citing_document_ref.clone()),
-                Some(edge.cited_document_ref.clone()),
+                Some(citing_document_ref.clone()),
+                Some(cited_document_ref.clone()),
                 &receipt.reviewer_ref,
             ));
             continue;
         };
-        if !trace.nodes.contains_key(&edge.citing_document_ref)
-            || !trace.nodes.contains_key(&edge.cited_document_ref)
+        if !trace.nodes.contains_key(&citing_document_ref)
+            || !trace.nodes.contains_key(&cited_document_ref)
         {
             residuals.push(residual(
                 ContractReviewedHopResidualKind::MissingTreatmentIdentity,
                 &receipt.review_unit_ref,
-                Some(edge.citing_document_ref.clone()),
-                Some(edge.cited_document_ref.clone()),
+                Some(citing_document_ref.clone()),
+                Some(cited_document_ref.clone()),
                 &receipt.reviewer_ref,
             ));
             continue;
@@ -379,8 +400,8 @@ pub fn compile_treatment_receipts_to_contract_hops(
         deltas.push(ContractLandscapeExpansionDelta {
             discovered_nodes: Vec::new(),
             discovered_edges: vec![ContractTraceEdge {
-                from_ref: edge.citing_document_ref.clone(),
-                to_ref: edge.cited_document_ref.clone(),
+                from_ref: citing_document_ref,
+                to_ref: cited_document_ref,
                 treatment,
                 candidate_only: true,
                 creates_legal_authority: false,
