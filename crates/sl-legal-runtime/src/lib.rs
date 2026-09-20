@@ -2121,6 +2121,29 @@ mod tests {
             AustralianCalibrationKind::Glj,
         ] {
             assert!(!calibration_refs(kind).is_empty());
+            let capstone = build_australian_calibration_capstone(kind).unwrap();
+            assert_eq!(capstone.kind, kind);
+            assert_eq!(capstone.campaign.hops.len(), 1);
+            capstone.campaign.validate_restart_replay().unwrap();
+            let last = capstone.campaign.hops.last().unwrap();
+            let workspace =
+                project_matter_issue_workspace(format!("matter:{kind:?}"), &capstone.issue, last);
+            assert!(workspace.projection_only);
+            assert!(!workspace.creates_semantic_authority);
         }
+    }
+
+    #[test]
+    fn capability_receipt_closes_m2_5_through_m4_a_without_promotion() {
+        let receipt = compile_capability_receipt().unwrap();
+        assert!(receipt.m2_5_mixed_family_replay);
+        assert!(receipt.m3_a_reviewed_world_to_wrong_type);
+        assert!(receipt.m3_b_source_realised_evaluator);
+        assert!(receipt.m3_c_all_calibrations_one_runner);
+        assert!(receipt.m3_c_restart_replay);
+        assert!(receipt.m4_a_matter_issue_projection);
+        assert!(receipt.candidate_only);
+        assert!(!receipt.creates_semantic_authority);
+        assert!(receipt.receipt_digest.starts_with("sha256:"));
     }
 }
