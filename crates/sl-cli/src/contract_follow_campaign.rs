@@ -83,6 +83,7 @@ pub enum CampaignFrontierClass {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CampaignOperatorGate {
     PrimarySourceAcquisition,
+    AuthorityIdentityReview,
     AuthorityTreatmentReview,
     ContextExpansion,
     TemporalAlternative,
@@ -968,6 +969,37 @@ fn config_from_trajectory(path: &Path) -> CampaignResult<CampaignConfig> {
     })
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct PendingRecursiveReview {
+    discovery_source_receipt: String,
+    source_semantic_ref: String,
+    target_source_receipt: String,
+    target_medium_neutral_citation: String,
+    target_semantic_ref: Option<String>,
+}
+
+fn pending_review_from_trajectory(path: &Path) -> CampaignResult<PendingRecursiveReview> {
+    let value = read_campaign_receipt(path)?;
+    serde_json::from_value(
+        value
+            .get("pending_recursive_review")
+            .cloned()
+            .ok_or_else(|| format!("{} has no pending_recursive_review", path.display()))?,
+    )
+    .map_err(|error| format!("decode pending recursive review from {}: {error}", path.display()))
+}
+
+fn campaign_step(gate: CampaignOperatorGate) -> CampaignNextStep {
+    CampaignNextStep {
+        gate,
+        selected: None,
+        selector_is_legal_truth_rank: false,
+        candidate_only: true,
+        creates_legal_authority: false,
+        creates_current_law_conclusion: false,
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct OutboundFrontierEnvelope {
     schema_version: String,
@@ -1062,9 +1094,32 @@ pub fn run(args: Vec<String>) -> CampaignResult<()> {
                 .ok_or_else(|| "outbound frontier has no selected candidate".to_string())?;
             let receipt = acquire_outbound_citation(&selected, output_dir.clone(), &as_at)?;
             campaign.record_source_acquisition(receipt.network_requests)?;
+            let target_source_receipt = output_dir.join("oalc-source-receipt.json");
+            let identity_worksheet =
+                output_dir.join("authority-identity-review-worksheet.json");
+            crate::contract_identity::prepare(
+                &[target_source_receipt.clone()],
+                &identity_worksheet,
+            )?;
+            let pending = PendingRecursiveReview {
+                discovery_source_receipt: envelope.source_receipt_path.clone(),
+                source_semantic_ref: envelope.source_semantic_ref.clone(),
+                target_source_receipt: target_source_receipt.display().to_string(),
+                target_medium_neutral_citation: selected.medium_neutral_citation.clone(),
+                target_semantic_ref: None,
+            };
+
             let mut next_campaign = campaign.receipt_json()?;
             next_campaign["parent_campaign_receipt"] =
                 json!(trajectory.display().to_string());
+            next_campaign["pending_recursive_review"] =
+                serde_json::to_value(&pending)
+                    .map_err(|error| format!("encode pending recursive review: {error}"))?;
+            next_campaign["identity_review_worksheet"] =
+                json!(identity_worksheet.display().to_string());
+            next_campaign["next_operator_gate"] =
+                serde_json::to_value(campaign_step(CampaignOperatorGate::AuthorityIdentityReview))
+                    .map_err(|error| format!("encode identity operator gate: {error}"))?;
             next_campaign["continuation_only"] = json!(true);
             next_campaign["last_action"] = json!("governed_source_acquisition");
             next_campaign["last_acquired_medium_neutral_citation"] =
@@ -1078,6 +1133,7 @@ pub fn run(args: Vec<String>) -> CampaignResult<()> {
                 "selected_medium_neutral_citation": selected.medium_neutral_citation,
                 "source_receipt": output_dir.join("oalc-source-receipt.json"),
                 "next_campaign_receipt": next_campaign_path,
+                "identity_review_worksheet": identity_worksheet,
                 "version_id": receipt.version_id,
                 "corpus_revision_ref": receipt.corpus_revision_ref,
                 "network_requests": receipt.network_requests,
@@ -1128,10 +1184,56 @@ pub fn run(args: Vec<String>) -> CampaignResult<()> {
             for delta in compiled.compilation.deltas {
                 campaign.accept_delta(&decisions.display().to_string(), delta)?;
             }
+
+            let pending = pending_review_from_trajectory(&trajectory)?;
+            let identity_decisions: crate::contract_identity::AuthorityIdentityDecisionFile = {
+                let bytes = fs::read(&decisions)
+                    .map_err(|error| format!("read {}: {error}", decisions.display()))?;
+                serde_json::from_slice(&bytes)
+                    .map_err(|error| format!("decode {}: {error}", decisions.display()))?
+            };
+            if identity_decisions.decisions.len() != 1 {
+                return Err(format!(
+                    "recursive identity gate requires exactly one reviewed authority, got {}",
+                    identity_decisions.decisions.len()
+                ));
+            }
+            let target_semantic_ref =
+                identity_decisions.decisions[0].semantic_ref.clone();
+            let review_dir = output.parent().unwrap_or_else(|| Path::new("."));
+            let treatment_queue = review_dir.join("recursive-treatment-queue.json");
+            let treatment_worksheet =
+                review_dir.join("recursive-treatment-review-worksheet.json");
+            crate::contract_treatment::prepare_exact_treatment_queue(
+                Path::new(&pending.discovery_source_receipt),
+                &pending.source_semantic_ref,
+                &pending.target_medium_neutral_citation,
+                &target_semantic_ref,
+                &treatment_queue,
+            )?;
+            crate::contract_treatment::prepare_treatment_worksheet(
+                &treatment_queue,
+                &treatment_worksheet,
+            )?;
+
+            let pending = PendingRecursiveReview {
+                target_semantic_ref: Some(target_semantic_ref),
+                ..pending
+            };
             let mut receipt = campaign.receipt_json()?;
             receipt["parent_campaign_receipt"] =
                 json!(trajectory.display().to_string());
             receipt["continuation_only"] = json!(true);
+            receipt["pending_recursive_review"] =
+                serde_json::to_value(&pending)
+                    .map_err(|error| format!("encode pending recursive review: {error}"))?;
+            receipt["treatment_queue"] =
+                json!(treatment_queue.display().to_string());
+            receipt["treatment_review_worksheet"] =
+                json!(treatment_worksheet.display().to_string());
+            receipt["next_operator_gate"] =
+                serde_json::to_value(campaign_step(CampaignOperatorGate::AuthorityTreatmentReview))
+                    .map_err(|error| format!("encode treatment operator gate: {error}"))?;
             write_json(&output, &receipt)?;
             println!(
                 "contract_follow_identity_continuation={} hops={} residuals={} authority=false",
@@ -1166,8 +1268,15 @@ pub fn run(args: Vec<String>) -> CampaignResult<()> {
         }
         [command, rest @ ..] if command == "treatment-reviewed" => {
             let trajectory = PathBuf::from(required_arg(rest, "--trajectory")?);
-            let queue = PathBuf::from(required_arg(rest, "--queue")?);
-            let worksheet = PathBuf::from(required_arg(rest, "--worksheet")?);
+            let trajectory_value = read_campaign_receipt(&trajectory)?;
+            let queue = arg_value(rest, "--queue")
+                .map(PathBuf::from)
+                .or_else(|| trajectory_value.get("treatment_queue").and_then(Value::as_str).map(PathBuf::from))
+                .ok_or_else(|| "treatment-reviewed requires --queue or trajectory treatment_queue".to_string())?;
+            let worksheet = arg_value(rest, "--worksheet")
+                .map(PathBuf::from)
+                .or_else(|| trajectory_value.get("treatment_review_worksheet").and_then(Value::as_str).map(PathBuf::from))
+                .ok_or_else(|| "treatment-reviewed requires --worksheet or trajectory treatment_review_worksheet".to_string())?;
             let decisions = PathBuf::from(required_arg(rest, "--decisions")?);
             let output = PathBuf::from(required_arg(rest, "--output")?);
             crate::contract_treatment::finalize_treatment_review(&worksheet, &decisions)?;
@@ -1186,11 +1295,61 @@ pub fn run(args: Vec<String>) -> CampaignResult<()> {
             for delta in compiled.compilation.deltas {
                 campaign.accept_delta(&decisions.display().to_string(), delta)?;
             }
+
+            let pending = pending_review_from_trajectory(&trajectory)?;
+            let target_semantic_ref = pending
+                .target_semantic_ref
+                .clone()
+                .ok_or_else(|| "treatment parent is missing reviewed target semantic identity".to_string())?;
+            let (_, target_materialization) = materialize_retained_oalc_receipt(
+                Path::new(&pending.target_source_receipt),
+            )?;
+            let next_residuals = discover_outbound_citation_residuals(
+                campaign.trace(),
+                &target_semantic_ref,
+                &target_materialization,
+            );
+            let next_selected = select_fresh_outbound_citation(&next_residuals).cloned();
+            let next_frontier = OutboundFrontierEnvelope {
+                schema_version: "sl.contract_follow.outbound_frontier.v0_2".into(),
+                parent_campaign_receipt: output.display().to_string(),
+                source_receipt_path: pending.target_source_receipt.clone(),
+                source_semantic_ref: target_semantic_ref,
+                residual_count: next_residuals.len(),
+                selected: next_selected,
+                residuals: next_residuals,
+                selector_is_legal_truth_rank: false,
+                budget: campaign.config.budget.clone(),
+                accepted_hop_count: campaign.accepted_hop_count(),
+                source_acquisition_count: campaign.source_acquisitions,
+                network_request_count: campaign.network_requests,
+                candidate_only: true,
+                creates_legal_authority: false,
+                creates_current_law_conclusion: false,
+            };
+            let next_frontier_path = output
+                .parent()
+                .unwrap_or_else(|| Path::new("."))
+                .join("next-outbound-frontier.json");
+
             let mut receipt = campaign.receipt_json()?;
             receipt["parent_campaign_receipt"] =
                 json!(trajectory.display().to_string());
             receipt["continuation_only"] = json!(true);
+            receipt["pending_recursive_review"] = Value::Null;
+            receipt["next_outbound_frontier"] =
+                json!(next_frontier_path.display().to_string());
+            receipt["next_operator_gate"] =
+                serde_json::to_value(
+                    if next_frontier.selected.is_some() {
+                        campaign_step(CampaignOperatorGate::OutboundCitationAcquisition)
+                    } else {
+                        campaign_step(CampaignOperatorGate::None)
+                    }
+                )
+                .map_err(|error| format!("encode next operator gate: {error}"))?;
             write_json(&output, &receipt)?;
+            write_json(&next_frontier_path, &next_frontier)?;
             println!(
                 "contract_follow_treatment_continuation={} hops={} residuals={} authority=false current_law_conclusion=false",
                 output.display(),
@@ -1200,7 +1359,7 @@ pub fn run(args: Vec<String>) -> CampaignResult<()> {
             Ok(())
         }
         _ => Err(
-            "usage: sensiblaw legal-follow contracts campaign <discover|acquire-next|identity-prepare|identity-reviewed|treatment-prepare|treatment-reviewed> ..."
+            "usage: sensiblaw legal-follow contracts campaign <discover|acquire-next|identity-prepare|identity-reviewed|treatment-prepare|treatment-reviewed> ...; acquire-next prepares identity review, identity-reviewed prepares treatment review, treatment-reviewed emits next outbound frontier"
                 .into(),
         ),
     }
