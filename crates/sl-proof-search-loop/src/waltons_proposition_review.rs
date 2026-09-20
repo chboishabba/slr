@@ -5,6 +5,7 @@
 //! substrate. Paying the evidence-coordinate obligation does not promote claim
 //! truth, applicability, or semantic/legal authority.
 
+use serde::{Deserialize, Serialize};
 use sensiblaw_consumer_residual::{
     ConsumerRequirement, ConsumerSpec, EvidenceCoordinateKind, RequirementNeed, RequirementScope,
 };
@@ -18,7 +19,7 @@ use crate::oalc_judgment_materialization::{
     JudgmentParagraphCandidate, OalcJudgmentMaterialisation,
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum EstoppelRequirementRole {
     AssumptionOrExpectation,
     Reliance,
@@ -46,14 +47,14 @@ impl EstoppelRequirementRole {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum PropositionEvidenceDisposition {
     Supports,
     Contests,
     ContextOnly,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReviewedWaltonsParagraphDecision {
     pub paragraph_locator_ref: String,
     pub source_revision_ref: String,
