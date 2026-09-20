@@ -9,6 +9,10 @@ rust-version.workspace = true
 name = "sensiblaw"
 path = "src/main.rs"
 
+[features]
+default = []
+live-network = ["sensiblaw-governed-legal-provider/live-network"]
+
 [dependencies]
 sensiblaw-governed-legal-provider = { path = "../sl-governed-legal-provider" }
 sensiblaw-legal-runtime = { path = "../sl-legal-runtime" }
