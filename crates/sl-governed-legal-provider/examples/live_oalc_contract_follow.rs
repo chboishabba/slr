@@ -313,7 +313,7 @@ mod live {
             temporal_coverage: OalcTemporalCoverage::DecisionDateAnchored,
             resolution_path: resolution_path.into(),
             network_requests: provider.requests,
-            receipt_authority: OALC_RECEIPT_AUTHORITY,
+            receipt_authority: OALC_RECEIPT_AUTHORITY.into(),
             candidate_only: true,
             creates_legal_authority: false,
             creates_claim_truth: false,
