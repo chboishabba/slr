@@ -885,6 +885,7 @@ pub fn evaluate_source_realised_rule(
     }
 
     let mut unresolved = Vec::new();
+    let mut applicability_unresolved = Vec::new();
     let mut premise_failed = false;
     let mut premise_contested = false;
     for premise in &rule.premise_refs {
@@ -892,7 +893,10 @@ pub fn evaluate_source_realised_rule(
             PropositionStatus::Established => {}
             PropositionStatus::Failed => premise_failed = true,
             PropositionStatus::Contested => premise_contested = true,
-            PropositionStatus::Unresolved => unresolved.push(premise.clone()),
+            PropositionStatus::Unresolved => {
+                unresolved.push(premise.clone());
+                applicability_unresolved.push(premise.clone());
+            },
         }
     }
 
@@ -918,6 +922,7 @@ pub fn evaluate_source_realised_rule(
     for reference in rule.exception_refs.iter().chain(rule.defeater_refs.iter()) {
         if proposition_status(context, reference) == PropositionStatus::Unresolved {
             unresolved.push(reference.clone());
+            applicability_unresolved.push(reference.clone());
         }
     }
     for burden in &rule.burden_refs {
@@ -930,7 +935,7 @@ pub fn evaluate_source_realised_rule(
         ApplicabilityStatus::NotApplicable
     } else if premise_contested || exception_contested || defeater_contested {
         ApplicabilityStatus::Contested
-    } else if !unresolved.is_empty() {
+    } else if !applicability_unresolved.is_empty() {
         ApplicabilityStatus::Unresolved
     } else {
         ApplicabilityStatus::Applicable
@@ -2159,6 +2164,53 @@ mod tests {
         assert_eq!(reopened.liability, LiabilityStatus::NotEstablished);
         assert_eq!(reopened.remedy, RemedyStatus::NotEligible);
         assert_eq!(reopened.live_exception_refs, vec!["prop:exception"]);
+    }
+
+    #[test]
+    fn unresolved_burden_does_not_leak_backward_into_applicability() {
+        let evidence = reviewed_text("obs:generic", "matter:rev1", "span:generic");
+        let issue = project_reviewed_world_to_wrong_type(
+            &negligence_bundle(),
+            &[
+                (&evidence, "element:duty", EvidenceDisposition::Supports),
+                (&evidence, "element:breach", EvidenceDisposition::Supports),
+                (&evidence, "element:causation", EvidenceDisposition::Supports),
+                (&evidence, "element:damage", EvidenceDisposition::Supports),
+            ],
+        )
+        .unwrap();
+        let mut propositions = BTreeMap::new();
+        for reference in ["prop:rule-enabled"] {
+            propositions.insert(
+                reference.into(),
+                PropositionState {
+                    proposition_ref: reference.into(),
+                    status: PropositionStatus::Established,
+                    source_refs: vec!["source:reviewed".into()],
+                },
+            );
+        }
+        for reference in ["prop:exception", "prop:defeater"] {
+            propositions.insert(
+                reference.into(),
+                PropositionState {
+                    proposition_ref: reference.into(),
+                    status: PropositionStatus::Failed,
+                    source_refs: vec!["source:reviewed".into()],
+                },
+            );
+        }
+        let context = LegalEvaluationContext {
+            jurisdiction_ref: "AU-NSW".into(),
+            as_at: "2026-09-20".into(),
+            propositions,
+            wrong_type: issue,
+        };
+        let evaluation = evaluate_source_realised_rule(&rule(), &context).unwrap();
+        assert_eq!(evaluation.applicability, ApplicabilityStatus::Applicable);
+        assert_eq!(evaluation.violation, ViolationStatus::Established);
+        assert_eq!(evaluation.liability, LiabilityStatus::Unresolved);
+        assert!(evaluation.unresolved_refs.contains(&"prop:burden-paid".into()));
     }
 
     #[test]
