@@ -1291,12 +1291,120 @@ impl LegalCampaignState {
     }
 
     pub fn replay_identity(&self) -> String {
+        let iteration = self.iteration.to_string();
         digest([
             self.campaign_ref.as_str(),
-            self.iteration.to_string().as_str(),
+            iteration.as_str(),
             self.evaluation.rule_ref.as_str(),
             self.receipt_head.as_str(),
         ])
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PersistedLegalCampaign {
+    pub campaign_ref: String,
+    pub hops: Vec<LegalCampaignState>,
+    pub receipt_head: String,
+    pub candidate_only: bool,
+    pub creates_claim_truth: bool,
+}
+
+impl PersistedLegalCampaign {
+    pub fn new(campaign_ref: impl Into<String>) -> Self {
+        let campaign_ref = campaign_ref.into();
+        let receipt_head = digest([
+            LEGAL_RUNTIME_VERSION,
+            "M3.C-campaign",
+            campaign_ref.as_str(),
+        ]);
+        Self {
+            campaign_ref,
+            hops: Vec::new(),
+            receipt_head,
+            candidate_only: true,
+            creates_claim_truth: false,
+        }
+    }
+
+    pub fn append(&mut self, state: LegalCampaignState) -> Result<(), LegalRuntimeError> {
+        if state.campaign_ref != self.campaign_ref {
+            return Err(LegalRuntimeError::ReplayIdentityMismatch);
+        }
+        if state.iteration != self.hops.len() as u64 {
+            return Err(LegalRuntimeError::ReplayFormat(
+                "campaign hop indexes must be consecutive".into(),
+            ));
+        }
+        let expected_previous = self.hops.last().map(|hop| hop.receipt_head.as_str());
+        if state.previous_receipt_head.as_deref() != expected_previous {
+            return Err(LegalRuntimeError::ReplayIdentityMismatch);
+        }
+        if !state.candidate_only || state.creates_claim_truth {
+            return Err(LegalRuntimeError::InvalidEvidence(
+                "legal campaign hop promoted claim truth".into(),
+            ));
+        }
+        self.receipt_head = state.receipt_head.clone();
+        self.hops.push(state);
+        Ok(())
+    }
+
+    pub fn encode(&self) -> String {
+        let mut lines = vec![format!(
+            "SLR-M3.C-LEDGER\t{}\t{}",
+            self.campaign_ref, self.receipt_head
+        )];
+        lines.extend(self.hops.iter().map(LegalCampaignState::encode));
+        lines.join("\n")
+    }
+
+    pub fn replay_summary(payload: &str) -> Result<(String, String, Vec<String>), LegalRuntimeError> {
+        let mut lines = payload.lines();
+        let header = lines
+            .next()
+            .ok_or_else(|| LegalRuntimeError::ReplayFormat("missing campaign header".into()))?;
+        let header_fields = header.split('\t').collect::<Vec<_>>();
+        if header_fields.len() != 3 || header_fields[0] != "SLR-M3.C-LEDGER" {
+            return Err(LegalRuntimeError::ReplayFormat("bad campaign header".into()));
+        }
+        let hop_lines = lines
+            .filter(|line| !line.trim().is_empty())
+            .map(ToOwned::to_owned)
+            .collect::<Vec<_>>();
+        if let Some(last) = hop_lines.last() {
+            let fields = last.split('\t').collect::<Vec<_>>();
+            if fields.len() != 13 || fields[0] != "SLR-M3.C" {
+                return Err(LegalRuntimeError::ReplayFormat(
+                    "bad persisted legal hop".into(),
+                ));
+            }
+            if fields[12] != header_fields[2] {
+                return Err(LegalRuntimeError::ReplayDigestMismatch);
+            }
+        }
+        Ok((
+            header_fields[1].to_owned(),
+            header_fields[2].to_owned(),
+            hop_lines,
+        ))
+    }
+
+    pub fn validate_restart_replay(&self) -> Result<(), LegalRuntimeError> {
+        let encoded = self.encode();
+        let (campaign_ref, receipt_head, hops) = Self::replay_summary(&encoded)?;
+        if campaign_ref != self.campaign_ref
+            || receipt_head != self.receipt_head
+            || hops.len() != self.hops.len()
+        {
+            return Err(LegalRuntimeError::ReplayIdentityMismatch);
+        }
+        for (persisted, live) in hops.iter().zip(&self.hops) {
+            if persisted != &live.encode() {
+                return Err(LegalRuntimeError::ReplayIdentityMismatch);
+            }
+        }
+        Ok(())
     }
 }
 
@@ -1370,7 +1478,7 @@ pub fn project_matter_issue_workspace(
         node_ref: issue_ref.clone(),
         label: issue.wrong_type_ref.clone(),
         semantic_kind: "legal-issue".into(),
-        source_revision_refs: campaign.evaluation.source_revision_ref.clone().into_iter().collect(),
+        source_revision_refs: vec![campaign.evaluation.source_revision_ref.clone()],
         span_refs: campaign.evaluation.source_span_refs.clone(),
         dependency_refs: issue
             .elements
