@@ -18,6 +18,7 @@ type CliResult<T = ()> = Result<T, String>;
 pub struct AuthorityIdentityReviewWorksheet {
     pub schema_version: String,
     pub candidate_only: bool,
+    pub review_complete: bool,
     pub rows: Vec<AuthorityIdentityReviewRow>,
 }
 
@@ -205,6 +206,7 @@ pub fn prepare(
         &AuthorityIdentityReviewWorksheet {
             schema_version: "sl.contract_authority_identity_review_worksheet.v0_1".into(),
             candidate_only: true,
+            review_complete: false,
             rows,
         },
     )
@@ -217,6 +219,12 @@ pub fn finalize(worksheet_path: &Path, output: &Path) -> CliResult {
             "unsupported identity worksheet schema {}",
             worksheet.schema_version
         ));
+    }
+
+    if !worksheet.review_complete {
+        return Err(
+            "authority identity review worksheet is not marked review_complete=true".into(),
+        );
     }
 
     let mut decisions = Vec::new();
