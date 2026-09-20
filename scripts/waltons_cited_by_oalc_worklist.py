@@ -14,7 +14,10 @@ def main()->int:
     a=p.parse_args()
     base=Path(a.candidates).resolve().parent
     sub=["cited-by","acquire"] if a.execute else ["cited-by","worklist"]
-    cmd=["cargo","run","-p","sensiblaw-cli","--bin","sensiblaw","--","legal-follow","waltons","--base",str(base),*sub]
+    cmd=["cargo","run","-p","sensiblaw-cli","--bin","sensiblaw"]
+    if a.execute:
+        cmd.extend(["--features","live-network"])
+    cmd.extend(["--","legal-follow","waltons","--base",str(base),*sub])
     return subprocess.run(cmd,cwd=ROOT,check=False).returncode
 if __name__=="__main__":
     raise SystemExit(main())
