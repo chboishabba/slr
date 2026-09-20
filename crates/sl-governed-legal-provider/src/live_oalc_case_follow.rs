@@ -166,11 +166,24 @@ impl OalcCaseFollowRequest {
             _ => "",
         }
         .to_string();
+        let legal_jurisdiction = match court_token.as_str() {
+            "HCA" | "FCA" | "FCAFC" => "AU",
+            "NSWCA" | "NSWSC" => "AU-NSW",
+            "VSCA" | "VSC" => "AU-VIC",
+            "QCA" | "QSC" => "AU-QLD",
+            "WASCA" | "WASC" => "AU-WA",
+            "SASCFC" | "SASC" => "AU-SA",
+            "TASFC" | "TASSC" => "AU-TAS",
+            "ACTCA" | "ACTSC" => "AU-ACT",
+            "NTCA" | "NTSC" => "AU-NT",
+            _ => "AU",
+        }
+        .to_string();
         Self {
             citation,
             court_ref,
             oalc_jurisdiction,
-            legal_jurisdiction: "AU".into(),
+            legal_jurisdiction,
             output_dir: output_dir.into(),
             as_at: "2026-09-20".into(),
         }
@@ -910,6 +923,7 @@ mod tests {
             let request = OalcCaseFollowRequest::for_citation(citation, "/tmp/oalc-map-test");
             assert_eq!(request.court_ref, court);
             assert_eq!(request.oalc_jurisdiction, jurisdiction);
+            assert!(request.legal_jurisdiction.starts_with("AU"));
         }
     }
 
