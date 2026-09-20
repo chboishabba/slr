@@ -20,6 +20,7 @@ pub mod live_artifact;
 pub mod live_artifact_validation;
 pub mod local;
 pub mod online;
+pub mod oalc_judgment_materialization;
 pub mod planner;
 pub mod provider;
 pub mod provider_access_policy;
