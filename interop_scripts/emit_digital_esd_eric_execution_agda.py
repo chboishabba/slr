@@ -49,6 +49,14 @@ def sha256_text(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+def sha256_file(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
 def emit_agda(receipt_path: Path, output_path: Path) -> dict:
     """Emit a concrete Agda value from the receipt."""
     with open(receipt_path) as fh:
@@ -78,12 +86,30 @@ def emit_agda(receipt_path: Path, output_path: Path) -> dict:
     if not receipt["counts_match"]:
         errors.append("counts do not match expected values")
 
-    # Verify all artifact hashes still match
-    artifact_errors: list[str] = []
-    for name, expected_hash in receipt.get("artifact_hashes", {}).items():
-        artifact_path = Path(expected_hash)  # Actually these are hashes, not paths
-        # The receipt stores artifact hashes as values
-        pass
+    # Verify every bound artifact still exists and matches its receipt hash.
+    artifact_paths = receipt.get("artifact_paths", {})
+    artifact_hashes = receipt.get("artifact_hashes", {})
+    if set(artifact_paths) != set(artifact_hashes):
+        errors.append(
+            "artifact path/hash key sets differ: "
+            f"paths={sorted(artifact_paths)} hashes={sorted(artifact_hashes)}"
+        )
+    for name in sorted(set(artifact_paths) | set(artifact_hashes)):
+        path_text = artifact_paths.get(name)
+        expected_hash = artifact_hashes.get(name)
+        if not path_text or not expected_hash:
+            errors.append(f"{name}: missing artifact path or hash")
+            continue
+        artifact_path = Path(path_text)
+        if not artifact_path.exists() or not artifact_path.is_file():
+            errors.append(f"{name}: artifact missing: {artifact_path}")
+            continue
+        observed_hash = sha256_file(artifact_path)
+        if observed_hash != expected_hash:
+            errors.append(
+                f"{name}: artifact digest drift: "
+                f"expected {expected_hash}, observed {observed_hash}"
+            )
 
     if errors:
         logger.error("Receipt validation failed:")
@@ -139,11 +165,11 @@ def emit_agda(receipt_path: Path, output_path: Path) -> dict:
         "  , createsScreeningDecision      = " + str(receipt["creates_screening_decision"]).lower() + "",
         "  , createsSourceTruth            = " + str(receipt["creates_source_truth"]).lower() + "",
         "  , createsSourceAuditAdmission   = " + str(receipt["creates_source_audit_admission"]).lower() + "",
-        "  , parsedMetadataCorpusHash      = " + json.dumps(receipt.get("artifact_hashes", {}).get("parsed_metadata_corpus", "000")) + "",
-        "  , parserManifestHash            = " + json.dumps(receipt.get("artifact_hashes", {}).get("parser_manifest", "000")) + "",
-        "  , screeningLedgerHash           = " + json.dumps(receipt.get("artifact_hashes", {}).get("screening_ledger", "000")) + "",
-        "  , candidateAssessmentHash       = " + json.dumps(receipt.get("artifact_hashes", {}).get("candidate_assessment", "000")) + "",
-        "  , paretoQueueHash               = " + json.dumps(receipt.get("artifact_hashes", {}).get("pareto_queue", "000")) + "",
+        "  , parsedMetadataCorpusHash      = " + json.dumps(receipt["artifact_hashes"]["parsed_metadata_corpus"]) + "",
+        "  , parserManifestHash            = " + json.dumps(receipt["artifact_hashes"]["parser_manifest"]) + "",
+        "  , screeningLedgerHash           = " + json.dumps(receipt["artifact_hashes"]["screening_ledger"]) + "",
+        "  , candidateAssessmentHash       = " + json.dumps(receipt["artifact_hashes"]["candidate_assessment"]) + "",
+        "  , paretoQueueHash               = " + json.dumps(receipt["artifact_hashes"]["pareto_queue"]) + "",
         "  }",
         "",
     ]
