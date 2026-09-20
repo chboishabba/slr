@@ -92,7 +92,12 @@ pub fn oalc_exact_source_filter_predicate(
     let document_type = request.document_type.replace('\'', "''");
     let citation_clause = match request.citation_match {
         OalcCitationMatch::Exact => format!("\"citation\"='{citation}'"),
-        OalcCitationMatch::Contains => format!("\"citation\" LIKE '%{citation}%'"),
+        OalcCitationMatch::Contains => {
+            return Err(OalcCaseFollowError::InvalidRequest(
+                "contains citation matching must use bounded datasets-server /search, not /filter"
+                    .into(),
+            ))
+        }
     };
     let mut clauses = vec![citation_clause, format!("\"type\"='{document_type}'")];
     if let Some(source) = request.source.as_deref() {
@@ -516,14 +521,31 @@ mod live {
             ));
         }
 
-        let where_clause = super::oalc_exact_source_filter_predicate(request)?;
-        let url = format!(
-            "{HF_FILTER_API}?dataset={}&config={}&split={}&where={}&offset=0&length=2",
-            encode(OALC_DATASET_ID),
-            encode(OALC_CONFIG),
-            encode(OALC_SPLIT),
-            encode(&where_clause)
-        );
+        let (url, bounded_resolution_label) = match request.citation_match {
+            OalcCitationMatch::Exact => {
+                let where_clause = super::oalc_exact_source_filter_predicate(request)?;
+                (
+                    format!(
+                        "{HF_FILTER_API}?dataset={}&config={}&split={}&where={}&offset=0&length=2",
+                        encode(OALC_DATASET_ID),
+                        encode(OALC_CONFIG),
+                        encode(OALC_SPLIT),
+                        encode(&where_clause)
+                    ),
+                    "filter_exact",
+                )
+            }
+            OalcCitationMatch::Contains => (
+                format!(
+                    "{HF_SEARCH_API}?dataset={}&config={}&split={}&query={}&offset=0&length=100",
+                    encode(OALC_DATASET_ID),
+                    encode(OALC_CONFIG),
+                    encode(OALC_SPLIT),
+                    encode(&request.citation)
+                ),
+                "search_exact_mnc",
+            ),
+        };
         let response: FilterResponse = serde_json::from_slice(&provider.get(&url)?.body)
             .map_err(|error| OalcCaseFollowError::Json(error.to_string()))?;
         let index_state = if response.partial {
@@ -546,7 +568,7 @@ mod live {
             .filter(|row| super::oalc_corpus_row_matches(&bounded_request, row))
             .collect();
         let (row, resolution_path) = match classify_exact_filter(rows, index_state) {
-            OalcExactLookupDisposition::Found(row) => (row, "filter_exact"),
+            OalcExactLookupDisposition::Found(row) => (row, bounded_resolution_label),
             OalcExactLookupDisposition::RequireRevisionPinnedStreaming => {
                 if provider.requests >= provider.context.bounds.max_network_requests {
                     return Err(OalcCaseFollowError::Governance(
@@ -1045,4 +1067,34 @@ mod tests {
         assert!(predicate.contains("O''Brien"));
         assert!(predicate.contains("LIKE"));
     }
+
+    #[test]
+    fn contains_filter_predicate_is_rejected_in_favour_of_search() {
+        let request = OalcExactSourceRequest {
+            citation: "[1999] HCA 10".into(),
+            citation_match: OalcCitationMatch::Contains,
+            document_type: "decision".into(),
+            source: None,
+            jurisdiction: Some("commonwealth".into()),
+        };
+        assert!(matches!(
+            oalc_exact_source_filter_predicate(&request),
+            Err(OalcCaseFollowError::InvalidRequest(_))
+        ));
+    }
+
+    #[test]
+    fn exact_filter_predicate_uses_documented_equality() {
+        let request = OalcExactSourceRequest {
+            citation: "Example v Example [1999] HCA 10".into(),
+            citation_match: OalcCitationMatch::Exact,
+            document_type: "decision".into(),
+            source: None,
+            jurisdiction: Some("commonwealth".into()),
+        };
+        let predicate = oalc_exact_source_filter_predicate(&request).unwrap();
+        assert!(predicate.contains("\"citation\"='Example v Example [1999] HCA 10'"));
+        assert!(!predicate.contains("LIKE"));
+    }
+
 }
