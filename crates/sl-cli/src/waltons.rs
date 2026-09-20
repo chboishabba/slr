@@ -453,9 +453,6 @@ pub fn review_finalize(paths: &WaltonsPaths) -> CliResult {
     if !worksheet.review_complete {
         return Err("Waltons paragraph review worksheet is not marked review_complete=true".into());
     }
-    if !worksheet.review_complete {
-        return Err("treatment review worksheet is not marked review_complete=true".into());
-    }
     let mut decisions = Vec::new();
     for (index, row) in worksheet.rows.into_iter().enumerate() {
         if !row.include {
@@ -1170,6 +1167,9 @@ pub fn treatment_finalize(paths: &WaltonsPaths) -> CliResult {
             "unsupported treatment worksheet schema {}",
             worksheet.schema_version
         ));
+    }
+    if !worksheet.review_complete {
+        return Err("treatment review worksheet is not marked review_complete=true".into());
     }
     let mut decisions = Vec::new();
     for (index, row) in worksheet.rows.into_iter().enumerate() {
