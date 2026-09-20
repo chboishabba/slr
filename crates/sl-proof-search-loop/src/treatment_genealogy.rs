@@ -114,7 +114,10 @@ pub fn build_temporal_treatment_genealogy(
     });
     let unresolved_temporal_edges = edges
         .iter()
-        .filter(|edge| edge.temporal_ref.as_deref().is_none_or(str::is_empty))
+        .filter(|edge| match edge.temporal_ref.as_deref() {
+            None => true,
+            Some(value) => value.is_empty(),
+        })
         .count();
 
     Ok(TemporalTreatmentGenealogy {
