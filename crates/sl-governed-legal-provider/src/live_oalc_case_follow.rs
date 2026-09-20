@@ -242,6 +242,7 @@ mod live {
     const HF_DATASET_API: &str =
         "https://huggingface.co/api/datasets/isaacus/open-australian-legal-corpus";
     const HF_FILTER_API: &str = "https://datasets-server.huggingface.co/filter";
+    const HF_SEARCH_API: &str = "https://datasets-server.huggingface.co/search";
 
     #[derive(Debug, Deserialize)]
     struct DatasetInfo {
@@ -265,6 +266,16 @@ mod live {
         context: GovernedExecutionContext,
         last_request: Option<Instant>,
         requests: u64,
+    }
+
+    fn bounded_response_detail(response: &HttpResponse) -> String {
+        const MAX: usize = 512;
+        let body = String::from_utf8_lossy(&response.body);
+        let mut detail = body.chars().take(MAX).collect::<String>();
+        if body.chars().count() > MAX {
+            detail.push_str("…");
+        }
+        detail.replace(['\n', '\r'], " ")
     }
 
     impl<T> GovernedOalc<T>
@@ -299,8 +310,10 @@ mod live {
             let status = classify_http_status(response.status_code);
             if status != ProviderAccessStatus::Available {
                 return Err(OalcCaseFollowError::Provider(format!(
-                    "OALC provider unavailable: {status:?} (HTTP {})",
+                    "OALC provider unavailable: {status:?} (HTTP {} content-type={} body={:?})",
                     response.status_code,
+                    response.content_type.as_deref().unwrap_or("unknown"),
+                    bounded_response_detail(&response),
                 )));
             }
             Ok(response)
@@ -718,14 +731,16 @@ mod live {
                 "LegalFollow demand did not lower to case law".into(),
             ));
         }
-        let predicate = oalc_filter_predicate(&demand)
-            .map_err(|error| OalcCaseFollowError::Validation(format!("{error:?}")))?;
+        // Dataset Server's documented /filter grammar does not include LIKE.
+        // Case citations in OALC include the party-name prefix, so exact MNC
+        // acquisition uses the documented bounded /search endpoint and then
+        // re-applies exact terminal-MNC/type/jurisdiction checks locally.
         let url = format!(
-            "{HF_FILTER_API}?dataset={}&config={}&split={}&where={}&offset=0&length=2",
+            "{HF_SEARCH_API}?dataset={}&config={}&split={}&query={}&offset=0&length=100",
             encode(OALC_DATASET_ID),
             encode(OALC_CONFIG),
             encode(OALC_SPLIT),
-            encode(&predicate)
+            encode(&request.citation)
         );
         let response: FilterResponse = serde_json::from_slice(&provider.get(&url)?.body)
             .map_err(|error| OalcCaseFollowError::Json(error.to_string()))?;
@@ -753,7 +768,7 @@ mod live {
             .filter(|row| super::oalc_corpus_row_matches(&bounded_request, row))
             .collect();
         let (record, resolution_path) = match classify_exact_filter(rows, index_state) {
-            OalcExactLookupDisposition::Found(row) => (row, "filter_exact"),
+            OalcExactLookupDisposition::Found(row) => (row, "search_exact_mnc"),
             OalcExactLookupDisposition::RequireRevisionPinnedStreaming
                 if allow_revision_pinned_streaming => (
                     stream_fallback(&mut provider, request, &info.sha)?,
@@ -761,13 +776,13 @@ mod live {
                 ),
             OalcExactLookupDisposition::RequireRevisionPinnedStreaming => {
                 return Err(OalcCaseFollowError::SourceResidual(format!(
-                    "bounded OALC filter was incomplete for {}; revision-pinned whole-corpus streaming is disabled for this batch",
+                    "bounded OALC search was incomplete for {}; revision-pinned whole-corpus streaming is disabled for this batch",
                     request.citation
                 )))
             }
             OalcExactLookupDisposition::CompleteIndexAbsent => {
                 return Err(OalcCaseFollowError::SourceResidual(format!(
-                    "complete OALC index found no {}",
+                    "complete bounded OALC search found no exact terminal-MNC source for {}",
                     request.citation
                 )))
             }
