@@ -101,7 +101,24 @@ pub fn status(paths: &WaltonsPaths) -> CliResult {
 /// through generation of the first human paragraph-review worksheet.
 pub fn prepare(paths: &WaltonsPaths) -> CliResult {
     require_live_network_feature()?;
-    if paths.receipt.exists() && paths.text.exists() {
+
+    let retained_root_valid = if paths.receipt.exists() && paths.text.exists() {
+        let receipt_bytes = fs::read(&paths.receipt)
+            .map_err(|error| format!("read {}: {error}", paths.receipt.display()))?;
+        let receipt: OalcResolvedSourceReceipt = serde_json::from_slice(&receipt_bytes)
+            .map_err(|error| format!("decode {}: {error}", paths.receipt.display()))?;
+        let text = fs::read_to_string(&paths.text)
+            .map_err(|error| format!("read {}: {error}", paths.text.display()))?;
+        receipt.citation.contains(waltons::WALTONS_MNC)
+            && receipt.candidate_only
+            && !receipt.creates_legal_authority
+            && !receipt.creates_claim_truth
+            && materialize_oalc_judgment(&receipt, &text, &[]).is_ok()
+    } else {
+        false
+    };
+
+    if retained_root_valid {
         println!(
             "waltons_live_reuse_root_source receipt={} text={}",
             paths.receipt.display(),
@@ -109,6 +126,8 @@ pub fn prepare(paths: &WaltonsPaths) -> CliResult {
         );
     } else {
         for partial in [
+            paths.receipt.clone(),
+            paths.text.clone(),
             paths.base.join("oalc-source-receipt.json"),
             paths.base.join("judgment.txt"),
         ] {
