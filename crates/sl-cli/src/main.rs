@@ -18,6 +18,7 @@ USAGE:
   sensiblaw legal-follow waltons [--base PATH] frontier
   sensiblaw legal-follow waltons [--base PATH] cited-by plan
   sensiblaw legal-follow waltons [--base PATH] cited-by import PROVIDER_RESULTS.json
+  sensiblaw legal-follow waltons [--base PATH] cited-by worklist
   sensiblaw legal-follow waltons [--base PATH] cited-by acquire
   sensiblaw legal-follow waltons [--base PATH] treatment queue
   sensiblaw legal-follow waltons [--base PATH] treatment merge
@@ -82,6 +83,9 @@ fn waltons_command(mut args: Vec<String>) -> Result<(), String> {
             if group == "cited-by" && command == "import" =>
         {
             waltons::cited_by_import(&paths, &PathBuf::from(provider_results))
+        }
+        [group, command] if group == "cited-by" && command == "worklist" => {
+            waltons::cited_by_worklist(&paths)
         }
         [group, command] if group == "cited-by" && command == "acquire" => {
             waltons::cited_by_acquire(&paths)
