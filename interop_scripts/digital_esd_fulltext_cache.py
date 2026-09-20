@@ -403,3 +403,72 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
+# ------------------------------------------------------------------
+# fetch
+# ------------------------------------------------------------------
+
+def fetch(
+    fetch_plan_path: Path | None = None,
+    cache_dir: Path = DEFAULT_CACHE_DIR,
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    """Execute the fetch plan: download artifacts to the cache directory.
+
+    Uses the fetch-batch.jsonl produced by plan() to download
+    full-text artifacts to the local cache.
+    """
+    if fetch_plan_path is None:
+        fetch_plan_path = DEFAULT_CACHE_DIR.parent / "fetch-batch.jsonl"
+
+    plan_rows = read_jsonl(fetch_plan_path) if fetch_plan_path.exists() else []
+    results: list[dict[str, Any]] = []
+    total_bytes = 0
+
+    for item in plan_rows:
+        ref = str(item.get("source_identity_reference") or "")
+        artifact_path = Path(str(item.get("candidate_path") or cache_dir / f"{ref}.pdf"))
+        artifact_path.parent.mkdir(parents=True, exist_ok=True)
+
+        if dry_run:
+            results.append({
+                "source_identity_reference": ref,
+                "artifact_path": str(artifact_path),
+                "status": "dry-run",
+                "actual_bytes": 0,
+            })
+            continue
+
+        # Placeholder for actual download
+        # In production: requests.get(item["artifact_url"], stream=True)
+        downloaded = False
+
+        if downloaded:
+            total_bytes += artifact_path.stat().st_size
+            results.append({
+                "source_identity_reference": ref,
+                "artifact_path": str(artifact_path),
+                "status": "downloaded",
+                "actual_bytes": artifact_path.stat().st_size,
+            })
+        else:
+            results.append({
+                "source_identity_reference": ref,
+                "artifact_path": str(artifact_path),
+                "status": "download-failed",
+                "actual_bytes": 0,
+            })
+
+    result: dict[str, Any] = {
+        "schema": "sensiblaw.digital-esd-fulltext-cache-fetch.v0_1",
+        "fetched_at": now_iso(),
+        "dry_run": dry_run,
+        "plan_count": len(plan_rows),
+        "downloaded_count": sum(1 for r in results if r["status"] == "downloaded"),
+        "failed_count": sum(1 for r in results if r["status"] == "download-failed"),
+        "total_bytes": total_bytes,
+        "results": results,
+    }
+    write_jsonl(cache_dir.parent / "fetch-results.jsonl", results)
+    return result
