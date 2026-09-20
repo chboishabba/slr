@@ -518,6 +518,38 @@ pub struct AustralianContractLandscapeWorklist {
     pub creates_current_law_conclusion: bool,
 }
 
+const ALL_CONTRACT_DOCTRINES: [ContractDoctrine; 12] = [
+    ContractDoctrine::Formation,
+    ContractDoctrine::Intention,
+    ContractDoctrine::TermsAndIncorporation,
+    ContractDoctrine::Construction,
+    ContractDoctrine::Estoppel,
+    ContractDoctrine::Unconscionability,
+    ContractDoctrine::Penalties,
+    ContractDoctrine::RepudiationAndTermination,
+    ContractDoctrine::Damages,
+    ContractDoctrine::Restitution,
+    ContractDoctrine::Privity,
+    ContractDoctrine::ConsumerLaw,
+];
+
+fn doctrine_slug(doctrine: ContractDoctrine) -> &'static str {
+    match doctrine {
+        ContractDoctrine::Formation => "formation",
+        ContractDoctrine::Intention => "intention",
+        ContractDoctrine::TermsAndIncorporation => "terms-and-incorporation",
+        ContractDoctrine::Construction => "construction",
+        ContractDoctrine::Estoppel => "estoppel",
+        ContractDoctrine::Unconscionability => "unconscionability",
+        ContractDoctrine::Penalties => "penalties",
+        ContractDoctrine::RepudiationAndTermination => "repudiation-and-termination",
+        ContractDoctrine::Damages => "damages",
+        ContractDoctrine::Restitution => "restitution",
+        ContractDoctrine::Privity => "privity",
+        ContractDoctrine::ConsumerLaw => "consumer-law",
+    }
+}
+
 fn jurisdiction_matches(filter: Option<&str>, node_jurisdiction: &str) -> bool {
     match filter {
         None => true,
@@ -620,6 +652,35 @@ pub fn compile_australian_contract_landscape_worklist(
             source_citation: from.source_citation.clone(),
             court_ref: from.court_ref.clone(),
             treatment: Some(edge.treatment),
+            active_at_as_at: true,
+            candidate_only: true,
+            creates_legal_authority: false,
+            creates_current_law_conclusion: false,
+        });
+    }
+
+    let represented_doctrines = trace
+        .nodes
+        .values()
+        .filter_map(|node| node.doctrine)
+        .collect::<BTreeSet<_>>();
+    for doctrine in ALL_CONTRACT_DOCTRINES {
+        if represented_doctrines.contains(&doctrine) {
+            continue;
+        }
+        let slug = doctrine_slug(doctrine);
+        context_items.push(ContractLandscapeWorkItem {
+            work_ref: format!("contracts:landscape:context:doctrine:{slug}"),
+            kind: ContractLandscapeWorkKind::ExpandResearchContext,
+            semantic_ref: format!("doctrine:au:contract:{slug}"),
+            related_ref: Some(trace.root_ref.clone()),
+            doctrine: Some(doctrine),
+            jurisdiction_ref: jurisdiction_filter.unwrap_or("AU").to_string(),
+            as_at: as_at.to_string(),
+            source_role: SourceRole::ResearchIndex,
+            source_citation: format!("doctrine-query:{slug}"),
+            court_ref: None,
+            treatment: None,
             active_at_as_at: true,
             candidate_only: true,
             creates_legal_authority: false,
@@ -847,6 +908,13 @@ mod tests {
                 && item.active_at_as_at
         }));
         assert!(!work.treatment_items.is_empty());
+        assert!(work.context_items.iter().any(|item| {
+            item.doctrine == Some(ContractDoctrine::Construction)
+                && item.kind == ContractLandscapeWorkKind::ExpandResearchContext
+        }));
+        assert!(work.context_items.iter().any(|item| {
+            item.doctrine == Some(ContractDoctrine::ConsumerLaw)
+        }));
         assert!(work.bounded_seed_only);
         assert!(work.candidate_only);
         assert!(!work.creates_legal_authority);
