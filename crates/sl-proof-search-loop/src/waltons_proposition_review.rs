@@ -135,6 +135,33 @@ fn paragraph_for_decision<'a>(
     Ok(paragraph)
 }
 
+pub fn waltons_estoppel_research_criteria(
+) -> Vec<crate::oalc_judgment_materialization::ParagraphResearchCriterion> {
+    use crate::oalc_judgment_materialization::ParagraphResearchCriterion;
+    vec![
+        ParagraphResearchCriterion {
+            criterion_ref: "requirement:estoppel:assumption".into(),
+            needles: vec![
+                "assumption".into(),
+                "expectation".into(),
+                "representation".into(),
+            ],
+        },
+        ParagraphResearchCriterion {
+            criterion_ref: "requirement:estoppel:reliance".into(),
+            needles: vec!["reliance".into(), "relied".into(), "acted".into()],
+        },
+        ParagraphResearchCriterion {
+            criterion_ref: "requirement:estoppel:detriment".into(),
+            needles: vec!["detriment".into(), "detrimental".into()],
+        },
+        ParagraphResearchCriterion {
+            criterion_ref: "requirement:estoppel:unconscionability".into(),
+            needles: vec!["unconscionable".into(), "unconscionability".into()],
+        },
+    ]
+}
+
 pub fn waltons_estoppel_consumer_spec(
     materialization: &OalcJudgmentMaterialisation,
 ) -> ConsumerSpec {
