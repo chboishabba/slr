@@ -15,6 +15,11 @@ use sha2::{Digest, Sha256};
 use crate::judgment_candidates::{
     extract_judgment_citation_candidates, CitationOccurrenceCandidate,
 };
+use crate::residual_review_shortlist::{
+    shortlist_anchored_citations_for_residual, ResidualAnchorCriterion,
+    ResidualCitationReviewDemand, ResidualReviewShortlistError, ResidualShortlistedCitation,
+};
+use crate::review_units::{cluster_shortlisted_citations, CitationReviewUnit};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct JudgmentParagraphCandidate {
@@ -170,6 +175,45 @@ pub fn materialize_oalc_judgment(
     })
 }
 
+pub fn shortlist_materialized_citations_for_requirement(
+    materialization: &OalcJudgmentMaterialisation,
+    residual_ref: &str,
+    proposition_ref: &str,
+    criterion_ref: &str,
+    required_anchor_phrases: Vec<String>,
+) -> Result<Vec<ResidualShortlistedCitation>, ResidualReviewShortlistError> {
+    shortlist_anchored_citations_for_residual(
+        &materialization.citation_candidates,
+        &ResidualCitationReviewDemand {
+            residual_ref: residual_ref.to_string(),
+            proposition_ref: proposition_ref.to_string(),
+            criteria: vec![ResidualAnchorCriterion {
+                criterion_ref: criterion_ref.to_string(),
+                residual_ref: residual_ref.to_string(),
+                proposition_ref: proposition_ref.to_string(),
+                required_anchor_phrases,
+            }],
+        },
+    )
+}
+
+pub fn review_units_for_materialized_requirement(
+    materialization: &OalcJudgmentMaterialisation,
+    residual_ref: &str,
+    proposition_ref: &str,
+    criterion_ref: &str,
+    required_anchor_phrases: Vec<String>,
+) -> Result<Vec<CitationReviewUnit>, ResidualReviewShortlistError> {
+    let shortlisted = shortlist_materialized_citations_for_requirement(
+        materialization,
+        residual_ref,
+        proposition_ref,
+        criterion_ref,
+        required_anchor_phrases,
+    )?;
+    Ok(cluster_shortlisted_citations(&shortlisted))
+}
+
 pub fn exact_mnc_candidate_follow_demand(
     candidate: &CitationOccurrenceCandidate,
     jurisdiction_ref: &str,
@@ -290,6 +334,33 @@ mod tests {
         assert!(!research_match_is_estoppel_element_payment(
             &result.paragraph_candidates[0]
         ));
+    }
+
+    #[test]
+    fn materialized_citations_reuse_existing_residual_shortlist_and_review_units() {
+        let text = "[55] In considering reliance and detriment the reasons referred to Sidhu v Van Dyke [2014] HCA 19.\n";
+        let result = materialize_oalc_judgment(&receipt(text), text, &estoppel_criteria()).unwrap();
+        let shortlisted = shortlist_materialized_citations_for_requirement(
+            &result,
+            "residual:estoppel:reliance",
+            "prop:estoppel:reliance",
+            "criterion:estoppel:reliance-and-detriment",
+            vec!["reliance".into(), "detriment".into()],
+        )
+        .unwrap();
+        assert_eq!(shortlisted.len(), 1);
+        let units = review_units_for_materialized_requirement(
+            &result,
+            "residual:estoppel:reliance",
+            "prop:estoppel:reliance",
+            "criterion:estoppel:reliance-and-detriment",
+            vec!["reliance".into(), "detriment".into()],
+        )
+        .unwrap();
+        assert_eq!(units.len(), 1);
+        assert!(units[0].candidate_only);
+        assert!(!crate::review_units::review_unit_is_citation_treatment(&units[0]));
+        assert!(!crate::review_units::review_unit_is_semantic_payment(&units[0]));
     }
 
     #[test]
