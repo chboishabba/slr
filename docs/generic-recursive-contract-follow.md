@@ -87,6 +87,35 @@ cargo run -p sensiblaw-cli --features live-network --bin sensiblaw -- \
 ```
 
 The selected source is independently reacquired through the governed OALC case path.
+
+The recursive acquisition mode is now `IndexedThenPinnedStream`.  Hugging
+Face Dataset Server search is an accelerator rather than the source boundary:
+
+```text
+dataset metadata / pinned revision
+        ↓
+bounded datasets-server /search
+        ├─ exact MNC found → retain
+        └─ incomplete / absent / HTTP 5xx
+                        ↓
+             revision-pinned corpus.jsonl stream
+                        ↓
+             first exact terminal-MNC row
+                        ↓
+                     retain
+```
+
+The pinned stream is still candidate-only.  It records
+`stream_rows_examined`, `stream_bytes_read`,
+`stream_terminated_after_match=true`, and
+`stream_uniqueness_exhaustively_verified=false`.  The latter is deliberate:
+stopping at the first exact terminal-MNC match does not pretend to prove that
+no duplicate row exists later in the corpus.  Authority identity review remains
+the admission gate.
+
+A transport interruption while streaming is not source absence and is not
+negative legal evidence.  Only a clean EOF with no exact row is represented as
+a source residual for that pinned corpus revision.
 Before the network call the controller reserves OALC's three-request worst-case
 budget.  The actual request count is then charged to the cumulative campaign
 budget.  A successful acquisition writes:
