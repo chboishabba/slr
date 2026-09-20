@@ -327,7 +327,8 @@ def main() -> int:
         "export_root": str(args.export_root.resolve()),
         "pages": [
             {
-                "query": f"Q{page.page_num}",
+                "query": f"Q{page.query_num}",
+                "page_index": page.page_index,
                 "path": str(page.raw_path.resolve()),
                 "sha256": page.sha256,
             }
