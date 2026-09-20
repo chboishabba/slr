@@ -1,0 +1,345 @@
+//! Reviewed legal receipts -> Australian contracts adaptive expansion.
+//!
+//! This compiler is deliberately narrow.  Review receipts may append candidate
+//! treatment/support edges to an existing contracts trace, but may not invent
+//! authority identities, promote legal truth, or collapse contested/context
+//! review into positive doctrine.
+
+use serde::Serialize;
+use sensiblaw_legal_follow_plan::{
+    AustralianContractTrace, ContractLandscapeExpansionDelta, ContractTraceEdge, TreatmentKind,
+};
+
+use crate::reasoning::CitationUse;
+use crate::review_unit_review::ReviewedCitationReviewUnitReceipt;
+use crate::waltons_proposition_review::{
+    EstoppelRequirementRole, PropositionEvidenceDisposition,
+    ReviewedWaltonsPropositionEvidenceReceipt,
+};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub enum ContractReviewedHopResidualKind {
+    PropositionContested,
+    PropositionContextOnly,
+    SupportingPropositionUnpaid,
+    MissingAuthorityIdentity,
+    MissingRequirementIdentity,
+    UnsupportedCitationUse,
+    MissingTreatmentIdentity,
+    ReceiptPromotedAuthority,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ContractReviewedHopResidual {
+    pub residual_ref: String,
+    pub kind: ContractReviewedHopResidualKind,
+    pub source_receipt_ref: String,
+    pub semantic_ref: Option<String>,
+    pub related_ref: Option<String>,
+    pub reviewer_ref: String,
+    pub candidate_only: bool,
+    pub creates_legal_authority: bool,
+    pub creates_current_law_conclusion: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ContractReviewedHopCompilation {
+    pub deltas: Vec<ContractLandscapeExpansionDelta>,
+    pub residuals: Vec<ContractReviewedHopResidual>,
+    pub candidate_only: bool,
+    pub creates_legal_authority: bool,
+    pub creates_current_law_conclusion: bool,
+}
+
+fn waltons_requirement_ref(role: EstoppelRequirementRole) -> &'static str {
+    role.requirement_ref()
+}
+
+fn treatment_kind(use_: CitationUse) -> Option<TreatmentKind> {
+    match use_ {
+        CitationUse::Applied => Some(TreatmentKind::Applies),
+        CitationUse::Followed => Some(TreatmentKind::Follows),
+        CitationUse::Distinguished => Some(TreatmentKind::Distinguishes),
+        CitationUse::Adopted | CitationUse::ReliedOn => Some(TreatmentKind::Supports),
+        CitationUse::Overruled => Some(TreatmentKind::Displaces),
+        CitationUse::Mentioned
+        | CitationUse::Quoted
+        | CitationUse::Criticised
+        | CitationUse::Rejected
+        | CitationUse::PartySubmission
+        | CitationUse::HistoricalBackground
+        | CitationUse::Unresolved => None,
+    }
+}
+
+fn residual(
+    kind: ContractReviewedHopResidualKind,
+    receipt_ref: impl Into<String>,
+    semantic_ref: Option<String>,
+    related_ref: Option<String>,
+    reviewer_ref: impl Into<String>,
+) -> ContractReviewedHopResidual {
+    let receipt_ref = receipt_ref.into();
+    ContractReviewedHopResidual {
+        residual_ref: format!("contracts:reviewed-hop:residual:{receipt_ref}"),
+        kind,
+        source_receipt_ref: receipt_ref,
+        semantic_ref,
+        related_ref,
+        reviewer_ref: reviewer_ref.into(),
+        candidate_only: true,
+        creates_legal_authority: false,
+        creates_current_law_conclusion: false,
+    }
+}
+
+pub fn compile_waltons_proposition_receipts_to_contract_hops(
+    trace: &AustralianContractTrace,
+    authority_ref: &str,
+    receipts: &[ReviewedWaltonsPropositionEvidenceReceipt],
+) -> ContractReviewedHopCompilation {
+    let mut deltas = Vec::new();
+    let mut residuals = Vec::new();
+
+    for receipt in receipts {
+        if !receipt.candidate_only || receipt.creates_legal_authority {
+            residuals.push(residual(
+                ContractReviewedHopResidualKind::ReceiptPromotedAuthority,
+                &receipt.review_ref,
+                Some(authority_ref.to_string()),
+                Some(waltons_requirement_ref(receipt.role).to_string()),
+                &receipt.reviewer_ref,
+            ));
+            continue;
+        }
+
+        let requirement_ref = waltons_requirement_ref(receipt.role);
+        match receipt.disposition {
+            PropositionEvidenceDisposition::Contests => {
+                residuals.push(residual(
+                    ContractReviewedHopResidualKind::PropositionContested,
+                    &receipt.review_ref,
+                    Some(authority_ref.to_string()),
+                    Some(requirement_ref.to_string()),
+                    &receipt.reviewer_ref,
+                ));
+                continue;
+            }
+            PropositionEvidenceDisposition::ContextOnly => {
+                residuals.push(residual(
+                    ContractReviewedHopResidualKind::PropositionContextOnly,
+                    &receipt.review_ref,
+                    Some(authority_ref.to_string()),
+                    Some(requirement_ref.to_string()),
+                    &receipt.reviewer_ref,
+                ));
+                continue;
+            }
+            PropositionEvidenceDisposition::Supports => {}
+        }
+
+        if receipt.reviewed_evidence.is_none() || receipt.payment_receipt.is_none() {
+            residuals.push(residual(
+                ContractReviewedHopResidualKind::SupportingPropositionUnpaid,
+                &receipt.review_ref,
+                Some(authority_ref.to_string()),
+                Some(requirement_ref.to_string()),
+                &receipt.reviewer_ref,
+            ));
+            continue;
+        }
+        if !trace.nodes.contains_key(authority_ref) {
+            residuals.push(residual(
+                ContractReviewedHopResidualKind::MissingAuthorityIdentity,
+                &receipt.review_ref,
+                Some(authority_ref.to_string()),
+                Some(requirement_ref.to_string()),
+                &receipt.reviewer_ref,
+            ));
+            continue;
+        }
+        if !trace.nodes.contains_key(requirement_ref) {
+            residuals.push(residual(
+                ContractReviewedHopResidualKind::MissingRequirementIdentity,
+                &receipt.review_ref,
+                Some(authority_ref.to_string()),
+                Some(requirement_ref.to_string()),
+                &receipt.reviewer_ref,
+            ));
+            continue;
+        }
+
+        deltas.push(ContractLandscapeExpansionDelta {
+            discovered_nodes: Vec::new(),
+            discovered_edges: vec![ContractTraceEdge {
+                from_ref: authority_ref.to_string(),
+                to_ref: requirement_ref.to_string(),
+                treatment: TreatmentKind::Supports,
+                candidate_only: true,
+                creates_legal_authority: false,
+            }],
+            provenance_ref: receipt.review_ref.clone(),
+            candidate_only: true,
+            creates_legal_authority: false,
+        });
+    }
+
+    ContractReviewedHopCompilation {
+        deltas,
+        residuals,
+        candidate_only: true,
+        creates_legal_authority: false,
+        creates_current_law_conclusion: false,
+    }
+}
+
+pub fn compile_treatment_receipts_to_contract_hops(
+    trace: &AustralianContractTrace,
+    receipts: &[ReviewedCitationReviewUnitReceipt],
+) -> ContractReviewedHopCompilation {
+    let mut deltas = Vec::new();
+    let mut residuals = Vec::new();
+
+    for receipt in receipts {
+        let edge = &receipt.edge;
+        if !edge.reviewed || !edge.candidate_only {
+            residuals.push(residual(
+                ContractReviewedHopResidualKind::ReceiptPromotedAuthority,
+                &receipt.review_unit_ref,
+                Some(edge.citing_document_ref.clone()),
+                Some(edge.cited_document_ref.clone()),
+                &receipt.reviewer_ref,
+            ));
+            continue;
+        }
+        let Some(treatment) = treatment_kind(edge.citation_use) else {
+            residuals.push(residual(
+                ContractReviewedHopResidualKind::UnsupportedCitationUse,
+                &receipt.review_unit_ref,
+                Some(edge.citing_document_ref.clone()),
+                Some(edge.cited_document_ref.clone()),
+                &receipt.reviewer_ref,
+            ));
+            continue;
+        };
+        if !trace.nodes.contains_key(&edge.citing_document_ref)
+            || !trace.nodes.contains_key(&edge.cited_document_ref)
+        {
+            residuals.push(residual(
+                ContractReviewedHopResidualKind::MissingTreatmentIdentity,
+                &receipt.review_unit_ref,
+                Some(edge.citing_document_ref.clone()),
+                Some(edge.cited_document_ref.clone()),
+                &receipt.reviewer_ref,
+            ));
+            continue;
+        }
+
+        deltas.push(ContractLandscapeExpansionDelta {
+            discovered_nodes: Vec::new(),
+            discovered_edges: vec![ContractTraceEdge {
+                from_ref: edge.citing_document_ref.clone(),
+                to_ref: edge.cited_document_ref.clone(),
+                treatment,
+                candidate_only: true,
+                creates_legal_authority: false,
+            }],
+            provenance_ref: receipt.review_unit_ref.clone(),
+            candidate_only: true,
+            creates_legal_authority: false,
+        });
+    }
+
+    ContractReviewedHopCompilation {
+        deltas,
+        residuals,
+        candidate_only: true,
+        creates_legal_authority: false,
+        creates_current_law_conclusion: false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::reasoning::{PropositionReasoningEdge, ReasoningRole};
+    use sensiblaw_legal_follow_plan::waltons_estoppel_trace;
+
+    fn treatment_receipt(use_: CitationUse) -> ReviewedCitationReviewUnitReceipt {
+        ReviewedCitationReviewUnitReceipt {
+            review_unit_ref: "review-unit:sidhu-waltons".into(),
+            document_ref: "case:au:hca:2014:19".into(),
+            source_revision_ref: "source:revision:sidhu".into(),
+            canonical_text_sha256: "sha256:fixture".into(),
+            citation_text: "[1988] HCA 7".into(),
+            citation_locator_refs: vec!["sidhu#citation".into()],
+            anchor_paragraph_locator_refs: vec!["sidhu#paragraph".into()],
+            selected_anchor_paragraph_locator_ref: "sidhu#paragraph".into(),
+            matched_criterion_refs: vec!["criterion:estoppel:treatment".into()],
+            reviewer_ref: "reviewer:fixture".into(),
+            evidence_refs: vec!["evidence:fixture".into()],
+            edge: PropositionReasoningEdge {
+                citing_document_ref: "case:au:hca:2014:19".into(),
+                citing_proposition_ref: "prop:sidhu:estoppel".into(),
+                cited_document_ref: "case:au:hca:1988:7".into(),
+                cited_proposition_ref: "prop:waltons:estoppel".into(),
+                citation_use: use_,
+                reasoning_role: ReasoningRole::Rule,
+                condition_coordinates: Vec::new(),
+                pinpoint_ref: Some("sidhu#paragraph".into()),
+                judge_or_speaker_ref: None,
+                court_ref: Some("court:HCA".into()),
+                jurisdiction_ref: Some("AU".into()),
+                temporal_ref: Some("2014-05-16".into()),
+                outcome_ref: None,
+                remedy_ref: None,
+                burden_refs: Vec::new(),
+                exception_refs: Vec::new(),
+                lexical_realisation: "reviewed treatment fixture".into(),
+                reviewed: true,
+                candidate_only: true,
+            },
+            receipt_authority: "experimental_candidate_only",
+        }
+    }
+
+    #[test]
+    fn reviewed_followed_edge_compiles_to_candidate_contract_delta() {
+        let trace = waltons_estoppel_trace();
+        let compiled =
+            compile_treatment_receipts_to_contract_hops(&trace, &[treatment_receipt(CitationUse::Followed)]);
+        assert_eq!(compiled.deltas.len(), 1);
+        assert!(compiled.residuals.is_empty());
+        let edge = &compiled.deltas[0].discovered_edges[0];
+        assert_eq!(edge.from_ref, "case:au:hca:2014:19");
+        assert_eq!(edge.to_ref, "case:au:hca:1988:7");
+        assert_eq!(edge.treatment, TreatmentKind::Follows);
+        assert!(!edge.creates_legal_authority);
+    }
+
+    #[test]
+    fn mere_mention_remains_residual_not_treatment() {
+        let trace = waltons_estoppel_trace();
+        let compiled =
+            compile_treatment_receipts_to_contract_hops(&trace, &[treatment_receipt(CitationUse::Mentioned)]);
+        assert!(compiled.deltas.is_empty());
+        assert_eq!(compiled.residuals.len(), 1);
+        assert_eq!(
+            compiled.residuals[0].kind,
+            ContractReviewedHopResidualKind::UnsupportedCitationUse
+        );
+    }
+
+    #[test]
+    fn missing_authority_identity_remains_residual() {
+        let mut receipt = treatment_receipt(CitationUse::Applied);
+        receipt.edge.citing_document_ref = "case:unknown".into();
+        let trace = waltons_estoppel_trace();
+        let compiled = compile_treatment_receipts_to_contract_hops(&trace, &[receipt]);
+        assert!(compiled.deltas.is_empty());
+        assert_eq!(
+            compiled.residuals[0].kind,
+            ContractReviewedHopResidualKind::MissingTreatmentIdentity
+        );
+    }
+}
