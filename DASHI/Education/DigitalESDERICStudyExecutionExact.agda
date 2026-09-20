@@ -19,15 +19,15 @@ record RealERICStudyExecutionReceipt : Set where
     startedAt : String
     completedAt : String
 
-    expectedRawQueryOccurrenceCount : Nat
+    declaredExpectedRawQueryOccurrenceCount : Nat
     observedRawQueryOccurrenceCount : Nat
     rawCountMatchesExpected :
-      observedRawQueryOccurrenceCount ≡ expectedRawQueryOccurrenceCount
+      observedRawQueryOccurrenceCount ≡ declaredExpectedRawQueryOccurrenceCount
 
-    expectedUniqueERICRecordCount : Nat
+    declaredExpectedUniqueERICRecordCount : Nat
     observedUniqueERICRecordCount : Nat
     uniqueCountMatchesExpected :
-      observedUniqueERICRecordCount ≡ expectedUniqueERICRecordCount
+      observedUniqueERICRecordCount ≡ declaredExpectedUniqueERICRecordCount
 
     realERIC : Bool
     realERICIsTrue : realERIC ≡ true
