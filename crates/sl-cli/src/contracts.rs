@@ -731,6 +731,52 @@ mod tests {
     }
 
     #[test]
+    fn reviewed_hop_envelope_loads_without_manual_reshaping() {
+        let path = std::env::temp_dir().join(format!(
+            "sensiblaw-reviewed-hop-envelope-{}.json",
+            std::process::id()
+        ));
+        let envelope = json!({
+            "schema_version": "sl.australian_contracts.reviewed_hops.v0_1",
+            "delta_count": 1,
+            "residual_count": 0,
+            "candidate_only": true,
+            "creates_legal_authority": false,
+            "creates_current_law_conclusion": false,
+            "deltas": [{
+                "provenance_ref": "review:fixture",
+                "candidate_only": true,
+                "creates_legal_authority": false,
+                "nodes": [{
+                    "semantic_ref": "case:fixture:reviewed-hop",
+                    "label": "Reviewed hop fixture",
+                    "kind": "CaseAuthority",
+                    "doctrine": "Construction",
+                    "jurisdiction_ref": "AU",
+                    "court_ref": "court:fixture",
+                    "decision_or_effective_date": "2000-01-01",
+                    "valid_from": null,
+                    "valid_to": null,
+                    "source_role": "PrimaryCaseLaw",
+                    "authority_level": "Official",
+                    "source_citation": "fixture:reviewed-hop"
+                }],
+                "edges": []
+            }],
+            "residuals": []
+        });
+        write_output(&path, &envelope).unwrap();
+        let deltas = load_expansion_deltas(&path).unwrap();
+        let _ = fs::remove_file(&path);
+        assert_eq!(deltas.len(), 1);
+        assert_eq!(
+            deltas[0].discovered_nodes[0].semantic_ref,
+            "case:fixture:reviewed-hop"
+        );
+        assert!(!deltas[0].creates_legal_authority);
+    }
+
+    #[test]
     fn source_frontier_compiles_to_acquisition_only_legal_follow_plans() {
         let (work, output) = compile(&["--as-at".into(), "2026-09-20".into()]).unwrap();
         assert!(!work.source_items.is_empty());
