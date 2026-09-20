@@ -36,6 +36,7 @@ USAGE:
   sensiblaw legal-follow waltons [--base PATH] treatment prepare
   sensiblaw legal-follow waltons [--base PATH] treatment finalize
   sensiblaw legal-follow waltons [--base PATH] genealogy
+  sensiblaw legal-follow waltons [--base PATH] s14-sync
 
 NOTES:
   * acquire/cited-by acquire require --features live-network at build time.
@@ -127,6 +128,7 @@ fn waltons_command(mut args: Vec<String>) -> Result<(), String> {
             waltons::treatment_finalize(&paths)
         }
         [command] if command == "genealogy" => waltons::genealogy(&paths),
+        [command] if command == "s14-sync" => waltons::s14_sync(&paths),
         _ => {
             usage();
             Err(format!("unsupported Waltons command: {}", args.join(" ")))
