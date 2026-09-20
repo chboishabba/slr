@@ -947,31 +947,28 @@ fn resume_from_trajectory(path: &Path) -> CampaignResult<ContractFollowCampaign>
 
 fn config_from_trajectory(path: &Path) -> CampaignResult<CampaignConfig> {
     let value = read_campaign_receipt(path)?;
-    let as_at = value
+    let state = value.get("campaign_state").unwrap_or(&value);
+    let as_at = state
         .get("as_at")
         .and_then(Value::as_str)
-        .or_else(|| {
-            value
-                .get("campaign_state")
-                .and_then(|state| state.get("as_at"))
-                .and_then(Value::as_str)
-        })
+        .or_else(|| value.get("as_at").and_then(Value::as_str))
         .unwrap_or("2026-09-20")
         .to_string();
-    let jurisdiction_filter = value
+    let jurisdiction_filter = state
         .get("jurisdiction_filter")
-        .or_else(|| {
-            value
-                .get("campaign_state")
-                .and_then(|state| state.get("jurisdiction_filter"))
-        })
+        .or_else(|| value.get("jurisdiction_filter"))
         .and_then(Value::as_str)
         .map(str::to_string);
+    let budget = match state.get("budget") {
+        Some(value) => serde_json::from_value::<CampaignBudget>(value.clone())
+            .map_err(|error| format!("decode campaign budget from {}: {error}", path.display()))?,
+        None => CampaignBudget::default(),
+    };
     Ok(CampaignConfig {
         campaign_ref: format!("campaign:recursive:{}", path.display()),
         as_at,
         jurisdiction_filter,
-        budget: CampaignBudget::default(),
+        budget,
     })
 }
 
@@ -1305,4 +1302,47 @@ mod tests {
         assert!(selected.candidate_only);
         assert!(!selected.creates_legal_authority);
     }
+
+    #[test]
+    fn resumed_campaign_cannot_reset_cumulative_hop_budget() {
+        let trace = waltons_estoppel_trace();
+        let config = CampaignConfig {
+            campaign_ref: "campaign:budget".into(),
+            as_at: "2026-09-20".into(),
+            jurisdiction_filter: None,
+            budget: CampaignBudget {
+                max_accepted_hops: 2,
+                max_source_acquisitions: 2,
+                max_network_requests: 6,
+            },
+        };
+        let campaign =
+            ContractFollowCampaign::resume(config, trace, 2, 0, 0).unwrap();
+        assert_eq!(campaign.accepted_hop_count(), 2);
+        assert_eq!(
+            campaign.next_fresh_step().gate,
+            CampaignOperatorGate::BudgetExhausted
+        );
+    }
+
+    #[test]
+    fn recursive_oalc_preflight_reserves_three_request_worst_case() {
+        let trace = waltons_estoppel_trace();
+        let config = CampaignConfig {
+            campaign_ref: "campaign:network-budget".into(),
+            as_at: "2026-09-20".into(),
+            jurisdiction_filter: None,
+            budget: CampaignBudget {
+                max_accepted_hops: 8,
+                max_source_acquisitions: 2,
+                max_network_requests: 4,
+            },
+        };
+        let campaign =
+            ContractFollowCampaign::resume(config, trace, 0, 0, 2).unwrap();
+        assert!(campaign
+            .ensure_source_acquisition_budget(RECURSIVE_OALC_MAX_REQUESTS_PER_ACQUISITION)
+            .is_err());
+    }
+
 }
