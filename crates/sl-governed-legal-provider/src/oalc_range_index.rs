@@ -14,6 +14,7 @@ use crate::live_oalc_case_follow::{
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use std::collections::BTreeSet;
 use std::fs;
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
@@ -275,12 +276,35 @@ fn append_entries(
     })?;
     fs::create_dir_all(parent)
         .map_err(|error| OalcCaseFollowError::Io(error.to_string()))?;
+
+    // A process can die after appending one chunk but before atomically
+    // advancing checkpoint.json.  On retry the same byte range is scanned
+    // again.  De-duplicate by immutable row start so that recovery is
+    // idempotent rather than accumulating duplicate index entries.
+    let mut existing_starts = BTreeSet::new();
+    if path.exists() {
+        let existing = fs::File::open(&path)
+            .map_err(|error| OalcCaseFollowError::Io(error.to_string()))?;
+        for line in BufReader::new(existing).lines() {
+            let line = line.map_err(|error| OalcCaseFollowError::Io(error.to_string()))?;
+            if line.trim().is_empty() {
+                continue;
+            }
+            let entry: OalcRangeIndexEntry = serde_json::from_str(&line)
+                .map_err(|error| OalcCaseFollowError::Json(error.to_string()))?;
+            existing_starts.insert(entry.byte_start);
+        }
+    }
+
     let mut file = fs::OpenOptions::new()
         .create(true)
         .append(true)
         .open(&path)
         .map_err(|error| OalcCaseFollowError::Io(error.to_string()))?;
     for entry in entries {
+        if !existing_starts.insert(entry.byte_start) {
+            continue;
+        }
         serde_json::to_writer(&mut file, entry)
             .map_err(|error| OalcCaseFollowError::Json(error.to_string()))?;
         file.write_all(b"\n")
