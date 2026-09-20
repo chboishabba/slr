@@ -1,6 +1,6 @@
 use crate::waltons::{self, WaltonsPaths};
 use sensiblaw_governed_legal_provider::{
-    run_live_oalc_case_follow, OalcCaseFollowRequest, OalcResolvedSourceReceipt,
+    run_live_oalc_case_follow_filter_only, OalcCaseFollowRequest, OalcResolvedSourceReceipt,
 };
 use sensiblaw_proof_search_loop::oalc_judgment_materialization::materialize_oalc_judgment;
 use serde_json::{json, Value};
@@ -75,8 +75,7 @@ fn require(path: &Path, label: &str) -> CliResult {
 
 fn read_json(path: &Path) -> CliResult<Value> {
     let bytes = fs::read(path).map_err(|error| format!("read {}: {error}", path.display()))?;
-    serde_json::from_slice(&bytes)
-        .map_err(|error| format!("decode {}: {error}", path.display()))
+    serde_json::from_slice(&bytes).map_err(|error| format!("decode {}: {error}", path.display()))
 }
 
 pub fn status(paths: &WaltonsPaths) -> CliResult {
@@ -268,14 +267,15 @@ fn reacquire_cited_by_candidates_resilient(paths: &WaltonsPaths) -> CliResult<Va
 
         for partial in [&receipt_path, &text_path] {
             if partial.exists() {
-                fs::remove_file(partial)
-                    .map_err(|error| format!("remove stale/incomplete {}: {error}", partial.display()))?;
+                fs::remove_file(partial).map_err(|error| {
+                    format!("remove stale/incomplete {}: {error}", partial.display())
+                })?;
             }
         }
 
         let mut request = OalcCaseFollowRequest::for_citation(citation, output_dir);
         request.as_at = waltons::DEFAULT_AS_AT.into();
-        match run_live_oalc_case_follow(&request) {
+        match run_live_oalc_case_follow_filter_only(&request) {
             Ok(run) => resolved.push(json!({
                 "citation": citation,
                 "state": "source_resolved",
@@ -350,7 +350,10 @@ pub fn cited_by(paths: &WaltonsPaths, provider_results: &Path) -> CliResult {
     waltons::identity_prepare(paths)?;
 
     require(&paths.citedby_candidates, "normalized cited-by candidates")?;
-    require(&paths.identity_worksheet, "authority identity review worksheet")?;
+    require(
+        &paths.identity_worksheet,
+        "authority identity review worksheet",
+    )?;
 
     write_state(
         paths,
@@ -380,7 +383,10 @@ pub fn cited_by(paths: &WaltonsPaths, provider_results: &Path) -> CliResult {
 /// extracted from the reacquired judgments, and the human treatment worksheet
 /// is prepared.
 pub fn identity_reviewed(paths: &WaltonsPaths) -> CliResult {
-    require(&paths.identity_worksheet, "authority identity review worksheet")?;
+    require(
+        &paths.identity_worksheet,
+        "authority identity review worksheet",
+    )?;
     waltons::identity_finalize(paths)?;
     waltons::identity_compile(paths)?;
     waltons::treatment_queue(paths)?;

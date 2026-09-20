@@ -665,8 +665,9 @@ mod live {
         result
     }
 
-    pub fn run(
+    fn run_with_stream_fallback(
         request: &OalcCaseFollowRequest,
+        allow_revision_pinned_streaming: bool,
     ) -> Result<OalcCaseFollowRunReceipt, OalcCaseFollowError> {
         validate_request(request)?;
         fs::create_dir_all(&request.output_dir)
@@ -753,10 +754,17 @@ mod live {
             .collect();
         let (record, resolution_path) = match classify_exact_filter(rows, index_state) {
             OalcExactLookupDisposition::Found(row) => (row, "filter_exact"),
-            OalcExactLookupDisposition::RequireRevisionPinnedStreaming => (
-                stream_fallback(&mut provider, request, &info.sha)?,
-                "revision_pinned_streaming",
-            ),
+            OalcExactLookupDisposition::RequireRevisionPinnedStreaming
+                if allow_revision_pinned_streaming => (
+                    stream_fallback(&mut provider, request, &info.sha)?,
+                    "revision_pinned_streaming",
+                ),
+            OalcExactLookupDisposition::RequireRevisionPinnedStreaming => {
+                return Err(OalcCaseFollowError::SourceResidual(format!(
+                    "bounded OALC filter was incomplete for {}; revision-pinned whole-corpus streaming is disabled for this batch",
+                    request.citation
+                )))
+            }
             OalcExactLookupDisposition::CompleteIndexAbsent => {
                 return Err(OalcCaseFollowError::SourceResidual(format!(
                     "complete OALC index found no {}",
@@ -837,17 +845,40 @@ mod live {
             creates_claim_truth: false,
         })
     }
+
+    /// Resolve a single root authority.  The explicit root path can use the
+    /// revision-pinned stream fallback when the index is incomplete.
+    pub fn run(
+        request: &OalcCaseFollowRequest,
+    ) -> Result<OalcCaseFollowRunReceipt, OalcCaseFollowError> {
+        run_with_stream_fallback(request, true)
+    }
+
+    /// Resolve one member of a multi-authority batch without downloading the
+    /// entire corpus.  An incomplete index is a source residual, not evidence.
+    pub fn run_filter_only(
+        request: &OalcCaseFollowRequest,
+    ) -> Result<OalcCaseFollowRunReceipt, OalcCaseFollowError> {
+        run_with_stream_fallback(request, false)
+    }
 }
 
 #[cfg(feature = "live-network")]
 pub use live::{
     resolve_dataset_revision as resolve_oalc_dataset_revision,
     resolve_exact_source as resolve_live_oalc_exact_source, run as run_live_oalc_case_follow,
-    run_pinned as run_pinned_oalc_stream,
+    run_filter_only as run_live_oalc_case_follow_filter_only, run_pinned as run_pinned_oalc_stream,
 };
 
 #[cfg(not(feature = "live-network"))]
 pub fn run_live_oalc_case_follow(
+    _request: &OalcCaseFollowRequest,
+) -> Result<OalcCaseFollowRunReceipt, OalcCaseFollowError> {
+    Err(OalcCaseFollowError::LiveNetworkFeatureDisabled)
+}
+
+#[cfg(not(feature = "live-network"))]
+pub fn run_live_oalc_case_follow_filter_only(
     _request: &OalcCaseFollowRequest,
 ) -> Result<OalcCaseFollowRunReceipt, OalcCaseFollowError> {
     Err(OalcCaseFollowError::LiveNetworkFeatureDisabled)
