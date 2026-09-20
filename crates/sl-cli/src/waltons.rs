@@ -821,7 +821,12 @@ fn embedded_mnc_parts(citation: &str) -> Option<(String, String, String)> {
     let fields = citation.split_whitespace().collect::<Vec<_>>();
     for window in fields.windows(3) {
         let year_token = window[0];
-        let year = year_token.strip_prefix('[')?.strip_suffix(']')?;
+        let Some(year) = year_token
+            .strip_prefix('[')
+            .and_then(|value| value.strip_suffix(']'))
+        else {
+            continue;
+        };
         if year.len() != 4 || !year.bytes().all(|byte| byte.is_ascii_digit()) {
             continue;
         }
