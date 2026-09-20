@@ -121,9 +121,7 @@ pub fn scan_pinned_oalc_jsonl<R: BufRead>(
         rows_examined += 1;
         bytes_read = bytes_read.saturating_add(read as u64);
         let row: OalcCorpusRow = serde_json::from_str(line.trim_end()).map_err(|error| {
-            OalcCaseFollowError::Json(format!(
-                "decode pinned corpus row {rows_examined}: {error}"
-            ))
+            OalcCaseFollowError::Json(format!("decode pinned corpus row {rows_examined}: {error}"))
         })?;
         if !oalc_corpus_row_matches(request, &row) {
             continue;
@@ -149,15 +147,14 @@ pub fn oalc_exact_source_filter_predicate(
     }
     let citation = request.citation.replace('\'', "''");
     let document_type = request.document_type.replace('\'', "''");
-    let citation_clause = match request.citation_match {
-        OalcCitationMatch::Exact => format!("\"citation\"='{citation}'"),
-        OalcCitationMatch::Contains => {
-            return Err(OalcCaseFollowError::InvalidRequest(
+    let citation_clause =
+        match request.citation_match {
+            OalcCitationMatch::Exact => format!("\"citation\"='{citation}'"),
+            OalcCitationMatch::Contains => return Err(OalcCaseFollowError::InvalidRequest(
                 "contains citation matching must use bounded datasets-server /search, not /filter"
                     .into(),
-            ))
-        }
-    };
+            )),
+        };
     let mut clauses = vec![citation_clause, format!("\"type\"='{document_type}'")];
     if let Some(source) = request.source.as_deref() {
         clauses.push(format!("\"source\"='{}'", source.replace('\'', "''")));
@@ -289,12 +286,12 @@ mod live {
         OalcExactSourceRunReceipt, PinnedOalcStreamReceipt, PinnedOalcStreamRequest,
     };
     use crate::{
-        classify_exact_filter, classify_http_status, oalc_filter_predicate,
-        GovernedExecutionContext, HttpRequest, HttpResponse, HttpTransport, LiveGovernanceBounds,
-        OalcDocumentKind, OalcExactLookupDisposition, OalcFilterIndexState,
-        OalcResolvedSourceReceipt, OalcSourceDemand, OalcTemporalCoverage,
-        PinnedOalcDatasetSelection, ProviderAccessStatus, UreqTransport, OALC_CONFIG,
-        OALC_DATASET_ID, OALC_RECEIPT_AUTHORITY, OALC_SPLIT, SENSIBLAW_UA,
+        classify_exact_filter, classify_http_status, GovernedExecutionContext, HttpRequest,
+        HttpResponse, HttpTransport, LiveGovernanceBounds, OalcDocumentKind,
+        OalcExactLookupDisposition, OalcFilterIndexState, OalcResolvedSourceReceipt,
+        OalcSourceDemand, OalcTemporalCoverage, PinnedOalcDatasetSelection, ProviderAccessStatus,
+        UreqTransport, OALC_CONFIG, OALC_DATASET_ID, OALC_RECEIPT_AUTHORITY, OALC_SPLIT,
+        SENSIBLAW_UA,
     };
     use sensiblaw_legal_follow_plan::{
         exact_oalc_case_law_demand, plan_legal_sources, AuthorityLevel, LegalSourceDemand,
@@ -516,7 +513,6 @@ mod live {
 
         let reader = BufReader::new(response.into_reader());
         super::scan_pinned_oalc_jsonl(reader, request)
-
     }
 
     pub fn run_pinned(
@@ -525,7 +521,7 @@ mod live {
         stream_pinned_corpus(request)
     }
 
-    pub fn resolve_exact_source(
+    fn resolve_exact_source_indexed(
         request: &OalcExactSourceRequest,
     ) -> Result<OalcExactSourceRunReceipt, OalcCaseFollowError> {
         if request.citation.trim().is_empty() || request.document_type.trim().is_empty() {
@@ -588,8 +584,179 @@ mod live {
                 "search_exact_mnc",
             ),
         };
-        let search_response = provider.get(&url);
-        let (record, resolution_path, stream_receipt) = match search_response {
+        let response: FilterResponse = serde_json::from_slice(&provider.get(&url)?.body)
+            .map_err(|error| OalcCaseFollowError::Json(error.to_string()))?;
+        let index_state = if response.partial {
+            OalcFilterIndexState::Partial
+        } else {
+            OalcFilterIndexState::Complete
+        };
+        let bounded_request = PinnedOalcStreamRequest {
+            revision: info.sha.clone(),
+            citation: request.citation.clone(),
+            citation_match: request.citation_match,
+            document_type: request.document_type.clone(),
+            source: request.source.clone(),
+            jurisdiction: request.jurisdiction.clone(),
+        };
+        let rows = response
+            .rows
+            .into_iter()
+            .map(|row| row.row)
+            .filter(|row| super::oalc_corpus_row_matches(&bounded_request, row))
+            .collect();
+        let (row, resolution_path) = match classify_exact_filter(rows, index_state) {
+            OalcExactLookupDisposition::Found(row) => (row, bounded_resolution_label),
+            OalcExactLookupDisposition::RequireRevisionPinnedStreaming => {
+                let stream = stream_pinned_corpus(&bounded_request)?;
+                (stream.row, "revision_pinned_streaming")
+            }
+            OalcExactLookupDisposition::CompleteIndexAbsent => {
+                return Err(OalcCaseFollowError::SourceResidual(format!(
+                    "complete OALC index found no bounded source for {}",
+                    request.citation
+                )))
+            }
+            OalcExactLookupDisposition::Ambiguous(count) => {
+                return Err(OalcCaseFollowError::SourceResidual(format!(
+                    "OALC exact source query returned {count} candidates for {}",
+                    request.citation
+                )))
+            }
+        };
+        if !super::oalc_corpus_row_matches(&bounded_request, &row) {
+            return Err(OalcCaseFollowError::Validation(
+                "OALC exact source result failed post-retrieval bounds".into(),
+            ));
+        }
+        Ok(OalcExactSourceRunReceipt {
+            corpus_revision_sha: info.sha,
+            row,
+            resolution_path: resolution_path.into(),
+            network_requests: provider.requests,
+        })
+    }
+
+    pub fn resolve_dataset_revision() -> Result<String, OalcCaseFollowError> {
+        let agent = ureq::AgentBuilder::new()
+            .timeout(Duration::from_secs(60))
+            .build();
+        let response = agent
+            .get(HF_DATASET_API)
+            .set("User-Agent", SENSIBLAW_UA)
+            .set("Referer", "https://huggingface.co/")
+            .call()
+            .map_err(|error| OalcCaseFollowError::Provider(error.to_string()))?;
+        let info: DatasetInfo = serde_json::from_reader(response.into_reader())
+            .map_err(|error| OalcCaseFollowError::Json(error.to_string()))?;
+        if info.sha.trim().is_empty() {
+            return Err(OalcCaseFollowError::Dataset(
+                "OALC metadata returned empty revision".into(),
+            ));
+        }
+        Ok(info.sha)
+    }
+
+    fn stream_fallback(
+        provider: &mut GovernedOalc<UreqTransport>,
+        request: &OalcCaseFollowRequest,
+        revision: &str,
+    ) -> Result<PinnedOalcStreamReceipt, OalcCaseFollowError> {
+        if provider.requests >= provider.context.bounds.max_network_requests {
+            return Err(OalcCaseFollowError::Governance(
+                "OALC request budget exceeded before pinned stream".into(),
+            ));
+        }
+        if let Some(last) = provider.last_request {
+            let minimum = Duration::from_secs(provider.context.bounds.minimum_pacing_seconds);
+            let elapsed = last.elapsed();
+            if elapsed < minimum {
+                thread::sleep(minimum - elapsed);
+            }
+        }
+        let stream_request = PinnedOalcStreamRequest {
+            revision: revision.to_string(),
+            citation: request.citation.clone(),
+            citation_match: OalcCitationMatch::Contains,
+            document_type: "decision".into(),
+            source: None,
+            jurisdiction: (!request.oalc_jurisdiction.is_empty())
+                .then(|| request.oalc_jurisdiction.clone()),
+        };
+        let result = stream_pinned_corpus(&stream_request);
+        provider.requests += 1;
+        provider.last_request = Some(Instant::now());
+        result
+    }
+
+    fn run_with_mode(
+        request: &OalcCaseFollowRequest,
+        mode: OalcCaseAcquisitionMode,
+    ) -> Result<OalcCaseFollowRunReceipt, OalcCaseFollowError> {
+        validate_request(request)?;
+        fs::create_dir_all(&request.output_dir)
+            .map_err(|error| OalcCaseFollowError::Io(error.to_string()))?;
+        let context = GovernedExecutionContext {
+            operator_opt_in: true,
+            cache_checked_first: true,
+            persisted_receipts_checked_first: true,
+            bounds: LiveGovernanceBounds {
+                minimum_pacing_seconds: 4,
+                burst: 1,
+                max_depth: 1,
+                max_new_documents: 1,
+                max_network_requests: 3,
+            },
+        };
+        context
+            .validate()
+            .map_err(|error| OalcCaseFollowError::Governance(format!("{error:?}")))?;
+        let mut provider = GovernedOalc {
+            transport: UreqTransport,
+            context,
+            last_request: None,
+            requests: 0,
+        };
+        let info: DatasetInfo = serde_json::from_slice(&provider.get(HF_DATASET_API)?.body)
+            .map_err(|error| OalcCaseFollowError::Json(error.to_string()))?;
+        if info.sha.trim().is_empty() {
+            return Err(OalcCaseFollowError::Dataset(
+                "OALC metadata returned empty revision".into(),
+            ));
+        }
+        let dataset = PinnedOalcDatasetSelection {
+            dataset_id: OALC_DATASET_ID.into(),
+            config: OALC_CONFIG.into(),
+            split: OALC_SPLIT.into(),
+            corpus_revision_ref: format!("{OALC_DATASET_ID}@{}", info.sha),
+        };
+        dataset
+            .validate()
+            .map_err(|error| OalcCaseFollowError::Dataset(format!("{error:?}")))?;
+        let demand = case_demand(request)?;
+        if demand.document_kind != OalcDocumentKind::CaseLaw {
+            return Err(OalcCaseFollowError::Validation(
+                "LegalFollow demand did not lower to case law".into(),
+            ));
+        }
+        let url = format!(
+            "{HF_SEARCH_API}?dataset={}&config={}&split={}&query={}&offset=0&length=100",
+            encode(OALC_DATASET_ID),
+            encode(OALC_CONFIG),
+            encode(OALC_SPLIT),
+            encode(&request.citation)
+        );
+        let bounded_request = PinnedOalcStreamRequest {
+            revision: info.sha.clone(),
+            citation: request.citation.clone(),
+            citation_match: OalcCitationMatch::Contains,
+            document_type: "decision".into(),
+            source: None,
+            jurisdiction: (!request.oalc_jurisdiction.is_empty())
+                .then(|| request.oalc_jurisdiction.clone()),
+        };
+        let search = provider.get(&url);
+        let (record, resolution_path, stream_receipt) = match search {
             Ok(response) => {
                 let response: FilterResponse = serde_json::from_slice(&response.body)
                     .map_err(|error| OalcCaseFollowError::Json(error.to_string()))?;
@@ -598,101 +765,64 @@ mod live {
                 } else {
                     OalcFilterIndexState::Complete
                 };
-                let bounded_request = PinnedOalcStreamRequest {
-                    revision: info.sha.clone(),
-                    citation: request.citation.clone(),
-                    citation_match: OalcCitationMatch::Contains,
-                    document_type: "decision".into(),
-                    source: None,
-                    jurisdiction: if request.oalc_jurisdiction.is_empty() {
-                        None
-                    } else {
-                        Some(request.oalc_jurisdiction.clone())
-                    },
-                };
                 let rows = response
                     .rows
                     .into_iter()
                     .map(|row| row.row)
                     .filter(|row| super::oalc_corpus_row_matches(&bounded_request, row))
                     .collect();
-
                 match classify_exact_filter(rows, index_state) {
                     OalcExactLookupDisposition::Found(row) => (row, "search_exact_mnc", None),
                     OalcExactLookupDisposition::RequireRevisionPinnedStreaming
-                        if mode == OalcCaseAcquisitionMode::IndexedThenPinnedStream =>
-                    {
-                        let streamed = stream_fallback(&mut provider, request, &info.sha)?;
-                        (
-                            streamed.row.clone(),
-                            "revision_pinned_streaming_after_incomplete_index",
-                            Some(streamed),
-                        )
-                    }
-                    OalcExactLookupDisposition::RequireRevisionPinnedStreaming => {
-                        return Err(OalcCaseFollowError::SourceResidual(format!(
+                        if mode == OalcCaseAcquisitionMode::IndexedThenPinnedStream => {
+                            let stream = stream_fallback(&mut provider, request, &info.sha)?;
+                            (stream.row.clone(), "revision_pinned_streaming_after_incomplete_index", Some(stream))
+                        }
+                    OalcExactLookupDisposition::CompleteIndexAbsent
+                        if mode == OalcCaseAcquisitionMode::IndexedThenPinnedStream => {
+                            let stream = stream_fallback(&mut provider, request, &info.sha)?;
+                            (stream.row.clone(), "revision_pinned_streaming_after_index_absence", Some(stream))
+                        }
+                    OalcExactLookupDisposition::RequireRevisionPinnedStreaming => return Err(
+                        OalcCaseFollowError::SourceResidual(format!(
                             "bounded OALC search was incomplete for {}; acquisition mode is IndexedOnly",
                             request.citation
-                        )))
-                    }
-                    OalcExactLookupDisposition::CompleteIndexAbsent
-                        if mode == OalcCaseAcquisitionMode::IndexedThenPinnedStream =>
-                    {
-                        let streamed = stream_fallback(&mut provider, request, &info.sha)?;
-                        (
-                            streamed.row.clone(),
-                            "revision_pinned_streaming_after_index_absence",
-                            Some(streamed),
-                        )
-                    }
-                    OalcExactLookupDisposition::CompleteIndexAbsent => {
-                        return Err(OalcCaseFollowError::SourceResidual(format!(
+                        )),
+                    ),
+                    OalcExactLookupDisposition::CompleteIndexAbsent => return Err(
+                        OalcCaseFollowError::SourceResidual(format!(
                             "complete bounded OALC search found no exact terminal-MNC source for {}",
                             request.citation
-                        )))
-                    }
-                    OalcExactLookupDisposition::Ambiguous(count) => {
-                        return Err(OalcCaseFollowError::SourceResidual(format!(
-                            "OALC returned {count} candidates for {}",
-                            request.citation
-                        )))
-                    }
+                        )),
+                    ),
+                    OalcExactLookupDisposition::Ambiguous(count) => return Err(
+                        OalcCaseFollowError::SourceResidual(format!(
+                            "OALC returned {count} candidates for {}", request.citation
+                        )),
+                    ),
                 }
             }
-            Err(index_error)
-                if mode == OalcCaseAcquisitionMode::IndexedThenPinnedStream =>
-            {
-                let streamed = stream_fallback(&mut provider, request, &info.sha)
-                    .map_err(|stream_error| {
-                        OalcCaseFollowError::StreamingFallback(format!(
-                            "OALC index path failed ({index_error:?}); pinned stream fallback also failed ({stream_error:?})"
-                        ))
-                    })?;
+            Err(index_error) if mode == OalcCaseAcquisitionMode::IndexedThenPinnedStream => {
+                let stream = stream_fallback(&mut provider, request, &info.sha).map_err(|stream_error| {
+                    OalcCaseFollowError::StreamingFallback(format!(
+                        "OALC index path failed ({index_error:?}); pinned stream fallback also failed ({stream_error:?})"
+                    ))
+                })?;
                 (
-                    streamed.row.clone(),
+                    stream.row.clone(),
                     "revision_pinned_streaming_after_index_provider_failure",
-                    Some(streamed),
+                    Some(stream),
                 )
             }
-            Err(index_error) => return Err(index_error),
+            Err(error) => return Err(error),
         };
-
-        if !record.citation.ends_with(&request.citation)
-            || record.document_type != "decision"
+        if !super::oalc_corpus_row_matches(&bounded_request, &record)
             || record.text.trim().is_empty()
         {
             return Err(OalcCaseFollowError::Validation(
                 "OALC result failed decision/citation/text validation".into(),
             ));
         }
-        if !request.oalc_jurisdiction.is_empty() && record.jurisdiction != request.oalc_jurisdiction
-        {
-            return Err(OalcCaseFollowError::Validation(format!(
-                "OALC jurisdiction mismatch: expected {} got {}",
-                request.oalc_jurisdiction, record.jurisdiction
-            )));
-        }
-
         let text_path = request.output_dir.join("judgment.txt");
         readonly_write(&text_path, &record.text)?;
         let receipt = OalcResolvedSourceReceipt {
@@ -729,7 +859,6 @@ mod live {
         receipt
             .validate_against(&dataset, &demand)
             .map_err(|error| OalcCaseFollowError::Validation(format!("{error:?}")))?;
-
         let receipt_path = request.output_dir.join("oalc-source-receipt.json");
         fs::write(
             &receipt_path,
@@ -737,7 +866,6 @@ mod live {
                 .map_err(|error| OalcCaseFollowError::Json(error.to_string()))?,
         )
         .map_err(|error| OalcCaseFollowError::Io(error.to_string()))?;
-
         Ok(OalcCaseFollowRunReceipt {
             source_receipt_path: receipt_path,
             canonical_text_path: text_path,
@@ -758,6 +886,12 @@ mod live {
             creates_legal_authority: false,
             creates_claim_truth: false,
         })
+    }
+
+    pub fn resolve_exact_source(
+        request: &OalcExactSourceRequest,
+    ) -> Result<OalcExactSourceRunReceipt, OalcCaseFollowError> {
+        resolve_exact_source_indexed(request)
     }
 
     pub fn run_with_acquisition_mode(
@@ -787,8 +921,7 @@ mod live {
 pub use live::{
     resolve_dataset_revision as resolve_oalc_dataset_revision,
     resolve_exact_source as resolve_live_oalc_exact_source, run as run_live_oalc_case_follow,
-    run_filter_only as run_live_oalc_case_follow_filter_only,
-    run_pinned as run_pinned_oalc_stream,
+    run_filter_only as run_live_oalc_case_follow_filter_only, run_pinned as run_pinned_oalc_stream,
     run_with_acquisition_mode as run_live_oalc_case_follow_with_mode,
 };
 
@@ -990,7 +1123,6 @@ mod tests {
         assert!(!predicate.contains("LIKE"));
     }
 
-
     #[test]
     fn recursive_acquisition_mode_allows_index_then_pinned_stream() {
         assert_ne!(
@@ -1017,7 +1149,6 @@ mod tests {
         assert!(!receipt.uniqueness_exhaustively_verified);
         assert_eq!(receipt.rows_examined, 42);
     }
-
 
     #[test]
     fn pinned_jsonl_scanner_stops_at_first_exact_mnc_and_records_cost() {
@@ -1085,5 +1216,4 @@ mod tests {
                 .unwrap_err();
         assert!(matches!(error, OalcCaseFollowError::SourceResidual(_)));
     }
-
 }
