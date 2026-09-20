@@ -81,11 +81,25 @@ priority_is_legal_truth_rank = false
 ```bash
 cargo run -p sensiblaw-cli --features live-network --bin sensiblaw -- \
   legal-follow contracts campaign acquire-next \
+  --trajectory /tmp/waltons-live/waltons-s14-adaptive-trajectory.json \
   --frontier /tmp/waltons-live/recursive/outbound-frontier.json \
   --output-dir /tmp/waltons-live/recursive/giumelli
 ```
 
 The selected source is independently reacquired through the governed OALC case path.
+Before the network call the controller reserves OALC's three-request worst-case
+budget.  The actual request count is then charged to the cumulative campaign
+budget.  A successful acquisition writes:
+
+```text
+giumelli/oalc-source-receipt.json
+giumelli/authority-identity-review-worksheet.json
+giumelli/campaign-after-source-acquisition.json
+```
+
+The last file is the next resumable campaign receipt.  Acquisition does not add
+a legal graph hop; it advances source/network counters and sets the explicit
+`AuthorityIdentityReview` operator gate.
 
 ## Generic identity gate
 
@@ -101,17 +115,29 @@ Review the worksheet and mark `review_complete=true`. Then:
 ```bash
 cargo run -p sensiblaw-cli --features live-network --bin sensiblaw -- \
   legal-follow contracts campaign identity-reviewed \
-  --trajectory /tmp/waltons-live/waltons-s14-adaptive-trajectory.json \
-  --worksheet /tmp/waltons-live/recursive/giumelli-identity-review.json \
+  --trajectory /tmp/waltons-live/recursive/giumelli/campaign-after-source-acquisition.json \
+  --worksheet /tmp/waltons-live/recursive/giumelli/authority-identity-review-worksheet.json \
   --decisions /tmp/waltons-live/recursive/giumelli-identity-decisions.json \
   --output /tmp/waltons-live/recursive/after-giumelli-identity.json
 ```
 
-The output is another resumable typed campaign receipt containing its own `final_trace`.
+The output is another resumable typed campaign receipt containing its own
+`final_trace`.  The controller also uses the pending recursive coordinate to
+prepare, automatically:
+
+```text
+recursive-treatment-queue.json
+recursive-treatment-review-worksheet.json
+```
+
+and sets the explicit `AuthorityTreatmentReview` operator gate.
 
 ## Generic Doueihi -> Giumelli treatment gate
 
-Prepare exact citation review units from the retained Doueihi primary source:
+The manual `treatment-prepare` command remains available as a compatibility
+surface, but the normal recursive path no longer needs it.  The identity stage
+has already prepared exact citation review units from the retained Doueihi
+primary source.
 
 ```bash
 cargo run -p sensiblaw-cli --features live-network --bin sensiblaw -- \
@@ -130,13 +156,21 @@ After explicit review:
 cargo run -p sensiblaw-cli --features live-network --bin sensiblaw -- \
   legal-follow contracts campaign treatment-reviewed \
   --trajectory /tmp/waltons-live/recursive/after-giumelli-identity.json \
-  --queue /tmp/waltons-live/recursive/doueihi-giumelli-treatment-queue.json \
-  --worksheet /tmp/waltons-live/recursive/doueihi-giumelli-treatment-review.json \
   --decisions /tmp/waltons-live/recursive/doueihi-giumelli-treatment-decisions.json \
   --output /tmp/waltons-live/recursive/after-doueihi-giumelli-treatment.json
 ```
 
-The compiled treatment is whatever the reviewed citation-use receipt supports. It is not predetermined by the controller.
+The compiled treatment is whatever the reviewed citation-use receipt supports.
+It is not predetermined by the controller.  After the reviewed treatment delta
+is accepted, the controller materialises the newly acquired target source,
+recomputes its outbound citation residuals against the updated typed trace, and
+writes `next-outbound-frontier.json`.  If a fresh candidate exists, the next
+operator gate is `OutboundCitationAcquisition`; otherwise it is `None`.
+This is the recursive loop rather than a one-shot Giumelli path.
+
+Campaign counters and the configured budget are inherited from the parent
+receipt at every continuation.  Writing a new receipt cannot reset the accepted
+hop, source acquisition, or network-request budgets.
 
 ## Phase-IV acceptance criterion
 
