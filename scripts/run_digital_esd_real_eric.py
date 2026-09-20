@@ -321,6 +321,28 @@ def main() -> int:
             f"unique record mismatch: observed={len(unique)} expected={args.expect_unique}"
         )
 
+    parser_manifest_path = args.output_root / "parser_manifest.json"
+    parser_manifest = {
+        "schema": "sensiblaw.digital-esd-eric-parser-manifest.v0_2",
+        "export_root": str(args.export_root.resolve()),
+        "pages": [
+            {
+                "query": f"Q{page.page_num}",
+                "path": str(page.raw_path.resolve()),
+                "sha256": page.sha256,
+            }
+            for page in eric.pages
+        ],
+        "observed_raw_occurrences": eric.query_occurrences,
+        "observed_unique_records": len(unique),
+        "page_sha_verified": count_receipt["page_sha_verified"],
+        "conflicts": count_receipt["conflicts"],
+    }
+    parser_manifest_path.write_text(
+        json.dumps(parser_manifest, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
     metadata_path = args.output_root / "digital_esd_eric_metadata.tsv"
     eric.export_records(metadata_path, unique)
 
@@ -355,6 +377,7 @@ def main() -> int:
 
     artifact_paths = {
         "parsed_metadata_corpus": metadata_path,
+        "parser_manifest": parser_manifest_path,
         "screening_ledger": ledger_path,
         "candidate_assessment": assessments_path,
         "study_family_hypotheses": hypotheses_path,
@@ -385,7 +408,7 @@ def main() -> int:
         "creates_screening_decision": False,
         "creates_source_truth": False,
         "creates_source_audit_admission": False,
-        "artifact_paths": {name: str(path) for name, path in artifact_paths.items()},
+        "artifact_paths": {name: str(path.resolve()) for name, path in artifact_paths.items()},
         "artifact_hashes": artifact_hashes,
         "count_receipt": count_receipt,
         "counts_match": (
