@@ -5,6 +5,42 @@
 //! acquisition yields candidate-only source material and never legal truth.
 
 use std::path::PathBuf;
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OalcCitationMatch {
+    Exact,
+    Contains,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PinnedOalcStreamRequest {
+    pub revision: String,
+    pub citation: String,
+    pub citation_match: OalcCitationMatch,
+    pub document_type: String,
+    pub source: Option<String>,
+    pub jurisdiction: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OalcCorpusRow {
+    pub version_id: String,
+    #[serde(rename = "type")]
+    pub document_type: String,
+    pub jurisdiction: String,
+    pub source: String,
+    pub citation: String,
+    #[serde(default)]
+    pub mime: Option<String>,
+    #[serde(default)]
+    pub date: Option<String>,
+    #[serde(default)]
+    pub url: Option<String>,
+    #[serde(default)]
+    pub when_scraped: Option<String>,
+    pub text: String,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OalcCaseFollowRequest {
