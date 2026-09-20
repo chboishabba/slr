@@ -817,24 +817,31 @@ fn jurisdiction_for_court_code(code: &str) -> Option<&'static str> {
     }
 }
 
-fn semantic_ref_suggestion(citation: &str) -> Option<(String, String)> {
+fn embedded_mnc_parts(citation: &str) -> Option<(String, String, String)> {
     let fields = citation.split_whitespace().collect::<Vec<_>>();
-    if fields.len() != 3 {
-        return None;
+    for window in fields.windows(3) {
+        let year_token = window[0];
+        let year = year_token.strip_prefix('[')?.strip_suffix(']')?;
+        if year.len() != 4 || !year.bytes().all(|byte| byte.is_ascii_digit()) {
+            continue;
+        }
+        let court = window[1].trim_matches(|ch: char| !ch.is_ascii_alphanumeric());
+        let number = window[2].trim_matches(|ch: char| !ch.is_ascii_digit());
+        if court.is_empty()
+            || !court.bytes().all(|byte| byte.is_ascii_alphanumeric())
+            || number.is_empty()
+            || !number.bytes().all(|byte| byte.is_ascii_digit())
+        {
+            continue;
+        }
+        return Some((year.to_string(), court.to_string(), number.to_string()));
     }
-    let year = fields[0].strip_prefix('[')?.strip_suffix(']')?;
-    if year.len() != 4 || !year.bytes().all(|byte| byte.is_ascii_digit()) {
-        return None;
-    }
-    let court = fields[1];
-    if !court.bytes().all(|byte| byte.is_ascii_alphanumeric()) {
-        return None;
-    }
-    let number = fields[2];
-    if !number.bytes().all(|byte| byte.is_ascii_digit()) {
-        return None;
-    }
-    let jurisdiction = jurisdiction_for_court_code(court)?;
+    None
+}
+
+fn semantic_ref_suggestion(citation: &str) -> Option<(String, String)> {
+    let (year, court, number) = embedded_mnc_parts(citation)?;
+    let jurisdiction = jurisdiction_for_court_code(&court)?;
     let jurisdiction_slug = match jurisdiction {
         "AU" => "au",
         "AU-NSW" => "nsw",
