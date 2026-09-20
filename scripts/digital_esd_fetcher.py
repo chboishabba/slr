@@ -113,6 +113,7 @@ class ERICFetcher:
         for q in range(1, 8):
             query_dir = self.export_root / f"Q{q}"
             queries.append({
+                "query_num": q,
                 "query": f"Q{q}",
                 "query_dir": str(query_dir),
                 "needs_fetch": not query_dir.exists() or not any(query_dir.glob("*.json")),
