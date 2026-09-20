@@ -3,6 +3,7 @@ use serde_json::json;
 use sensiblaw_governed_legal_provider::{
     resolve_live_oalc_exact_source, OalcCitationMatch, OalcExactSourceRequest,
 };
+use sensiblaw_proof_search_loop::contract_review_expansion::ContractReviewedHopResidual;
 use sensiblaw_legal_follow_plan::{
     australian_contract_landscape_seed, compile_australian_contract_landscape_worklist,
     apply_contract_landscape_expansion, legal_follow_demand_for_trace_node, plan_legal_sources,
@@ -501,6 +502,85 @@ fn load_expansion_artifact(path: &Path) -> CliResult<LoadedExpansionArtifact> {
             .collect::<CliResult<Vec<_>>>()?,
         reviewed_residuals,
     })
+}
+
+#[derive(Debug)]
+pub struct NativeExpansionBatch {
+    pub source_ref: String,
+    pub deltas: Vec<ContractLandscapeExpansionDelta>,
+    pub reviewed_residuals: Vec<ContractReviewedHopResidual>,
+}
+
+pub fn run_native_expansion_trajectory(
+    mut expanded: AustralianContractTrace,
+    batches: Vec<NativeExpansionBatch>,
+    as_at: &str,
+    jurisdiction: Option<&str>,
+) -> CliResult<serde_json::Value> {
+    expanded.validate()?;
+    if as_at.trim().is_empty() {
+        return Err("native contracts trajectory requires an as-at date".into());
+    }
+
+    let mut trajectory = Vec::new();
+    let mut reviewed_residuals = Vec::new();
+    let mut hop_index = 0usize;
+
+    for batch in batches {
+        reviewed_residuals.extend(
+            batch
+                .reviewed_residuals
+                .into_iter()
+                .map(|residual| {
+                    json!({
+                        "source_artifact": batch.source_ref,
+                        "residual": residual,
+                    })
+                }),
+        );
+
+        for delta in batch.deltas {
+            hop_index += 1;
+            let (next, receipt) =
+                apply_contract_landscape_expansion(&expanded, &delta)?;
+            expanded = next;
+            let work = compile_australian_contract_landscape_worklist(
+                &expanded,
+                as_at,
+                jurisdiction,
+            )?;
+            trajectory.push(json!({
+                "hop_index": hop_index,
+                "source_ref": batch.source_ref,
+                "expansion_receipt": expansion_receipt_json(&receipt),
+                "frontier_counts": {
+                    "primary_source_acquisition": work.source_items.len(),
+                    "authority_treatment_review": work.treatment_items.len(),
+                    "context_expansion": work.context_items.len(),
+                    "temporal_alternatives": work.temporal_alternatives.len(),
+                },
+            }));
+        }
+    }
+
+    let work = compile_australian_contract_landscape_worklist(
+        &expanded,
+        as_at,
+        jurisdiction,
+    )?;
+    Ok(json!({
+        "schema_version": "sl.australian_contract_landscape_native_trajectory.v0_1",
+        "transport": "typed_rust_in_process",
+        "json_is_semantic_command_transport": false,
+        "hop_count": trajectory.len(),
+        "reviewed_residual_count": reviewed_residuals.len(),
+        "reviewed_residuals": reviewed_residuals,
+        "trajectory": trajectory,
+        "final_recomputed_worklist": plan_json(&expanded, &work),
+        "candidate_only": true,
+        "creates_legal_authority": false,
+        "creates_current_law_conclusion": false,
+    }))
 }
 
 fn expansion_receipt_json(
