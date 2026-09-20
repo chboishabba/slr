@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from scripts.apply_digital_esd_screening_decisions import apply_decisions
-from scripts.refresh_digital_esd_review_queue import calibration_estimate
+from scripts.refresh_digital_esd_review_queue import calibration_estimate, explicitly_reviewed
 
 
 def _ledger_row(ref: str) -> dict[str, str]:
@@ -115,3 +115,23 @@ def test_calibration_estimate_uses_reviewed_subset_only():
     assert estimate["candidate_review_disagreement_n"] == 1
     assert estimate["estimate_creates_population_truth"] is False
     assert estimate["estimate_creates_automatic_decision"] is False
+
+
+def test_explicitly_reviewed_unresolved_is_counted_as_reviewed_pair():
+    row = _ledger_row("ERIC:EJ1")
+    row["decision"] = "unresolved"
+    row["reviewer_or_model_reference"] = "reviewer:human-1"
+    row["supersedes_decision_reference"] = "screening-decision:prior"
+    assert explicitly_reviewed(row) is True
+
+    estimate = calibration_estimate([row], [_assessment("ERIC:EJ1", "exclude")])
+    assert estimate["reviewed_pair_count"] == 1
+    assert estimate["confusion_counts"]["unresolved->exclude"] == 1
+
+
+def test_unreviewed_unresolved_is_not_counted_as_reviewed_pair():
+    row = _ledger_row("ERIC:EJ1")
+    assert explicitly_reviewed(row) is False
+
+    estimate = calibration_estimate([row], [_assessment("ERIC:EJ1", "exclude")])
+    assert estimate["reviewed_pair_count"] == 0
