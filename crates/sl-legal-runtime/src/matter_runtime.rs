@@ -11,9 +11,10 @@ use std::collections::BTreeSet;
 use sensiblaw_reader_model::ReaderIntent;
 
 use crate::{
-    compile_explanation_index, compile_projection, ExplanationIndex, LegalCampaignState,
-    MatterIssueWorkbench, ProjectionContext, ProjectionGraph, ProjectionKind, ProjectionQuery,
-    ProvenanceAddress, WrongTypeIssueState,
+    compile_explanation_index, compile_explanation_index_from_state, compile_projection,
+    ExplanationIndex, LegalCampaignState, LegalProjectionState, MatterIssueWorkbench,
+    ProjectionContext, ProjectionGraph, ProjectionKind, ProjectionQuery, ProvenanceAddress,
+    WrongTypeIssueState,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -103,14 +104,14 @@ pub struct MatterRuntime {
     pub creates_semantic_authority: bool,
 }
 
-pub fn compile_matter_runtime(
+pub fn compile_matter_runtime_from_state(
     workbench: MatterIssueWorkbench,
     issue: &WrongTypeIssueState,
-    campaign: &LegalCampaignState,
+    state: &LegalProjectionState,
     projection_context: ProjectionContext,
 ) -> Result<MatterRuntime, String> {
     workbench.validate_projection_boundary()?;
-    let explanation = compile_explanation_index(&workbench, issue, campaign)?;
+    let explanation = compile_explanation_index_from_state(&workbench, issue, state)?;
     explanation.validate()?;
 
     let runtime = MatterRuntime {
@@ -123,6 +124,16 @@ pub fn compile_matter_runtime(
     };
     runtime.validate()?;
     Ok(runtime)
+}
+
+pub fn compile_matter_runtime(
+    workbench: MatterIssueWorkbench,
+    issue: &WrongTypeIssueState,
+    campaign: &LegalCampaignState,
+    projection_context: ProjectionContext,
+) -> Result<MatterRuntime, String> {
+    let state = LegalProjectionState::from(campaign);
+    compile_matter_runtime_from_state(workbench, issue, &state, projection_context)
 }
 
 pub fn lower_reader_intent(
