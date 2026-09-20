@@ -428,6 +428,62 @@ mod tests {
         }
     }
 
+    fn source_receipt(citation: &str) -> OalcResolvedSourceReceipt {
+        OalcResolvedSourceReceipt {
+            demand_ref: "demand:fixture".into(),
+            origin_ref: "origin:fixture".into(),
+            citation: citation.into(),
+            version_id: "version:fixture".into(),
+            corpus_revision_ref: "isaacus/open-australian-legal-corpus@fixture".into(),
+            source: "high_court_of_australia".into(),
+            jurisdiction: "commonwealth".into(),
+            document_type: "decision".into(),
+            court: Some("court:HCA".into()),
+            date: Some("2020-01-01".into()),
+            canonical_url: Some("https://example.invalid/fixture".into()),
+            when_scraped: Some("2026-09-20".into()),
+            canonical_text_digest: "sha256:fixture".into(),
+            local_artifact_ref: std::path::PathBuf::from("fixture.txt"),
+            temporal_coverage:
+                sensiblaw_governed_legal_provider::OalcTemporalCoverage::DecisionDateAnchored,
+            resolution_path: "fixture".into(),
+            network_requests: 0,
+            receipt_authority:
+                sensiblaw_governed_legal_provider::OALC_RECEIPT_AUTHORITY.into(),
+            candidate_only: true,
+            creates_legal_authority: false,
+            creates_claim_truth: false,
+        }
+    }
+
+    #[test]
+    fn reviewed_source_identity_adds_new_candidate_authority_node() {
+        let trace = waltons_estoppel_trace();
+        let reviewed = ReviewedContractAuthorityIdentity {
+            semantic_ref: "case:au:hca:2020:1".into(),
+            label: "Later authority fixture".into(),
+            doctrine: Some(sensiblaw_legal_follow_plan::ContractDoctrine::Estoppel),
+            jurisdiction_ref: "AU".into(),
+            court_ref: Some("court:HCA".into()),
+            source_role: SourceRole::PrimaryCaseLaw,
+            authority_level: AuthorityLevel::Official,
+            reviewer_ref: "reviewer:fixture".into(),
+            evidence_refs: vec!["review-note:fixture".into()],
+            source_receipt: source_receipt("[2020] HCA 1"),
+            candidate_only: true,
+            creates_legal_authority: false,
+        };
+        let compiled =
+            compile_reviewed_authority_identity_to_contract_hop(&trace, &reviewed);
+        assert_eq!(compiled.deltas.len(), 1);
+        assert!(compiled.residuals.is_empty());
+        let node = &compiled.deltas[0].discovered_nodes[0];
+        assert_eq!(node.semantic_ref, "case:au:hca:2020:1");
+        assert_eq!(node.kind, TraceNodeKind::CaseAuthority);
+        assert!(node.candidate_only);
+        assert!(!node.creates_legal_authority);
+    }
+
     #[test]
     fn reviewed_followed_edge_compiles_to_candidate_contract_delta() {
         let trace = waltons_estoppel_trace();
