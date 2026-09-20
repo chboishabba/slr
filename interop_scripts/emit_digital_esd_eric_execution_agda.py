@@ -77,6 +77,10 @@ def emit_agda(receipt_path: Path, output_path: Path) -> dict:
         errors.append("real_ERIC flag is not true")
     if not receipt["full_text_stop"]:
         errors.append("full_text_stop boundary is not true")
+    if not receipt.get("screening_ledger_all_unresolved", False):
+        errors.append("screening_ledger_all_unresolved must be true")
+    if receipt.get("scalar_screening_score_used", True):
+        errors.append("scalar_screening_score_used must be false")
     if receipt["creates_screening_decision"]:
         errors.append("creates_screening_decision must be false")
     if receipt["creates_source_truth"]:
