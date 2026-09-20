@@ -67,6 +67,17 @@ jobs:
           grep -q '"reviewed_treatment"' /tmp/waltons-s14-sync/waltons-s14-adaptive-trajectory.json
           grep -q '"creates_legal_authority": false' /tmp/waltons-s14-sync/waltons-s14-adaptive-trajectory.json
           grep -q '"creates_current_law_conclusion": false' /tmp/waltons-s14-sync/waltons-s14-adaptive-trajectory.json
+          rm -f /tmp/contracts-three-hop-adaptive-fixture.json
+          cargo run -p sensiblaw-cli --bin sensiblaw -- legal-follow contracts landscape adaptive-fixture --output /tmp/contracts-three-hop-adaptive-fixture.json
+          test -s /tmp/contracts-three-hop-adaptive-fixture.json
+          grep -q '"schema_version": "sl.australian_contracts.three_hop_adaptive_fixture.v0_1"' /tmp/contracts-three-hop-adaptive-fixture.json
+          grep -q '"hop_count": 3' /tmp/contracts-three-hop-adaptive-fixture.json
+          grep -q '"fresh_frontier_after_every_hop": true' /tmp/contracts-three-hop-adaptive-fixture.json
+          grep -q '"fixed_upfront_queue_consumed": false' /tmp/contracts-three-hop-adaptive-fixture.json
+          grep -q '"calibration_fixture_only": true' /tmp/contracts-three-hop-adaptive-fixture.json
+          grep -q '"claims_live_human_reviewed_campaign": false' /tmp/contracts-three-hop-adaptive-fixture.json
+          grep -q '"creates_legal_authority": false' /tmp/contracts-three-hop-adaptive-fixture.json
+          grep -q '"creates_current_law_conclusion": false' /tmp/contracts-three-hop-adaptive-fixture.json
           cargo run -p sensiblaw-cli --bin sensiblaw -- legal-follow contracts landscape status --as-at 2026-09-20 --jurisdiction AU-QLD
           cargo run -p sensiblaw-cli --bin sensiblaw -- legal-follow contracts landscape plan --as-at 2026-09-20 --jurisdiction AU-QLD --output /tmp/contracts-landscape-qld.json
           test -s /tmp/contracts-landscape-qld.json
