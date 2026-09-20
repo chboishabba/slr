@@ -235,6 +235,18 @@ pub struct OalcResolvedSourceReceipt {
     pub stream_terminated_after_match: Option<bool>,
     #[serde(default)]
     pub stream_uniqueness_exhaustively_verified: Option<bool>,
+    #[serde(default)]
+    pub range_index_hit: Option<bool>,
+    #[serde(default)]
+    pub range_index_requests: Option<u64>,
+    #[serde(default)]
+    pub range_index_rows_indexed_this_run: Option<u64>,
+    #[serde(default)]
+    pub range_index_bytes_indexed_this_run: Option<u64>,
+    #[serde(default)]
+    pub range_index_byte_start: Option<u64>,
+    #[serde(default)]
+    pub range_index_byte_len: Option<u64>,
     pub receipt_authority: String,
     pub candidate_only: bool,
     pub creates_legal_authority: bool,
