@@ -302,6 +302,64 @@ pub fn identity_reviewed(paths: &WaltonsPaths) -> CliResult {
     )
 }
 
+fn validate_final_s14_trajectory(paths: &WaltonsPaths, trajectory: &Value) -> CliResult<Value> {
+    if trajectory["transport"] != "typed_rust_in_process"
+        || trajectory["json_is_semantic_command_transport"] != false
+        || trajectory["creates_legal_authority"] != false
+        || trajectory["creates_current_law_conclusion"] != false
+    {
+        return Err("final S14 trajectory crossed the native transport/authority boundary".into());
+    }
+
+    let hops = trajectory["trajectory"]
+        .as_array()
+        .ok_or_else(|| "final S14 trajectory missing trajectory array".to_string())?;
+    let mut bootstrap_hops = 0u64;
+    let mut identity_hops = 0u64;
+    let mut proposition_hops = 0u64;
+    let mut treatment_hops = 0u64;
+    let identity_ref = paths.identity_hops.display().to_string();
+    let proposition_ref = paths.proposition_hops.display().to_string();
+    let treatment_ref = paths.treatment_hops.display().to_string();
+
+    for hop in hops {
+        let receipt = &hop["expansion_receipt"];
+        if receipt["recompute_frontier_required"] != true
+            || receipt["old_source_history_preserved"] != true
+            || receipt["old_conclusions_frozen"] != false
+            || receipt["creates_legal_authority"] != false
+            || receipt["creates_current_law_conclusion"] != false
+        {
+            return Err("final S14 trajectory contains a hop that violates recomputation/history/authority invariants".into());
+        }
+        let source_ref = hop["source_ref"].as_str().unwrap_or_default();
+        if source_ref.starts_with("bootstrap:") {
+            bootstrap_hops += 1;
+        } else if source_ref == identity_ref {
+            identity_hops += 1;
+        } else if source_ref == proposition_ref {
+            proposition_hops += 1;
+        } else if source_ref == treatment_ref {
+            treatment_hops += 1;
+        }
+    }
+
+    let reviewed_hops = identity_hops + proposition_hops + treatment_hops;
+    Ok(json!({
+        "accepted_hop_count": hops.len(),
+        "bootstrap_hop_count": bootstrap_hops,
+        "reviewed_identity_hop_count": identity_hops,
+        "reviewed_proposition_hop_count": proposition_hops,
+        "reviewed_treatment_hop_count": treatment_hops,
+        "accepted_reviewed_hop_count": reviewed_hops,
+        "has_accepted_reviewed_hop": reviewed_hops > 0,
+        "recompute_after_every_accepted_hop": true,
+        "old_source_history_preserved": true,
+        "old_conclusions_frozen": false,
+        "typed_rust_transport": true,
+    }))
+}
+
 /// Final deterministic stage after human treatment decisions.  This compiles
 /// proposition-level citation-use receipts, temporal genealogy, candidate S14
 /// treatment edges and the final typed adaptive trajectory.
@@ -316,7 +374,7 @@ pub fn treatment_reviewed(paths: &WaltonsPaths) -> CliResult {
     require(&paths.s14_trajectory, "S14 adaptive trajectory")?;
 
     let trajectory = read_json(&paths.s14_trajectory)?;
-    let hop_count = trajectory["hop_count"].as_u64().unwrap_or_default();
+    let validated = validate_final_s14_trajectory(paths, &trajectory)?;
     let residual_count = trajectory["reviewed_residual_count"]
         .as_u64()
         .unwrap_or_default();
@@ -331,7 +389,7 @@ pub fn treatment_reviewed(paths: &WaltonsPaths) -> CliResult {
             "genealogy": paths.genealogy,
             "treatment_contract_hops": paths.treatment_hops,
             "s14_trajectory": paths.s14_trajectory,
-            "accepted_hop_count": hop_count,
+            "trajectory_validation": validated,
             "reviewed_residual_count": residual_count,
             "live_oalc_source_chain_exercised": true,
             "candidate_only": true,
