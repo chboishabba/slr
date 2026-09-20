@@ -1175,7 +1175,6 @@ dependencies = [
 name = "sensiblaw-governed-legal-provider"
 version = "0.1.0"
 dependencies = [
- "sensiblaw-legal-follow-plan",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -1196,6 +1195,20 @@ name = "sensiblaw-legal-follow-plan"
 version = "0.1.0"
 dependencies = [
  "sensiblaw-legal-counterfactual",
+]
+
+[[package]]
+name = "sensiblaw-legal-runtime"
+version = "0.1.0"
+dependencies = [
+ "sensiblaw-consumer-residual",
+ "sensiblaw-core",
+ "sensiblaw-legal-counterfactual",
+ "sensiblaw-legal-follow-plan",
+ "sensiblaw-proof-search-loop",
+ "sensiblaw-reader-model",
+ "sensiblaw-reviewed-evidence-payment",
+ "sha2 0.10.9",
 ]
 
 [[package]]

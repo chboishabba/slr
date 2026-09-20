@@ -9,6 +9,8 @@ import DASHI.Education.DigitalESDERICStudyExecutionExact as ERIC
 import DASHI.Education.DigitalESDERICStudyExecutionRegression as ERICRegression
 import DASHI.Education.DigitalESDAdaptiveScreeningExecutionExact as Screening
 import DASHI.Education.DigitalESDAdaptiveScreeningExecutionRegression as ScreeningRegression
+import DASHI.Education.DigitalESDSelectiveFullTextMaterialisationExact as FullText
+import DASHI.Education.DigitalESDSelectiveFullTextMaterialisationRegression as FullTextRegression
 
 ------------------------------------------------------------------------
 -- DIGITAL-ESD RECIPROCAL BRAID
@@ -43,13 +45,21 @@ record DigitalESDReciprocalBraidBoundary : Set where
     paretoQueueCreatesDecisionIsFalse :
       paretoQueueCreatesDecision ≡ false
 
-    missingFullTextCountsAsVerified : Bool
-    missingFullTextCountsAsVerifiedIsFalse :
-      missingFullTextCountsAsVerified ≡ false
+missingFullTextCountsAsVerified : Bool
+missingFullTextCountsAsVerifiedIsFalse :
+  missingFullTextCountsAsVerified ≡ false
 
-    fullTextVerificationCreatesSourceAuditAdmission : Bool
-    fullTextVerificationCreatesSourceAuditAdmissionIsFalse :
-      fullTextVerificationCreatesSourceAuditAdmission ≡ false
+fullTextVerificationCreatesSourceAuditAdmission : Bool
+fullTextVerificationCreatesSourceAuditAdmissionIsFalse :
+  fullTextVerificationCreatesSourceAuditAdmission ≡ false
+
+selectiveFullTextMaterialisationBoundary : Bool
+selectiveFullTextMaterialisationBoundaryIsTrue :
+  selectiveFullTextMaterialisationBoundary ≡ true
+
+metadataRowsNotFullTextFilesInBraid : Bool
+metadataRowsNotFullTextFilesInBraidIsTrue :
+  metadataRowsNotFullTextFilesInBraid ≡ true
 
 open DigitalESDReciprocalBraidBoundary public
 
@@ -66,6 +76,8 @@ canonicalDigitalESDReciprocalBraidBoundary =
     false refl
     false refl
     false refl
+    true refl
+    true refl
 
 data BraidCreatesObservedWitness : Set where
 data BraidPromotesMetadataToFullText : Set where
@@ -102,4 +114,22 @@ screeningMetadataNotFullText :
   Screening.allMetadataCountsAsVerifiedFullText
     Screening.canonicalAdaptiveScreeningExecutionBoundary
   ≡ false
-screeningMetadataNotFullText = ScreeningRegression.metadataIsNotFullText
+ screeningMetadataNotFullText = ScreeningRegression.metadataIsNotFullText
+
+selectiveFullTextMetadataNotFullText :
+  FullText.metadataRecordCount
+    FullText.canonicalFullTextCacheBoundary
+  ≡ 43996
+ selectiveFullTextMetadataNotFullText = FullTextRegression.metadataRowsAreNotFullTextFiles
+
+selectiveFullTextPlanRespectsReserve :
+  FullText.planRespectsReserve
+    FullText.canonicalFullTextCacheBoundary
+  ≡ true
+ selectiveFullTextPlanRespectsReserve = FullTextRegression.planRespectsReserve
+
+selectiveFullTextGcPlanNotDeletion :
+  FullText.gcPlanNotDeletion
+    FullText.canonicalFullTextCacheBoundary
+  ≡ true
+ selectiveFullTextGcPlanNotDeletion = FullTextRegression.gcPlanNotDeletion

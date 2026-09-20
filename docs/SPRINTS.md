@@ -304,6 +304,60 @@ Digital-ESD remains an application workload. None of these screening/runtime
 layers create source truth, SourceAuditAdmission, legal applicability, or
 semantic promotion.
 
+### Digital-ESD selective full-text materialisation (HDD-safe sparse cache)
+
+The 43,996-record ERIC metadata universe is cheap metadata. Full-text
+PDFs are intentionally sparse. The formal boundary is:
+
+```
+43,996 metadata rows  !=  43,996 materialised full-text files
+unreviewed record      !=  eligible for full-text batch
+include|probable        !=  automatic download
+cached artifact         !=  SourceAuditAdmission
+unprocessed artifact    !=  safely evictable
+```
+
+The default corpus state is `metadataOnly`. Full-text materialisation
+proceeds as an on-demand sparse cache over the review frontier, never
+as a bulk mirror.
+
+Four machine-executable stages with one wrapper:
+
+```text
+interop_scripts/digital_esd_fulltext_cache.py
+  plan      bounded fetch batch from include|probable worklist
+            respects max-items, cache-cap, free-space reserve
+  register  hashes actual bytes; refuses unplaned artifacts
+            refuses cache-cap overrun
+  handoff   lowers only registered retained items toward SLR evidence
+  gc-plan   writes inspectable safe-eviction list only when SLR receipt
+            exists and revision digest is retained
+            gc-plan != deletion
+```
+
+Default planning envelope is conservative:
+
+```text
+max batch       20 items
+cache cap       2 GiB
+free-space hold 5 GiB
+planning size   10 MiB / paper
+```
+
+Primary owners:
+
+```text
+interop_scripts/digital_esd_fulltext_cache.py
+DASHI/Education/DigitalESDSelectiveFullTextMaterialisationExact.agda
+DASHI/Education/DigitalESDSelectiveFullTextMaterialisationRegression.agda
+DASHI/Education/Everything.agda
+DASHI/Everything.agda
+```
+
+Selective full-text materialisation does not create source truth or
+SourceAuditAdmission. Cached working storage (PDF/HTML/extracted text)
+is evitable only through the gc-plan safe-candidate list.
+
 
 ### Digital-ESD execution reference
 
