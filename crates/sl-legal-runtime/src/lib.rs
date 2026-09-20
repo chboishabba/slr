@@ -2024,10 +2024,27 @@ pub struct MatterWorkspaceProjection {
     pub creates_semantic_authority: bool,
 }
 
-pub fn project_matter_issue_workspace(
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LegalProjectionState {
+    pub evaluation: SourceRealisedLegalEvaluation,
+    pub residuals: Vec<LegalResidual>,
+    pub selected_action: Option<InformationAction>,
+}
+
+impl From<&LegalCampaignState> for LegalProjectionState {
+    fn from(campaign: &LegalCampaignState) -> Self {
+        Self {
+            evaluation: campaign.evaluation.clone(),
+            residuals: campaign.residuals.clone(),
+            selected_action: campaign.selected_action.clone(),
+        }
+    }
+}
+
+pub fn project_matter_issue_workspace_from_state(
     matter_ref: impl Into<String>,
     issue: &WrongTypeIssueState,
-    campaign: &LegalCampaignState,
+    state: &LegalProjectionState,
 ) -> MatterWorkspaceProjection {
     let issue_ref = format!("issue:{}", issue.wrong_type_ref);
     let mut nodes = Vec::new();
@@ -2036,15 +2053,15 @@ pub fn project_matter_issue_workspace(
         node_ref: issue_ref.clone(),
         label: issue.wrong_type_ref.clone(),
         semantic_kind: "legal-issue".into(),
-        source_revision_refs: vec![campaign.evaluation.source_revision_ref.clone()],
-        span_refs: campaign.evaluation.source_span_refs.clone(),
+        source_revision_refs: vec![state.evaluation.source_revision_ref.clone()],
+        span_refs: state.evaluation.source_span_refs.clone(),
         dependency_refs: issue
             .elements
             .iter()
             .map(|element| element.element.element_ref.clone())
             .collect(),
-        downstream_refs: vec![campaign.evaluation.rule_ref.clone()],
-        residual_refs: campaign
+        downstream_refs: vec![state.evaluation.rule_ref.clone()],
+        residual_refs: state
             .residuals
             .iter()
             .map(|residual| residual.residual_ref.clone())
@@ -2074,7 +2091,7 @@ pub fn project_matter_issue_workspace(
                 .map(|evidence| evidence.reviewed_evidence_ref.clone())
                 .collect(),
             downstream_refs: vec![issue_ref.clone()],
-            residual_refs: campaign
+            residual_refs: state
                 .residuals
                 .iter()
                 .filter(|residual| residual.target_ref == element.element.element_ref)
@@ -2090,14 +2107,23 @@ pub fn project_matter_issue_workspace(
         nodes,
         issue_ref,
         wrong_type_ref: issue.wrong_type_ref.clone(),
-        applicability: campaign.evaluation.applicability,
-        violation: campaign.evaluation.violation,
-        liability: campaign.evaluation.liability,
-        remedy: campaign.evaluation.remedy,
-        next_action: campaign.selected_action.clone(),
+        applicability: state.evaluation.applicability,
+        violation: state.evaluation.violation,
+        liability: state.evaluation.liability,
+        remedy: state.evaluation.remedy,
+        next_action: state.selected_action.clone(),
         projection_only: true,
         creates_semantic_authority: false,
     }
+}
+
+pub fn project_matter_issue_workspace(
+    matter_ref: impl Into<String>,
+    issue: &WrongTypeIssueState,
+    campaign: &LegalCampaignState,
+) -> MatterWorkspaceProjection {
+    let state = LegalProjectionState::from(campaign);
+    project_matter_issue_workspace_from_state(matter_ref, issue, &state)
 }
 
 #[cfg(test)]
