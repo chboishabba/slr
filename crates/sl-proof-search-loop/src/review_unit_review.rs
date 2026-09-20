@@ -10,8 +10,9 @@ use crate::reasoning::{
     CitationUse, ConditionCoordinate, PropositionReasoningEdge, ReasoningGraphDelta, ReasoningRole,
 };
 use crate::review_units::CitationReviewUnit;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReviewedCitationReviewUnitDecision {
     pub review_unit_ref: String,
     pub source_revision_ref: String,
