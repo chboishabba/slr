@@ -1,3 +1,6 @@
+pub mod oalc_source_contract;
+pub use oalc_source_contract::*;
+
 //! Governed legal-provider runtime for SensibLaw.
 //!
 //! Preferred Australian authority order:
