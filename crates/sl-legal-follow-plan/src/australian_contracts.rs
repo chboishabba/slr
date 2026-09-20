@@ -79,6 +79,51 @@ pub struct ContractTraceEdge {
     pub creates_legal_authority: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum ExternalIdentityLookupPriority {
+    NotApplicable,
+    Opportunistic,
+    WorthChecking,
+    HighValue,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExternalIdentityLookupHint {
+    pub semantic_ref: String,
+    pub wikidata_qid_priority: ExternalIdentityLookupPriority,
+    pub canonical_url_priority: ExternalIdentityLookupPriority,
+    pub lookup_is_existence_claim: bool,
+    pub lookup_creates_legal_authority: bool,
+}
+
+pub fn external_identity_lookup_hint(node: &ContractTraceNode) -> ExternalIdentityLookupHint {
+    use ExternalIdentityLookupPriority::*;
+    let qid = match node.kind {
+        TraceNodeKind::ResearchRequirement => NotApplicable,
+        TraceNodeKind::Doctrine => HighValue,
+        TraceNodeKind::CaseAuthority | TraceNodeKind::Matter => {
+            if node.court_ref.as_deref() == Some("court:HCA") {
+                WorthChecking
+            } else {
+                Opportunistic
+            }
+        }
+        TraceNodeKind::Legislation => Opportunistic,
+    };
+    let canonical = match node.kind {
+        TraceNodeKind::ResearchRequirement => NotApplicable,
+        TraceNodeKind::CaseAuthority | TraceNodeKind::Matter | TraceNodeKind::Legislation => HighValue,
+        TraceNodeKind::Doctrine => WorthChecking,
+    };
+    ExternalIdentityLookupHint {
+        semantic_ref: node.semantic_ref.clone(),
+        wikidata_qid_priority: qid,
+        canonical_url_priority: canonical,
+        lookup_is_existence_claim: false,
+        lookup_creates_legal_authority: false,
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AustralianContractTrace {
     pub root_ref: String,
@@ -474,6 +519,23 @@ mod tests {
         assert!(!trace.active_at("legislation:qld:property-law-act-1974:s55", "2025-08-01"));
         assert!(!trace.active_at("legislation:qld:property-law-act-2023:s68", "2025-07-31"));
         assert!(trace.active_at("legislation:qld:property-law-act-2023:s68", "2025-08-01"));
+    }
+
+    #[test]
+    fn qid_lookup_priority_is_opportunistic_identity_not_existential_or_authoritative() {
+        let waltons = waltons_estoppel_trace();
+        let case = external_identity_lookup_hint(&waltons.nodes["case:au:hca:1988:7"]);
+        assert_eq!(case.wikidata_qid_priority, ExternalIdentityLookupPriority::WorthChecking);
+        assert_eq!(case.canonical_url_priority, ExternalIdentityLookupPriority::HighValue);
+        assert!(!case.lookup_is_existence_claim);
+        assert!(!case.lookup_creates_legal_authority);
+
+        let requirement =
+            external_identity_lookup_hint(&waltons.nodes["requirement:estoppel:detriment"]);
+        assert_eq!(
+            requirement.wikidata_qid_priority,
+            ExternalIdentityLookupPriority::NotApplicable
+        );
     }
 
     #[test]
