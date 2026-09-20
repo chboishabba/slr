@@ -1420,9 +1420,8 @@ impl PersistedLegalCampaign {
         ))
     }
 
-    pub fn validate_restart_replay(&self) -> Result<(), LegalRuntimeError> {
-        let encoded = self.encode();
-        let (campaign_ref, receipt_head, hops) = Self::replay_summary(&encoded)?;
+    pub fn validate_persisted_payload(&self, payload: &str) -> Result<(), LegalRuntimeError> {
+        let (campaign_ref, receipt_head, hops) = Self::replay_summary(payload)?;
         if campaign_ref != self.campaign_ref
             || receipt_head != self.receipt_head
             || hops.len() != self.hops.len()
@@ -1435,6 +1434,10 @@ impl PersistedLegalCampaign {
             }
         }
         Ok(())
+    }
+
+    pub fn validate_restart_replay(&self) -> Result<(), LegalRuntimeError> {
+        self.validate_persisted_payload(&self.encode())
     }
 }
 
