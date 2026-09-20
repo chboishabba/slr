@@ -463,11 +463,22 @@ fn expansion_input_to_delta(
     })
 }
 
-fn load_expansion_deltas(path: &Path) -> CliResult<Vec<ContractLandscapeExpansionDelta>> {
+struct LoadedExpansionArtifact {
+    deltas: Vec<ContractLandscapeExpansionDelta>,
+    reviewed_residuals: Vec<serde_json::Value>,
+}
+
+fn load_expansion_artifact(path: &Path) -> CliResult<LoadedExpansionArtifact> {
     let bytes = fs::read(path)
         .map_err(|error| format!("read expansion delta {}: {error}", path.display()))?;
     let value: serde_json::Value = serde_json::from_slice(&bytes)
         .map_err(|error| format!("decode expansion delta {}: {error}", path.display()))?;
+
+    let reviewed_residuals = value
+        .get("residuals")
+        .and_then(|value| value.as_array())
+        .cloned()
+        .unwrap_or_default();
 
     let inputs = if let Some(deltas) = value.get("deltas").and_then(|value| value.as_array()) {
         deltas
@@ -483,10 +494,13 @@ fn load_expansion_deltas(path: &Path) -> CliResult<Vec<ContractLandscapeExpansio
             .map_err(|error| format!("decode expansion delta {}: {error}", path.display()))?]
     };
 
-    inputs
-        .into_iter()
-        .map(expansion_input_to_delta)
-        .collect()
+    Ok(LoadedExpansionArtifact {
+        deltas: inputs
+            .into_iter()
+            .map(expansion_input_to_delta)
+            .collect::<CliResult<Vec<_>>>()?,
+        reviewed_residuals,
+    })
 }
 
 fn expansion_receipt_json(
@@ -571,10 +585,21 @@ pub fn run(args: Vec<String>) -> CliResult {
             let jurisdiction = value(rest, "--jurisdiction");
             let mut expanded = australian_contract_landscape_seed();
             let mut trajectory = Vec::new();
+            let mut reviewed_residuals = Vec::new();
 
             let mut hop_index = 0usize;
             for delta_path in &delta_paths {
-                for delta in load_expansion_deltas(delta_path)? {
+                let artifact = load_expansion_artifact(delta_path)?;
+                reviewed_residuals.extend(
+                    artifact
+                        .reviewed_residuals
+                        .into_iter()
+                        .map(|residual| json!({
+                            "source_artifact": delta_path,
+                            "residual": residual,
+                        })),
+                );
+                for delta in artifact.deltas {
                     hop_index += 1;
                     let (next, receipt) =
                         apply_contract_landscape_expansion(&expanded, &delta)?;
@@ -606,6 +631,8 @@ pub fn run(args: Vec<String>) -> CliResult {
             let output = json!({
                 "schema_version": "sl.australian_contract_landscape_adaptive_trajectory.v0_1",
                 "hop_count": trajectory.len(),
+                "reviewed_residual_count": reviewed_residuals.len(),
+                "reviewed_residuals": reviewed_residuals,
                 "trajectory": trajectory,
                 "final_recomputed_worklist": plan_json(&expanded, &work),
                 "candidate_only": true,
@@ -766,7 +793,8 @@ mod tests {
             "residuals": []
         });
         write_output(&path, &envelope).unwrap();
-        let deltas = load_expansion_deltas(&path).unwrap();
+        let artifact = load_expansion_artifact(&path).unwrap();
+        let deltas = artifact.deltas;
         let _ = fs::remove_file(&path);
         assert_eq!(deltas.len(), 1);
         assert_eq!(
