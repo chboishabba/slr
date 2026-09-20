@@ -1192,6 +1192,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "sensiblaw-legal-runtime"
+version = "0.1.0"
+dependencies = [
+ "sensiblaw-consumer-residual",
+ "sensiblaw-core",
+ "sensiblaw-legal-counterfactual",
+ "sensiblaw-proof-search-loop",
+ "sensiblaw-reviewed-evidence-payment",
+ "sha2 0.10.9",
+]
+
+[[package]]
 name = "sensiblaw-legal-follow-plan"
 version = "0.1.0"
 dependencies = [
