@@ -1515,8 +1515,23 @@ pub fn genealogy(paths: &WaltonsPaths) -> CliResult {
     });
     write_json(&paths.genealogy, &output)?;
 
-    let trace = waltons_estoppel_trace();
-    let reviewed_hops = compile_treatment_receipts_to_contract_hops(&trace, &receipts);
+    let (trace, _identity_hops, aliases) = if paths.identity_decisions.exists() {
+        compile_identity_reviews(paths)?
+    } else {
+        (
+            waltons_estoppel_trace(),
+            ContractReviewedHopCompilation {
+                deltas: Vec::new(),
+                residuals: Vec::new(),
+                candidate_only: true,
+                creates_legal_authority: false,
+                creates_current_law_conclusion: false,
+            },
+            BTreeMap::new(),
+        )
+    };
+    let reviewed_hops =
+        compile_treatment_receipts_to_contract_hops_with_aliases(&trace, &receipts, &aliases);
     write_json(&paths.treatment_hops, &contract_hop_json(&reviewed_hops))?;
 
     println!(
