@@ -385,6 +385,7 @@ def main() -> int:
         "creates_screening_decision": False,
         "creates_source_truth": False,
         "creates_source_audit_admission": False,
+        "artifact_paths": {name: str(path) for name, path in artifact_paths.items()},
         "artifact_hashes": artifact_hashes,
         "count_receipt": count_receipt,
         "counts_match": (
