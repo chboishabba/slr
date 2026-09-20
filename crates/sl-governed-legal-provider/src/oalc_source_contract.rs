@@ -7,6 +7,7 @@
 //! truth, or citation-use classification.
 
 use std::path::PathBuf;
+use serde::{Deserialize, Serialize};
 
 use sensiblaw_legal_follow_plan::{
     ExactCaseLawSourceDemand, ExactLegislationSourceDemand, SourceRole,
@@ -33,7 +34,7 @@ impl OalcDocumentKind {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum OalcTemporalCoverage {
     LatestKnownOnly,
     DecisionDateAnchored,
@@ -207,7 +208,7 @@ impl OalcSourceDemand {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OalcResolvedSourceReceipt {
     pub demand_ref: String,
     pub origin_ref: String,
