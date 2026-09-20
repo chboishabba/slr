@@ -1241,9 +1241,24 @@ pub fn compile_legal_campaign_state(
     let campaign_ref = campaign_ref.into();
     let evaluation = evaluate_source_realised_rule(rule, context)?;
     let residuals = residuals_for_evaluation(&evaluation, &context.wrong_type);
+    fn residual_priority(kind: LegalResidualKind) -> u8 {
+        match kind {
+            LegalResidualKind::Source => 0,
+            LegalResidualKind::FormalRuleDerivation => 1,
+            LegalResidualKind::JurisdictionOrTime => 2,
+            LegalResidualKind::ExceptionOrDefeater => 3,
+            LegalResidualKind::Element => 4,
+            LegalResidualKind::Burden => 5,
+            LegalResidualKind::MatterEvidence => 6,
+            LegalResidualKind::Remedy => 7,
+            LegalResidualKind::ClosedForConsumer => u8::MAX,
+        }
+    }
+
     let selected_action = residuals
         .iter()
-        .find(|residual| residual.kind != LegalResidualKind::ClosedForConsumer)
+        .filter(|residual| residual.kind != LegalResidualKind::ClosedForConsumer)
+        .min_by_key(|residual| residual_priority(residual.kind))
         .and_then(action_for_residual);
     let receipt_head = state_receipt_head(
         &campaign_ref,
