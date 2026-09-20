@@ -27,7 +27,7 @@ pub enum OalcDocumentKind {
 impl OalcDocumentKind {
     pub const fn expected_oalc_type(self) -> &'static str {
         match self {
-            Self::CaseLaw => "case",
+            Self::CaseLaw => "decision",
             Self::Legislation => "primary_legislation",
         }
     }
