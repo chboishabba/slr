@@ -74,7 +74,7 @@ pub struct ReviewedWaltonsPropositionEvidenceReceipt {
     pub canonical_text_sha256: String,
     pub disposition: PropositionEvidenceDisposition,
     pub reviewed_evidence: ReviewedCanonicalEvidence,
-    pub payment_receipt: ReviewedEvidencePaymentReceipt,
+    pub payment_receipt: Option<ReviewedEvidencePaymentReceipt>,
     pub payment_bytes: Vec<u8>,
     pub reviewer_ref: String,
     pub review_evidence_refs: Vec<String>,
@@ -229,12 +229,16 @@ pub fn compile_reviewed_waltons_paragraph(
 
     let spec = waltons_estoppel_consumer_spec(materialization);
     let mut payment_bytes = Vec::new();
-    let payment_receipt = compile_reviewed_evidence_payment(
-        &spec,
-        &review,
-        &mut payment_bytes,
-        iteration_index,
-    )?;
+    let payment_receipt = if decision.disposition == PropositionEvidenceDisposition::Supports {
+        Some(compile_reviewed_evidence_payment(
+            &spec,
+            &review,
+            &mut payment_bytes,
+            iteration_index,
+        )?)
+    } else {
+        None
+    };
 
     Ok(ReviewedWaltonsPropositionEvidenceReceipt {
         role: decision.role,
@@ -332,12 +336,37 @@ mod tests {
             review_evidence_refs: vec!["review-note:fixture".into()],
         };
         let receipt = compile_reviewed_waltons_paragraph(&materialization, &decision, 1).unwrap();
-        assert_eq!(receipt.payment_receipt.payments_emitted, 2);
-        assert!(receipt.payment_receipt.review_emitted);
+        assert_eq!(receipt.payment_receipt.as_ref().unwrap().payments_emitted, 2);
+        assert!(receipt.payment_receipt.as_ref().unwrap().review_emitted);
         assert!(receipt.candidate_only);
         assert!(!receipt.creates_legal_authority);
         assert!(!receipt.claim_truth_promoted);
         assert!(!reviewed_waltons_evidence_is_proposition_truth(&receipt));
+    }
+
+    #[test]
+    fn contested_or_context_evidence_does_not_contract_the_evidence_frontier() {
+        let materialization = fixture("[1] Reliance was discussed.\n");
+        let paragraph = &materialization.paragraph_candidates[0];
+        for disposition in [
+            PropositionEvidenceDisposition::Contests,
+            PropositionEvidenceDisposition::ContextOnly,
+        ] {
+            let decision = ReviewedWaltonsParagraphDecision {
+                paragraph_locator_ref: paragraph.paragraph_locator_ref.clone(),
+                source_revision_ref: paragraph.source_revision_ref.clone(),
+                canonical_text_sha256: paragraph.canonical_text_sha256.clone(),
+                role: EstoppelRequirementRole::Reliance,
+                disposition,
+                reviewer_ref: "reviewer:fixture".into(),
+                review_evidence_refs: vec!["review-note:fixture".into()],
+            };
+            let receipt =
+                compile_reviewed_waltons_paragraph(&materialization, &decision, 1).unwrap();
+            assert!(receipt.payment_receipt.is_none());
+            assert!(receipt.payment_bytes.is_empty());
+            assert!(!receipt.claim_truth_promoted);
+        }
     }
 
     #[test]
