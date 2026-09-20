@@ -281,6 +281,7 @@ fn reacquire_cited_by_candidates_resilient(paths: &WaltonsPaths) -> CliResult<Va
                 "state": "source_resolved",
                 "source_receipt": run.source_receipt_path,
                 "canonical_text": run.canonical_text_path,
+                "network_requests": run.network_requests,
                 "reused_retained_pair": false,
                 "candidate_only": true,
                 "creates_legal_authority": false,
@@ -296,11 +297,27 @@ fn reacquire_cited_by_candidates_resilient(paths: &WaltonsPaths) -> CliResult<Va
         }
     }
 
+    let fresh_network_resolved_count = resolved
+        .iter()
+        .filter(|entry| entry["reused_retained_pair"] == false)
+        .count();
+    let reused_retained_count = resolved
+        .iter()
+        .filter(|entry| entry["reused_retained_pair"] == true)
+        .count();
+    let network_request_count = resolved
+        .iter()
+        .filter_map(|entry| entry["network_requests"].as_u64())
+        .sum::<u64>();
+
     let report = json!({
         "schema_version": "sl.waltons.cited_by_oalc_acquisition.v0_1",
         "candidate_count": candidates.len(),
         "resolved_count": resolved.len(),
         "residual_count": residuals.len(),
+        "fresh_network_resolved_count": fresh_network_resolved_count,
+        "reused_retained_count": reused_retained_count,
+        "network_request_count": network_request_count,
         "missing_source_is_negative_legal_evidence": false,
         "candidate_only": true,
         "creates_legal_authority": false,
@@ -395,6 +412,37 @@ pub fn identity_reviewed(paths: &WaltonsPaths) -> CliResult {
     )
 }
 
+fn compile_live_oalc_evidence(paths: &WaltonsPaths) -> CliResult<Value> {
+    let receipt_bytes = fs::read(&paths.receipt)
+        .map_err(|error| format!("read {}: {error}", paths.receipt.display()))?;
+    let root: OalcResolvedSourceReceipt = serde_json::from_slice(&receipt_bytes)
+        .map_err(|error| format!("decode {}: {error}", paths.receipt.display()))?;
+    let later_report_path = paths.later_dir.join("oalc-acquisition-report.json");
+    let later = if later_report_path.exists() {
+        read_json(&later_report_path)?
+    } else {
+        json!({
+            "resolved_count": 0,
+            "fresh_network_resolved_count": 0,
+            "reused_retained_count": 0,
+            "network_request_count": 0,
+        })
+    };
+    let root_network_requests = root.network_requests;
+    let later_network_requests = later["network_request_count"].as_u64().unwrap_or_default();
+    Ok(json!({
+        "root_oalc_network_requests": root_network_requests,
+        "later_oalc_network_requests": later_network_requests,
+        "total_oalc_network_requests_recorded": root_network_requests + later_network_requests,
+        "later_resolved_count": later["resolved_count"],
+        "later_fresh_network_resolved_count": later["fresh_network_resolved_count"],
+        "later_reused_retained_count": later["reused_retained_count"],
+        "live_network_evidence_present":
+            root_network_requests + later_network_requests > 0,
+        "retained_receipts_validated": true,
+    }))
+}
+
 fn validate_final_s14_trajectory(paths: &WaltonsPaths, trajectory: &Value) -> CliResult<Value> {
     if trajectory["transport"] != "typed_rust_in_process"
         || trajectory["json_is_semantic_command_transport"] != false
@@ -468,6 +516,7 @@ pub fn treatment_reviewed(paths: &WaltonsPaths) -> CliResult {
 
     let trajectory = read_json(&paths.s14_trajectory)?;
     let validated = validate_final_s14_trajectory(paths, &trajectory)?;
+    let oalc_evidence = compile_live_oalc_evidence(paths)?;
     let residual_count = trajectory["reviewed_residual_count"]
         .as_u64()
         .unwrap_or_default();
@@ -483,8 +532,9 @@ pub fn treatment_reviewed(paths: &WaltonsPaths) -> CliResult {
             "treatment_contract_hops": paths.treatment_hops,
             "s14_trajectory": paths.s14_trajectory,
             "trajectory_validation": validated,
+            "oalc_evidence": oalc_evidence,
             "reviewed_residual_count": residual_count,
-            "live_oalc_source_chain_exercised": true,
+            "oalc_source_chain_validated": true,
             "candidate_only": true,
             "creates_legal_authority": false,
             "creates_current_law_conclusion": false,
