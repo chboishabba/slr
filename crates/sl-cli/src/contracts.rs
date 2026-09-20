@@ -24,14 +24,15 @@ fn value(args: &[String], flag: &str) -> Option<String> {
 }
 
 fn values(args: &[String], flag: &str) -> Vec<String> {
-    args.iter()
-        .enumerate()
-        .filter_map(|(index, arg)| {
-            (arg == flag)
-                .then(|| args.get(index + 1).cloned())
-                .flatten()
-        })
-        .collect()
+    let mut out = Vec::new();
+    for (index, arg) in args.iter().enumerate() {
+        if arg == flag {
+            if let Some(value) = args.get(index + 1) {
+                out.push(value.clone());
+            }
+        }
+    }
+    out
 }
 
 fn work_item_json(item: &ContractLandscapeWorkItem) -> serde_json::Value {
