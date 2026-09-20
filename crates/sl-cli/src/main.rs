@@ -1,3 +1,4 @@
+mod contract_identity;
 mod contracts;
 mod cullen;
 mod oalc;
