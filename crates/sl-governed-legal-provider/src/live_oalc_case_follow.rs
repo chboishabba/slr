@@ -20,7 +20,7 @@ pub enum OalcCaseAcquisitionMode {
     IndexedThenPinnedStream,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PinnedOalcStreamReceipt {
     pub row: OalcCorpusRow,
     pub rows_examined: u64,
@@ -1048,7 +1048,7 @@ mod tests {
 
         // The malformed third line must never be parsed: exact-MNC acquisition
         // terminates immediately after the target row.
-        let jsonl = format!("{before}\\n{target}\\n{{malformed\\n");
+        let jsonl = format!("{before}\n{target}\n{{malformed\n");
         let receipt = scan_pinned_oalc_jsonl(Cursor::new(jsonl.as_bytes()), &request).unwrap();
 
         assert_eq!(receipt.row.citation, "Giumelli v Giumelli [1999] HCA 10");
@@ -1081,7 +1081,7 @@ mod tests {
         ))
         .unwrap();
         let error =
-            scan_pinned_oalc_jsonl(Cursor::new(format!("{other}\\n").into_bytes()), &request)
+            scan_pinned_oalc_jsonl(Cursor::new(format!("{other}\n").into_bytes()), &request)
                 .unwrap_err();
         assert!(matches!(error, OalcCaseFollowError::SourceResidual(_)));
     }
