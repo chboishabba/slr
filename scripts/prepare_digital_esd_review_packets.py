@@ -49,6 +49,12 @@ def read_jsonl(path: Path) -> list[dict[str, Any]]:
     return out
 
 
+def explicitly_reviewed(row: dict[str, str]) -> bool:
+    reviewer = str(row.get("reviewer_or_model_reference") or "").strip()
+    supersedes = str(row.get("supersedes_decision_reference") or "").strip()
+    return reviewer not in {"", "unassigned"} and bool(supersedes)
+
+
 def write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
     with path.open("w", encoding="utf-8") as fh:
         for row in rows:
@@ -116,6 +122,8 @@ def main() -> int:
         if ledger is None:
             raise RuntimeError(f"queue references source outside ledger denominator: {ref}")
         if ledger.get("decision") != "unresolved":
+            continue
+        if explicitly_reviewed(ledger):
             continue
         assessment = assessment_by_ref.get(ref)
         if assessment is None:
