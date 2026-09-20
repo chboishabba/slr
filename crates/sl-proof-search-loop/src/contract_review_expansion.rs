@@ -6,8 +6,10 @@
 //! review into positive doctrine.
 
 use serde::Serialize;
+use sensiblaw_governed_legal_provider::OalcResolvedSourceReceipt;
 use sensiblaw_legal_follow_plan::{
-    AustralianContractTrace, ContractLandscapeExpansionDelta, ContractTraceEdge, TreatmentKind,
+    AuthorityLevel, AustralianContractTrace, ContractDoctrine, ContractLandscapeExpansionDelta,
+    ContractTraceEdge, ContractTraceNode, SourceRole, TraceNodeKind, TreatmentKind,
 };
 
 use crate::reasoning::CitationUse;
@@ -16,6 +18,22 @@ use crate::waltons_proposition_review::{
     EstoppelRequirementRole, PropositionEvidenceDisposition,
     ReviewedWaltonsPropositionEvidenceReceipt,
 };
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReviewedContractAuthorityIdentity {
+    pub semantic_ref: String,
+    pub label: String,
+    pub doctrine: Option<ContractDoctrine>,
+    pub jurisdiction_ref: String,
+    pub court_ref: Option<String>,
+    pub source_role: SourceRole,
+    pub authority_level: AuthorityLevel,
+    pub reviewer_ref: String,
+    pub evidence_refs: Vec<String>,
+    pub source_receipt: OalcResolvedSourceReceipt,
+    pub candidate_only: bool,
+    pub creates_legal_authority: bool,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub enum ContractReviewedHopResidualKind {
@@ -27,6 +45,8 @@ pub enum ContractReviewedHopResidualKind {
     UnsupportedCitationUse,
     MissingTreatmentIdentity,
     ReceiptPromotedAuthority,
+    SourceIdentityReviewInvalid,
+    SourceIdentityConflict,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -87,6 +107,111 @@ fn residual(
         semantic_ref,
         related_ref,
         reviewer_ref: reviewer_ref.into(),
+        candidate_only: true,
+        creates_legal_authority: false,
+        creates_current_law_conclusion: false,
+    }
+}
+
+pub fn compile_reviewed_authority_identity_to_contract_hop(
+    trace: &AustralianContractTrace,
+    reviewed: &ReviewedContractAuthorityIdentity,
+) -> ContractReviewedHopCompilation {
+    let mut deltas = Vec::new();
+    let mut residuals = Vec::new();
+
+    let invalid = reviewed.semantic_ref.trim().is_empty()
+        || reviewed.label.trim().is_empty()
+        || reviewed.jurisdiction_ref.trim().is_empty()
+        || reviewed.reviewer_ref.trim().is_empty()
+        || reviewed.evidence_refs.is_empty()
+        || reviewed.evidence_refs.iter().any(|value| value.trim().is_empty())
+        || !reviewed.candidate_only
+        || reviewed.creates_legal_authority
+        || !reviewed.source_receipt.candidate_only
+        || reviewed.source_receipt.creates_legal_authority
+        || reviewed.source_receipt.creates_claim_truth;
+    if invalid {
+        residuals.push(residual(
+            ContractReviewedHopResidualKind::SourceIdentityReviewInvalid,
+            format!("source-identity:{}", reviewed.semantic_ref),
+            Some(reviewed.semantic_ref.clone()),
+            None,
+            &reviewed.reviewer_ref,
+        ));
+        return ContractReviewedHopCompilation {
+            deltas,
+            residuals,
+            candidate_only: true,
+            creates_legal_authority: false,
+            creates_current_law_conclusion: false,
+        };
+    }
+
+    let kind = match reviewed.source_role {
+        SourceRole::PrimaryCaseLaw => TraceNodeKind::CaseAuthority,
+        SourceRole::PrimaryLegislation => TraceNodeKind::Legislation,
+        _ => {
+            residuals.push(residual(
+                ContractReviewedHopResidualKind::SourceIdentityReviewInvalid,
+                format!("source-identity:{}", reviewed.semantic_ref),
+                Some(reviewed.semantic_ref.clone()),
+                None,
+                &reviewed.reviewer_ref,
+            ));
+            return ContractReviewedHopCompilation {
+                deltas,
+                residuals,
+                candidate_only: true,
+                creates_legal_authority: false,
+                creates_current_law_conclusion: false,
+            };
+        }
+    };
+
+    let node = ContractTraceNode {
+        semantic_ref: reviewed.semantic_ref.clone(),
+        label: reviewed.label.clone(),
+        kind,
+        doctrine: reviewed.doctrine,
+        jurisdiction_ref: reviewed.jurisdiction_ref.clone(),
+        court_ref: reviewed.court_ref.clone(),
+        decision_or_effective_date: reviewed.source_receipt.date.clone(),
+        valid_from: None,
+        valid_to: None,
+        source_role: reviewed.source_role,
+        authority_level: reviewed.authority_level,
+        source_citation: reviewed.source_receipt.citation.clone(),
+        candidate_only: true,
+        creates_legal_authority: false,
+    };
+
+    if let Some(existing) = trace.nodes.get(&node.semantic_ref) {
+        if existing != &node {
+            residuals.push(residual(
+                ContractReviewedHopResidualKind::SourceIdentityConflict,
+                format!("source-identity:{}", reviewed.semantic_ref),
+                Some(reviewed.semantic_ref.clone()),
+                None,
+                &reviewed.reviewer_ref,
+            ));
+        }
+    } else {
+        deltas.push(ContractLandscapeExpansionDelta {
+            discovered_nodes: vec![node],
+            discovered_edges: Vec::new(),
+            provenance_ref: format!(
+                "reviewed-source-identity:{}:{}",
+                reviewed.reviewer_ref, reviewed.source_receipt.version_id
+            ),
+            candidate_only: true,
+            creates_legal_authority: false,
+        });
+    }
+
+    ContractReviewedHopCompilation {
+        deltas,
+        residuals,
         candidate_only: true,
         creates_legal_authority: false,
         creates_current_law_conclusion: false,
