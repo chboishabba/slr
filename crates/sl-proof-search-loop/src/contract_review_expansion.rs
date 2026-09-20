@@ -671,6 +671,7 @@ mod tests {
             doctrine: Some(sensiblaw_legal_follow_plan::ContractDoctrine::Estoppel),
             jurisdiction_ref: "AU".into(),
             court_ref: Some("court:HCA".into()),
+            decision_or_effective_date: Some("2014-06-19".into()),
             source_role: SourceRole::PrimaryCaseLaw,
             authority_level: AuthorityLevel::Official,
             reviewer_ref: "reviewer:fixture".into(),
@@ -694,6 +695,7 @@ mod tests {
             doctrine: Some(sensiblaw_legal_follow_plan::ContractDoctrine::Estoppel),
             jurisdiction_ref: "AU".into(),
             court_ref: Some("court:HCA".into()),
+            decision_or_effective_date: Some("2020-01-01".into()),
             source_role: SourceRole::PrimaryCaseLaw,
             authority_level: AuthorityLevel::Official,
             reviewer_ref: "reviewer:fixture".into(),
@@ -709,6 +711,10 @@ mod tests {
         let node = &compiled.deltas[0].discovered_nodes[0];
         assert_eq!(node.semantic_ref, "case:au:hca:2020:1");
         assert_eq!(node.kind, TraceNodeKind::CaseAuthority);
+        assert_eq!(
+            node.decision_or_effective_date.as_deref(),
+            Some("2020-01-01")
+        );
         assert!(node.candidate_only);
         assert!(!node.creates_legal_authority);
     }
