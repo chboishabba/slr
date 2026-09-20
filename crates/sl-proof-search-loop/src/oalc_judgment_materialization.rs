@@ -214,6 +214,22 @@ pub fn review_units_for_materialized_requirement(
     Ok(cluster_shortlisted_citations(&shortlisted))
 }
 
+pub fn later_treatment_cited_by_demand(
+    receipt: &OalcResolvedSourceReceipt,
+    proposition_ref: Option<String>,
+) -> KnownAuthorityDemand {
+    KnownAuthorityDemand {
+        demand_ref: format!("citation-treatment:cited-by:{}", receipt.version_id),
+        jurisdiction_ref: "AU".into(),
+        source_identity_ref: format!("oalc:{}", receipt.version_id),
+        medium_neutral_citation: Some(receipt.citation.clone()),
+        explicit_austlii_ref: None,
+        proposition_ref,
+        use_intent: PropositionUseIntent::CitationTreatment,
+        treatment_intent: CitationTreatmentIntent::CitedBy,
+    }
+}
+
 pub fn exact_mnc_candidate_follow_demand(
     candidate: &CitationOccurrenceCandidate,
     jurisdiction_ref: &str,
@@ -334,6 +350,27 @@ mod tests {
         assert!(!research_match_is_estoppel_element_payment(
             &result.paragraph_candidates[0]
         ));
+    }
+
+    #[test]
+    fn waltons_source_can_schedule_inverse_cited_by_treatment_snowball() {
+        let source = receipt("[1] fixture\n");
+        let demand = later_treatment_cited_by_demand(
+            &source,
+            Some("prop:estoppel:waltons-treatment".into()),
+        );
+        assert_eq!(demand.medium_neutral_citation.as_deref(), Some("[1988] HCA 7"));
+        assert_eq!(demand.treatment_intent, CitationTreatmentIntent::CitedBy);
+        let traversal = sensiblaw_governed_legal_provider::citation_traversal_plan(&demand)
+            .expect("cited-by demand has traversal plan");
+        assert_eq!(
+            traversal.operation,
+            sensiblaw_governed_legal_provider::ProviderOperation::CitedBy
+        );
+        assert_eq!(
+            traversal.provider,
+            sensiblaw_governed_legal_provider::LegalProvider::Jade
+        );
     }
 
     #[test]
