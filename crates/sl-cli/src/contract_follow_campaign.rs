@@ -1065,11 +1065,22 @@ pub fn run(args: Vec<String>) -> CampaignResult<()> {
                 .ok_or_else(|| "outbound frontier has no selected candidate".to_string())?;
             let receipt = acquire_outbound_citation(&selected, output_dir.clone(), &as_at)?;
             campaign.record_source_acquisition(receipt.network_requests)?;
+            let mut next_campaign = campaign.receipt_json()?;
+            next_campaign["parent_campaign_receipt"] =
+                json!(trajectory.display().to_string());
+            next_campaign["continuation_only"] = json!(true);
+            next_campaign["last_action"] = json!("governed_source_acquisition");
+            next_campaign["last_acquired_medium_neutral_citation"] =
+                json!(selected.medium_neutral_citation.clone());
+            let next_campaign_path = output_dir.join("campaign-after-source-acquisition.json");
+            write_json(&next_campaign_path, &next_campaign)?;
+
             let summary = json!({
-                "schema_version": "sl.contract_follow.recursive_source_acquisition.v0_1",
+                "schema_version": "sl.contract_follow.recursive_source_acquisition.v0_2",
                 "selected_residual_ref": selected.residual_ref,
                 "selected_medium_neutral_citation": selected.medium_neutral_citation,
                 "source_receipt": output_dir.join("oalc-source-receipt.json"),
+                "next_campaign_receipt": next_campaign_path,
                 "version_id": receipt.version_id,
                 "corpus_revision_ref": receipt.corpus_revision_ref,
                 "network_requests": receipt.network_requests,
@@ -1085,8 +1096,9 @@ pub fn run(args: Vec<String>) -> CampaignResult<()> {
             let summary_path = output_dir.join("campaign-source-acquisition.json");
             write_json(&summary_path, &summary)?;
             println!(
-                "contract_follow_recursive_source={} citation={} network={} authority=false",
+                "contract_follow_recursive_source={} next_campaign={} citation={} network={} authority=false",
                 summary_path.display(),
+                next_campaign_path.display(),
                 receipt.citation,
                 receipt.network_requests,
             );
