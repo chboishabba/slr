@@ -1391,6 +1391,12 @@ pub fn s14_sync(paths: &WaltonsPaths) -> CliResult {
     )?;
     output["schema_version"] =
         Value::String("sl.waltons_s14_reviewed_sync.v0_1".into());
+    output["sync_stage_order"] = json!([
+        "waltons_bootstrap",
+        "reviewed_identity",
+        "reviewed_proposition",
+        "reviewed_treatment"
+    ]);
     output["waltons_bootstrap_included"] = Value::Bool(true);
     output["identity_review_present"] = Value::Bool(paths.identity_decisions.exists());
     output["proposition_review_present"] = Value::Bool(paths.decisions.exists());
@@ -1450,6 +1456,15 @@ mod tests {
         assert_eq!(output["schema_version"], "sl.waltons_s14_reviewed_sync.v0_1");
         assert_eq!(output["transport"], "typed_rust_in_process");
         assert_eq!(output["json_is_semantic_command_transport"], false);
+        assert_eq!(
+            output["sync_stage_order"],
+            json!([
+                "waltons_bootstrap",
+                "reviewed_identity",
+                "reviewed_proposition",
+                "reviewed_treatment"
+            ])
+        );
         assert_eq!(output["waltons_bootstrap_included"], true);
         assert_eq!(output["identity_review_present"], false);
         assert_eq!(output["proposition_review_present"], false);
