@@ -341,6 +341,7 @@ struct WaltonsReviewWorksheet {
     schema_version: String,
     source_queue: String,
     candidate_only: bool,
+    review_complete: bool,
     rows: Vec<WaltonsReviewWorksheetRow>,
 }
 
@@ -427,6 +428,7 @@ pub fn review_prepare(paths: &WaltonsPaths) -> CliResult {
             schema_version: "sl.waltons.review_worksheet.v0_1".into(),
             source_queue: paths.queue.display().to_string(),
             candidate_only: true,
+            review_complete: false,
             rows,
         },
     )?;
@@ -447,6 +449,12 @@ pub fn review_finalize(paths: &WaltonsPaths) -> CliResult {
             "unsupported Waltons review worksheet schema {}",
             worksheet.schema_version
         ));
+    }
+    if !worksheet.review_complete {
+        return Err("Waltons paragraph review worksheet is not marked review_complete=true".into());
+    }
+    if !worksheet.review_complete {
+        return Err("treatment review worksheet is not marked review_complete=true".into());
     }
     let mut decisions = Vec::new();
     for (index, row) in worksheet.rows.into_iter().enumerate() {
@@ -1063,6 +1071,7 @@ struct TreatmentReviewWorksheet {
     source_queue: String,
     root_authority_ref: String,
     candidate_only: bool,
+    review_complete: bool,
     rows: Vec<TreatmentReviewWorksheetRow>,
 }
 
@@ -1137,6 +1146,7 @@ pub fn treatment_prepare(paths: &WaltonsPaths) -> CliResult {
             source_queue: paths.merged_treatment_queue.display().to_string(),
             root_authority_ref: WALTONS_AUTHORITY_REF.into(),
             candidate_only: true,
+            review_complete: false,
             rows,
         },
     )?;
