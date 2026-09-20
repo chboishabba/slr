@@ -153,7 +153,7 @@ Work package:
 - **M2.2 one SourceRevision -> exact-anchor -> Observation substrate — paid**;
 - **M2.3 shared reviewed-evidence reducer ABI — paid / certified**;
 - **M2.4 provider normalisation — source-written, Agda owners created, exact-head receipts pending**;
-- **Digital-ESD adaptive screening (P0-A through P0-G) — implemented and verified**;
+- **Digital-ESD real ERIC adaptive screening — active application lane; metadata/advisory stages implemented, reviewed-calibration and verified-full-text stages receipt-contingent**;
 - PG-hit/no-network, PG-miss/acquire/persist/reuse;
 - cross-family exact replay.
 
@@ -303,3 +303,14 @@ drifted artifacts fail closed.
 Digital-ESD remains an application workload. None of these screening/runtime
 layers create source truth, SourceAuditAdmission, legal applicability, or
 semantic promotion.
+
+
+### Digital-ESD execution reference
+
+The authoritative application runbook is:
+
+`docs/digital-esd-real-eric-screening.md`
+
+Do not interpret the 43,996 ERIC metadata denominator as 43,996 screened or
+full-text-verified studies. The exact denominator is retained while explicit
+review changes only its decision-state partition.
