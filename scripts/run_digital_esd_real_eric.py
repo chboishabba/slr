@@ -124,23 +124,27 @@ def build_family_hypotheses(records: list[ERICRecord]) -> tuple[list[dict[str, A
         refs = [f"ERIC:{m.accession}" for m in members]
         for ref in refs:
             fibre_sizes[ref] = max(fibre_sizes.get(ref, 0), len(refs))
-        for a, b in itertools.combinations(sorted(refs), 2):
+        ordered = sorted(refs)
+        representative = ordered[0]
+        for member in ordered[1:]:
             payload = {
-                "left": a,
-                "right": b,
+                "left": representative,
+                "right": member,
                 "basis": "exact-normalized-title",
                 "normalized_title": title,
+                "fibre_size": len(ordered),
             }
             hypotheses.append(
                 {
                     "schema": "digital-esd-study-family-hypothesis-v1",
                     "hypothesis_reference": "study-family-hypothesis:" + sha256_json(payload),
-                    "left_source_identity_reference": a,
-                    "right_source_identity_reference": b,
+                    "left_source_identity_reference": representative,
+                    "right_source_identity_reference": member,
                     "proposed_relation": "publicationDuplicate",
                     "evidence": {
                         "basis": "exact-normalized-title",
                         "normalized_title": title,
+                        "fibre_size": len(ordered),
                     },
                     "candidate_only": True,
                     "creates_duplicate_decision": False,
@@ -205,11 +209,33 @@ def dominates(a: dict[str, Any], b: dict[str, Any]) -> bool:
 
 
 def pareto_front(rows: list[dict[str, Any]]) -> set[str]:
-    front: set[str] = set()
-    for i, row in enumerate(rows):
-        if not any(i != j and dominates(other, row) for j, other in enumerate(rows)):
-            front.add(str(row["source_identity_reference"]))
-    return front
+    """Return refs whose cost vector is non-dominated.
+
+    The five declared axes have a small discrete value surface.  Collapse the
+    43,996 rows to unique cost vectors first, perform dominance on that compact
+    surface, then lift the non-dominated vectors back to all matching records.
+    """
+    vectors: dict[tuple[int, ...], list[str]] = defaultdict(list)
+    for row in rows:
+        vector = tuple(int(row[key]) for key in AXES)
+        vectors[vector].append(str(row["source_identity_reference"]))
+
+    unique = list(vectors)
+    non_dominated: set[tuple[int, ...]] = set()
+    for i, vector in enumerate(unique):
+        if not any(
+            i != j
+            and all(other[k] <= vector[k] for k in range(len(AXES)))
+            and any(other[k] < vector[k] for k in range(len(AXES)))
+            for j, other in enumerate(unique)
+        ):
+            non_dominated.add(vector)
+
+    return {
+        ref
+        for vector in non_dominated
+        for ref in vectors[vector]
+    }
 
 
 def build_adaptive_work_queue(
