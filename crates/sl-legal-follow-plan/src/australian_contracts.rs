@@ -730,6 +730,55 @@ pub struct ContractLandscapeExpansionReceipt {
     pub creates_current_law_conclusion: bool,
 }
 
+pub fn trace_extension_delta(
+    base: &AustralianContractTrace,
+    extension: &AustralianContractTrace,
+    provenance_ref: impl Into<String>,
+) -> Result<ContractLandscapeExpansionDelta, String> {
+    base.validate()?;
+    extension.validate()?;
+    let provenance_ref = provenance_ref.into();
+    if provenance_ref.trim().is_empty() {
+        return Err("trace extension requires provenance".into());
+    }
+
+    let mut discovered_nodes = Vec::new();
+    for node in extension.nodes.values() {
+        match base.nodes.get(&node.semantic_ref) {
+            Some(existing) if existing == node => {}
+            Some(existing) => {
+                let compatible = existing.kind == node.kind
+                    && existing.doctrine == node.doctrine
+                    && existing.jurisdiction_ref == node.jurisdiction_ref
+                    && existing.source_role == node.source_role
+                    && existing.authority_level == node.authority_level;
+                if !compatible {
+                    return Err(format!(
+                        "trace extension conflicts with existing semantic identity: {}",
+                        node.semantic_ref
+                    ));
+                }
+            }
+            None => discovered_nodes.push(node.clone()),
+        }
+    }
+
+    let discovered_edges = extension
+        .edges
+        .iter()
+        .filter(|edge| !base.edges.contains(edge))
+        .cloned()
+        .collect();
+
+    Ok(ContractLandscapeExpansionDelta {
+        discovered_nodes,
+        discovered_edges,
+        provenance_ref,
+        candidate_only: true,
+        creates_legal_authority: false,
+    })
+}
+
 pub fn apply_contract_landscape_expansion(
     trace: &AustralianContractTrace,
     delta: &ContractLandscapeExpansionDelta,
@@ -1034,6 +1083,27 @@ mod tests {
         assert!(work.temporal_alternatives.iter().any(|item| {
             item.semantic_ref == "legislation:qld:property-law-act-1974:s55"
         }));
+    }
+
+    #[test]
+    fn waltons_trace_extension_adds_requirements_without_replacing_seeded_authority() {
+        let landscape = australian_contract_landscape_seed();
+        let waltons = waltons_estoppel_trace();
+        let delta = trace_extension_delta(
+            &landscape,
+            &waltons,
+            "bootstrap:waltons-estoppel-materialisation",
+        )
+        .unwrap();
+        assert!(delta.discovered_nodes.iter().any(|node| {
+            node.semantic_ref == "requirement:estoppel:reliance"
+        }));
+        assert!(!delta.discovered_nodes.iter().any(|node| {
+            node.semantic_ref == "case:au:hca:1988:7"
+        }));
+        let (expanded, _) = apply_contract_landscape_expansion(&landscape, &delta).unwrap();
+        assert!(expanded.nodes.contains_key("requirement:estoppel:detriment"));
+        assert!(expanded.nodes.contains_key("case:au:hca:1988:7"));
     }
 
     #[test]
