@@ -694,6 +694,39 @@ fn safe_citation_dir(citation: &str) -> String {
         .to_ascii_lowercase()
 }
 
+pub fn cited_by_worklist(paths: &WaltonsPaths) -> CliResult {
+    let normalized: NormalizedCitedByCandidates = read_json(&paths.citedby_candidates)?;
+    if normalized.schema_version != "sl.cited_by_candidates.v0_1" {
+        return Err(format!(
+            "unsupported cited-by candidate schema {}",
+            normalized.schema_version
+        ));
+    }
+    fs::create_dir_all(&paths.later_dir)
+        .map_err(|error| format!("create {}: {error}", paths.later_dir.display()))?;
+    let work = normalized
+        .candidates
+        .iter()
+        .map(|candidate| {
+            json!({
+                "medium_neutral_citation": candidate.medium_neutral_citation,
+                "output_dir": paths.later_dir.join(safe_citation_dir(&candidate.medium_neutral_citation)),
+                "state": "primary_source_acquisition_required",
+            })
+        })
+        .collect::<Vec<_>>();
+    let output = json!({
+        "schema_version": "sl.oalc_case_acquisition_worklist.v0_1",
+        "root_medium_neutral_citation": normalized.root_medium_neutral_citation,
+        "candidate_only": true,
+        "work": work,
+    });
+    let path = paths.later_dir.join("oalc-acquisition-worklist.json");
+    write_json(&path, &output)?;
+    println!("oalc_acquisition_worklist={}", path.display());
+    Ok(())
+}
+
 pub fn cited_by_acquire(paths: &WaltonsPaths) -> CliResult {
     let normalized: NormalizedCitedByCandidates = read_json(&paths.citedby_candidates)?;
     if normalized.schema_version != "sl.cited_by_candidates.v0_1" {
