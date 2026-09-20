@@ -708,6 +708,100 @@ pub fn compile_australian_contract_landscape_worklist(
     })
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ContractLandscapeExpansionDelta {
+    pub discovered_nodes: Vec<ContractTraceNode>,
+    pub discovered_edges: Vec<ContractTraceEdge>,
+    pub provenance_ref: String,
+    pub candidate_only: bool,
+    pub creates_legal_authority: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ContractLandscapeExpansionReceipt {
+    pub provenance_ref: String,
+    pub added_node_count: usize,
+    pub added_edge_count: usize,
+    pub recompute_frontier_required: bool,
+    pub old_source_history_preserved: bool,
+    pub old_conclusions_frozen: bool,
+    pub candidate_only: bool,
+    pub creates_legal_authority: bool,
+    pub creates_current_law_conclusion: bool,
+}
+
+pub fn apply_contract_landscape_expansion(
+    trace: &AustralianContractTrace,
+    delta: &ContractLandscapeExpansionDelta,
+) -> Result<(AustralianContractTrace, ContractLandscapeExpansionReceipt), String> {
+    trace.validate()?;
+    if delta.provenance_ref.trim().is_empty() {
+        return Err("contract landscape expansion requires provenance".into());
+    }
+    if !delta.candidate_only || delta.creates_legal_authority {
+        return Err("contract landscape expansion crossed authority boundary".into());
+    }
+
+    let mut expanded = trace.clone();
+    let mut added_node_count = 0usize;
+    for node in &delta.discovered_nodes {
+        if !node.candidate_only || node.creates_legal_authority {
+            return Err(format!(
+                "discovered node {} crossed candidate-only boundary",
+                node.semantic_ref
+            ));
+        }
+        match expanded.nodes.get(&node.semantic_ref) {
+            Some(existing) if existing == node => {}
+            Some(_) => {
+                return Err(format!(
+                    "discovered node conflicts with existing semantic identity: {}",
+                    node.semantic_ref
+                ))
+            }
+            None => {
+                expanded.nodes.insert(node.semantic_ref.clone(), node.clone());
+                added_node_count += 1;
+            }
+        }
+    }
+
+    let mut added_edge_count = 0usize;
+    for edge in &delta.discovered_edges {
+        if !edge.candidate_only || edge.creates_legal_authority {
+            return Err("discovered edge crossed candidate-only boundary".into());
+        }
+        if !expanded.nodes.contains_key(&edge.from_ref)
+            || !expanded.nodes.contains_key(&edge.to_ref)
+        {
+            return Err(format!(
+                "discovered edge references unresolved semantic identity: {} -> {}",
+                edge.from_ref, edge.to_ref
+            ));
+        }
+        if !expanded.edges.contains(edge) {
+            expanded.edges.push(edge.clone());
+            added_edge_count += 1;
+        }
+    }
+    expanded.validate()?;
+
+    Ok((
+        expanded,
+        ContractLandscapeExpansionReceipt {
+            provenance_ref: delta.provenance_ref.clone(),
+            added_node_count,
+            added_edge_count,
+            recompute_frontier_required: true,
+            old_source_history_preserved: true,
+            old_conclusions_frozen: false,
+            candidate_only: true,
+            creates_legal_authority: false,
+            creates_current_law_conclusion: false,
+        },
+    ))
+}
+
 pub fn legal_follow_demand_for_trace_node(
     node: &ContractTraceNode,
     as_at: &str,
@@ -940,6 +1034,66 @@ mod tests {
         assert!(work.temporal_alternatives.iter().any(|item| {
             item.semantic_ref == "legislation:qld:property-law-act-1974:s55"
         }));
+    }
+
+    #[test]
+    fn reviewed_expansion_candidate_recomputes_missing_doctrine_frontier() {
+        let trace = australian_contract_landscape_seed();
+        let before = compile_australian_contract_landscape_worklist(
+            &trace,
+            "2026-09-20",
+            None,
+        )
+        .unwrap();
+        assert!(before.context_items.iter().any(|item| {
+            item.doctrine == Some(ContractDoctrine::Construction)
+        }));
+
+        let construction = node(
+            "case:fixture:construction",
+            "fixture construction authority candidate",
+            TraceNodeKind::CaseAuthority,
+            Some(ContractDoctrine::Construction),
+            "AU",
+            Some("court:fixture"),
+            Some("2000-01-01"),
+            None,
+            None,
+            SourceRole::PrimaryCaseLaw,
+            AuthorityLevel::Official,
+            "fixture:construction-primary-case",
+        );
+        let delta = ContractLandscapeExpansionDelta {
+            discovered_nodes: vec![construction],
+            discovered_edges: vec![edge(
+                "landscape:au:contract-law",
+                "case:fixture:construction",
+                TreatmentKind::Seeds,
+            )],
+            provenance_ref: "reviewed-hop:fixture:construction".into(),
+            candidate_only: true,
+            creates_legal_authority: false,
+        };
+        let (expanded, receipt) =
+            apply_contract_landscape_expansion(&trace, &delta).unwrap();
+        let after = compile_australian_contract_landscape_worklist(
+            &expanded,
+            "2026-09-20",
+            None,
+        )
+        .unwrap();
+
+        assert!(!after.context_items.iter().any(|item| {
+            item.doctrine == Some(ContractDoctrine::Construction)
+        }));
+        assert!(after.source_items.iter().any(|item| {
+            item.semantic_ref == "case:fixture:construction"
+        }));
+        assert!(receipt.recompute_frontier_required);
+        assert!(receipt.old_source_history_preserved);
+        assert!(!receipt.old_conclusions_frozen);
+        assert!(!receipt.creates_legal_authority);
+        assert!(!receipt.creates_current_law_conclusion);
     }
 
     #[test]
