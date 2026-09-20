@@ -126,8 +126,16 @@ struct ParentDocument {
     citation: String,
     version_id: String,
     corpus_revision: String,
+    source: String,
+    jurisdiction: String,
+    document_type: String,
+    date: Option<String>,
+    url: Option<String>,
+    when_scraped: Option<String>,
     canonical_text_digest: String,
     artifact: PathBuf,
+    resolution_path: String,
+    network_requests: u64,
     text: String,
 }
 
@@ -171,25 +179,50 @@ fn acquire_parent_documents(materialised: &Path) -> CliResult<Vec<ParentDocument
             citation: citation.to_string(),
             version_id: row.version_id,
             corpus_revision,
+            source: row.source,
+            jurisdiction: row.jurisdiction,
+            document_type: row.document_type,
+            date: row.date,
+            url: row.url,
+            when_scraped: row.when_scraped,
             canonical_text_digest: digest,
             artifact,
+            resolution_path: resolved.resolution_path,
+            network_requests: resolved.network_requests,
             text: row.text,
         });
     }
 
     let receipt_path = materialised.join("oalc_legislation_receipts.tsv");
     let mut receipt = String::from(
-        "citation\tversion_id\tcorpus_revision\tcanonical_text_digest\tlocal_artifact_ref\ttemporal_status\treceipt_authority\n",
+        "citation\tversion_id\tcorpus_revision\tsource\tjurisdiction\ttype\tdate\turl\twhen_scraped\tcanonical_text_digest\tlocal_artifact_ref\ttemporal_status\tresolution_path\tnetwork_requests\treceipt_authority\n",
     );
     for parent in &parents {
-        receipt.push_str(&format!(
-            "{}\t{}\t{}\t{}\t{}\tlatest_known_only\texperimental_candidate_only\n",
-            parent.citation.replace(['\t', '\r', '\n'], " "),
-            parent.version_id.replace(['\t', '\r', '\n'], " "),
-            parent.corpus_revision.replace(['\t', '\r', '\n'], " "),
-            parent.canonical_text_digest,
-            parent.artifact.display(),
-        ));
+        let fields = [
+            parent.citation.clone(),
+            parent.version_id.clone(),
+            parent.corpus_revision.clone(),
+            parent.source.clone(),
+            parent.jurisdiction.clone(),
+            parent.document_type.clone(),
+            parent.date.clone().unwrap_or_default(),
+            parent.url.clone().unwrap_or_default(),
+            parent.when_scraped.clone().unwrap_or_default(),
+            parent.canonical_text_digest.clone(),
+            parent.artifact.to_string_lossy().into_owned(),
+            "latest_known_only".into(),
+            parent.resolution_path.clone(),
+            parent.network_requests.to_string(),
+            "experimental_candidate_only".into(),
+        ];
+        receipt.push_str(
+            &fields
+                .iter()
+                .map(|value| value.replace(['\t', '\r', '\n'], " "))
+                .collect::<Vec<_>>()
+                .join("\t"),
+        );
+        receipt.push('\n');
     }
     fs::write(&receipt_path, receipt)
         .map_err(|error| format!("write {}: {error}", receipt_path.display()))?;
