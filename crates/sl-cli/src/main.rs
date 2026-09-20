@@ -11,7 +11,7 @@ fn usage() {
         "SensibLaw native CLI
 
 USAGE:
-  sensiblaw legal-follow case acquire --citation "[YYYY] COURT N" [options]
+  sensiblaw legal-follow case acquire --citation '[YYYY] COURT N' [options]
   sensiblaw legal-follow oalc stream-pinned --revision SHA --citation TEXT [options]
   sensiblaw legal-follow waltons [--base PATH] status
   sensiblaw legal-follow waltons [--base PATH] acquire
