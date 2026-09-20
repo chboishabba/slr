@@ -34,6 +34,7 @@ ALIASES = {
     "treatment-template": ["treatment", "prepare"],
     "treatment-finalize": ["treatment", "finalize"],
     "genealogy": ["genealogy"],
+    "s14-sync": ["s14-sync"],
 }
 
 
