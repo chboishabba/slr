@@ -1805,6 +1805,8 @@ pub struct LegalRuntimeCapabilityReceipt {
     pub s8_matter_runtime: bool,
     pub s8_shared_command_reducer: bool,
     pub s8_reader_command_weld: bool,
+    pub s8_unseen_contract_matter: bool,
+    pub s8_contract_follow_trace: bool,
     pub candidate_only: bool,
     pub creates_semantic_authority: bool,
     pub receipt_digest: String,
@@ -1961,6 +1963,17 @@ pub fn compile_capability_receipt() -> Result<LegalRuntimeCapabilityReceipt, Leg
         }
     }
 
+    let unseen_contract = build_mann_unseen_matter_runtime()?;
+    if unseen_contract.used_calibration_enum
+        || unseen_contract.contract_specific_reducer_added
+        || unseen_contract.creates_semantic_authority
+        || !unseen_contract.trace.nodes.contains_key("matter:au:hca:2019:32")
+    {
+        return Err(LegalRuntimeError::Projection(
+            "Sprint 8 unseen contract matter crossed generic-runtime boundary".into(),
+        ));
+    }
+
     let receipt_digest = digest(
         std::iter::once(LEGAL_RUNTIME_VERSION)
             .chain(std::iter::once(mixed.receipt_head.as_str()))
@@ -1968,7 +1981,9 @@ pub fn compile_capability_receipt() -> Result<LegalRuntimeCapabilityReceipt, Leg
             .chain(std::iter::once("M6:universal-explanation"))
             .chain(std::iter::once("M7:projection-fabric"))
             .chain(std::iter::once("S8:matter-runtime"))
-            .chain(std::iter::once("S8:shared-command-reducer")),
+            .chain(std::iter::once("S8:shared-command-reducer"))
+            .chain(std::iter::once("S8:unseen-contract-matter"))
+            .chain(std::iter::once("S8:contract-follow-trace")),
     );
 
     Ok(LegalRuntimeCapabilityReceipt {
@@ -1985,6 +2000,8 @@ pub fn compile_capability_receipt() -> Result<LegalRuntimeCapabilityReceipt, Leg
         s8_matter_runtime: true,
         s8_shared_command_reducer: true,
         s8_reader_command_weld: true,
+        s8_unseen_contract_matter: true,
+        s8_contract_follow_trace: true,
         candidate_only: true,
         creates_semantic_authority: false,
         receipt_digest,
@@ -2560,6 +2577,8 @@ mod tests {
         assert!(receipt.s8_matter_runtime);
         assert!(receipt.s8_shared_command_reducer);
         assert!(receipt.s8_reader_command_weld);
+        assert!(receipt.s8_unseen_contract_matter);
+        assert!(receipt.s8_contract_follow_trace);
         assert!(receipt.candidate_only);
         assert!(!receipt.creates_semantic_authority);
         assert!(receipt.receipt_digest.starts_with("sha256:"));
