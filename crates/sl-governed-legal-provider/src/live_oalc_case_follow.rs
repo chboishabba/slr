@@ -59,6 +59,59 @@ pub struct OalcExactSourceRunReceipt {
     pub network_requests: u64,
 }
 
+pub fn oalc_corpus_row_matches(
+    request: &PinnedOalcStreamRequest,
+    row: &OalcCorpusRow,
+) -> bool {
+    let citation_matches = match request.citation_match {
+        OalcCitationMatch::Exact => row.citation == request.citation,
+        OalcCitationMatch::Contains => row.citation.contains(&request.citation),
+    };
+    citation_matches
+        && row.document_type == request.document_type
+        && request
+            .source
+            .as_deref()
+            .map_or(true, |source| row.source == source)
+        && request
+            .jurisdiction
+            .as_deref()
+            .map_or(true, |jurisdiction| row.jurisdiction == jurisdiction)
+}
+
+pub fn oalc_exact_source_filter_predicate(
+    request: &OalcExactSourceRequest,
+) -> Result<String, OalcCaseFollowError> {
+    if request.citation.trim().is_empty() || request.document_type.trim().is_empty() {
+        return Err(OalcCaseFollowError::InvalidRequest(
+            "exact source requires citation and document_type".into(),
+        ));
+    }
+    let citation = request.citation.replace('\'', "''");
+    let document_type = request.document_type.replace('\'', "''");
+    let citation_clause = match request.citation_match {
+        OalcCitationMatch::Exact => format!("\"citation\"='{citation}'"),
+        OalcCitationMatch::Contains => format!("\"citation\" LIKE '%{citation}%'"),
+    };
+    let mut clauses = vec![
+        citation_clause,
+        format!("\"type\"='{document_type}'"),
+    ];
+    if let Some(source) = request.source.as_deref() {
+        clauses.push(format!(
+            "\"source\"='{}'",
+            source.replace('\'', "''")
+        ));
+    }
+    if let Some(jurisdiction) = request.jurisdiction.as_deref() {
+        clauses.push(format!(
+            "\"jurisdiction\"='{}'",
+            jurisdiction.replace('\'', "''")
+        ));
+    }
+    Ok(clauses.join(" AND "))
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OalcCaseFollowRequest {
     pub citation: String,
@@ -319,22 +372,6 @@ mod live {
             .map_err(|error| OalcCaseFollowError::Validation(format!("{error:?}")))
     }
 
-    fn row_matches(request: &PinnedOalcStreamRequest, row: &OalcCorpusRow) -> bool {
-        let citation_matches = match request.citation_match {
-            OalcCitationMatch::Exact => row.citation == request.citation,
-            OalcCitationMatch::Contains => row.citation.contains(&request.citation),
-        };
-        citation_matches
-            && row.document_type == request.document_type
-            && request
-                .source
-                .as_deref()
-                .map_or(true, |source| row.source == source)
-            && request
-                .jurisdiction
-                .as_deref()
-                .map_or(true, |jurisdiction| row.jurisdiction == jurisdiction)
-    }
 
     fn stream_pinned_corpus(
         request: &PinnedOalcStreamRequest,
@@ -380,7 +417,7 @@ mod live {
                 .map_err(|error| OalcCaseFollowError::StreamingFallback(error.to_string()))?;
             let row: OalcCorpusRow = serde_json::from_str(&line)
                 .map_err(|error| OalcCaseFollowError::Json(error.to_string()))?;
-            if !row_matches(request, &row) {
+            if !super::oalc_corpus_row_matches(request, &row) {
                 continue;
             }
             if match_row.is_some() {
@@ -404,31 +441,6 @@ mod live {
         request: &PinnedOalcStreamRequest,
     ) -> Result<OalcCorpusRow, OalcCaseFollowError> {
         stream_pinned_corpus(request)
-    }
-    fn exact_filter_predicate(request: &OalcExactSourceRequest) -> String {
-        let citation = request.citation.replace('\'', "''");
-        let document_type = request.document_type.replace('\'', "''");
-        let citation_clause = match request.citation_match {
-            OalcCitationMatch::Exact => format!("\"citation\"='{citation}'"),
-            OalcCitationMatch::Contains => format!("\"citation\" LIKE '%{citation}%'"),
-        };
-        let mut clauses = vec![
-            citation_clause,
-            format!("\"type\"='{document_type}'"),
-        ];
-        if let Some(source) = request.source.as_deref() {
-            clauses.push(format!(
-                "\"source\"='{}'",
-                source.replace('\'', "''")
-            ));
-        }
-        if let Some(jurisdiction) = request.jurisdiction.as_deref() {
-            clauses.push(format!(
-                "\"jurisdiction\"='{}'",
-                jurisdiction.replace('\'', "''")
-            ));
-        }
-        clauses.join(" AND ")
     }
 
     pub fn resolve_exact_source(
@@ -469,7 +481,7 @@ mod live {
             ));
         }
 
-        let where_clause = exact_filter_predicate(request);
+        let where_clause = super::oalc_exact_source_filter_predicate(request)?;
         let url = format!(
             "{HF_FILTER_API}?dataset={}&config={}&split={}&where={}&offset=0&length=2",
             encode(OALC_DATASET_ID),
@@ -528,7 +540,7 @@ mod live {
             }
         };
 
-        if !row_matches(
+        if !super::oalc_corpus_row_matches(
             &PinnedOalcStreamRequest {
                 revision: info.sha.clone(),
                 citation: request.citation.clone(),
