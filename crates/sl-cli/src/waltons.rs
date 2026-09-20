@@ -5,7 +5,8 @@ use sensiblaw_governed_legal_provider::{
     OalcResolvedSourceReceipt,
 };
 use sensiblaw_legal_follow_plan::{
-    apply_contract_landscape_expansion, waltons_estoppel_trace, AuthorityLevel,
+    apply_contract_landscape_expansion, australian_contract_landscape_seed,
+    trace_extension_delta, waltons_estoppel_trace, AuthorityLevel,
     AustralianContractTrace, ContractDoctrine, SourceRole,
 };
 use sensiblaw_legal_runtime::project_waltons_reviewed_receipts_to_issue;
@@ -1087,38 +1088,99 @@ pub fn identity_compile(paths: &WaltonsPaths) -> CliResult {
 }
 
 pub fn s14_sync(paths: &WaltonsPaths) -> CliResult {
-    let ordered = [
-        &paths.identity_hops,
-        &paths.proposition_hops,
-        &paths.treatment_hops,
-    ];
-    let available = ordered
-        .iter()
-        .filter(|path| path.exists())
-        .copied()
-        .collect::<Vec<_>>();
-    if available.is_empty() {
-        return Err(
-            "no reviewed contract hop artifacts found; compile identity/proposition/treatment review first"
-                .into(),
-        );
-    }
+    let landscape = australian_contract_landscape_seed();
+    let waltons_trace = waltons_estoppel_trace();
+    let bootstrap = trace_extension_delta(
+        &landscape,
+        &waltons_trace,
+        "bootstrap:waltons-estoppel-materialisation",
+    )
+    .map_err(|error| format!("compile Waltons S14 bootstrap: {error}"))?;
 
-    let mut args = vec![
-        "landscape".to_string(),
-        "expand".to_string(),
-        "--as-at".to_string(),
-        DEFAULT_AS_AT.to_string(),
-    ];
-    for path in available {
-        args.push("--delta".into());
-        args.push(path.display().to_string());
-    }
-    args.push("--output".into());
-    args.push(paths.s14_trajectory.display().to_string());
+    let (review_trace, identity_hops, aliases) = if paths.identity_decisions.exists() {
+        compile_identity_reviews(paths)?
+    } else {
+        (
+            waltons_trace.clone(),
+            ContractReviewedHopCompilation {
+                deltas: Vec::new(),
+                residuals: Vec::new(),
+                candidate_only: true,
+                creates_legal_authority: false,
+                creates_current_law_conclusion: false,
+            },
+            BTreeMap::new(),
+        )
+    };
 
-    crate::contracts::run(args)?;
-    println!("waltons_s14_trajectory={}", paths.s14_trajectory.display());
+    let proposition_hops = if paths.decisions.exists() {
+        let reviewed = compile_waltons_reviewed(paths)?;
+        compile_waltons_proposition_receipts_to_contract_hops(
+            &review_trace,
+            WALTONS_AUTHORITY_REF,
+            &reviewed,
+        )
+    } else {
+        ContractReviewedHopCompilation {
+            deltas: Vec::new(),
+            residuals: Vec::new(),
+            candidate_only: true,
+            creates_legal_authority: false,
+            creates_current_law_conclusion: false,
+        }
+    };
+
+    let treatment_hops = if paths.merged_treatment_queue.exists()
+        && paths.treatment_decisions.exists()
+    {
+        let receipts = compile_treatment_review_receipts(paths)?;
+        compile_treatment_receipts_to_contract_hops_with_aliases(
+            &review_trace,
+            &receipts,
+            &aliases,
+        )
+    } else {
+        ContractReviewedHopCompilation {
+            deltas: Vec::new(),
+            residuals: Vec::new(),
+            candidate_only: true,
+            creates_legal_authority: false,
+            creates_current_law_conclusion: false,
+        }
+    };
+
+    let output = crate::contracts::run_native_expansion_trajectory(
+        landscape,
+        vec![
+            crate::contracts::NativeExpansionBatch {
+                source_ref: "bootstrap:waltons-estoppel-materialisation".into(),
+                deltas: vec![bootstrap],
+                reviewed_residuals: Vec::new(),
+            },
+            crate::contracts::NativeExpansionBatch {
+                source_ref: "reviewed:authority-identities".into(),
+                deltas: identity_hops.deltas,
+                reviewed_residuals: identity_hops.residuals,
+            },
+            crate::contracts::NativeExpansionBatch {
+                source_ref: "reviewed:waltons-propositions".into(),
+                deltas: proposition_hops.deltas,
+                reviewed_residuals: proposition_hops.residuals,
+            },
+            crate::contracts::NativeExpansionBatch {
+                source_ref: "reviewed:authority-treatment".into(),
+                deltas: treatment_hops.deltas,
+                reviewed_residuals: treatment_hops.residuals,
+            },
+        ],
+        DEFAULT_AS_AT,
+        None,
+    )?;
+    write_json(&paths.s14_trajectory, &output)?;
+    println!(
+        "waltons_s14_trajectory={} transport=typed_rust_in_process",
+        paths.s14_trajectory.display()
+    );
     Ok(())
 }
 
@@ -1527,7 +1589,9 @@ pub fn treatment_finalize(paths: &WaltonsPaths) -> CliResult {
     Ok(())
 }
 
-pub fn genealogy(paths: &WaltonsPaths) -> CliResult {
+fn compile_treatment_review_receipts(
+    paths: &WaltonsPaths,
+) -> CliResult<Vec<sensiblaw_proof_search_loop::review_unit_review::ReviewedCitationReviewUnitReceipt>> {
     let queue: TreatmentQueue = read_json(&paths.merged_treatment_queue)?;
     let decisions: TreatmentDecisionFile = read_json(&paths.treatment_decisions)?;
     if decisions.schema_version != "sl.citation_treatment_review_decisions.v0_1" {
@@ -1541,16 +1605,21 @@ pub fn genealogy(paths: &WaltonsPaths) -> CliResult {
         .iter()
         .map(|unit| (unit.review_unit_ref.clone(), unit))
         .collect::<BTreeMap<_, _>>();
-    let mut receipts = Vec::new();
-    for decision in &decisions.decisions {
-        let unit = units
-            .get(&decision.review_unit_ref)
-            .ok_or_else(|| format!("unknown review unit {}", decision.review_unit_ref))?;
-        receipts.push(
+    decisions
+        .decisions
+        .iter()
+        .map(|decision| {
+            let unit = units
+                .get(&decision.review_unit_ref)
+                .ok_or_else(|| format!("unknown review unit {}", decision.review_unit_ref))?;
             compile_reviewed_unit_receipt(unit, decision)
-                .map_err(|error| format!("compile treatment review: {error:?}"))?,
-        );
-    }
+                .map_err(|error| format!("compile treatment review: {error:?}"))
+        })
+        .collect()
+}
+
+pub fn genealogy(paths: &WaltonsPaths) -> CliResult {
+    let receipts = compile_treatment_review_receipts(paths)?;
     let genealogy = build_temporal_treatment_genealogy(
         WALTONS_AUTHORITY_REF,
         DEFAULT_AS_AT,
