@@ -35,13 +35,18 @@ ALIASES = {
     "treatment-finalize": ["treatment", "finalize"],
     "genealogy": ["genealogy"],
     "s14-sync": ["s14-sync"],
+    "live-status": ["live", "status"],
+    "live-prepare": ["live", "prepare"],
+    "live-paragraph-reviewed": ["live", "paragraph-reviewed"],
+    "live-identity-reviewed": ["live", "identity-reviewed"],
+    "live-treatment-reviewed": ["live", "treatment-reviewed"],
 }
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--base")
-    parser.add_argument("command", choices=sorted([*ALIASES, "citedby-import"]))
+    parser.add_argument("command", choices=sorted([*ALIASES, "citedby-import", "live-citedby"]))
     parser.add_argument("extra", nargs="*")
     args = parser.parse_args()
 
@@ -53,7 +58,7 @@ def main() -> int:
         "--bin",
         "sensiblaw",
     ]
-    if args.command in {"acquire", "citedby-oalc"}:
+    if args.command in {"acquire", "citedby-oalc", "live-prepare", "live-citedby"}:
         native.extend(["--features", "live-network"])
     native.extend([
         "--",
@@ -67,6 +72,10 @@ def main() -> int:
         if len(args.extra) != 1:
             parser.error("citedby-import requires PROVIDER_RESULTS.json")
         native.extend(["cited-by", "import", args.extra[0]])
+    elif args.command == "live-citedby":
+        if len(args.extra) != 1:
+            parser.error("live-citedby requires PROVIDER_RESULTS.json")
+        native.extend(["live", "cited-by", args.extra[0]])
     else:
         native.extend(ALIASES[args.command])
         tolerated = args.command == "citedby-oalc" and args.extra == ["--execute"]
