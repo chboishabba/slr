@@ -1570,15 +1570,19 @@ pub fn build_australian_calibration_capstone(
             (&evidence, secondary.as_str(), EvidenceDisposition::Supports),
         ],
     };
-    let issue = project_reviewed_world_to_wrong_type(&bundle, &element_evidence)?;
+    let mut issue = project_reviewed_world_to_wrong_type(&bundle, &element_evidence)?;
 
-    let rule = SourceRealisedLegalRule {
+    let mut rule = SourceRealisedLegalRule {
         rule_ref: format!("rule:{case}:calibration"),
         source_revision_ref: format!("authority:{case}:revision:1"),
-        source_span_refs: calibration_refs(kind)
-            .iter()
-            .map(|reference| (*reference).to_owned())
-            .collect(),
+        source_span_refs: if kind == AustralianCalibrationKind::Pabai {
+            Vec::new()
+        } else {
+            calibration_refs(kind)
+                .iter()
+                .map(|reference| (*reference).to_owned())
+                .collect()
+        },
         conclusion_ref: format!("prop:{case}:conclusion"),
         premise_refs: vec![format!("prop:{case}:rule-enabled")],
         exception_refs: vec![format!("prop:{case}:exception")],
@@ -1637,7 +1641,7 @@ pub fn build_australian_calibration_capstone(
         },
     );
 
-    let context = LegalEvaluationContext {
+    let mut context = LegalEvaluationContext {
         jurisdiction_ref: rule.jurisdiction_ref.clone(),
         as_at: "2026-09-20".into(),
         propositions,
@@ -1654,6 +1658,117 @@ pub fn build_australian_calibration_capstone(
     )?;
     let mut campaign = PersistedLegalCampaign::new(state.campaign_ref.clone());
     campaign.append(state)?;
+
+    match kind {
+        AustralianCalibrationKind::Mabo => {
+            // Positive doctrinal route is already closed for this bounded
+            // calibration consumer.
+        }
+        AustralianCalibrationKind::Pabai => {
+            // Hop 0 exposes the missing exact source/pinpoint surface and
+            // therefore selects Look.  Acquisition fills that coordinate,
+            // then the current issue is recomputed; the live defeater remains
+            // legally decisive rather than being erased.
+            rule.source_span_refs = calibration_refs(kind)
+                .iter()
+                .map(|reference| (*reference).to_owned())
+                .collect();
+            for proposition in context.propositions.values_mut() {
+                proposition.source_refs = rule.source_span_refs.clone();
+            }
+            let previous = campaign.receipt_head.clone();
+            let next = compile_legal_campaign_state(
+                campaign.campaign_ref.clone(),
+                kind,
+                1,
+                &rule,
+                &context,
+                Some(previous),
+            )?;
+            campaign.append(next)?;
+        }
+        AustralianCalibrationKind::CullenNswCla => {
+            // Hop 0 leaves the second required element unresolved and selects
+            // Review.  A reviewed follow-up observation pays that coordinate;
+            // re-diagnosis then closes this bounded calibration.
+            let followup = calibration_reviewed_observation(kind, "secondary-review")?;
+            issue = project_reviewed_world_to_wrong_type(
+                &bundle,
+                &[
+                    (&evidence, primary.as_str(), EvidenceDisposition::Supports),
+                    (&followup, secondary.as_str(), EvidenceDisposition::Supports),
+                    (&followup, remedy.as_str(), EvidenceDisposition::Supports),
+                ],
+            )?;
+            context.wrong_type = issue.clone();
+            let previous = campaign.receipt_head.clone();
+            let next = compile_legal_campaign_state(
+                campaign.campaign_ref.clone(),
+                kind,
+                1,
+                &rule,
+                &context,
+                Some(previous),
+            )?;
+            campaign.append(next)?;
+        }
+        AustralianCalibrationKind::Glj => {
+            // Hop 0 has a contested formal/legal route and selects Think.  The
+            // bounded formal check resolves derivability of the defeater but
+            // does not establish the contested matter element; re-diagnosis
+            // therefore selects Review at hop 1.  Only reviewed evidence pays
+            // that matter coordinate at hop 2.
+            let defeater_ref = format!("prop:{case}:defeater");
+            if let Some(defeater) = context.propositions.get_mut(&defeater_ref) {
+                defeater.status = PropositionStatus::Failed;
+            }
+            let previous = campaign.receipt_head.clone();
+            let after_think = compile_legal_campaign_state(
+                campaign.campaign_ref.clone(),
+                kind,
+                1,
+                &rule,
+                &context,
+                Some(previous),
+            )?;
+            campaign.append(after_think)?;
+
+            let reviewed_resolution =
+                calibration_reviewed_observation(kind, "reviewed-resolution")?;
+            issue = project_reviewed_world_to_wrong_type(
+                &bundle,
+                &[
+                    (
+                        &reviewed_resolution,
+                        primary.as_str(),
+                        EvidenceDisposition::Supports,
+                    ),
+                    (
+                        &evidence,
+                        secondary.as_str(),
+                        EvidenceDisposition::Supports,
+                    ),
+                    (
+                        &reviewed_resolution,
+                        remedy.as_str(),
+                        EvidenceDisposition::Supports,
+                    ),
+                ],
+            )?;
+            context.wrong_type = issue.clone();
+            let previous = campaign.receipt_head.clone();
+            let after_review = compile_legal_campaign_state(
+                campaign.campaign_ref.clone(),
+                kind,
+                2,
+                &rule,
+                &context,
+                Some(previous),
+            )?;
+            campaign.append(after_review)?;
+        }
+    }
+
     campaign.validate_restart_replay()?;
 
     Ok(CalibrationCapstone {
@@ -2162,7 +2277,7 @@ mod tests {
     fn glj_contested_formal_route_selects_think_without_authority() {
         let capstone =
             build_australian_calibration_capstone(AustralianCalibrationKind::Glj).unwrap();
-        let hop = capstone.campaign.hops.last().unwrap();
+        let hop = capstone.campaign.hops.first().unwrap();
         let action = hop.selected_action.as_ref().unwrap();
         assert_eq!(action.kind, InformationActionKind::Think);
         assert!(action.candidate_only);
