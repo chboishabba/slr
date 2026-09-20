@@ -4,12 +4,16 @@ use sensiblaw_governed_legal_provider::{
     citation_traversal_plan, run_live_oalc_case_follow, OalcCaseFollowRequest,
     OalcResolvedSourceReceipt,
 };
-use sensiblaw_legal_follow_plan::waltons_estoppel_trace;
+use sensiblaw_legal_follow_plan::{
+    apply_contract_landscape_expansion, waltons_estoppel_trace, AuthorityLevel,
+    AustralianContractTrace, ContractDoctrine, SourceRole,
+};
 use sensiblaw_legal_runtime::project_waltons_reviewed_receipts_to_issue;
 use sensiblaw_proof_search_loop::contract_review_expansion::{
+    compile_reviewed_authority_identity_to_contract_hop,
     compile_treatment_receipts_to_contract_hops,
     compile_waltons_proposition_receipts_to_contract_hops,
-    ContractReviewedHopCompilation,
+    ContractReviewedHopCompilation, ReviewedContractAuthorityIdentity,
 };
 use sensiblaw_proof_search_loop::judgment_candidates::CitationOccurrenceCandidate;
 use sensiblaw_proof_search_loop::oalc_judgment_materialization::{
@@ -58,6 +62,9 @@ pub struct WaltonsPaths {
     pub citedby_manifest: PathBuf,
     pub citedby_candidates: PathBuf,
     pub later_dir: PathBuf,
+    pub identity_worksheet: PathBuf,
+    pub identity_decisions: PathBuf,
+    pub identity_hops: PathBuf,
     pub merged_treatment_queue: PathBuf,
     pub treatment_worksheet: PathBuf,
     pub treatment_decisions: PathBuf,
@@ -80,6 +87,9 @@ impl WaltonsPaths {
             citedby_manifest: base.join("waltons-cited-by-work-manifest.json"),
             citedby_candidates: base.join("waltons-cited-by-candidates.json"),
             later_dir: base.join("later-authorities"),
+            identity_worksheet: base.join("waltons-authority-identity-review-worksheet.json"),
+            identity_decisions: base.join("waltons-authority-identity-reviewed-decisions.json"),
+            identity_hops: base.join("waltons-reviewed-authority-identity-contract-hops.json"),
             merged_treatment_queue: base.join("waltons-treatment-review-queue.json"),
             treatment_worksheet: base.join("waltons-treatment-review-worksheet.json"),
             treatment_decisions: base.join("waltons-treatment-reviewed-decisions.json"),
@@ -186,6 +196,9 @@ pub fn status(paths: &WaltonsPaths) {
         ("5 proposition S14 hops", &paths.proposition_hops),
         ("6 cited-by manifest", &paths.citedby_manifest),
         ("6 cited-by candidates", &paths.citedby_candidates),
+        ("6/7 identity worksheet", &paths.identity_worksheet),
+        ("6/7 identity decisions", &paths.identity_decisions),
+        ("6/7 identity S14 hops", &paths.identity_hops),
         ("7 merged treatment queue", &paths.merged_treatment_queue),
         ("7 treatment worksheet", &paths.treatment_worksheet),
         ("7 treatment decisions", &paths.treatment_decisions),
