@@ -72,6 +72,8 @@ pub struct IndexedChunk {
     pub target: Option<(OalcCorpusRow, OalcRangeIndexEntry)>,
     pub complete_bytes: u64,
     pub complete_rows: u64,
+    pub bytes_received: u64,
+    pub trailing_partial_row: bool,
 }
 
 fn sha256(bytes: &[u8]) -> String {
@@ -172,6 +174,8 @@ pub fn index_complete_jsonl_chunk(
         target,
         complete_bytes: cursor as u64,
         complete_rows: rows,
+        bytes_received: chunk.len() as u64,
+        trailing_partial_row: cursor < chunk.len(),
     })
 }
 
@@ -312,11 +316,11 @@ fn lookup_entry(
 }
 
 #[cfg(feature = "live-network")]
-fn range_get(
+fn range_response(
     revision: &str,
     start: u64,
     end_inclusive: u64,
-) -> Result<Vec<u8>, OalcCaseFollowError> {
+) -> Result<ureq::Response, OalcCaseFollowError> {
     let url = format!(
         "https://huggingface.co/datasets/{OALC_DATASET_ID}/resolve/{revision}/corpus.jsonl?download=true"
     );
@@ -344,13 +348,93 @@ fn range_get(
             response.status()
         )));
     }
-    let mut reader = response.into_reader();
-    let mut bytes = Vec::new();
-    std::io::Read::read_to_end(&mut reader, &mut bytes)
-        .map_err(|error| OalcCaseFollowError::StreamingFallback(format!(
-            "range-index read {start}-{end_inclusive} failed: {error}"
-        )))?;
-    Ok(bytes)
+    Ok(response)
+}
+
+#[cfg(feature = "live-network")]
+fn content_range_total(response: &ureq::Response) -> Option<u64> {
+    let value = response.header("Content-Range")?;
+    let (_, total) = value.rsplit_once('/')?;
+    total.parse::<u64>().ok()
+}
+
+#[cfg(feature = "live-network")]
+fn index_range_reader<R: BufRead>(
+    revision: &str,
+    byte_start: u64,
+    mut reader: R,
+    request: &PinnedOalcStreamRequest,
+) -> Result<IndexedChunk, OalcCaseFollowError> {
+    let mut entries = Vec::new();
+    let mut target = None;
+    let mut line = Vec::new();
+    let mut complete_bytes = 0u64;
+    let mut bytes_received = 0u64;
+    let mut rows = 0u64;
+    let mut trailing_partial_row = false;
+
+    loop {
+        line.clear();
+        let read = reader.read_until(b'\n', &mut line).map_err(|error| {
+            OalcCaseFollowError::StreamingFallback(format!(
+                "range-index read interrupted after {} complete rows and {} complete bytes: {error}",
+                rows, complete_bytes
+            ))
+        })?;
+        if read == 0 {
+            break;
+        }
+        bytes_received = bytes_received.saturating_add(read as u64);
+        if !line.ends_with(b"\n") {
+            trailing_partial_row = true;
+            break;
+        }
+
+        let json = &line[..line.len() - 1];
+        let row: OalcCorpusRow = serde_json::from_slice(json).map_err(|error| {
+            OalcCaseFollowError::Json(format!(
+                "decode pinned range-index row at byte {}: {error}",
+                byte_start + complete_bytes
+            ))
+        })?;
+        rows += 1;
+        let row_start = byte_start + complete_bytes;
+        complete_bytes = complete_bytes.saturating_add(read as u64);
+
+        if let Some(mnc) = terminal_mnc(&row.citation) {
+            let entry = OalcRangeIndexEntry {
+                corpus_revision_sha: revision.to_string(),
+                terminal_mnc: mnc,
+                document_type: row.document_type.clone(),
+                jurisdiction: row.jurisdiction.clone(),
+                source: row.source.clone(),
+                version_id: row.version_id.clone(),
+                byte_start: row_start,
+                byte_len: read as u64,
+                row_sha256: sha256(json),
+                candidate_only: true,
+                creates_legal_authority: false,
+                creates_claim_truth: false,
+            };
+            if target.is_none() && entry_matches_request(&entry, request) {
+                target = Some((row.clone(), entry.clone()));
+            }
+            entries.push(entry);
+        }
+
+        if target.is_some() {
+            break;
+        }
+    }
+
+    Ok(IndexedChunk {
+        entries,
+        target,
+        complete_bytes,
+        complete_rows: rows,
+        bytes_received,
+        trailing_partial_row,
+    })
 }
 
 #[cfg(feature = "live-network")]
@@ -363,11 +447,17 @@ fn fetch_indexed_row(
             "range-index entry has zero byte length".into(),
         ));
     }
-    let bytes = range_get(
+    let response = range_response(
         &request.revision,
         entry.byte_start,
         entry.byte_start + entry.byte_len - 1,
     )?;
+    let mut bytes = Vec::with_capacity(entry.byte_len as usize);
+    let mut reader = response.into_reader();
+    std::io::Read::read_to_end(&mut reader, &mut bytes)
+        .map_err(|error| OalcCaseFollowError::StreamingFallback(format!(
+            "read indexed row range failed: {error}"
+        )))?;
     let json = bytes.strip_suffix(b"\n").unwrap_or(&bytes);
     if sha256(json) != entry.row_sha256 {
         return Err(OalcCaseFollowError::Validation(
@@ -415,15 +505,16 @@ pub fn lookup_or_build_oalc_range_index(
     while range_requests < OALC_RANGE_MAX_CHUNKS_PER_BUILD {
         let start = checkpoint.next_byte_offset;
         let end = start.saturating_add(OALC_RANGE_CHUNK_BYTES - 1);
-        let chunk = range_get(&request.revision, start, end)?;
+        let response = range_response(&request.revision, start, end)?;
+        let total_size = content_range_total(&response);
         range_requests += 1;
-        if chunk.is_empty() {
-            checkpoint.complete = true;
-            write_checkpoint(&checkpoint)?;
-            break;
-        }
 
-        let indexed = index_complete_jsonl_chunk(&request.revision, start, &chunk, request)?;
+        let indexed = index_range_reader(
+            &request.revision,
+            start,
+            BufReader::new(response.into_reader()),
+            request,
+        )?;
         if indexed.complete_bytes == 0 {
             return Err(OalcCaseFollowError::StreamingFallback(format!(
                 "range-index chunk at byte {start} contained no complete JSONL row; increase chunk size"
@@ -449,11 +540,10 @@ pub fn lookup_or_build_oalc_range_index(
             });
         }
 
-        // A short HTTP 206 range at the end of the object contains the final
-        // bytes.  If all of them ended at a complete row boundary, the index is
-        // complete.  Otherwise the final partial line is re-requested once.
-        if chunk.len() < OALC_RANGE_CHUNK_BYTES as usize
-            && indexed.complete_bytes == chunk.len() as u64
+        if total_size
+            .map(|total| checkpoint.next_byte_offset >= total)
+            .unwrap_or(false)
+            && !indexed.trailing_partial_row
         {
             checkpoint.complete = true;
             write_checkpoint(&checkpoint)?;
@@ -540,6 +630,8 @@ mod tests {
         assert_eq!(entry.byte_start, 1000 + before.len() as u64 + 1);
         assert_eq!(entry.byte_len, target.len() as u64 + 1);
         assert!(indexed.complete_bytes < chunk.len() as u64);
+        assert_eq!(indexed.bytes_received, chunk.len() as u64);
+        assert!(indexed.trailing_partial_row);
     }
 
     #[test]
