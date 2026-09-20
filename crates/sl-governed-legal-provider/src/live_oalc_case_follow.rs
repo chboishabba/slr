@@ -824,3 +824,100 @@ pub fn resolve_live_oalc_exact_source(
 ) -> Result<OalcExactSourceRunReceipt, OalcCaseFollowError> {
     Err(OalcCaseFollowError::LiveNetworkFeatureDisabled)
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn row(citation: &str, document_type: &str, source: &str, jurisdiction: &str) -> OalcCorpusRow {
+        OalcCorpusRow {
+            version_id: "version:fixture".into(),
+            document_type: document_type.into(),
+            jurisdiction: jurisdiction.into(),
+            source: source.into(),
+            citation: citation.into(),
+            mime: None,
+            date: None,
+            url: None,
+            when_scraped: None,
+            text: "fixture text".into(),
+        }
+    }
+
+    #[test]
+    fn exact_legislation_filter_is_bounded_offline() {
+        let request = OalcExactSourceRequest {
+            citation: "Civil Liability Act 2002 (NSW)".into(),
+            citation_match: OalcCitationMatch::Exact,
+            document_type: "primary_legislation".into(),
+            source: Some("nsw_legislation".into()),
+            jurisdiction: Some("new_south_wales".into()),
+        };
+        let predicate = oalc_exact_source_filter_predicate(&request).unwrap();
+        assert!(predicate.contains("\"citation\"='Civil Liability Act 2002 (NSW)'"));
+        assert!(predicate.contains("\"type\"='primary_legislation'"));
+        assert!(predicate.contains("\"source\"='nsw_legislation'"));
+        assert!(predicate.contains("\"jurisdiction\"='new_south_wales'"));
+        assert!(oalc_corpus_row_matches(
+            &PinnedOalcStreamRequest {
+                revision: "deadbeef".into(),
+                citation: request.citation.clone(),
+                citation_match: request.citation_match,
+                document_type: request.document_type.clone(),
+                source: request.source.clone(),
+                jurisdiction: request.jurisdiction.clone(),
+            },
+            &row(
+                "Civil Liability Act 2002 (NSW)",
+                "primary_legislation",
+                "nsw_legislation",
+                "new_south_wales",
+            ),
+        ));
+    }
+
+    #[test]
+    fn case_containment_matches_full_oalc_citation_but_not_wrong_jurisdiction() {
+        let request = PinnedOalcStreamRequest {
+            revision: "deadbeef".into(),
+            citation: "[1988] HCA 7".into(),
+            citation_match: OalcCitationMatch::Contains,
+            document_type: "decision".into(),
+            source: None,
+            jurisdiction: Some("commonwealth".into()),
+        };
+        assert!(oalc_corpus_row_matches(
+            &request,
+            &row(
+                "Waltons Stores (Interstate) Ltd v Maher [1988] HCA 7",
+                "decision",
+                "high_court_of_australia",
+                "commonwealth",
+            ),
+        ));
+        assert!(!oalc_corpus_row_matches(
+            &request,
+            &row(
+                "Waltons Stores (Interstate) Ltd v Maher [1988] HCA 7",
+                "decision",
+                "fixture",
+                "new_south_wales",
+            ),
+        ));
+    }
+
+    #[test]
+    fn filter_predicate_escapes_single_quotes() {
+        let request = OalcExactSourceRequest {
+            citation: "O'Brien v Example [2020] HCA 1".into(),
+            citation_match: OalcCitationMatch::Contains,
+            document_type: "decision".into(),
+            source: None,
+            jurisdiction: None,
+        };
+        let predicate = oalc_exact_source_filter_predicate(&request).unwrap();
+        assert!(predicate.contains("O''Brien"));
+        assert!(predicate.contains("LIKE"));
+    }
+}
