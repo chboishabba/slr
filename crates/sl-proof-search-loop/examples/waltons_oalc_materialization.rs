@@ -61,6 +61,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "paragraph_locator_ref": paragraph.paragraph_locator_ref.clone(),
                 "reported_paragraph_label": paragraph.reported_paragraph_label.clone(),
                 "matched_research_criterion_refs": paragraph.matched_research_criterion_refs.clone(),
+                "paragraph_text": paragraph.paragraph_text.clone(),
                 "candidate_only": paragraph.candidate_only,
                 "creates_legal_authority": paragraph.creates_legal_authority,
                 "creates_claim_truth": paragraph.creates_claim_truth,
