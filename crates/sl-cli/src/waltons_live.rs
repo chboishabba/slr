@@ -1,5 +1,8 @@
 use crate::waltons::{self, WaltonsPaths};
-use sensiblaw_governed_legal_provider::{run_live_oalc_case_follow, OalcCaseFollowRequest};
+use sensiblaw_governed_legal_provider::{
+    run_live_oalc_case_follow, OalcCaseFollowRequest, OalcResolvedSourceReceipt,
+};
+use sensiblaw_proof_search_loop::oalc_judgment_materialization::materialize_oalc_judgment;
 use serde_json::{json, Value};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -215,14 +218,18 @@ fn reacquire_cited_by_candidates_resilient(paths: &WaltonsPaths) -> CliResult<Va
         let text_path = output_dir.join("judgment.txt");
 
         if receipt_path.exists() && text_path.exists() {
-            let receipt = read_json(&receipt_path)?;
-            let citation_matches = receipt["citation"]
-                .as_str()
-                .map_or(false, |value| value.contains(citation));
+            let receipt_bytes = fs::read(&receipt_path)
+                .map_err(|error| format!("read {}: {error}", receipt_path.display()))?;
+            let receipt: OalcResolvedSourceReceipt = serde_json::from_slice(&receipt_bytes)
+                .map_err(|error| format!("decode {}: {error}", receipt_path.display()))?;
+            let text = fs::read_to_string(&text_path)
+                .map_err(|error| format!("read {}: {error}", text_path.display()))?;
+            let citation_matches = receipt.citation.contains(citation);
             let retained_pair_valid = citation_matches
-                && receipt["candidate_only"] == true
-                && receipt["creates_legal_authority"] == false
-                && receipt["creates_claim_truth"] == false;
+                && receipt.candidate_only
+                && !receipt.creates_legal_authority
+                && !receipt.creates_claim_truth
+                && materialize_oalc_judgment(&receipt, &text, &[]).is_ok();
             if retained_pair_valid {
                 resolved.push(json!({
                     "citation": citation,
@@ -238,7 +245,7 @@ fn reacquire_cited_by_candidates_resilient(paths: &WaltonsPaths) -> CliResult<Va
             residuals.push(json!({
                 "citation": citation,
                 "state": "source_residual",
-                "reason": "existing retained OALC pair failed candidate/identity validation",
+                "reason": "existing retained OALC pair failed citation/candidate/digest validation",
                 "missing_source_is_negative_legal_evidence": false,
                 "candidate_only": true,
                 "creates_legal_authority": false,
