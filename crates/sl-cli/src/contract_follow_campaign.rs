@@ -730,6 +730,255 @@ pub fn snapshot_from_campaign_receipt(value: &Value) -> CampaignResult<ContractT
     .map_err(|error| format!("decode campaign final_trace: {error}"))
 }
 
+
+fn arg_value(args: &[String], flag: &str) -> Option<String> {
+    args.iter()
+        .position(|arg| arg == flag)
+        .and_then(|index| args.get(index + 1))
+        .cloned()
+}
+
+fn required_arg(args: &[String], flag: &str) -> CampaignResult<String> {
+    arg_value(args, flag).ok_or_else(|| format!("{flag} requires a value"))
+}
+
+fn trace_snapshot_from_trajectory(path: &Path) -> CampaignResult<ContractTraceSnapshot> {
+    let value = read_campaign_receipt(path)?;
+    if let Some(trace) = value.get("final_trace") {
+        return serde_json::from_value(trace.clone())
+            .map_err(|error| format!("decode final_trace from {}: {error}", path.display()));
+    }
+    if let Some(trace) = value
+        .get("campaign_state")
+        .and_then(|state| state.get("final_trace"))
+    {
+        return serde_json::from_value(trace.clone())
+            .map_err(|error| format!("decode campaign_state.final_trace from {}: {error}", path.display()));
+    }
+    Err(format!(
+        "{} does not contain a resumable final_trace; rerun the typed trajectory with S14.5 code",
+        path.display()
+    ))
+}
+
+fn config_from_trajectory(path: &Path) -> CampaignResult<CampaignConfig> {
+    let value = read_campaign_receipt(path)?;
+    let as_at = value
+        .get("as_at")
+        .and_then(Value::as_str)
+        .or_else(|| {
+            value
+                .get("campaign_state")
+                .and_then(|state| state.get("as_at"))
+                .and_then(Value::as_str)
+        })
+        .unwrap_or("2026-09-20")
+        .to_string();
+    let jurisdiction_filter = value
+        .get("jurisdiction_filter")
+        .or_else(|| {
+            value
+                .get("campaign_state")
+                .and_then(|state| state.get("jurisdiction_filter"))
+        })
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    Ok(CampaignConfig {
+        campaign_ref: format!("campaign:recursive:{}", path.display()),
+        as_at,
+        jurisdiction_filter,
+        budget: CampaignBudget::default(),
+    })
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct OutboundFrontierEnvelope {
+    schema_version: String,
+    source_receipt_path: String,
+    source_semantic_ref: String,
+    residual_count: usize,
+    selected: Option<OutboundCitationResidual>,
+    residuals: Vec<OutboundCitationResidual>,
+    selector_is_legal_truth_rank: bool,
+    candidate_only: bool,
+    creates_legal_authority: bool,
+    creates_current_law_conclusion: bool,
+}
+
+pub fn run(args: Vec<String>) -> CampaignResult<()> {
+    match args.as_slice() {
+        [command, rest @ ..] if command == "discover" => {
+            let trajectory = PathBuf::from(required_arg(rest, "--trajectory")?);
+            let source_receipt = PathBuf::from(required_arg(rest, "--source-receipt")?);
+            let source_semantic_ref = required_arg(rest, "--source-semantic-ref")?;
+            let output = PathBuf::from(required_arg(rest, "--output")?);
+            let snapshot = trace_snapshot_from_trajectory(&trajectory)?;
+            let trace = restore_trace(&snapshot)?;
+            let (_, materialization) = materialize_retained_oalc_receipt(&source_receipt)?;
+            let residuals =
+                discover_outbound_citation_residuals(&trace, &source_semantic_ref, &materialization);
+            let selected = select_fresh_outbound_citation(&residuals).cloned();
+            let envelope = OutboundFrontierEnvelope {
+                schema_version: "sl.contract_follow.outbound_frontier.v0_1".into(),
+                source_receipt_path: source_receipt.display().to_string(),
+                source_semantic_ref,
+                residual_count: residuals.len(),
+                selected,
+                residuals,
+                selector_is_legal_truth_rank: false,
+                candidate_only: true,
+                creates_legal_authority: false,
+                creates_current_law_conclusion: false,
+            };
+            write_json(&output, &envelope)?;
+            println!(
+                "contract_follow_outbound_frontier={} residuals={} selected={} authority=false current_law_conclusion=false",
+                output.display(),
+                envelope.residual_count,
+                envelope
+                    .selected
+                    .as_ref()
+                    .map(|value| value.medium_neutral_citation.as_str())
+                    .unwrap_or("none"),
+            );
+            Ok(())
+        }
+        [command, rest @ ..] if command == "acquire-next" => {
+            let frontier = PathBuf::from(required_arg(rest, "--frontier")?);
+            let output_dir = PathBuf::from(required_arg(rest, "--output-dir")?);
+            let as_at = arg_value(rest, "--as-at").unwrap_or_else(|| "2026-09-20".into());
+            let envelope: OutboundFrontierEnvelope = {
+                let bytes = fs::read(&frontier)
+                    .map_err(|error| format!("read {}: {error}", frontier.display()))?;
+                serde_json::from_slice(&bytes)
+                    .map_err(|error| format!("decode {}: {error}", frontier.display()))?
+            };
+            let selected = envelope
+                .selected
+                .ok_or_else(|| "outbound frontier has no selected candidate".to_string())?;
+            let receipt = acquire_outbound_citation(&selected, output_dir.clone(), &as_at)?;
+            let summary = json!({
+                "schema_version": "sl.contract_follow.recursive_source_acquisition.v0_1",
+                "selected_residual_ref": selected.residual_ref,
+                "selected_medium_neutral_citation": selected.medium_neutral_citation,
+                "source_receipt": output_dir.join("oalc-source-receipt.json"),
+                "version_id": receipt.version_id,
+                "corpus_revision_ref": receipt.corpus_revision_ref,
+                "network_requests": receipt.network_requests,
+                "candidate_only": true,
+                "creates_legal_authority": false,
+                "creates_current_law_conclusion": false,
+                "missing_source_is_negative_legal_evidence": false,
+            });
+            let summary_path = output_dir.join("campaign-source-acquisition.json");
+            write_json(&summary_path, &summary)?;
+            println!(
+                "contract_follow_recursive_source={} citation={} network={} authority=false",
+                summary_path.display(),
+                receipt.citation,
+                receipt.network_requests,
+            );
+            Ok(())
+        }
+        [command, rest @ ..] if command == "identity-prepare" => {
+            let receipt = PathBuf::from(required_arg(rest, "--receipt")?);
+            let output = PathBuf::from(required_arg(rest, "--output")?);
+            crate::contract_identity::prepare(&[receipt], &output)?;
+            println!("contract_follow_identity_worksheet={}", output.display());
+            Ok(())
+        }
+        [command, rest @ ..] if command == "identity-reviewed" => {
+            let trajectory = PathBuf::from(required_arg(rest, "--trajectory")?);
+            let worksheet = PathBuf::from(required_arg(rest, "--worksheet")?);
+            let decisions = PathBuf::from(required_arg(rest, "--decisions")?);
+            let output = PathBuf::from(required_arg(rest, "--output")?);
+            crate::contract_identity::finalize(&worksheet, &decisions)?;
+            let snapshot = trace_snapshot_from_trajectory(&trajectory)?;
+            let trace = restore_trace(&snapshot)?;
+            let compiled = crate::contract_identity::compile_against(&decisions, trace.clone())?;
+            let mut campaign = ContractFollowCampaign::new(config_from_trajectory(&trajectory)?, trace)?;
+            for residual in &compiled.compilation.residuals {
+                campaign.preserve_reviewed_residual(
+                    &decisions.display().to_string(),
+                    serde_json::to_value(residual)
+                        .map_err(|error| format!("encode identity residual: {error}"))?,
+                );
+            }
+            for delta in compiled.compilation.deltas {
+                campaign.accept_delta(&decisions.display().to_string(), delta)?;
+            }
+            let receipt = campaign.receipt_json()?;
+            write_json(&output, &receipt)?;
+            println!(
+                "contract_follow_identity_continuation={} hops={} residuals={} authority=false",
+                output.display(),
+                receipt["accepted_hop_count"],
+                receipt["reviewed_residual_count"],
+            );
+            Ok(())
+        }
+        [command, rest @ ..] if command == "treatment-prepare" => {
+            let source_receipt = PathBuf::from(required_arg(rest, "--source-receipt")?);
+            let source_semantic_ref = required_arg(rest, "--source-semantic-ref")?;
+            let target_mnc = required_arg(rest, "--target-mnc")?;
+            let target_semantic_ref = required_arg(rest, "--target-semantic-ref")?;
+            let queue = PathBuf::from(required_arg(rest, "--queue")?);
+            let worksheet = PathBuf::from(required_arg(rest, "--worksheet")?);
+            let prepared = crate::contract_treatment::prepare_exact_treatment_queue(
+                &source_receipt,
+                &source_semantic_ref,
+                &target_mnc,
+                &target_semantic_ref,
+                &queue,
+            )?;
+            crate::contract_treatment::prepare_treatment_worksheet(&queue, &worksheet)?;
+            println!(
+                "contract_follow_treatment_worksheet={} units={} target={} authority=false",
+                worksheet.display(),
+                prepared.review_unit_count,
+                target_mnc,
+            );
+            Ok(())
+        }
+        [command, rest @ ..] if command == "treatment-reviewed" => {
+            let trajectory = PathBuf::from(required_arg(rest, "--trajectory")?);
+            let queue = PathBuf::from(required_arg(rest, "--queue")?);
+            let worksheet = PathBuf::from(required_arg(rest, "--worksheet")?);
+            let decisions = PathBuf::from(required_arg(rest, "--decisions")?);
+            let output = PathBuf::from(required_arg(rest, "--output")?);
+            crate::contract_treatment::finalize_treatment_review(&worksheet, &decisions)?;
+            let snapshot = trace_snapshot_from_trajectory(&trajectory)?;
+            let trace = restore_trace(&snapshot)?;
+            let compiled =
+                crate::contract_treatment::compile_treatment_review(&queue, &decisions, &trace)?;
+            let mut campaign = ContractFollowCampaign::new(config_from_trajectory(&trajectory)?, trace)?;
+            for residual in &compiled.compilation.residuals {
+                campaign.preserve_reviewed_residual(
+                    &decisions.display().to_string(),
+                    serde_json::to_value(residual)
+                        .map_err(|error| format!("encode treatment residual: {error}"))?,
+                );
+            }
+            for delta in compiled.compilation.deltas {
+                campaign.accept_delta(&decisions.display().to_string(), delta)?;
+            }
+            let receipt = campaign.receipt_json()?;
+            write_json(&output, &receipt)?;
+            println!(
+                "contract_follow_treatment_continuation={} hops={} residuals={} authority=false current_law_conclusion=false",
+                output.display(),
+                receipt["accepted_hop_count"],
+                receipt["reviewed_residual_count"],
+            );
+            Ok(())
+        }
+        _ => Err(
+            "usage: sensiblaw legal-follow contracts campaign <discover|acquire-next|identity-prepare|identity-reviewed|treatment-prepare|treatment-reviewed> ..."
+                .into(),
+        ),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
