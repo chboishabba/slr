@@ -84,7 +84,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             resolved.corpus_revision_sha
         );
         if let Some(existing) = common_revision.as_deref() {
-            if existing != corpus_revision {
+            if existing != corpus_revision.as_str() {
                 return Err(format!(
                     "Cullen acquisition crossed OALC revisions: {existing} vs {corpus_revision}"
                 )
