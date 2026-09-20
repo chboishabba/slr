@@ -1135,3 +1135,40 @@ pub fn genealogy(paths: &WaltonsPaths) -> CliResult {
     println!("waltons_genealogy={}", paths.genealogy.display());
     Ok(())
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn medium_neutral_citation_gate_accepts_expected_shape_only() {
+        assert!(looks_like_mnc("[1988] HCA 7"));
+        assert!(looks_like_mnc("[2014] HCA 19"));
+        assert!(!looks_like_mnc("Waltons Stores [1988] HCA 7"));
+        assert!(!looks_like_mnc("[1988] HCA"));
+        assert!(!looks_like_mnc("1988 HCA 7"));
+    }
+
+    #[test]
+    fn native_paths_keep_review_json_as_surface_artifacts() {
+        let paths = WaltonsPaths::from_base(PathBuf::from("/tmp/waltons-native-test"));
+        assert_eq!(
+            paths.decisions,
+            PathBuf::from("/tmp/waltons-native-test/waltons-reviewed-decisions.json")
+        );
+        assert_eq!(
+            paths.genealogy,
+            PathBuf::from("/tmp/waltons-native-test/waltons-temporal-treatment-genealogy.json")
+        );
+    }
+
+    #[test]
+    fn requirement_roles_are_typed_and_not_inferred_from_arbitrary_strings() {
+        assert_eq!(
+            role_for_requirement("requirement:estoppel:reliance"),
+            Some(EstoppelRequirementRole::Reliance)
+        );
+        assert_eq!(role_for_requirement("estoppel-ish"), None);
+    }
+}
