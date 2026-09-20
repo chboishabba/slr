@@ -72,6 +72,31 @@ pub struct ContractReviewedHopCompilation {
     pub creates_current_law_conclusion: bool,
 }
 
+fn embedded_medium_neutral_citation(value: &str) -> Option<String> {
+    let fields = value.split_whitespace().collect::<Vec<_>>();
+    for window in fields.windows(3) {
+        let year = window[0];
+        if year.len() != 6
+            || !year.starts_with('[')
+            || !year.ends_with(']')
+            || !year[1..5].bytes().all(|byte| byte.is_ascii_digit())
+        {
+            continue;
+        }
+        let court = window[1].trim_matches(|ch: char| !ch.is_ascii_alphanumeric());
+        let number = window[2].trim_matches(|ch: char| !ch.is_ascii_digit());
+        if court.is_empty()
+            || !court.bytes().all(|byte| byte.is_ascii_alphanumeric())
+            || number.is_empty()
+            || !number.bytes().all(|byte| byte.is_ascii_digit())
+        {
+            continue;
+        }
+        return Some(format!("{year} {court} {number}"));
+    }
+    None
+}
+
 fn waltons_requirement_ref(role: EstoppelRequirementRole) -> &'static str {
     role.requirement_ref()
 }
@@ -191,13 +216,18 @@ pub fn compile_reviewed_authority_identity_to_contract_hop(
         let court_compatible = existing.court_ref.is_none()
             || reviewed.court_ref.is_none()
             || existing.court_ref == reviewed.court_ref;
-        let citation_compatible = existing
-            .source_citation
-            .contains(&reviewed.source_receipt.citation)
-            || reviewed
-                .source_receipt
-                .citation
-                .contains(&existing.source_citation);
+        let citation_compatible = embedded_medium_neutral_citation(&existing.source_citation)
+            .zip(embedded_medium_neutral_citation(&reviewed.source_receipt.citation))
+            .map_or_else(
+                || {
+                    existing.source_citation.contains(&reviewed.source_receipt.citation)
+                        || reviewed
+                            .source_receipt
+                            .citation
+                            .contains(&existing.source_citation)
+                },
+                |(left, right)| left == right,
+            );
         let compatible = existing.kind == node.kind
             && existing.source_role == node.source_role
             && existing.authority_level == node.authority_level
