@@ -5,6 +5,7 @@ mod oalc;
 mod case_follow;
 mod s14_adaptive_fixture;
 mod waltons;
+mod waltons_live;
 
 use std::env;
 use std::path::PathBuf;
@@ -40,12 +41,20 @@ USAGE:
   sensiblaw legal-follow waltons [--base PATH] treatment finalize
   sensiblaw legal-follow waltons [--base PATH] genealogy
   sensiblaw legal-follow waltons [--base PATH] s14-sync
+  sensiblaw legal-follow waltons [--base PATH] live status
+  sensiblaw legal-follow waltons [--base PATH] live prepare
+  sensiblaw legal-follow waltons [--base PATH] live paragraph-reviewed
+  sensiblaw legal-follow waltons [--base PATH] live cited-by PROVIDER_RESULTS.json
+  sensiblaw legal-follow waltons [--base PATH] live identity-reviewed
+  sensiblaw legal-follow waltons [--base PATH] live treatment-reviewed
 
 NOTES:
   * acquire/cited-by acquire require --features live-network at build time.
   * review prepare/finalize are human-review file surfaces; they do not make
     legal decisions automatically.
   * Waltons s14-sync is the canonical typed Rust reviewed-hop path.
+  * Waltons live is the resumable live-OALC operator path. It advances every
+    deterministic stage and stops only at explicit human/provider gates.
   * contracts landscape adaptive-fixture is an executable controller
     calibration; it does not claim a live human-reviewed campaign.
   * contracts landscape expand --delta is a compatibility/import surface for
@@ -137,6 +146,24 @@ fn waltons_command(mut args: Vec<String>) -> Result<(), String> {
         }
         [command] if command == "genealogy" => waltons::genealogy(&paths),
         [command] if command == "s14-sync" => waltons::s14_sync(&paths),
+        [group, command] if group == "live" && command == "status" => {
+            waltons_live::status(&paths)
+        }
+        [group, command] if group == "live" && command == "prepare" => {
+            waltons_live::prepare(&paths)
+        }
+        [group, command] if group == "live" && command == "paragraph-reviewed" => {
+            waltons_live::paragraph_reviewed(&paths)
+        }
+        [group, command, provider_results] if group == "live" && command == "cited-by" => {
+            waltons_live::cited_by(&paths, &PathBuf::from(provider_results))
+        }
+        [group, command] if group == "live" && command == "identity-reviewed" => {
+            waltons_live::identity_reviewed(&paths)
+        }
+        [group, command] if group == "live" && command == "treatment-reviewed" => {
+            waltons_live::treatment_reviewed(&paths)
+        }
         _ => {
             usage();
             Err(format!("unsupported Waltons command: {}", args.join(" ")))
