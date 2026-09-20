@@ -1,11 +1,14 @@
+use serde::Deserialize;
 use serde_json::json;
 use sensiblaw_governed_legal_provider::{
     resolve_live_oalc_exact_source, OalcCitationMatch, OalcExactSourceRequest,
 };
 use sensiblaw_legal_follow_plan::{
     australian_contract_landscape_seed, compile_australian_contract_landscape_worklist,
-    legal_follow_demand_for_trace_node, plan_legal_sources, AustralianContractLandscapeWorklist,
-    ContractLandscapeWorkItem, PlanState, SourceRole,
+    apply_contract_landscape_expansion, legal_follow_demand_for_trace_node, plan_legal_sources,
+    AuthorityLevel, AustralianContractLandscapeWorklist, AustralianContractTrace,
+    ContractDoctrine, ContractLandscapeExpansionDelta, ContractLandscapeWorkItem,
+    ContractTraceEdge, ContractTraceNode, PlanState, SourceRole, TraceNodeKind, TreatmentKind,
 };
 use sha2::{Digest, Sha256};
 use std::fs;
@@ -41,9 +44,9 @@ fn work_item_json(item: &ContractLandscapeWorkItem) -> serde_json::Value {
 }
 
 fn plan_json(
+    trace: &AustralianContractTrace,
     work: &AustralianContractLandscapeWorklist,
 ) -> serde_json::Value {
-    let trace = australian_contract_landscape_seed();
     let source = work
         .source_items
         .iter()
@@ -110,7 +113,7 @@ fn compile(args: &[String]) -> CliResult<(AustralianContractLandscapeWorklist, s
         &as_at,
         jurisdiction.as_deref(),
     )?;
-    let output = plan_json(&work);
+    let output = plan_json(&trace, &work);
     Ok((work, output))
 }
 
@@ -294,6 +297,178 @@ fn acquire_primary_sources(
     }))
 }
 
+#[derive(Debug, Deserialize)]
+struct ExpansionInput {
+    provenance_ref: String,
+    #[serde(default)]
+    nodes: Vec<ExpansionNodeInput>,
+    #[serde(default)]
+    edges: Vec<ExpansionEdgeInput>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ExpansionNodeInput {
+    semantic_ref: String,
+    label: String,
+    kind: String,
+    doctrine: Option<String>,
+    jurisdiction_ref: String,
+    court_ref: Option<String>,
+    decision_or_effective_date: Option<String>,
+    valid_from: Option<String>,
+    valid_to: Option<String>,
+    source_role: String,
+    authority_level: String,
+    source_citation: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct ExpansionEdgeInput {
+    from_ref: String,
+    to_ref: String,
+    treatment: String,
+}
+
+fn parse_doctrine(value: &str) -> CliResult<ContractDoctrine> {
+    match value {
+        "Formation" | "formation" => Ok(ContractDoctrine::Formation),
+        "Intention" | "intention" => Ok(ContractDoctrine::Intention),
+        "TermsAndIncorporation" | "terms-and-incorporation" => {
+            Ok(ContractDoctrine::TermsAndIncorporation)
+        }
+        "Construction" | "construction" => Ok(ContractDoctrine::Construction),
+        "Estoppel" | "estoppel" => Ok(ContractDoctrine::Estoppel),
+        "Unconscionability" | "unconscionability" => Ok(ContractDoctrine::Unconscionability),
+        "Penalties" | "penalties" => Ok(ContractDoctrine::Penalties),
+        "RepudiationAndTermination" | "repudiation-and-termination" => {
+            Ok(ContractDoctrine::RepudiationAndTermination)
+        }
+        "Damages" | "damages" => Ok(ContractDoctrine::Damages),
+        "Restitution" | "restitution" => Ok(ContractDoctrine::Restitution),
+        "Privity" | "privity" => Ok(ContractDoctrine::Privity),
+        "ConsumerLaw" | "consumer-law" => Ok(ContractDoctrine::ConsumerLaw),
+        other => Err(format!("unsupported contract doctrine {other:?}")),
+    }
+}
+
+fn parse_node_kind(value: &str) -> CliResult<TraceNodeKind> {
+    match value {
+        "Doctrine" | "doctrine" => Ok(TraceNodeKind::Doctrine),
+        "CaseAuthority" | "case-authority" => Ok(TraceNodeKind::CaseAuthority),
+        "Legislation" | "legislation" => Ok(TraceNodeKind::Legislation),
+        "ResearchRequirement" | "research-requirement" => {
+            Ok(TraceNodeKind::ResearchRequirement)
+        }
+        "Matter" | "matter" => Ok(TraceNodeKind::Matter),
+        other => Err(format!("unsupported trace node kind {other:?}")),
+    }
+}
+
+fn parse_source_role(value: &str) -> CliResult<SourceRole> {
+    match value {
+        "PrimaryCaseLaw" | "primary-case-law" => Ok(SourceRole::PrimaryCaseLaw),
+        "PrimaryLegislation" | "primary-legislation" => Ok(SourceRole::PrimaryLegislation),
+        "OfficialRecord" | "official-record" => Ok(SourceRole::OfficialRecord),
+        "ResearchIndex" | "research-index" => Ok(SourceRole::ResearchIndex),
+        "SecondaryAnalysis" | "secondary-analysis" => Ok(SourceRole::SecondaryAnalysis),
+        other => Err(format!("unsupported source role {other:?}")),
+    }
+}
+
+fn parse_authority_level(value: &str) -> CliResult<AuthorityLevel> {
+    match value {
+        "Official" | "official" => Ok(AuthorityLevel::Official),
+        "Supporting" | "supporting" => Ok(AuthorityLevel::Supporting),
+        "Secondary" | "secondary" => Ok(AuthorityLevel::Secondary),
+        other => Err(format!("unsupported authority level {other:?}")),
+    }
+}
+
+fn parse_treatment(value: &str) -> CliResult<TreatmentKind> {
+    match value {
+        "Seeds" | "seeds" => Ok(TreatmentKind::Seeds),
+        "Supports" | "supports" => Ok(TreatmentKind::Supports),
+        "Applies" | "applies" => Ok(TreatmentKind::Applies),
+        "Follows" | "follows" => Ok(TreatmentKind::Follows),
+        "Distinguishes" | "distinguishes" => Ok(TreatmentKind::Distinguishes),
+        "Qualifies" | "qualifies" => Ok(TreatmentKind::Qualifies),
+        "Displaces" | "displaces" => Ok(TreatmentKind::Displaces),
+        "TemporalSuccessor" | "temporal-successor" => Ok(TreatmentKind::TemporalSuccessor),
+        "Requires" | "requires" => Ok(TreatmentKind::Requires),
+        "Intersects" | "intersects" => Ok(TreatmentKind::Intersects),
+        other => Err(format!("unsupported treatment kind {other:?}")),
+    }
+}
+
+fn load_expansion_delta(path: &Path) -> CliResult<ContractLandscapeExpansionDelta> {
+    let bytes = fs::read(path)
+        .map_err(|error| format!("read expansion delta {}: {error}", path.display()))?;
+    let input: ExpansionInput = serde_json::from_slice(&bytes)
+        .map_err(|error| format!("decode expansion delta {}: {error}", path.display()))?;
+    if input.provenance_ref.trim().is_empty() {
+        return Err("expansion delta requires non-empty provenance_ref".into());
+    }
+
+    let mut nodes = Vec::new();
+    for node in input.nodes {
+        nodes.push(ContractTraceNode {
+            semantic_ref: node.semantic_ref,
+            label: node.label,
+            kind: parse_node_kind(&node.kind)?,
+            doctrine: node
+                .doctrine
+                .as_deref()
+                .map(parse_doctrine)
+                .transpose()?,
+            jurisdiction_ref: node.jurisdiction_ref,
+            court_ref: node.court_ref,
+            decision_or_effective_date: node.decision_or_effective_date,
+            valid_from: node.valid_from,
+            valid_to: node.valid_to,
+            source_role: parse_source_role(&node.source_role)?,
+            authority_level: parse_authority_level(&node.authority_level)?,
+            source_citation: node.source_citation,
+            candidate_only: true,
+            creates_legal_authority: false,
+        });
+    }
+
+    let mut edges = Vec::new();
+    for edge in input.edges {
+        edges.push(ContractTraceEdge {
+            from_ref: edge.from_ref,
+            to_ref: edge.to_ref,
+            treatment: parse_treatment(&edge.treatment)?,
+            candidate_only: true,
+            creates_legal_authority: false,
+        });
+    }
+
+    Ok(ContractLandscapeExpansionDelta {
+        discovered_nodes: nodes,
+        discovered_edges: edges,
+        provenance_ref: input.provenance_ref,
+        candidate_only: true,
+        creates_legal_authority: false,
+    })
+}
+
+fn expansion_receipt_json(
+    receipt: &sensiblaw_legal_follow_plan::ContractLandscapeExpansionReceipt,
+) -> serde_json::Value {
+    json!({
+        "provenance_ref": receipt.provenance_ref,
+        "added_node_count": receipt.added_node_count,
+        "added_edge_count": receipt.added_edge_count,
+        "recompute_frontier_required": receipt.recompute_frontier_required,
+        "old_source_history_preserved": receipt.old_source_history_preserved,
+        "old_conclusions_frozen": receipt.old_conclusions_frozen,
+        "candidate_only": receipt.candidate_only,
+        "creates_legal_authority": receipt.creates_legal_authority,
+        "creates_current_law_conclusion": receipt.creates_current_law_conclusion,
+    })
+}
+
 fn write_output(path: &Path, output: &serde_json::Value) -> CliResult {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)
@@ -348,6 +523,47 @@ pub fn run(args: Vec<String>) -> CliResult {
             );
             Ok(())
         }
+        [scope, command, rest @ ..] if scope == "landscape" && command == "expand" => {
+            let delta_path = value(rest, "--delta")
+                .map(PathBuf::from)
+                .ok_or_else(|| "landscape expand requires --delta PATH".to_string())?;
+            let as_at = value(rest, "--as-at").unwrap_or_else(|| "2026-09-20".into());
+            let jurisdiction = value(rest, "--jurisdiction");
+            let delta = load_expansion_delta(&delta_path)?;
+            let seed = australian_contract_landscape_seed();
+            let (expanded, receipt) =
+                apply_contract_landscape_expansion(&seed, &delta)?;
+            let work = compile_australian_contract_landscape_worklist(
+                &expanded,
+                &as_at,
+                jurisdiction.as_deref(),
+            )?;
+            let output = json!({
+                "schema_version": "sl.australian_contract_landscape_adaptive_step.v0_1",
+                "expansion_receipt": expansion_receipt_json(&receipt),
+                "recomputed_worklist": plan_json(&expanded, &work),
+            });
+            if let Some(path) = value(rest, "--output").map(PathBuf::from) {
+                write_output(&path, &output)?;
+                println!("contracts_landscape_adaptive_step={}", path.display());
+            } else {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&output)
+                        .map_err(|error| format!("encode adaptive step: {error}"))?
+                );
+            }
+            println!(
+                "contracts_landscape_recomputed added_nodes={} added_edges={} source={} treatment={} context={} temporal={} authority=false current_law_conclusion=false",
+                receipt.added_node_count,
+                receipt.added_edge_count,
+                work.source_items.len(),
+                work.treatment_items.len(),
+                work.context_items.len(),
+                work.temporal_alternatives.len(),
+            );
+            Ok(())
+        }
         [scope, command, rest @ ..] if scope == "landscape" && command == "acquire" => {
             let (work, _) = compile(rest)?;
             let output_dir = value(rest, "--output-dir")
@@ -368,7 +584,7 @@ pub fn run(args: Vec<String>) -> CliResult {
             Ok(())
         }
         _ => Err(
-            "usage: sensiblaw legal-follow contracts landscape <plan|status|acquire> [--as-at YYYY-MM-DD] [--jurisdiction AU-QLD] [--output PATH] [--output-dir PATH]"
+            "usage: sensiblaw legal-follow contracts landscape <plan|status|expand|acquire> [--as-at YYYY-MM-DD] [--jurisdiction AU-QLD] [--delta PATH] [--output PATH] [--output-dir PATH]"
                 .into(),
         ),
     }
@@ -408,6 +624,42 @@ mod tests {
             legislation_act_citation("Property Law Act 2023 (Qld) s 68"),
             ("Property Law Act 2023 (Qld)".into(), Some("s 68".into()))
         );
+    }
+
+    #[test]
+    fn expansion_input_cannot_supply_authority_bits() {
+        let input = ExpansionNodeInput {
+            semantic_ref: "case:fixture:construction".into(),
+            label: "fixture".into(),
+            kind: "case-authority".into(),
+            doctrine: Some("construction".into()),
+            jurisdiction_ref: "AU".into(),
+            court_ref: Some("court:fixture".into()),
+            decision_or_effective_date: None,
+            valid_from: None,
+            valid_to: None,
+            source_role: "primary-case-law".into(),
+            authority_level: "official".into(),
+            source_citation: "fixture:construction".into(),
+        };
+        let node = ContractTraceNode {
+            semantic_ref: input.semantic_ref,
+            label: input.label,
+            kind: parse_node_kind(&input.kind).unwrap(),
+            doctrine: input.doctrine.as_deref().map(parse_doctrine).transpose().unwrap(),
+            jurisdiction_ref: input.jurisdiction_ref,
+            court_ref: input.court_ref,
+            decision_or_effective_date: input.decision_or_effective_date,
+            valid_from: input.valid_from,
+            valid_to: input.valid_to,
+            source_role: parse_source_role(&input.source_role).unwrap(),
+            authority_level: parse_authority_level(&input.authority_level).unwrap(),
+            source_citation: input.source_citation,
+            candidate_only: true,
+            creates_legal_authority: false,
+        };
+        assert!(node.candidate_only);
+        assert!(!node.creates_legal_authority);
     }
 
     #[test]
