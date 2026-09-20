@@ -11,6 +11,7 @@ pub mod gwb_supervised_type_closure;
 pub mod gwb_analysis;
 pub mod sprint1_acquisition_machine;
 pub mod sprint1_producers;
+pub mod sprint2_provider_normalisation;
 pub mod zelph_hf_physical;
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};

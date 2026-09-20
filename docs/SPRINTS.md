@@ -151,8 +151,8 @@ one canonical evidence/provenance substrate.
 Work package:
 - **M2.1 one evidence manifestation envelope — paid**;
 - **M2.2 one SourceRevision -> exact-anchor -> Observation substrate — paid**;
-- **M2.3 shared reviewed-evidence reducer ABI — source-written awaiting fresh runtime/kernel receipts**;
-- legal providers as ordinary producer implementations;
+- **M2.3 shared reviewed-evidence reducer ABI — paid / certified**;
+- **M2.4 provider normalisation — source-written awaiting fresh runtime/kernel receipts**;
 - PG-hit/no-network, PG-miss/acquire/persist/reuse;
 - cross-family exact replay.
 
@@ -188,4 +188,52 @@ Existing Wikidata, Wikipedia and OALC producer artifacts now lower into that car
 
 M2.1 and M2.2 are paid with exact Rust and Agda receipts. M2.2 uses one exact-anchor ABI: character ranges for text and structured coordinates for graph evidence, with compiler tokens revision-bound and persisted PG legal slices projected into the same carrier.
 
-M2.3 is now source-written in `sl-reviewed-evidence-payment::shared_reducer`. It wraps one canonical `EvidenceObservation` with explicit review/payment identity, offers optional world/matter/legal projection slots, permits explicit abstention, and repeats the exact observation/revision/span/review/payment coordinates in each projection receipt. It remains `implementedAwaitingRuntime` until the new exact Rust and Agda heads receive fresh execution receipts.
+M2.3 is paid: the shared reviewed-evidence reducer received exact Rust workspace and Agda kernel receipts, while the persisted Sprint-1 campaign continued to replay without semantic promotion.
+
+### Current M2.4 tranche
+
+M2.4 is now source-written in
+`sl-world-expansion-runtime::sprint2_provider_normalisation`.
+
+It reuses existing provider artifacts rather than adding new acquisition paths:
+
+```text
+Wikidata property artifact
+Wikipedia acquired article
+OALC exact legal source
+cache-first persisted legal source
+locally ingested official DOCX/PDF
+        ↓
+EvidenceManifestation
+        ↓
+EvidenceSourceRevision
+        ↓
+EvidenceSpan
+        ↓
+EvidenceObservation
+        ↓ explicit review
+ReviewedCanonicalEvidence
+        ↓
+SharedEvidenceReducer
+```
+
+Provider-specific evidence may not bypass the canonical carrier, explicit review,
+or the shared reducer. Wikidata uses a structured coordinate; article/legal
+whole-revision observations may remain whole-revision anchors until a narrower
+reviewed span is available.
+
+Official court/document acquisition is also normalised only after local
+ingestion has fixed a source identity, exact source revision and byte digest.
+A PDF may use the canonical PdfDocument family; an official legal document may
+use LegalAuthority. Ingestion still creates no legal authority or semantic
+payment.
+
+The cache-first path retains whether canonical evidence came from an exact
+PostgreSQL hit or an acquire→persist path. Exact PG hits retain zero network
+requests; post-persist verification likewise retains zero network requests.
+The stored source revision and resolution receipt remain the evidence identity
+coordinates after normalisation.
+
+M2.4 remains `implementedAwaitingRuntime` until the new Rust and Agda heads
+receive fresh exact-head receipts. M2.5 cross-family persisted replay remains
+the Sprint-2 closure gate.
