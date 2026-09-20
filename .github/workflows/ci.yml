@@ -70,6 +70,12 @@ jobs:
           grep -q '"creates_current_law_conclusion": false' /tmp/contracts-landscape-qld.json
           grep -q 'legislation:qld:property-law-act-1974:s55' /tmp/contracts-landscape-qld.json
           grep -q 'legislation:qld:property-law-act-2023:s68' /tmp/contracts-landscape-qld.json
+          grep -q '"legal_frontier": false' /tmp/contracts-landscape-qld.json
+          grep -q '"optional": true' /tmp/contracts-landscape-qld.json
+          grep -q '"qid_creates_legal_authority": false' /tmp/contracts-landscape-qld.json
+          grep -q '"qid_creates_applicability": false' /tmp/contracts-landscape-qld.json
+          grep -q '"primary_source_precedes_identity_by_default": true' /tmp/contracts-landscape-qld.json
+          grep -q '"wikidata_qid_likelihood": "High"' /tmp/contracts-landscape-qld.json
           cat > /tmp/contracts-expansion.json <<'JSON'
           {
             "schema_version": "sl.australian_contracts.reviewed_hops.v0_1",
