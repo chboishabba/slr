@@ -1802,6 +1802,9 @@ pub struct LegalRuntimeCapabilityReceipt {
     pub m6_reverse_material_impact: bool,
     pub m7_projection_fabric: bool,
     pub m7_same_identity_cross_projection: bool,
+    pub s8_matter_runtime: bool,
+    pub s8_shared_command_reducer: bool,
+    pub s8_reader_command_weld: bool,
     pub candidate_only: bool,
     pub creates_semantic_authority: bool,
     pub receipt_digest: String,
@@ -1922,6 +1925,40 @@ pub fn compile_capability_receipt() -> Result<LegalRuntimeCapabilityReceipt, Leg
                 )));
             }
         }
+
+        let mut runtime = compile_matter_runtime(
+            workbench.clone(),
+            &capstone.issue,
+            last,
+            projection_context.clone(),
+        )
+        .map_err(LegalRuntimeError::Projection)?;
+        let select = runtime
+            .dispatch(MatterCommand::SelectObject(anchor.clone()))
+            .map_err(LegalRuntimeError::Projection)?;
+        if !select.projection.contains(&anchor)
+            || select.creates_semantic_authority
+            || !select.candidate_only
+        {
+            return Err(LegalRuntimeError::Projection(
+                "Sprint 8 shared reducer failed selection/non-authority invariant".into(),
+            ));
+        }
+        let reader_command = lower_reader_intent(
+            sensiblaw_reader_model::ReaderIntent::OpenSource,
+            Some(anchor.as_str()),
+        )
+        .map_err(LegalRuntimeError::Projection)?;
+        let source = runtime
+            .dispatch(reader_command)
+            .map_err(LegalRuntimeError::Projection)?;
+        if !matches!(source.effect, MatterRuntimeEffect::SourceOpened { .. })
+            || source.creates_semantic_authority
+        {
+            return Err(LegalRuntimeError::Projection(
+                "Sprint 8 reader command weld failed source-open invariant".into(),
+            ));
+        }
     }
 
     let receipt_digest = digest(
@@ -1929,7 +1966,9 @@ pub fn compile_capability_receipt() -> Result<LegalRuntimeCapabilityReceipt, Leg
             .chain(std::iter::once(mixed.receipt_head.as_str()))
             .chain(capstones.iter().map(|capstone| capstone.campaign.receipt_head.as_str()))
             .chain(std::iter::once("M6:universal-explanation"))
-            .chain(std::iter::once("M7:projection-fabric")),
+            .chain(std::iter::once("M7:projection-fabric"))
+            .chain(std::iter::once("S8:matter-runtime"))
+            .chain(std::iter::once("S8:shared-command-reducer")),
     );
 
     Ok(LegalRuntimeCapabilityReceipt {
@@ -1943,6 +1982,9 @@ pub fn compile_capability_receipt() -> Result<LegalRuntimeCapabilityReceipt, Leg
         m6_reverse_material_impact: true,
         m7_projection_fabric: true,
         m7_same_identity_cross_projection: true,
+        s8_matter_runtime: true,
+        s8_shared_command_reducer: true,
+        s8_reader_command_weld: true,
         candidate_only: true,
         creates_semantic_authority: false,
         receipt_digest,
@@ -2477,7 +2519,7 @@ mod tests {
     }
 
     #[test]
-    fn capability_receipt_closes_m2_5_through_sprint7_without_promotion() {
+    fn capability_receipt_closes_m2_5_through_sprint8_without_promotion() {
         let receipt = compile_capability_receipt().unwrap();
         assert!(receipt.m2_5_mixed_family_replay);
         assert!(receipt.m3_a_reviewed_world_to_wrong_type);
@@ -2489,6 +2531,9 @@ mod tests {
         assert!(receipt.m6_reverse_material_impact);
         assert!(receipt.m7_projection_fabric);
         assert!(receipt.m7_same_identity_cross_projection);
+        assert!(receipt.s8_matter_runtime);
+        assert!(receipt.s8_shared_command_reducer);
+        assert!(receipt.s8_reader_command_weld);
         assert!(receipt.candidate_only);
         assert!(!receipt.creates_semantic_authority);
         assert!(receipt.receipt_digest.starts_with("sha256:"));
