@@ -1,12 +1,16 @@
 """Regressions for explicit Digital-ESD review decisions and adaptive refresh."""
 from __future__ import annotations
 
+import csv
 import json
 from pathlib import Path
 
 import pytest
 
-from scripts.apply_digital_esd_screening_decisions import apply_decisions
+from scripts.apply_digital_esd_screening_decisions import apply_decisions, read_tsv, write_tsv
+from scripts.prepare_digital_esd_screening_resolution_fulltext import (
+    explicitly_reviewed as resolution_explicitly_reviewed,
+)
 from scripts.refresh_digital_esd_review_queue import calibration_estimate, explicitly_reviewed
 
 
@@ -135,3 +139,98 @@ def test_unreviewed_unresolved_is_not_counted_as_reviewed_pair():
 
     estimate = calibration_estimate([row], [_assessment("ERIC:EJ1", "exclude")])
     assert estimate["reviewed_pair_count"] == 0
+
+
+def test_reviewed_ledger_round_trip_preserves_review_receipt_columns(tmp_path: Path):
+    ledger = [
+        _ledger_row("ERIC:EJ1"),
+        _ledger_row("ERIC:EJ2"),
+        _ledger_row("ERIC:EJ3"),
+    ]
+    decisions = [
+        {
+            "source_identity_reference": "ERIC:EJ1",
+            "reviewed": True,
+            "decision": "include",
+            "reason_code": "potentiallyRelevant",
+            "reviewer_or_process_reference": "reviewer:human-1",
+            "decision_timestamp": "2026-09-20T00:00:00Z",
+        },
+        {
+            "source_identity_reference": "ERIC:EJ2",
+            "reviewed": True,
+            "decision": "unresolved",
+            "reason_code": "insufficientTitleAbstractEvidence",
+            "reviewer_or_process_reference": "reviewer:human-1",
+            "decision_timestamp": "2026-09-20T00:01:00Z",
+        },
+    ]
+    output, _ = apply_decisions(ledger, decisions)
+
+    ledger_path = tmp_path / "reviewed.tsv"
+    write_tsv(ledger_path, output)
+    reread = read_tsv(ledger_path)
+
+    assert len(reread) == len(ledger)
+    by_ref = {row["source_identity_reference"]: row for row in reread}
+    for ref, expected_decision in (("ERIC:EJ1", "include"), ("ERIC:EJ2", "unresolved")):
+        row = by_ref[ref]
+        assert row["decision"] == expected_decision
+        assert row["reviewer_or_model_reference"] == "reviewer:human-1"
+        assert row["supersedes_decision_reference"].startswith("screening-decision:")
+        assert row["decision_timestamp"] == decisions[
+            0 if ref == "ERIC:EJ1" else 1
+        ]["decision_timestamp"]
+    assert by_ref["ERIC:EJ3"]["reviewer_or_model_reference"] == "unassigned"
+    assert "" == by_ref["ERIC:EJ3"].get("supersedes_decision_reference", "")
+
+    assert explicitly_reviewed(by_ref["ERIC:EJ2"]) is True
+    assert explicitly_reviewed(by_ref["ERIC:EJ3"]) is False
+
+
+def test_screening_resolution_lane_selects_reviewed_unresolved_after_round_trip(
+    tmp_path: Path,
+):
+    ledger = [
+        _ledger_row("ERIC:EJ1"),
+        _ledger_row("ERIC:EJ2"),
+        _ledger_row("ERIC:EJ3"),
+    ]
+    decisions = [
+        {
+            "source_identity_reference": "ERIC:EJ2",
+            "reviewed": True,
+            "decision": "unresolved",
+            "reason_code": "insufficientTitleAbstractEvidence",
+            "reviewer_or_process_reference": "reviewer:human-1",
+        }
+    ]
+    output, _ = apply_decisions(ledger, decisions)
+    ledger_path = tmp_path / "reviewed.tsv"
+    write_tsv(ledger_path, output)
+
+    order = list(output[0].keys())
+    row_to_map = {
+        row["source_identity_reference"]: row
+        for row in csv.DictReader(ledger_path.open(newline="", encoding="utf-8"), delimiter="\t")
+    }
+    rederived = [dict(row_to_map[ref]) for ref in (r["source_identity_reference"] for r in output)]
+
+    resolution_hits = []
+    for row in rederived:
+        if row["decision"] != "unresolved":
+            continue
+        if not resolution_explicitly_reviewed(row):
+            continue
+        if row["reason_code"] not in {
+            "insufficientTitleAbstractEvidence",
+            "inaccessibleAbstract",
+            "requiresFullText",
+        }:
+            continue
+        resolution_hits.append(row["source_identity_reference"])
+
+    assert resolution_hits == ["ERIC:EJ2"]
+    assert resolution_explicitly_reviewed(
+        next(r for r in rederived if r["source_identity_reference"] == "ERIC:EJ2")
+    ) is True
