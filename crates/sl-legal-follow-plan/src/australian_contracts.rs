@@ -476,6 +476,177 @@ pub fn australian_contract_landscape_seed() -> AustralianContractTrace {
 }
 
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum ContractLandscapeWorkKind {
+    AcquirePrimarySource,
+    ReviewAuthorityTreatment,
+    ExpandResearchContext,
+    RetainTemporalAlternative,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ContractLandscapeWorkItem {
+    pub work_ref: String,
+    pub kind: ContractLandscapeWorkKind,
+    pub semantic_ref: String,
+    pub related_ref: Option<String>,
+    pub doctrine: Option<ContractDoctrine>,
+    pub jurisdiction_ref: String,
+    pub as_at: String,
+    pub source_role: SourceRole,
+    pub source_citation: String,
+    pub court_ref: Option<String>,
+    pub treatment: Option<TreatmentKind>,
+    pub active_at_as_at: bool,
+    pub candidate_only: bool,
+    pub creates_legal_authority: bool,
+    pub creates_current_law_conclusion: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AustralianContractLandscapeWorklist {
+    pub root_ref: String,
+    pub as_at: String,
+    pub jurisdiction_filter: Option<String>,
+    pub source_items: Vec<ContractLandscapeWorkItem>,
+    pub treatment_items: Vec<ContractLandscapeWorkItem>,
+    pub context_items: Vec<ContractLandscapeWorkItem>,
+    pub temporal_alternatives: Vec<ContractLandscapeWorkItem>,
+    pub bounded_seed_only: bool,
+    pub candidate_only: bool,
+    pub creates_legal_authority: bool,
+    pub creates_current_law_conclusion: bool,
+}
+
+fn jurisdiction_matches(filter: Option<&str>, node_jurisdiction: &str) -> bool {
+    match filter {
+        None => true,
+        Some("AU") => true,
+        Some(filter) => node_jurisdiction == filter || node_jurisdiction == "AU",
+    }
+}
+
+pub fn compile_australian_contract_landscape_worklist(
+    trace: &AustralianContractTrace,
+    as_at: &str,
+    jurisdiction_filter: Option<&str>,
+) -> Result<AustralianContractLandscapeWorklist, String> {
+    trace.validate()?;
+    if as_at.trim().is_empty() {
+        return Err("contract landscape worklist requires an as-at date".into());
+    }
+
+    let mut source_items = Vec::new();
+    let mut treatment_items = Vec::new();
+    let mut context_items = Vec::new();
+    let mut temporal_alternatives = Vec::new();
+
+    for node in trace.nodes.values() {
+        if node.semantic_ref == trace.root_ref {
+            continue;
+        }
+        if !jurisdiction_matches(jurisdiction_filter, &node.jurisdiction_ref) {
+            continue;
+        }
+
+        let active = trace.active_at(&node.semantic_ref, as_at);
+        let base = ContractLandscapeWorkItem {
+            work_ref: format!("contracts:landscape:source:{}", node.semantic_ref),
+            kind: ContractLandscapeWorkKind::AcquirePrimarySource,
+            semantic_ref: node.semantic_ref.clone(),
+            related_ref: None,
+            doctrine: node.doctrine,
+            jurisdiction_ref: node.jurisdiction_ref.clone(),
+            as_at: as_at.to_string(),
+            source_role: node.source_role,
+            source_citation: node.source_citation.clone(),
+            court_ref: node.court_ref.clone(),
+            treatment: None,
+            active_at_as_at: active,
+            candidate_only: true,
+            creates_legal_authority: false,
+            creates_current_law_conclusion: false,
+        };
+
+        if !active {
+            let mut item = base;
+            item.work_ref = format!("contracts:landscape:temporal:{}", node.semantic_ref);
+            item.kind = ContractLandscapeWorkKind::RetainTemporalAlternative;
+            temporal_alternatives.push(item);
+            continue;
+        }
+
+        match node.source_role {
+            SourceRole::PrimaryCaseLaw | SourceRole::PrimaryLegislation => {
+                source_items.push(base);
+            }
+            SourceRole::OfficialRecord
+            | SourceRole::ResearchIndex
+            | SourceRole::SecondaryAnalysis => {
+                let mut item = base;
+                item.work_ref = format!("contracts:landscape:context:{}", node.semantic_ref);
+                item.kind = ContractLandscapeWorkKind::ExpandResearchContext;
+                context_items.push(item);
+            }
+        }
+    }
+
+    for (index, edge) in trace.edges.iter().enumerate() {
+        let Some(from) = trace.nodes.get(&edge.from_ref) else { continue };
+        let Some(to) = trace.nodes.get(&edge.to_ref) else { continue };
+        if !jurisdiction_matches(jurisdiction_filter, &from.jurisdiction_ref)
+            && !jurisdiction_matches(jurisdiction_filter, &to.jurisdiction_ref)
+        {
+            continue;
+        }
+        if !trace.active_at(&from.semantic_ref, as_at)
+            || !trace.active_at(&to.semantic_ref, as_at)
+        {
+            continue;
+        }
+        treatment_items.push(ContractLandscapeWorkItem {
+            work_ref: format!("contracts:landscape:treatment:{index}:{}:{}", edge.from_ref, edge.to_ref),
+            kind: ContractLandscapeWorkKind::ReviewAuthorityTreatment,
+            semantic_ref: edge.from_ref.clone(),
+            related_ref: Some(edge.to_ref.clone()),
+            doctrine: from.doctrine.or(to.doctrine),
+            jurisdiction_ref: if from.jurisdiction_ref == "AU" {
+                to.jurisdiction_ref.clone()
+            } else {
+                from.jurisdiction_ref.clone()
+            },
+            as_at: as_at.to_string(),
+            source_role: from.source_role,
+            source_citation: from.source_citation.clone(),
+            court_ref: from.court_ref.clone(),
+            treatment: Some(edge.treatment),
+            active_at_as_at: true,
+            candidate_only: true,
+            creates_legal_authority: false,
+            creates_current_law_conclusion: false,
+        });
+    }
+
+    source_items.sort_by(|left, right| left.semantic_ref.cmp(&right.semantic_ref));
+    treatment_items.sort_by(|left, right| left.work_ref.cmp(&right.work_ref));
+    context_items.sort_by(|left, right| left.semantic_ref.cmp(&right.semantic_ref));
+    temporal_alternatives.sort_by(|left, right| left.semantic_ref.cmp(&right.semantic_ref));
+
+    Ok(AustralianContractLandscapeWorklist {
+        root_ref: trace.root_ref.clone(),
+        as_at: as_at.to_string(),
+        jurisdiction_filter: jurisdiction_filter.map(str::to_owned),
+        source_items,
+        treatment_items,
+        context_items,
+        temporal_alternatives,
+        bounded_seed_only: true,
+        candidate_only: true,
+        creates_legal_authority: false,
+        creates_current_law_conclusion: false,
+    })
+}
+
 pub fn legal_follow_demand_for_trace_node(
     node: &ContractTraceNode,
     as_at: &str,
@@ -651,6 +822,56 @@ mod tests {
             requirement.wikidata_qid_priority,
             ExternalIdentityLookupPriority::NotApplicable
         );
+    }
+
+    #[test]
+    fn landscape_worklist_separates_source_treatment_context_and_temporal_frontiers() {
+        let trace = australian_contract_landscape_seed();
+        let work = compile_australian_contract_landscape_worklist(
+            &trace,
+            "2026-09-20",
+            None,
+        )
+        .unwrap();
+
+        assert!(work.source_items.iter().any(|item| {
+            item.semantic_ref == "case:au:hca:1988:7"
+                && item.kind == ContractLandscapeWorkKind::AcquirePrimarySource
+        }));
+        assert!(work.temporal_alternatives.iter().any(|item| {
+            item.semantic_ref == "legislation:qld:property-law-act-1974:s55"
+                && !item.active_at_as_at
+        }));
+        assert!(work.source_items.iter().any(|item| {
+            item.semantic_ref == "legislation:qld:property-law-act-2023:s68"
+                && item.active_at_as_at
+        }));
+        assert!(!work.treatment_items.is_empty());
+        assert!(work.bounded_seed_only);
+        assert!(work.candidate_only);
+        assert!(!work.creates_legal_authority);
+        assert!(!work.creates_current_law_conclusion);
+    }
+
+    #[test]
+    fn qld_landscape_filter_keeps_national_authorities_and_qld_temporal_branch() {
+        let trace = australian_contract_landscape_seed();
+        let work = compile_australian_contract_landscape_worklist(
+            &trace,
+            "2026-09-20",
+            Some("AU-QLD"),
+        )
+        .unwrap();
+
+        assert!(work.source_items.iter().any(|item| {
+            item.jurisdiction_ref == "AU" && item.source_role == SourceRole::PrimaryCaseLaw
+        }));
+        assert!(work.source_items.iter().any(|item| {
+            item.semantic_ref == "legislation:qld:property-law-act-2023:s68"
+        }));
+        assert!(work.temporal_alternatives.iter().any(|item| {
+            item.semantic_ref == "legislation:qld:property-law-act-1974:s55"
+        }));
     }
 
     #[test]
