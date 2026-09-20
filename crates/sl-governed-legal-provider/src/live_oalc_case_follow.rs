@@ -132,20 +132,37 @@ impl OalcCaseFollowRequest {
             .to_ascii_uppercase();
         let court_ref = match court_token.as_str() {
             "HCA" => "court:HCA",
-            "FCA" | "FCAFC" => "court:FCA",
+            "FCA" => "court:FCA",
+            "FCAFC" => "court:FCAFC",
             "NSWCA" => "court:NSWCA",
+            "NSWSC" => "court:NSWSC",
             "VSCA" => "court:VSCA",
+            "VSC" => "court:VSC",
             "QCA" => "court:QCA",
+            "QSC" => "court:QSC",
             "WASCA" => "court:WASCA",
+            "WASC" => "court:WASC",
+            "SASCFC" => "court:SASCFC",
+            "SASC" => "court:SASC",
+            "TASFC" => "court:TASFC",
+            "TASSC" => "court:TASSC",
+            "ACTCA" => "court:ACTCA",
+            "ACTSC" => "court:ACTSC",
+            "NTCA" => "court:NTCA",
+            "NTSC" => "court:NTSC",
             _ => "court:unknown",
         }
         .to_string();
         let oalc_jurisdiction = match court_token.as_str() {
             "HCA" | "FCA" | "FCAFC" => "commonwealth",
-            "NSWCA" => "new_south_wales",
-            "VSCA" => "victoria",
-            "QCA" => "queensland",
-            "WASCA" => "western_australia",
+            "NSWCA" | "NSWSC" => "new_south_wales",
+            "VSCA" | "VSC" => "victoria",
+            "QCA" | "QSC" => "queensland",
+            "WASCA" | "WASC" => "western_australia",
+            "SASCFC" | "SASC" => "south_australia",
+            "TASFC" | "TASSC" => "tasmania",
+            "ACTCA" | "ACTSC" => "australian_capital_territory",
+            "NTCA" | "NTSC" => "northern_territory",
             _ => "",
         }
         .to_string();
@@ -875,6 +892,25 @@ mod tests {
                 "new_south_wales",
             ),
         ));
+    }
+
+    #[test]
+    fn case_request_maps_supported_state_and_territory_courts() {
+        let cases = [
+            ("[2020] NSWSC 1", "court:NSWSC", "new_south_wales"),
+            ("[2020] VSC 1", "court:VSC", "victoria"),
+            ("[2020] QSC 1", "court:QSC", "queensland"),
+            ("[2020] WASC 1", "court:WASC", "western_australia"),
+            ("[2020] SASC 1", "court:SASC", "south_australia"),
+            ("[2020] TASSC 1", "court:TASSC", "tasmania"),
+            ("[2020] ACTSC 1", "court:ACTSC", "australian_capital_territory"),
+            ("[2020] NTSC 1", "court:NTSC", "northern_territory"),
+        ];
+        for (citation, court, jurisdiction) in cases {
+            let request = OalcCaseFollowRequest::for_citation(citation, "/tmp/oalc-map-test");
+            assert_eq!(request.court_ref, court);
+            assert_eq!(request.oalc_jurisdiction, jurisdiction);
+        }
     }
 
     #[test]
