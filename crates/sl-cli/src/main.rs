@@ -1,0 +1,129 @@
+mod waltons;
+
+use std::env;
+use std::path::PathBuf;
+use waltons::WaltonsPaths;
+
+fn usage() {
+    eprintln!(
+        "SensibLaw native CLI
+
+USAGE:
+  sensiblaw legal-follow waltons [--base PATH] status
+  sensiblaw legal-follow waltons [--base PATH] acquire
+  sensiblaw legal-follow waltons [--base PATH] materialise
+  sensiblaw legal-follow waltons [--base PATH] review prepare
+  sensiblaw legal-follow waltons [--base PATH] review finalize
+  sensiblaw legal-follow waltons [--base PATH] review compile
+  sensiblaw legal-follow waltons [--base PATH] frontier
+  sensiblaw legal-follow waltons [--base PATH] cited-by plan
+  sensiblaw legal-follow waltons [--base PATH] cited-by import PROVIDER_RESULTS.json
+  sensiblaw legal-follow waltons [--base PATH] cited-by acquire
+  sensiblaw legal-follow waltons [--base PATH] treatment queue
+  sensiblaw legal-follow waltons [--base PATH] treatment merge
+  sensiblaw legal-follow waltons [--base PATH] treatment prepare
+  sensiblaw legal-follow waltons [--base PATH] treatment finalize
+  sensiblaw legal-follow waltons [--base PATH] genealogy
+
+NOTES:
+  * acquire/cited-by acquire require --features live-network at build time.
+  * review prepare/finalize are human-review file surfaces; they do not make
+    legal decisions automatically.
+  * CitedBy provider results are discovery candidates only and must be
+    re-acquired through OALC before treatment review.
+"
+    );
+}
+
+fn parse_base(args: &mut Vec<String>) -> Result<WaltonsPaths, String> {
+    if let Some(index) = args.iter().position(|arg| arg == "--base") {
+        let Some(value) = args.get(index + 1).cloned() else {
+            return Err("--base requires a path".into());
+        };
+        args.drain(index..=index + 1);
+        Ok(WaltonsPaths::from_base(PathBuf::from(value)))
+    } else {
+        Ok(WaltonsPaths::default())
+    }
+}
+
+fn waltons_command(mut args: Vec<String>) -> Result<(), String> {
+    let paths = parse_base(&mut args)?;
+    if args.is_empty() {
+        usage();
+        return Err("missing Waltons command".into());
+    }
+
+    match args.as_slice() {
+        [command] if command == "status" => {
+            waltons::status(&paths);
+            Ok(())
+        }
+        [command] if command == "acquire" => waltons::acquire(&paths),
+        [command] if command == "materialise" || command == "materialize" => {
+            waltons::materialise(&paths)
+        }
+        [command] if command == "frontier" => waltons::frontier(&paths),
+        [group, command] if group == "review" && command == "prepare" => {
+            waltons::review_prepare(&paths)
+        }
+        [group, command]
+            if group == "review" && (command == "finalize" || command == "finalise") =>
+        {
+            waltons::review_finalize(&paths)
+        }
+        [group, command] if group == "review" && command == "compile" => {
+            waltons::review_compile(&paths)
+        }
+        [group, command] if group == "cited-by" && command == "plan" => {
+            waltons::cited_by_plan(&paths)
+        }
+        [group, command, provider_results]
+            if group == "cited-by" && command == "import" =>
+        {
+            waltons::cited_by_import(&paths, &PathBuf::from(provider_results))
+        }
+        [group, command] if group == "cited-by" && command == "acquire" => {
+            waltons::cited_by_acquire(&paths)
+        }
+        [group, command] if group == "treatment" && command == "queue" => {
+            waltons::treatment_queue(&paths)
+        }
+        [group, command] if group == "treatment" && command == "merge" => {
+            waltons::treatment_merge(&paths)
+        }
+        [group, command] if group == "treatment" && command == "prepare" => {
+            waltons::treatment_prepare(&paths)
+        }
+        [group, command]
+            if group == "treatment" && (command == "finalize" || command == "finalise") =>
+        {
+            waltons::treatment_finalize(&paths)
+        }
+        [command] if command == "genealogy" => waltons::genealogy(&paths),
+        _ => {
+            usage();
+            Err(format!("unsupported Waltons command: {}", args.join(" ")))
+        }
+    }
+}
+
+fn run() -> Result<(), String> {
+    let args = env::args().skip(1).collect::<Vec<_>>();
+    match args.as_slice() {
+        [domain, matter, rest @ ..] if domain == "legal-follow" && matter == "waltons" => {
+            waltons_command(rest.to_vec())
+        }
+        _ => {
+            usage();
+            Err("expected: sensiblaw legal-follow waltons ...".into())
+        }
+    }
+}
+
+fn main() {
+    if let Err(error) = run() {
+        eprintln!("sensiblaw: {error}");
+        std::process::exit(2);
+    }
+}
