@@ -178,6 +178,26 @@ impl ExternalIdentityAttachment {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum ExternalIdentityLikelihood {
+    NotApplicable,
+    Low,
+    Moderate,
+    High,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ContractExternalIdentityWorkItem {
+    pub semantic_ref: String,
+    pub wikidata_qid_priority: ExternalIdentityLookupPriority,
+    pub canonical_url_priority: ExternalIdentityLookupPriority,
+    pub wikidata_qid_likelihood: ExternalIdentityLikelihood,
+    pub lookup_is_existence_claim: bool,
+    pub lookup_creates_legal_authority: bool,
+    pub lookup_creates_applicability: bool,
+    pub primary_source_precedes_identity_by_default: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExternalIdentityLookupHint {
     pub semantic_ref: String,
@@ -185,6 +205,65 @@ pub struct ExternalIdentityLookupHint {
     pub canonical_url_priority: ExternalIdentityLookupPriority,
     pub lookup_is_existence_claim: bool,
     pub lookup_creates_legal_authority: bool,
+}
+
+fn external_identity_likelihood(node: &ContractTraceNode) -> ExternalIdentityLikelihood {
+    match node.kind {
+        TraceNodeKind::ResearchRequirement => ExternalIdentityLikelihood::NotApplicable,
+        TraceNodeKind::CaseAuthority | TraceNodeKind::Matter
+            if node.court_ref.as_deref() == Some("court:HCA") =>
+        {
+            ExternalIdentityLikelihood::High
+        }
+        TraceNodeKind::CaseAuthority | TraceNodeKind::Matter => {
+            ExternalIdentityLikelihood::Moderate
+        }
+        TraceNodeKind::Legislation => ExternalIdentityLikelihood::Moderate,
+        TraceNodeKind::Doctrine => ExternalIdentityLikelihood::High,
+    }
+}
+
+pub fn compile_contract_external_identity_worklist(
+    trace: &AustralianContractTrace,
+) -> Result<Vec<ContractExternalIdentityWorkItem>, String> {
+    trace.validate()?;
+    let mut work = trace
+        .nodes
+        .values()
+        .filter(|node| node.semantic_ref != trace.root_ref)
+        .filter_map(|node| {
+            let hint = external_identity_lookup_hint(node);
+            let likelihood = external_identity_likelihood(node);
+            if hint.wikidata_qid_priority == ExternalIdentityLookupPriority::NotApplicable
+                && hint.canonical_url_priority == ExternalIdentityLookupPriority::NotApplicable
+            {
+                return None;
+            }
+            Some(ContractExternalIdentityWorkItem {
+                semantic_ref: node.semantic_ref.clone(),
+                wikidata_qid_priority: hint.wikidata_qid_priority,
+                canonical_url_priority: hint.canonical_url_priority,
+                wikidata_qid_likelihood: likelihood,
+                lookup_is_existence_claim: false,
+                lookup_creates_legal_authority: false,
+                lookup_creates_applicability: false,
+                primary_source_precedes_identity_by_default:
+                    primary_source_precedes_optional_identity_by_default(),
+            })
+        })
+        .collect::<Vec<_>>();
+    work.sort_by(|left, right| {
+        right
+            .wikidata_qid_priority
+            .cmp(&left.wikidata_qid_priority)
+            .then_with(|| {
+                right
+                    .wikidata_qid_likelihood
+                    .cmp(&left.wikidata_qid_likelihood)
+            })
+            .then_with(|| left.semantic_ref.cmp(&right.semantic_ref))
+    });
+    Ok(work)
 }
 
 pub fn external_identity_lookup_hint(node: &ContractTraceNode) -> ExternalIdentityLookupHint {
@@ -1164,6 +1243,25 @@ mod tests {
         assert!(!receipt.old_conclusions_frozen);
         assert!(!receipt.creates_legal_authority);
         assert!(!receipt.creates_current_law_conclusion);
+    }
+
+    #[test]
+    fn external_identity_worklist_is_supplemental_and_non_existential() {
+        let trace = australian_contract_landscape_seed();
+        let work = compile_contract_external_identity_worklist(&trace).unwrap();
+        let waltons = work
+            .iter()
+            .find(|item| item.semantic_ref == "case:au:hca:1988:7")
+            .unwrap();
+        assert_eq!(waltons.wikidata_qid_priority, ExternalIdentityLookupPriority::WorthChecking);
+        assert_eq!(waltons.wikidata_qid_likelihood, ExternalIdentityLikelihood::High);
+        assert!(!waltons.lookup_is_existence_claim);
+        assert!(!waltons.lookup_creates_legal_authority);
+        assert!(!waltons.lookup_creates_applicability);
+        assert!(waltons.primary_source_precedes_identity_by_default);
+        assert!(!work.iter().any(|item| {
+            item.semantic_ref.starts_with("requirement:")
+        }));
     }
 
     #[test]
