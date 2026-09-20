@@ -11,6 +11,8 @@ import DASHI.Education.DigitalESDAdaptiveScreeningExecutionExact as Screening
 import DASHI.Education.DigitalESDAdaptiveScreeningExecutionRegression as ScreeningRegression
 import DASHI.Education.DigitalESDSelectiveFullTextMaterialisationExact as FullText
 import DASHI.Education.DigitalESDSelectiveFullTextMaterialisationRegression as FullTextRegression
+import DASHI.Interop.DigitalESD.ScholarlyFullTextCrossPollinationExact as ScholarlyXPoll
+import DASHI.Interop.DigitalESD.ScholarlyFullTextCrossPollinationRegression as ScholarlyXPollRegression
 
 ------------------------------------------------------------------------
 -- DIGITAL-ESD RECIPROCAL BRAID
@@ -78,6 +80,26 @@ canonicalDigitalESDReciprocalBraidBoundary =
     false refl
     true refl
     true refl
+    true refl
+    true refl
+
+scholarlyXPollNotSemanticAuthority :
+  ScholarlyXPoll.parserSuccessNotReviewPayment
+    ScholarlyXPoll.defaultScholarlyFullTextCrossPollinationReceipt
+  ≡ true
+  scholarlyXPollNotSemanticAuthority = refl
+
+scholarlyXPollVerifiedBundleNotSourceTruth :
+  ScholarlyXPoll.verifiedBundleNotSourceTruth
+    ScholarlyXPoll.defaultScholarlyFullTextCrossPollinationReceipt
+  ≡ true
+  scholarlyXPollVerifiedBundleNotSourceTruth = refl
+
+scholarlyXPollVerifiedBundleNotSourceAuditAdmission :
+  ScholarlyXPoll.verifiedBundleNotSourceAuditAdmission
+    ScholarlyXPoll.defaultScholarlyFullTextCrossPollinationReceipt
+  ≡ false
+  scholarlyXPollVerifiedBundleNotSourceAuditAdmission = refl
 
 data BraidCreatesObservedWitness : Set where
 data BraidPromotesMetadataToFullText : Set where
