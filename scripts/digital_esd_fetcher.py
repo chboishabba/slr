@@ -551,9 +551,47 @@ class FullTextFetcher:
         results: list[dict[str, Any]] = []
         total_bytes = 0
 
+        manifest_path = self.output_dir / "retrieved-manifest.jsonl"
+        existing_manifest = read_jsonl(manifest_path) if manifest_path.exists() else []
+        existing_by_ref = {
+            str(row.get("source_identity_reference") or ""): row
+            for row in existing_manifest
+            if str(row.get("source_identity_reference") or "")
+        }
+
         for ref in selected_refs:
             artifact_path = self.cache_dir / f"{ref}.pdf"
             url = self._resolve_url(ref)
+
+            existing = existing_by_ref.get(ref)
+            if existing is not None and artifact_path.exists() and artifact_path.is_file():
+                expected = str(existing.get("sha256") or "").lower().removeprefix("sha256:")
+                observed = sha256_file(artifact_path)
+                if expected and observed == expected:
+                    size = artifact_path.stat().st_size
+                    results.append({
+                        "source_identity_reference": ref,
+                        "artifact_path": str(artifact_path),
+                        "resolved_url": url,
+                        "status": "cache-hit",
+                        "actual_bytes": size,
+                        "sha256": observed,
+                        "source_revision_reference": str(
+                            existing.get("source_revision_reference")
+                            or f"fulltext-sha256:{observed}"
+                        ),
+                        "retrieval_reference": str(
+                            existing.get("retrieval_reference")
+                            or f"retained-cache:{artifact_path.resolve()}"
+                        ),
+                        "retrieval_timestamp": str(
+                            existing.get("retrieval_timestamp") or now_iso()
+                        ),
+                        "candidate_only": True,
+                        "creates_source_truth": False,
+                        "creates_source_audit_admission": False,
+                    })
+                    continue
 
             if dry_run:
                 results.append({
@@ -631,7 +669,6 @@ class FullTextFetcher:
             "host-not-allowlisted",
         }
         downloaded_rows = [r for r in results if r["status"] == "downloaded"]
-        manifest_path: Path | None = None
         if downloaded_rows and not dry_run:
             manifest_path = self._merge_retrieved_manifest(downloaded_rows)
         return {
@@ -642,6 +679,9 @@ class FullTextFetcher:
             "selected_count": len(selected_refs),
             "downloaded_count": sum(
                 1 for r in results if r["status"] == "downloaded"
+            ),
+            "cache_hit_count": sum(
+                1 for r in results if r["status"] == "cache-hit"
             ),
             "failed_count": sum(
                 1 for r in results if r["status"] in failed_statuses
