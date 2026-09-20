@@ -335,11 +335,11 @@ fn validate_final_s14_trajectory(paths: &WaltonsPaths, trajectory: &Value) -> Cl
         let source_ref = hop["source_ref"].as_str().unwrap_or_default();
         if source_ref.starts_with("bootstrap:") {
             bootstrap_hops += 1;
-        } else if source_ref == identity_ref {
+        } else if source_ref == identity_ref.as_str() {
             identity_hops += 1;
-        } else if source_ref == proposition_ref {
+        } else if source_ref == proposition_ref.as_str() {
             proposition_hops += 1;
-        } else if source_ref == treatment_ref {
+        } else if source_ref == treatment_ref.as_str() {
             treatment_hops += 1;
         }
     }
