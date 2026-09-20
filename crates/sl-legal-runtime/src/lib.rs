@@ -1300,22 +1300,22 @@ impl LegalCampaignState {
         let selected = self
             .selected_action
             .as_ref()
-            .map(|action| action.action_ref.as_str())
-            .unwrap_or("");
-        [
-            "SLR-M3.C",
-            &self.campaign_ref,
-            &self.iteration.to_string(),
-            &format!("{:?}", self.calibration),
-            &self.evaluation.rule_ref,
-            &format!("{:?}", self.evaluation.applicability),
-            &format!("{:?}", self.evaluation.violation),
-            &format!("{:?}", self.evaluation.liability),
-            &format!("{:?}", self.evaluation.remedy),
-            &residual_refs,
+            .map(|action| action.action_ref.clone())
+            .unwrap_or_default();
+        vec![
+            "SLR-M3.C".to_owned(),
+            self.campaign_ref.clone(),
+            self.iteration.to_string(),
+            format!("{:?}", self.calibration),
+            self.evaluation.rule_ref.clone(),
+            format!("{:?}", self.evaluation.applicability),
+            format!("{:?}", self.evaluation.violation),
+            format!("{:?}", self.evaluation.liability),
+            format!("{:?}", self.evaluation.remedy),
+            residual_refs,
             selected,
-            self.previous_receipt_head.as_deref().unwrap_or(""),
-            &self.receipt_head,
+            self.previous_receipt_head.clone().unwrap_or_default(),
+            self.receipt_head.clone(),
         ]
         .join("\t")
     }
