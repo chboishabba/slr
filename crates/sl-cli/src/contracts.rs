@@ -180,6 +180,7 @@ fn acquire_primary_sources(
     fs::create_dir_all(output_dir)
         .map_err(|error| format!("create {}: {error}", output_dir.display()))?;
     let mut receipts = Vec::new();
+    let mut residuals = Vec::new();
 
     for item in &work.source_items {
         let (citation, citation_match, document_type, section_ref) = match item.source_role {
@@ -201,19 +202,33 @@ fn acquire_primary_sources(
             _ => continue,
         };
 
-        let resolved = resolve_live_oalc_exact_source(&OalcExactSourceRequest {
+        let request = OalcExactSourceRequest {
             citation: citation.clone(),
             citation_match,
             document_type,
             source: None,
             jurisdiction: oalc_jurisdiction(&item.jurisdiction_ref),
-        })
-        .map_err(|error| {
-            format!(
-                "acquire {} ({citation}): {error:?}",
-                item.semantic_ref
-            )
-        })?;
+        };
+        let resolved = match resolve_live_oalc_exact_source(&request) {
+            Ok(resolved) => resolved,
+            Err(error) => {
+                residuals.push(json!({
+                    "work_ref": item.work_ref,
+                    "semantic_ref": item.semantic_ref,
+                    "jurisdiction_ref": item.jurisdiction_ref,
+                    "as_at": item.as_at,
+                    "source_role": format!("{:?}", item.source_role),
+                    "requested_citation": citation,
+                    "section_ref": section_ref,
+                    "residual": format!("{error:?}"),
+                    "missing_source_is_negative_legal_evidence": false,
+                    "candidate_only": true,
+                    "creates_legal_authority": false,
+                    "creates_current_law_conclusion": false,
+                }));
+                continue;
+            }
+        };
 
         let artifact_dir = output_dir.join(safe_ref(&item.semantic_ref));
         fs::create_dir_all(&artifact_dir)
@@ -265,13 +280,17 @@ fn acquire_primary_sources(
         "as_at": work.as_at,
         "jurisdiction_filter": work.jurisdiction_filter,
         "bounded_seed_only": work.bounded_seed_only,
+        "source_work_count": work.source_items.len(),
         "acquired_source_count": receipts.len(),
+        "source_residual_count": residuals.len(),
         "candidate_only": true,
         "creates_legal_authority": false,
         "creates_current_law_conclusion": false,
         "section_receipts_paid": false,
         "treatment_review_paid": false,
+        "missing_source_is_negative_legal_evidence": false,
         "receipts": receipts,
+        "residuals": residuals,
     }))
 }
 
