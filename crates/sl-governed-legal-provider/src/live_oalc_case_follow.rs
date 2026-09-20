@@ -18,6 +18,7 @@ pub enum OalcCitationMatch {
 pub enum OalcCaseAcquisitionMode {
     IndexedOnly,
     IndexedThenPinnedStream,
+    IndexedThenPinnedRangeIndex,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -259,6 +260,12 @@ pub struct OalcCaseFollowRunReceipt {
     pub stream_bytes_read: Option<u64>,
     pub stream_terminated_after_match: Option<bool>,
     pub stream_uniqueness_exhaustively_verified: Option<bool>,
+    pub range_index_hit: Option<bool>,
+    pub range_index_requests: Option<u64>,
+    pub range_index_rows_indexed_this_run: Option<u64>,
+    pub range_index_bytes_indexed_this_run: Option<u64>,
+    pub range_index_byte_start: Option<u64>,
+    pub range_index_byte_len: Option<u64>,
     pub candidate_only: bool,
     pub creates_legal_authority: bool,
     pub creates_claim_truth: bool,
@@ -288,10 +295,10 @@ mod live {
     use crate::{
         classify_exact_filter, classify_http_status, GovernedExecutionContext, HttpRequest,
         HttpResponse, HttpTransport, LiveGovernanceBounds, OalcDocumentKind,
-        OalcExactLookupDisposition, OalcFilterIndexState, OalcResolvedSourceReceipt,
-        OalcSourceDemand, OalcTemporalCoverage, PinnedOalcDatasetSelection, ProviderAccessStatus,
-        UreqTransport, OALC_CONFIG, OALC_DATASET_ID, OALC_RECEIPT_AUTHORITY, OALC_SPLIT,
-        SENSIBLAW_UA,
+        lookup_or_build_oalc_range_index, OalcExactLookupDisposition, OalcFilterIndexState,
+        OalcRangeLookupReceipt, OalcResolvedSourceReceipt, OalcSourceDemand,
+        OalcTemporalCoverage, PinnedOalcDatasetSelection, ProviderAccessStatus, UreqTransport,
+        OALC_CONFIG, OALC_DATASET_ID, OALC_RECEIPT_AUTHORITY, OALC_SPLIT, SENSIBLAW_UA,
     };
     use sensiblaw_legal_follow_plan::{
         exact_oalc_case_law_demand, plan_legal_sources, AuthorityLevel, LegalSourceDemand,
@@ -692,6 +699,22 @@ mod live {
         result
     }
 
+    fn range_index_fallback(
+        request: &OalcCaseFollowRequest,
+        revision: &str,
+    ) -> Result<OalcRangeLookupReceipt, OalcCaseFollowError> {
+        let range_request = PinnedOalcStreamRequest {
+            revision: revision.to_string(),
+            citation: request.citation.clone(),
+            citation_match: OalcCitationMatch::Contains,
+            document_type: "decision".into(),
+            source: None,
+            jurisdiction: (!request.oalc_jurisdiction.is_empty())
+                .then(|| request.oalc_jurisdiction.clone()),
+        };
+        lookup_or_build_oalc_range_index(&range_request)
+    }
+
     fn run_with_mode(
         request: &OalcCaseFollowRequest,
         mode: OalcCaseAcquisitionMode,
@@ -759,7 +782,7 @@ mod live {
                 .then(|| request.oalc_jurisdiction.clone()),
         };
         let search = provider.get(&url);
-        let (record, resolution_path, stream_receipt) = match search {
+        let (record, resolution_path, stream_receipt, range_receipt) = match search {
             Ok(response) => {
                 let response: FilterResponse = serde_json::from_slice(&response.body)
                     .map_err(|error| OalcCaseFollowError::Json(error.to_string()))?;
@@ -775,50 +798,120 @@ mod live {
                     .filter(|row| super::oalc_corpus_row_matches(&bounded_request, row))
                     .collect();
                 match classify_exact_filter(rows, index_state) {
-                    OalcExactLookupDisposition::Found(row) => (row, "search_exact_mnc", None),
+                    OalcExactLookupDisposition::Found(row) => {
+                        (row, "search_exact_mnc", None, None)
+                    }
                     OalcExactLookupDisposition::RequireRevisionPinnedStreaming
-                        if mode == OalcCaseAcquisitionMode::IndexedThenPinnedStream => {
-                            let stream = stream_fallback(&mut provider, request, &info.sha)?;
-                            (stream.row.clone(), "revision_pinned_streaming_after_incomplete_index", Some(stream))
-                        }
+                        if mode == OalcCaseAcquisitionMode::IndexedThenPinnedStream =>
+                    {
+                        let stream = stream_fallback(&mut provider, request, &info.sha)?;
+                        (
+                            stream.row.clone(),
+                            "revision_pinned_streaming_after_incomplete_index",
+                            Some(stream),
+                            None,
+                        )
+                    }
+                    OalcExactLookupDisposition::RequireRevisionPinnedStreaming
+                        if mode == OalcCaseAcquisitionMode::IndexedThenPinnedRangeIndex =>
+                    {
+                        let range = range_index_fallback(request, &info.sha)?;
+                        (
+                            range.row.clone(),
+                            if range.index_hit {
+                                "revision_pinned_range_index_hit"
+                            } else {
+                                "revision_pinned_range_index_build_after_incomplete_index"
+                            },
+                            None,
+                            Some(range),
+                        )
+                    }
                     OalcExactLookupDisposition::CompleteIndexAbsent
-                        if mode == OalcCaseAcquisitionMode::IndexedThenPinnedStream => {
-                            let stream = stream_fallback(&mut provider, request, &info.sha)?;
-                            (stream.row.clone(), "revision_pinned_streaming_after_index_absence", Some(stream))
-                        }
-                    OalcExactLookupDisposition::RequireRevisionPinnedStreaming => return Err(
-                        OalcCaseFollowError::SourceResidual(format!(
+                        if mode == OalcCaseAcquisitionMode::IndexedThenPinnedStream =>
+                    {
+                        let stream = stream_fallback(&mut provider, request, &info.sha)?;
+                        (
+                            stream.row.clone(),
+                            "revision_pinned_streaming_after_index_absence",
+                            Some(stream),
+                            None,
+                        )
+                    }
+                    OalcExactLookupDisposition::CompleteIndexAbsent
+                        if mode == OalcCaseAcquisitionMode::IndexedThenPinnedRangeIndex =>
+                    {
+                        let range = range_index_fallback(request, &info.sha)?;
+                        (
+                            range.row.clone(),
+                            if range.index_hit {
+                                "revision_pinned_range_index_hit"
+                            } else {
+                                "revision_pinned_range_index_build_after_index_absence"
+                            },
+                            None,
+                            Some(range),
+                        )
+                    }
+                    OalcExactLookupDisposition::RequireRevisionPinnedStreaming => {
+                        return Err(OalcCaseFollowError::SourceResidual(format!(
                             "bounded OALC search was incomplete for {}; acquisition mode is IndexedOnly",
                             request.citation
-                        )),
-                    ),
-                    OalcExactLookupDisposition::CompleteIndexAbsent => return Err(
-                        OalcCaseFollowError::SourceResidual(format!(
+                        )))
+                    }
+                    OalcExactLookupDisposition::CompleteIndexAbsent => {
+                        return Err(OalcCaseFollowError::SourceResidual(format!(
                             "complete bounded OALC search found no exact terminal-MNC source for {}",
                             request.citation
-                        )),
-                    ),
-                    OalcExactLookupDisposition::Ambiguous(count) => return Err(
-                        OalcCaseFollowError::SourceResidual(format!(
-                            "OALC returned {count} candidates for {}", request.citation
-                        )),
-                    ),
+                        )))
+                    }
+                    OalcExactLookupDisposition::Ambiguous(count) => {
+                        return Err(OalcCaseFollowError::SourceResidual(format!(
+                            "OALC returned {count} candidates for {}",
+                            request.citation
+                        )))
+                    }
                 }
             }
-            Err(index_error) if mode == OalcCaseAcquisitionMode::IndexedThenPinnedStream => {
-                let stream = stream_fallback(&mut provider, request, &info.sha).map_err(|stream_error| {
-                    OalcCaseFollowError::StreamingFallback(format!(
-                        "OALC index path failed ({index_error:?}); pinned stream fallback also failed ({stream_error:?})"
-                    ))
-                })?;
+            Err(index_error)
+                if mode == OalcCaseAcquisitionMode::IndexedThenPinnedStream =>
+            {
+                let stream =
+                    stream_fallback(&mut provider, request, &info.sha).map_err(|stream_error| {
+                        OalcCaseFollowError::StreamingFallback(format!(
+                            "OALC index path failed ({index_error:?}); pinned stream fallback also failed ({stream_error:?})"
+                        ))
+                    })?;
                 (
                     stream.row.clone(),
                     "revision_pinned_streaming_after_index_provider_failure",
                     Some(stream),
+                    None,
+                )
+            }
+            Err(index_error)
+                if mode == OalcCaseAcquisitionMode::IndexedThenPinnedRangeIndex =>
+            {
+                let range =
+                    range_index_fallback(request, &info.sha).map_err(|range_error| {
+                        OalcCaseFollowError::StreamingFallback(format!(
+                            "OALC index path failed ({index_error:?}); pinned range-index fallback also failed ({range_error:?})"
+                        ))
+                    })?;
+                (
+                    range.row.clone(),
+                    if range.index_hit {
+                        "revision_pinned_range_index_hit_after_index_provider_failure"
+                    } else {
+                        "revision_pinned_range_index_build_after_index_provider_failure"
+                    },
+                    None,
+                    Some(range),
                 )
             }
             Err(error) => return Err(error),
         };
+
         if !super::oalc_corpus_row_matches(&bounded_request, &record)
             || record.text.trim().is_empty()
         {
@@ -828,6 +921,11 @@ mod live {
         }
         let text_path = request.output_dir.join("judgment.txt");
         readonly_write(&text_path, &record.text)?;
+        let range_requests = range_receipt
+            .as_ref()
+            .map(|value| value.range_requests)
+            .unwrap_or(0);
+        let total_network_requests = provider.requests.saturating_add(range_requests);
         let receipt = OalcResolvedSourceReceipt {
             demand_ref: demand.demand_ref.clone(),
             origin_ref: demand.origin_ref.clone(),
@@ -845,7 +943,7 @@ mod live {
             local_artifact_ref: text_path.clone(),
             temporal_coverage: OalcTemporalCoverage::DecisionDateAnchored,
             resolution_path: resolution_path.into(),
-            network_requests: provider.requests,
+            network_requests: total_network_requests,
             stream_rows_examined: stream_receipt.as_ref().map(|value| value.rows_examined),
             stream_bytes_read: stream_receipt.as_ref().map(|value| value.bytes_read),
             stream_terminated_after_match: stream_receipt
@@ -854,6 +952,20 @@ mod live {
             stream_uniqueness_exhaustively_verified: stream_receipt
                 .as_ref()
                 .map(|value| value.uniqueness_exhaustively_verified),
+            range_index_hit: range_receipt.as_ref().map(|value| value.index_hit),
+            range_index_requests: range_receipt.as_ref().map(|value| value.range_requests),
+            range_index_rows_indexed_this_run: range_receipt
+                .as_ref()
+                .map(|value| value.rows_indexed_this_run),
+            range_index_bytes_indexed_this_run: range_receipt
+                .as_ref()
+                .map(|value| value.bytes_indexed_this_run),
+            range_index_byte_start: range_receipt
+                .as_ref()
+                .map(|value| value.entry.byte_start),
+            range_index_byte_len: range_receipt
+                .as_ref()
+                .map(|value| value.entry.byte_len),
             receipt_authority: OALC_RECEIPT_AUTHORITY.into(),
             candidate_only: true,
             creates_legal_authority: false,
@@ -885,6 +997,20 @@ mod live {
             stream_uniqueness_exhaustively_verified: stream_receipt
                 .as_ref()
                 .map(|value| value.uniqueness_exhaustively_verified),
+            range_index_hit: range_receipt.as_ref().map(|value| value.index_hit),
+            range_index_requests: range_receipt.as_ref().map(|value| value.range_requests),
+            range_index_rows_indexed_this_run: range_receipt
+                .as_ref()
+                .map(|value| value.rows_indexed_this_run),
+            range_index_bytes_indexed_this_run: range_receipt
+                .as_ref()
+                .map(|value| value.bytes_indexed_this_run),
+            range_index_byte_start: range_receipt
+                .as_ref()
+                .map(|value| value.entry.byte_start),
+            range_index_byte_len: range_receipt
+                .as_ref()
+                .map(|value| value.entry.byte_len),
             candidate_only: true,
             creates_legal_authority: false,
             creates_claim_truth: false,
@@ -1219,4 +1345,12 @@ mod tests {
                 .unwrap_err();
         assert!(matches!(error, OalcCaseFollowError::SourceResidual(_)));
     }
+    #[test]
+    fn range_index_mode_is_distinct_from_one_shot_streaming() {
+        assert_ne!(
+            OalcCaseAcquisitionMode::IndexedThenPinnedRangeIndex,
+            OalcCaseAcquisitionMode::IndexedThenPinnedStream
+        );
+    }
+
 }
