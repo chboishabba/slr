@@ -88,7 +88,10 @@ cargo run -p sensiblaw-cli --features live-network --bin sensiblaw -- \
 
 The selected source is independently reacquired through the governed OALC case path.
 
-The recursive acquisition mode is now `IndexedThenPinnedStream`.  Hugging
+The recursive acquisition mode is now `IndexedThenPinnedRangeIndex`.
+The earlier one-shot `IndexedThenPinnedStream` mode remains available for
+regression/compatibility, but the recursive campaign no longer depends on a
+single long-lived corpus response.  Hugging
 Face Dataset Server search is an accelerator rather than the source boundary:
 
 ```text
@@ -222,3 +225,33 @@ completed typed campaign
 and every step remains candidate-only, typed Rust in-process, bounded, and case-module independent.
 
 The first live recursive capstone is complete only after the Giumelli source and treatment review have actually been run. The Agda capstone contract intentionally records that this live receipt is not fabricated by the source formalisation.
+
+### Revision-pinned local byte index
+
+When Dataset Server search is unavailable or incomplete, the provider maintains
+a discovery-only byte-range index keyed by the immutable OALC revision SHA:
+
+```text
+(terminal MNC, type, jurisdiction)
+    -> byte_start, byte_len, row_sha256
+```
+
+The default persistent root is, in order:
+
+```text
+$SENSIBLAW_OALC_INDEX_DIR
+$XDG_CACHE_HOME/sensiblaw/oalc-range-index
+$HOME/.cache/sensiblaw/oalc-range-index
+$tmp/sensiblaw-oalc-range-index
+```
+
+Each revision directory contains a JSONL citation/range index plus an atomic
+checkpoint. Range construction advances only through complete JSONL rows; a
+partial trailing row is re-fetched from its beginning. A crash after index
+append but before checkpoint advance is idempotent because entries are
+de-duplicated by immutable row byte offset.
+
+The index stores metadata and byte coordinates, not judgment text. An index hit
+still performs an exact byte-range GET, validates the recorded row digest,
+re-runs the exact citation/type/jurisdiction matcher, retains the source, and
+then stops at the ordinary human identity-review gate.
