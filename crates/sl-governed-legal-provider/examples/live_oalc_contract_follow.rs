@@ -322,6 +322,9 @@ mod live {
             .validate_against(&dataset, &demand)
             .map_err(|error| format!("receipt: {error:?}"))?;
 
+        let receipt_path = output_dir.join("waltons-oalc-source-receipt.json");
+        fs::write(&receipt_path, serde_json::to_vec_pretty(&receipt)?)?;
+
         println!(
             "LegalFollow -> governed OALC Waltons source candidate; revision={}; version={}; path={}; network_requests={}; authority={}",
             receipt.corpus_revision_ref,
@@ -330,6 +333,7 @@ mod live {
             receipt.network_requests,
             receipt.receipt_authority
         );
+        println!("receipt_artifact={}", receipt_path.display());
         Ok(())
     }
 }
