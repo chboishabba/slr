@@ -1,8 +1,3 @@
-pub mod live_oalc_case_follow;
-pub use live_oalc_case_follow::*;
-pub mod oalc_source_contract;
-pub use oalc_source_contract::*;
-
 //! Governed legal-provider runtime for SensibLaw.
 //!
 //! Preferred Australian authority order:
@@ -11,6 +6,11 @@ pub use oalc_source_contract::*;
 //!
 //! The scheduler owns no HTTP. Search returns references, fetch returns bytes,
 //! and semantic/legal interpretation begins only after local ingestion/review.
+
+pub mod live_oalc_case_follow;
+pub use live_oalc_case_follow::*;
+pub mod oalc_source_contract;
+pub use oalc_source_contract::*;
 
 use std::collections::BTreeMap;
 use std::thread;
