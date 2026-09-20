@@ -1008,7 +1008,10 @@ pub fn run(args: Vec<String>) -> CampaignResult<()> {
             for delta in compiled.compilation.deltas {
                 campaign.accept_delta(&decisions.display().to_string(), delta)?;
             }
-            let receipt = campaign.receipt_json()?;
+            let mut receipt = campaign.receipt_json()?;
+            receipt["parent_campaign_receipt"] =
+                json!(trajectory.display().to_string());
+            receipt["continuation_only"] = json!(true);
             write_json(&output, &receipt)?;
             println!(
                 "contract_follow_identity_continuation={} hops={} residuals={} authority=false",
@@ -1063,7 +1066,10 @@ pub fn run(args: Vec<String>) -> CampaignResult<()> {
             for delta in compiled.compilation.deltas {
                 campaign.accept_delta(&decisions.display().to_string(), delta)?;
             }
-            let receipt = campaign.receipt_json()?;
+            let mut receipt = campaign.receipt_json()?;
+            receipt["parent_campaign_receipt"] =
+                json!(trajectory.display().to_string());
+            receipt["continuation_only"] = json!(true);
             write_json(&output, &receipt)?;
             println!(
                 "contract_follow_treatment_continuation={} hops={} residuals={} authority=false current_law_conclusion=false",
