@@ -283,6 +283,16 @@ pub fn compile_against(
     for decision in decisions.decisions {
         let receipt: OalcResolvedSourceReceipt =
             read_json(Path::new(&decision.source_receipt_path))?;
+        if let (Some(source_date), Some(reviewed_date)) =
+            (receipt.date.as_deref(), decision.date.as_deref())
+        {
+            if source_date.trim() != reviewed_date.trim() {
+                return Err(format!(
+                    "identity review date conflicts with source receipt for {}: source {:?}, reviewed {:?}",
+                    decision.semantic_ref, source_date, reviewed_date
+                ));
+            }
+        }
         if receipt.version_id != decision.version_id || receipt.citation != decision.citation {
             return Err(format!(
                 "identity review source receipt changed for {}",
@@ -305,6 +315,10 @@ pub fn compile_against(
             doctrine: parse_contract_doctrine(decision.doctrine.as_deref())?,
             jurisdiction_ref: decision.jurisdiction_ref,
             court_ref: decision.court_ref,
+            decision_or_effective_date: decision
+                .date
+                .clone()
+                .or_else(|| receipt.date.clone()),
             source_role: match receipt.document_type.as_str() {
                 "decision" => SourceRole::PrimaryCaseLaw,
                 "primary_legislation" => SourceRole::PrimaryLegislation,
