@@ -125,12 +125,14 @@ pub fn project_waltons_reviewed_receipts_to_issue(
 ) -> Result<WrongTypeIssueState, LegalRuntimeError> {
     let links = receipts
         .iter()
-        .map(|receipt| {
-            (
-                &receipt.reviewed_evidence,
-                waltons_element_ref(receipt.role),
-                waltons_evidence_disposition(receipt.disposition),
-            )
+        .filter_map(|receipt| {
+            receipt.reviewed_evidence.as_ref().map(|reviewed| {
+                (
+                    reviewed,
+                    waltons_element_ref(receipt.role),
+                    waltons_evidence_disposition(receipt.disposition),
+                )
+            })
         })
         .collect::<Vec<_>>();
     project_reviewed_world_to_wrong_type(&waltons_estoppel_bundle(), &links)
