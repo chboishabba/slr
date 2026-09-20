@@ -42,10 +42,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .map_err(|error| format!("{kind:?} replay failed: {error:?}"))?;
 
         let campaign_payload = capstone.campaign.encode();
-        fs::write(
-            output.join(format!("{kind:?}.legal-campaign.tsv").to_lowercase()),
-            campaign_payload,
-        )?;
+        let campaign_path =
+            output.join(format!("{kind:?}.legal-campaign.tsv").to_lowercase());
+        fs::write(&campaign_path, campaign_payload)?;
+        let reloaded_campaign = fs::read_to_string(&campaign_path)?;
+        capstone
+            .campaign
+            .validate_persisted_payload(&reloaded_campaign)
+            .map_err(|error| format!("{kind:?} disk replay failed: {error:?}"))?;
 
         let last = capstone
             .campaign
