@@ -5,21 +5,21 @@
 //! source acquisition, identity review and treatment review separate from legal
 //! authority.  A selected frontier item is a research action, not a truth rank.
 
-use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
 use sensiblaw_governed_legal_provider::{
-    run_live_oalc_case_follow, OalcCaseFollowRequest, OalcResolvedSourceReceipt,
+    run_live_oalc_case_follow_filter_only, OalcCaseFollowRequest, OalcResolvedSourceReceipt,
 };
 use sensiblaw_legal_follow_plan::{
     apply_contract_landscape_expansion, compile_australian_contract_landscape_worklist,
-    AuthorityLevel, AustralianContractLandscapeWorklist, AustralianContractTrace,
-    ContractDoctrine, ContractLandscapeExpansionDelta, ContractLandscapeExpansionReceipt,
-    ContractLandscapeWorkItem, ContractLandscapeWorkKind, ContractTraceEdge, ContractTraceNode,
-    SourceRole, TraceNodeKind, TreatmentKind,
+    AustralianContractLandscapeWorklist, AustralianContractTrace, AuthorityLevel, ContractDoctrine,
+    ContractLandscapeExpansionDelta, ContractLandscapeExpansionReceipt, ContractLandscapeWorkItem,
+    ContractLandscapeWorkKind, ContractTraceEdge, ContractTraceNode, SourceRole, TraceNodeKind,
+    TreatmentKind,
 };
 use sensiblaw_proof_search_loop::oalc_judgment_materialization::{
     materialize_oalc_judgment, OalcJudgmentMaterialisation,
 };
+use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -218,7 +218,9 @@ fn parse_doctrine(value: &str) -> CampaignResult<ContractDoctrine> {
         "Restitution" => Ok(ContractDoctrine::Restitution),
         "Privity" => Ok(ContractDoctrine::Privity),
         "ConsumerLaw" => Ok(ContractDoctrine::ConsumerLaw),
-        other => Err(format!("unsupported doctrine in campaign snapshot {other:?}")),
+        other => Err(format!(
+            "unsupported doctrine in campaign snapshot {other:?}"
+        )),
     }
 }
 
@@ -239,7 +241,9 @@ fn parse_node_kind(value: &str) -> CampaignResult<TraceNodeKind> {
         "Legislation" => Ok(TraceNodeKind::Legislation),
         "ResearchRequirement" => Ok(TraceNodeKind::ResearchRequirement),
         "Matter" => Ok(TraceNodeKind::Matter),
-        other => Err(format!("unsupported node kind in campaign snapshot {other:?}")),
+        other => Err(format!(
+            "unsupported node kind in campaign snapshot {other:?}"
+        )),
     }
 }
 
@@ -260,7 +264,9 @@ fn parse_source_role(value: &str) -> CampaignResult<SourceRole> {
         "OfficialRecord" => Ok(SourceRole::OfficialRecord),
         "ResearchIndex" => Ok(SourceRole::ResearchIndex),
         "SecondaryAnalysis" => Ok(SourceRole::SecondaryAnalysis),
-        other => Err(format!("unsupported source role in campaign snapshot {other:?}")),
+        other => Err(format!(
+            "unsupported source role in campaign snapshot {other:?}"
+        )),
     }
 }
 
@@ -277,7 +283,9 @@ fn parse_authority_level(value: &str) -> CampaignResult<AuthorityLevel> {
         "Official" => Ok(AuthorityLevel::Official),
         "Supporting" => Ok(AuthorityLevel::Supporting),
         "Secondary" => Ok(AuthorityLevel::Secondary),
-        other => Err(format!("unsupported authority level in campaign snapshot {other:?}")),
+        other => Err(format!(
+            "unsupported authority level in campaign snapshot {other:?}"
+        )),
     }
 }
 
@@ -308,7 +316,9 @@ fn parse_treatment(value: &str) -> CampaignResult<TreatmentKind> {
         "TemporalSuccessor" => Ok(TreatmentKind::TemporalSuccessor),
         "Requires" => Ok(TreatmentKind::Requires),
         "Intersects" => Ok(TreatmentKind::Intersects),
-        other => Err(format!("unsupported treatment in campaign snapshot {other:?}")),
+        other => Err(format!(
+            "unsupported treatment in campaign snapshot {other:?}"
+        )),
     }
 }
 
@@ -399,9 +409,13 @@ pub fn restore_trace(snapshot: &ContractTraceSnapshot) -> CampaignResult<Austral
 fn work_item_to_fresh(item: &ContractLandscapeWorkItem) -> FreshFrontierItem {
     let class = match item.kind {
         ContractLandscapeWorkKind::AcquirePrimarySource => CampaignFrontierClass::PrimarySource,
-        ContractLandscapeWorkKind::ReviewAuthorityTreatment => CampaignFrontierClass::TreatmentReview,
+        ContractLandscapeWorkKind::ReviewAuthorityTreatment => {
+            CampaignFrontierClass::TreatmentReview
+        }
         ContractLandscapeWorkKind::ExpandResearchContext => CampaignFrontierClass::ContextExpansion,
-        ContractLandscapeWorkKind::RetainTemporalAlternative => CampaignFrontierClass::TemporalAlternative,
+        ContractLandscapeWorkKind::RetainTemporalAlternative => {
+            CampaignFrontierClass::TemporalAlternative
+        }
     };
     FreshFrontierItem {
         frontier_ref: item.work_ref.clone(),
@@ -582,9 +596,7 @@ impl ContractFollowCampaign {
             Some(CampaignFrontierClass::TreatmentReview) => {
                 CampaignOperatorGate::AuthorityTreatmentReview
             }
-            Some(CampaignFrontierClass::ContextExpansion) => {
-                CampaignOperatorGate::ContextExpansion
-            }
+            Some(CampaignFrontierClass::ContextExpansion) => CampaignOperatorGate::ContextExpansion,
             Some(CampaignFrontierClass::TemporalAlternative) => {
                 CampaignOperatorGate::TemporalAlternative
             }
@@ -610,7 +622,9 @@ impl ContractFollowCampaign {
         if self.source_acquisitions >= self.config.budget.max_source_acquisitions {
             return Err("campaign source-acquisition budget exhausted".into());
         }
-        if self.network_requests.saturating_add(reserved_network_requests)
+        if self
+            .network_requests
+            .saturating_add(reserved_network_requests)
             > self.config.budget.max_network_requests
         {
             return Err("campaign network-request budget exhausted".into());
@@ -618,10 +632,7 @@ impl ContractFollowCampaign {
         Ok(())
     }
 
-    pub fn record_source_acquisition(
-        &mut self,
-        network_requests: u64,
-    ) -> CampaignResult<()> {
+    pub fn record_source_acquisition(&mut self, network_requests: u64) -> CampaignResult<()> {
         self.ensure_source_acquisition_budget(network_requests)?;
         self.source_acquisitions += 1;
         self.network_requests += network_requests;
@@ -731,13 +742,10 @@ fn australian_court_priority(court: &str) -> Option<u16> {
 }
 
 fn trace_contains_mnc(trace: &AustralianContractTrace, citation: &str) -> bool {
-    trace.nodes.values().any(|node| {
-        node.source_citation
-            .split(';')
-            .next()
-            .map(str::trim)
-            == Some(citation)
-    })
+    trace
+        .nodes
+        .values()
+        .any(|node| node.source_citation.split(';').next().map(str::trim) == Some(citation))
 }
 
 pub fn discover_outbound_citation_residuals(
@@ -757,26 +765,30 @@ pub fn discover_outbound_citation_residuals(
         if trace_contains_mnc(trace, &citation) {
             continue;
         }
-        let entry = grouped.entry(citation.clone()).or_insert_with(|| OutboundCitationResidual {
-            residual_ref: format!(
-                "campaign:outbound-citation:{}:{}",
-                materialization.source_revision_ref, citation
-            ),
-            source_document_ref: materialization.document_ref.clone(),
-            source_semantic_ref: source_semantic_ref.into(),
-            source_revision_ref: materialization.source_revision_ref.clone(),
-            canonical_text_sha256: materialization.canonical_text_sha256.clone(),
-            medium_neutral_citation: citation,
-            citation_locator_refs: Vec::new(),
-            anchor_paragraph_locator_refs: Vec::new(),
-            first_paragraph_ordinal: candidate.paragraph_ordinal,
-            research_priority: priority,
-            priority_is_legal_truth_rank: false,
-            candidate_only: true,
-            creates_legal_authority: false,
-            creates_current_law_conclusion: false,
-        });
-        entry.first_paragraph_ordinal = entry.first_paragraph_ordinal.min(candidate.paragraph_ordinal);
+        let entry = grouped
+            .entry(citation.clone())
+            .or_insert_with(|| OutboundCitationResidual {
+                residual_ref: format!(
+                    "campaign:outbound-citation:{}:{}",
+                    materialization.source_revision_ref, citation
+                ),
+                source_document_ref: materialization.document_ref.clone(),
+                source_semantic_ref: source_semantic_ref.into(),
+                source_revision_ref: materialization.source_revision_ref.clone(),
+                canonical_text_sha256: materialization.canonical_text_sha256.clone(),
+                medium_neutral_citation: citation,
+                citation_locator_refs: Vec::new(),
+                anchor_paragraph_locator_refs: Vec::new(),
+                first_paragraph_ordinal: candidate.paragraph_ordinal,
+                research_priority: priority,
+                priority_is_legal_truth_rank: false,
+                candidate_only: true,
+                creates_legal_authority: false,
+                creates_current_law_conclusion: false,
+            });
+        entry.first_paragraph_ordinal = entry
+            .first_paragraph_ordinal
+            .min(candidate.paragraph_ordinal);
         if !entry
             .citation_locator_refs
             .contains(&candidate.paragraph_locator_ref)
@@ -795,8 +807,14 @@ pub fn discover_outbound_citation_residuals(
     residuals.sort_by(|left, right| {
         left.research_priority
             .cmp(&right.research_priority)
-            .then_with(|| left.first_paragraph_ordinal.cmp(&right.first_paragraph_ordinal))
-            .then_with(|| left.medium_neutral_citation.cmp(&right.medium_neutral_citation))
+            .then_with(|| {
+                left.first_paragraph_ordinal
+                    .cmp(&right.first_paragraph_ordinal)
+            })
+            .then_with(|| {
+                left.medium_neutral_citation
+                    .cmp(&right.medium_neutral_citation)
+            })
     });
     residuals
 }
@@ -833,7 +851,7 @@ pub fn acquire_outbound_citation(
     let mut request =
         OalcCaseFollowRequest::for_citation(&residual.medium_neutral_citation, output_dir);
     request.as_at = as_at.into();
-    let run = run_live_oalc_case_follow(&request)
+    let run = run_live_oalc_case_follow_filter_only(&request)
         .map_err(|error| format!("recursive OALC acquisition: {error:?}"))?;
     let bytes = fs::read(&run.source_receipt_path)
         .map_err(|error| format!("read {}: {error}", run.source_receipt_path.display()))?;
@@ -856,8 +874,7 @@ pub fn write_json<T: Serialize>(path: &Path, value: &T) -> CampaignResult<()> {
 
 pub fn read_campaign_receipt(path: &Path) -> CampaignResult<Value> {
     let bytes = fs::read(path).map_err(|error| format!("read {}: {error}", path.display()))?;
-    serde_json::from_slice(&bytes)
-        .map_err(|error| format!("decode {}: {error}", path.display()))
+    serde_json::from_slice(&bytes).map_err(|error| format!("decode {}: {error}", path.display()))
 }
 
 pub fn snapshot_from_campaign_receipt(value: &Value) -> CampaignResult<ContractTraceSnapshot> {
@@ -869,7 +886,6 @@ pub fn snapshot_from_campaign_receipt(value: &Value) -> CampaignResult<ContractT
     )
     .map_err(|error| format!("decode campaign final_trace: {error}"))
 }
-
 
 fn arg_value(args: &[String], flag: &str) -> Option<String> {
     args.iter()
@@ -892,8 +908,12 @@ fn trace_snapshot_from_trajectory(path: &Path) -> CampaignResult<ContractTraceSn
         .get("campaign_state")
         .and_then(|state| state.get("final_trace"))
     {
-        return serde_json::from_value(trace.clone())
-            .map_err(|error| format!("decode campaign_state.final_trace from {}: {error}", path.display()));
+        return serde_json::from_value(trace.clone()).map_err(|error| {
+            format!(
+                "decode campaign_state.final_trace from {}: {error}",
+                path.display()
+            )
+        });
     }
     Err(format!(
         "{} does not contain a resumable final_trace; rerun the typed trajectory with S14.5 code",
@@ -916,7 +936,10 @@ fn counters_from_trajectory(path: &Path) -> CampaignResult<CampaignCounters> {
             .get("accepted_hop_count")
             .and_then(Value::as_u64)
             .unwrap_or_else(|| {
-                value.get("hop_count").and_then(Value::as_u64).unwrap_or_default()
+                value
+                    .get("hop_count")
+                    .and_then(Value::as_u64)
+                    .unwrap_or_default()
             }) as usize,
         source_acquisitions: state
             .get("source_acquisition_count")
@@ -986,7 +1009,12 @@ fn pending_review_from_trajectory(path: &Path) -> CampaignResult<PendingRecursiv
             .cloned()
             .ok_or_else(|| format!("{} has no pending_recursive_review", path.display()))?,
     )
-    .map_err(|error| format!("decode pending recursive review from {}: {error}", path.display()))
+    .map_err(|error| {
+        format!(
+            "decode pending recursive review from {}: {error}",
+            path.display()
+        )
+    })
 }
 
 fn campaign_step(gate: CampaignOperatorGate) -> CampaignNextStep {
@@ -1484,8 +1512,7 @@ mod tests {
                 max_network_requests: 6,
             },
         };
-        let campaign =
-            ContractFollowCampaign::resume(config, trace, 2, 0, 0).unwrap();
+        let campaign = ContractFollowCampaign::resume(config, trace, 2, 0, 0).unwrap();
         assert_eq!(campaign.accepted_hop_count(), 2);
         assert_eq!(
             campaign.next_fresh_step().gate,
@@ -1506,11 +1533,9 @@ mod tests {
                 max_network_requests: 4,
             },
         };
-        let campaign =
-            ContractFollowCampaign::resume(config, trace, 0, 0, 2).unwrap();
+        let campaign = ContractFollowCampaign::resume(config, trace, 0, 0, 2).unwrap();
         assert!(campaign
             .ensure_source_acquisition_budget(RECURSIVE_OALC_MAX_REQUESTS_PER_ACQUISITION)
             .is_err());
     }
-
 }
