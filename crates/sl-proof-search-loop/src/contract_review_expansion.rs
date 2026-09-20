@@ -524,6 +524,29 @@ mod tests {
     }
 
     #[test]
+    fn reviewed_source_identity_can_bind_compatible_seeded_authority() {
+        let trace = waltons_estoppel_trace();
+        let reviewed = ReviewedContractAuthorityIdentity {
+            semantic_ref: "case:au:hca:2014:19".into(),
+            label: "Sidhu v Van Dyke".into(),
+            doctrine: Some(sensiblaw_legal_follow_plan::ContractDoctrine::Estoppel),
+            jurisdiction_ref: "AU".into(),
+            court_ref: Some("court:HCA".into()),
+            source_role: SourceRole::PrimaryCaseLaw,
+            authority_level: AuthorityLevel::Official,
+            reviewer_ref: "reviewer:fixture".into(),
+            evidence_refs: vec!["review-note:fixture".into()],
+            source_receipt: source_receipt("Sidhu v Van Dyke [2014] HCA 19"),
+            candidate_only: true,
+            creates_legal_authority: false,
+        };
+        let compiled =
+            compile_reviewed_authority_identity_to_contract_hop(&trace, &reviewed);
+        assert!(compiled.deltas.is_empty());
+        assert!(compiled.residuals.is_empty());
+    }
+
+    #[test]
     fn reviewed_source_identity_adds_new_candidate_authority_node() {
         let trace = waltons_estoppel_trace();
         let reviewed = ReviewedContractAuthorityIdentity {
