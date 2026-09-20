@@ -1116,7 +1116,7 @@ fn residuals_for_evaluation(
             source_refs: Vec::new(),
         });
     }
-    for element in &wrong_type.elements {
+    for element in wrong_type.elements.iter().filter(|element| element.element.required) {
         if matches!(
             element.disposition,
             ElementDisposition::Contested | ElementDisposition::Unresolved
