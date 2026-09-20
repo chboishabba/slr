@@ -387,6 +387,36 @@ mod live {
     ) -> Result<OalcCorpusRow, OalcCaseFollowError> {
         stream_pinned_corpus(request)
     }
+    pub fn resolve_dataset_revision() -> Result<String, OalcCaseFollowError> {
+        let agent = ureq::AgentBuilder::new()
+            .timeout(Duration::from_secs(60))
+            .build();
+        let response = match agent
+            .get(HF_DATASET_API)
+            .set("User-Agent", SENSIBLAW_UA)
+            .set("Referer", "https://huggingface.co/")
+            .call()
+        {
+            Ok(response) => response,
+            Err(ureq::Error::Status(_, response)) => response,
+            Err(error) => return Err(OalcCaseFollowError::Provider(error.to_string())),
+        };
+        let status = classify_http_status(response.status());
+        if status != ProviderAccessStatus::Available {
+            return Err(OalcCaseFollowError::Provider(format!(
+                "OALC dataset metadata unavailable: {status:?}"
+            )));
+        }
+        let info: DatasetInfo = serde_json::from_reader(response.into_reader())
+            .map_err(|error| OalcCaseFollowError::Json(error.to_string()))?;
+        if info.sha.trim().is_empty() {
+            return Err(OalcCaseFollowError::Dataset(
+                "OALC metadata returned empty revision".into(),
+            ));
+        }
+        Ok(info.sha)
+    }
+
 
     fn stream_fallback(
         provider: &mut GovernedOalc<UreqTransport>,
@@ -585,7 +615,11 @@ mod live {
 }
 
 #[cfg(feature = "live-network")]
-pub use live::{run as run_live_oalc_case_follow, run_pinned as run_pinned_oalc_stream};
+pub use live::{
+    resolve_dataset_revision as resolve_oalc_dataset_revision,
+    run as run_live_oalc_case_follow,
+    run_pinned as run_pinned_oalc_stream,
+};
 
 #[cfg(not(feature = "live-network"))]
 pub fn run_live_oalc_case_follow(
@@ -598,5 +632,10 @@ pub fn run_live_oalc_case_follow(
 pub fn run_pinned_oalc_stream(
     _request: &PinnedOalcStreamRequest,
 ) -> Result<OalcCorpusRow, OalcCaseFollowError> {
+    Err(OalcCaseFollowError::LiveNetworkFeatureDisabled)
+}
+
+#[cfg(not(feature = "live-network"))]
+pub fn resolve_oalc_dataset_revision() -> Result<String, OalcCaseFollowError> {
     Err(OalcCaseFollowError::LiveNetworkFeatureDisabled)
 }
