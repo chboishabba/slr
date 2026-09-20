@@ -527,19 +527,23 @@ pub fn run_native_expansion_trajectory(
     let mut hop_index = 0usize;
 
     for batch in batches {
+        let NativeExpansionBatch {
+            source_ref,
+            deltas,
+            reviewed_residuals: batch_residuals,
+        } = batch;
         reviewed_residuals.extend(
-            batch
-                .reviewed_residuals
+            batch_residuals
                 .into_iter()
                 .map(|residual| {
                     json!({
-                        "source_artifact": batch.source_ref,
+                        "source_artifact": source_ref.clone(),
                         "residual": residual,
                     })
                 }),
         );
 
-        for delta in batch.deltas {
+        for delta in deltas {
             hop_index += 1;
             let (next, receipt) =
                 apply_contract_landscape_expansion(&expanded, &delta)?;
@@ -551,7 +555,7 @@ pub fn run_native_expansion_trajectory(
             )?;
             trajectory.push(json!({
                 "hop_index": hop_index,
-                "source_ref": batch.source_ref,
+                "source_ref": source_ref.clone(),
                 "expansion_receipt": expansion_receipt_json(&receipt),
                 "frontier_counts": {
                     "primary_source_acquisition": work.source_items.len(),
@@ -787,6 +791,37 @@ mod tests {
         assert_eq!(output["bounded_seed_only"], true);
         assert_eq!(output["creates_legal_authority"], false);
         assert_eq!(output["creates_current_law_conclusion"], false);
+    }
+
+    #[test]
+    fn native_waltons_bootstrap_uses_typed_transport_and_recomputes_frontier() {
+        let landscape = australian_contract_landscape_seed();
+        let waltons = sensiblaw_legal_follow_plan::waltons_estoppel_trace();
+        let bootstrap = sensiblaw_legal_follow_plan::trace_extension_delta(
+            &landscape,
+            &waltons,
+            "bootstrap:waltons-estoppel-materialisation",
+        )
+        .unwrap();
+        let output = run_native_expansion_trajectory(
+            landscape,
+            vec![NativeExpansionBatch {
+                source_ref: "bootstrap:waltons-estoppel-materialisation".into(),
+                deltas: vec![bootstrap],
+                reviewed_residuals: Vec::new(),
+            }],
+            "2026-09-20",
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(output["transport"], "typed_rust_in_process");
+        assert_eq!(output["json_is_semantic_command_transport"], false);
+        assert_eq!(output["hop_count"], 1);
+        assert_eq!(output["creates_legal_authority"], false);
+        assert!(output
+            .to_string()
+            .contains("requirement:estoppel:reliance"));
     }
 
     #[test]
