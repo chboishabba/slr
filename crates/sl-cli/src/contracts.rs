@@ -412,11 +412,9 @@ fn parse_treatment(value: &str) -> CliResult<TreatmentKind> {
     }
 }
 
-fn load_expansion_delta(path: &Path) -> CliResult<ContractLandscapeExpansionDelta> {
-    let bytes = fs::read(path)
-        .map_err(|error| format!("read expansion delta {}: {error}", path.display()))?;
-    let input: ExpansionInput = serde_json::from_slice(&bytes)
-        .map_err(|error| format!("decode expansion delta {}: {error}", path.display()))?;
+fn expansion_input_to_delta(
+    input: ExpansionInput,
+) -> CliResult<ContractLandscapeExpansionDelta> {
     if input.provenance_ref.trim().is_empty() {
         return Err("expansion delta requires non-empty provenance_ref".into());
     }
@@ -463,6 +461,32 @@ fn load_expansion_delta(path: &Path) -> CliResult<ContractLandscapeExpansionDelt
         candidate_only: true,
         creates_legal_authority: false,
     })
+}
+
+fn load_expansion_deltas(path: &Path) -> CliResult<Vec<ContractLandscapeExpansionDelta>> {
+    let bytes = fs::read(path)
+        .map_err(|error| format!("read expansion delta {}: {error}", path.display()))?;
+    let value: serde_json::Value = serde_json::from_slice(&bytes)
+        .map_err(|error| format!("decode expansion delta {}: {error}", path.display()))?;
+
+    let inputs = if let Some(deltas) = value.get("deltas").and_then(|value| value.as_array()) {
+        deltas
+            .iter()
+            .cloned()
+            .map(|value| {
+                serde_json::from_value::<ExpansionInput>(value)
+                    .map_err(|error| format!("decode reviewed-hop delta {}: {error}", path.display()))
+            })
+            .collect::<Result<Vec<_>, _>>()?
+    } else {
+        vec![serde_json::from_value::<ExpansionInput>(value)
+            .map_err(|error| format!("decode expansion delta {}: {error}", path.display()))?]
+    };
+
+    inputs
+        .into_iter()
+        .map(expansion_input_to_delta)
+        .collect()
 }
 
 fn expansion_receipt_json(
@@ -548,27 +572,30 @@ pub fn run(args: Vec<String>) -> CliResult {
             let mut expanded = australian_contract_landscape_seed();
             let mut trajectory = Vec::new();
 
-            for (hop_index, delta_path) in delta_paths.iter().enumerate() {
-                let delta = load_expansion_delta(delta_path)?;
-                let (next, receipt) =
-                    apply_contract_landscape_expansion(&expanded, &delta)?;
-                expanded = next;
-                let work = compile_australian_contract_landscape_worklist(
-                    &expanded,
-                    &as_at,
-                    jurisdiction.as_deref(),
-                )?;
-                trajectory.push(json!({
-                    "hop_index": hop_index + 1,
-                    "delta_path": delta_path,
-                    "expansion_receipt": expansion_receipt_json(&receipt),
-                    "frontier_counts": {
-                        "primary_source_acquisition": work.source_items.len(),
-                        "authority_treatment_review": work.treatment_items.len(),
-                        "context_expansion": work.context_items.len(),
-                        "temporal_alternatives": work.temporal_alternatives.len(),
-                    },
-                }));
+            let mut hop_index = 0usize;
+            for delta_path in &delta_paths {
+                for delta in load_expansion_deltas(delta_path)? {
+                    hop_index += 1;
+                    let (next, receipt) =
+                        apply_contract_landscape_expansion(&expanded, &delta)?;
+                    expanded = next;
+                    let work = compile_australian_contract_landscape_worklist(
+                        &expanded,
+                        &as_at,
+                        jurisdiction.as_deref(),
+                    )?;
+                    trajectory.push(json!({
+                        "hop_index": hop_index,
+                        "delta_path": delta_path,
+                        "expansion_receipt": expansion_receipt_json(&receipt),
+                        "frontier_counts": {
+                            "primary_source_acquisition": work.source_items.len(),
+                            "authority_treatment_review": work.treatment_items.len(),
+                            "context_expansion": work.context_items.len(),
+                            "temporal_alternatives": work.temporal_alternatives.len(),
+                        },
+                    }));
+                }
             }
 
             let work = compile_australian_contract_landscape_worklist(
