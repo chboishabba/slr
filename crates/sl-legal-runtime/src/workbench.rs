@@ -115,6 +115,26 @@ impl MatterIssueWorkbench {
             .map(|entity| entity.entity_ref.as_str())
             .collect::<BTreeSet<_>>();
 
+        for entity in &self.entities {
+            if !entity.candidate_only {
+                return Err(format!("entity {} is not candidate-only", entity.entity_ref));
+            }
+        }
+        for observation in &self.observations {
+            if !observation.candidate_only {
+                return Err(format!(
+                    "observation {} is not candidate-only",
+                    observation.observation_ref
+                ));
+            }
+            if observation.source_revision_ref.trim().is_empty() || observation.span_ref.trim().is_empty() {
+                return Err(format!(
+                    "observation {} lost exact source identity",
+                    observation.observation_ref
+                ));
+            }
+        }
+
         for event in &self.events {
             if !event.candidate_only {
                 return Err(format!("event {} is not candidate-only", event.event_ref));
@@ -154,7 +174,7 @@ impl MatterIssueWorkbench {
         self.issue
             .nodes
             .iter()
-            .filter(|node| matches!(node.kind, crate::MatterIssueNodeKind::Element))
+            .filter(|node| node.semantic_kind.starts_with("legal-element:"))
             .count()
     }
 }
