@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Return one exact OALC legislation row from a revision-pinned stream.
+"""Return one bounded OALC source row from a revision-pinned stream.
 
 This helper is an acquisition fallback for an incomplete Hugging Face Dataset
 Viewer index. It deliberately uses ``streaming=True`` and an immutable revision
@@ -21,6 +21,15 @@ def main() -> int:
     parser.add_argument("--split", required=True)
     parser.add_argument("--revision", required=True)
     parser.add_argument("--citation", required=True)
+    parser.add_argument(
+        "--citation-match",
+        choices=("exact", "contains"),
+        default="exact",
+        help="Exact equality for legislation; MNC containment for decisions.",
+    )
+    parser.add_argument("--document-type", default="primary_legislation")
+    parser.add_argument("--source", default="nsw_legislation")
+    parser.add_argument("--jurisdiction", default="new_south_wales")
     args = parser.parse_args()
 
     try:
@@ -43,17 +52,27 @@ def main() -> int:
         )
         matches = []
         for row in rows:
+            row_citation = row.get("citation") or ""
+            citation_matches = (
+                row_citation == args.citation
+                if args.citation_match == "exact"
+                else args.citation in row_citation
+            )
+            source_matches = not args.source or row.get("source") == args.source
+            jurisdiction_matches = (
+                not args.jurisdiction or row.get("jurisdiction") == args.jurisdiction
+            )
             if (
-                row.get("citation") == args.citation
-                and row.get("source") == "nsw_legislation"
-                and row.get("jurisdiction") == "new_south_wales"
-                and row.get("type") == "primary_legislation"
+                citation_matches
+                and source_matches
+                and jurisdiction_matches
+                and row.get("type") == args.document_type
             ):
                 matches.append(row)
                 if len(matches) > 1:
                     print(
                         "SOURCE_RESIDUAL: revision-pinned stream returned "
-                        "multiple exact legislation rows",
+                        "multiple bounded source rows",
                         file=sys.stderr,
                     )
                     return 4
@@ -63,8 +82,8 @@ def main() -> int:
 
     if not matches:
         print(
-            "SOURCE_RESIDUAL: revision-pinned streaming completed with no exact "
-            "legislation row",
+            "SOURCE_RESIDUAL: revision-pinned streaming completed with no bounded "
+            "source row",
             file=sys.stderr,
         )
         return 3
