@@ -199,13 +199,20 @@ class FullTextCacheWrapper:
             raw = fetch_plan_path.read_text(encoding="utf-8").strip()
             if not raw:
                 batch = []
-            elif raw.startswith("{"):
-                payload = json.loads(raw)
-                batch = payload.get("batch", [])
-            elif raw.startswith("["):
-                batch = json.loads(raw)
             else:
-                batch = jsonl(fetch_plan_path)
+                try:
+                    payload = json.loads(raw)
+                except json.JSONDecodeError:
+                    batch = jsonl(fetch_plan_path)
+                else:
+                    if isinstance(payload, dict):
+                        batch = payload.get("batch", [])
+                    elif isinstance(payload, list):
+                        batch = payload
+                    else:
+                        raise ValueError(
+                            "fetch plan must be an object with batch, a JSON array, or JSONL"
+                        )
         plan_refs = {str(b["source_identity_reference"]) for b in batch}
 
         retrieved_path = self.cache_dir.parent / "retrieved-manifest.jsonl"
