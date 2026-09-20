@@ -1,0 +1,775 @@
+//! Generic recursive LegalFollow campaign runtime for Australian contracts.
+//!
+//! This module owns the Phase-IV orchestration seam that used to live only in
+//! the Waltons campaign shell.  It deliberately keeps research scheduling,
+//! source acquisition, identity review and treatment review separate from legal
+//! authority.  A selected frontier item is a research action, not a truth rank.
+
+use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
+use sensiblaw_governed_legal_provider::{
+    run_live_oalc_case_follow, OalcCaseFollowRequest, OalcResolvedSourceReceipt,
+};
+use sensiblaw_legal_follow_plan::{
+    apply_contract_landscape_expansion, compile_australian_contract_landscape_worklist,
+    AuthorityLevel, AustralianContractLandscapeWorklist, AustralianContractTrace,
+    ContractDoctrine, ContractLandscapeExpansionDelta, ContractLandscapeExpansionReceipt,
+    ContractLandscapeWorkItem, ContractLandscapeWorkKind, ContractTraceEdge, ContractTraceNode,
+    SourceRole, TraceNodeKind, TreatmentKind,
+};
+use sensiblaw_proof_search_loop::oalc_judgment_materialization::{
+    materialize_oalc_judgment, OalcJudgmentMaterialisation,
+};
+use std::collections::{BTreeMap, BTreeSet};
+use std::fs;
+use std::path::{Path, PathBuf};
+
+pub type CampaignResult<T> = Result<T, String>;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CampaignBudget {
+    pub max_accepted_hops: usize,
+    pub max_source_acquisitions: usize,
+    pub max_network_requests: u64,
+}
+
+impl Default for CampaignBudget {
+    fn default() -> Self {
+        Self {
+            max_accepted_hops: 128,
+            max_source_acquisitions: 32,
+            max_network_requests: 128,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CampaignConfig {
+    pub campaign_ref: String,
+    pub as_at: String,
+    pub jurisdiction_filter: Option<String>,
+    pub budget: CampaignBudget,
+}
+
+impl CampaignConfig {
+    pub fn validate(&self) -> CampaignResult<()> {
+        if self.campaign_ref.trim().is_empty() {
+            return Err("campaign_ref must be non-empty".into());
+        }
+        if self.as_at.trim().is_empty() {
+            return Err("campaign as_at must be non-empty".into());
+        }
+        if self.budget.max_accepted_hops == 0
+            || self.budget.max_source_acquisitions == 0
+            || self.budget.max_network_requests == 0
+        {
+            return Err("campaign budgets must all be positive".into());
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub enum CampaignFrontierClass {
+    PrimarySource,
+    TreatmentReview,
+    ContextExpansion,
+    TemporalAlternative,
+    OutboundCitation,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FreshFrontierItem {
+    pub frontier_ref: String,
+    pub class: CampaignFrontierClass,
+    pub semantic_ref: String,
+    pub related_ref: Option<String>,
+    pub source_citation: String,
+    pub jurisdiction_ref: String,
+    pub candidate_only: bool,
+    pub creates_legal_authority: bool,
+    pub creates_current_law_conclusion: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CampaignHopReceipt {
+    pub hop_index: usize,
+    pub source_ref: String,
+    pub provenance_ref: String,
+    pub added_node_count: usize,
+    pub added_edge_count: usize,
+    pub recompute_frontier_required: bool,
+    pub old_source_history_preserved: bool,
+    pub old_conclusions_frozen: bool,
+    pub fresh_frontier: Vec<FreshFrontierItem>,
+    pub candidate_only: bool,
+    pub creates_legal_authority: bool,
+    pub creates_current_law_conclusion: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TraceNodeSnapshot {
+    pub semantic_ref: String,
+    pub label: String,
+    pub kind: String,
+    pub doctrine: Option<String>,
+    pub jurisdiction_ref: String,
+    pub court_ref: Option<String>,
+    pub decision_or_effective_date: Option<String>,
+    pub valid_from: Option<String>,
+    pub valid_to: Option<String>,
+    pub source_role: String,
+    pub authority_level: String,
+    pub source_citation: String,
+    pub candidate_only: bool,
+    pub creates_legal_authority: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TraceEdgeSnapshot {
+    pub from_ref: String,
+    pub to_ref: String,
+    pub treatment: String,
+    pub candidate_only: bool,
+    pub creates_legal_authority: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ContractTraceSnapshot {
+    pub root_ref: String,
+    pub nodes: Vec<TraceNodeSnapshot>,
+    pub edges: Vec<TraceEdgeSnapshot>,
+    pub candidate_only: bool,
+    pub creates_legal_authority: bool,
+}
+
+fn doctrine_name(value: ContractDoctrine) -> &'static str {
+    match value {
+        ContractDoctrine::Formation => "Formation",
+        ContractDoctrine::Intention => "Intention",
+        ContractDoctrine::TermsAndIncorporation => "TermsAndIncorporation",
+        ContractDoctrine::Construction => "Construction",
+        ContractDoctrine::Estoppel => "Estoppel",
+        ContractDoctrine::Unconscionability => "Unconscionability",
+        ContractDoctrine::Penalties => "Penalties",
+        ContractDoctrine::RepudiationAndTermination => "RepudiationAndTermination",
+        ContractDoctrine::Damages => "Damages",
+        ContractDoctrine::Restitution => "Restitution",
+        ContractDoctrine::Privity => "Privity",
+        ContractDoctrine::ConsumerLaw => "ConsumerLaw",
+    }
+}
+
+fn parse_doctrine(value: &str) -> CampaignResult<ContractDoctrine> {
+    match value {
+        "Formation" => Ok(ContractDoctrine::Formation),
+        "Intention" => Ok(ContractDoctrine::Intention),
+        "TermsAndIncorporation" => Ok(ContractDoctrine::TermsAndIncorporation),
+        "Construction" => Ok(ContractDoctrine::Construction),
+        "Estoppel" => Ok(ContractDoctrine::Estoppel),
+        "Unconscionability" => Ok(ContractDoctrine::Unconscionability),
+        "Penalties" => Ok(ContractDoctrine::Penalties),
+        "RepudiationAndTermination" => Ok(ContractDoctrine::RepudiationAndTermination),
+        "Damages" => Ok(ContractDoctrine::Damages),
+        "Restitution" => Ok(ContractDoctrine::Restitution),
+        "Privity" => Ok(ContractDoctrine::Privity),
+        "ConsumerLaw" => Ok(ContractDoctrine::ConsumerLaw),
+        other => Err(format!("unsupported doctrine in campaign snapshot {other:?}")),
+    }
+}
+
+fn node_kind_name(value: TraceNodeKind) -> &'static str {
+    match value {
+        TraceNodeKind::Doctrine => "Doctrine",
+        TraceNodeKind::CaseAuthority => "CaseAuthority",
+        TraceNodeKind::Legislation => "Legislation",
+        TraceNodeKind::ResearchRequirement => "ResearchRequirement",
+        TraceNodeKind::Matter => "Matter",
+    }
+}
+
+fn parse_node_kind(value: &str) -> CampaignResult<TraceNodeKind> {
+    match value {
+        "Doctrine" => Ok(TraceNodeKind::Doctrine),
+        "CaseAuthority" => Ok(TraceNodeKind::CaseAuthority),
+        "Legislation" => Ok(TraceNodeKind::Legislation),
+        "ResearchRequirement" => Ok(TraceNodeKind::ResearchRequirement),
+        "Matter" => Ok(TraceNodeKind::Matter),
+        other => Err(format!("unsupported node kind in campaign snapshot {other:?}")),
+    }
+}
+
+fn source_role_name(value: SourceRole) -> &'static str {
+    match value {
+        SourceRole::PrimaryCaseLaw => "PrimaryCaseLaw",
+        SourceRole::PrimaryLegislation => "PrimaryLegislation",
+        SourceRole::OfficialRecord => "OfficialRecord",
+        SourceRole::ResearchIndex => "ResearchIndex",
+        SourceRole::SecondaryAnalysis => "SecondaryAnalysis",
+    }
+}
+
+fn parse_source_role(value: &str) -> CampaignResult<SourceRole> {
+    match value {
+        "PrimaryCaseLaw" => Ok(SourceRole::PrimaryCaseLaw),
+        "PrimaryLegislation" => Ok(SourceRole::PrimaryLegislation),
+        "OfficialRecord" => Ok(SourceRole::OfficialRecord),
+        "ResearchIndex" => Ok(SourceRole::ResearchIndex),
+        "SecondaryAnalysis" => Ok(SourceRole::SecondaryAnalysis),
+        other => Err(format!("unsupported source role in campaign snapshot {other:?}")),
+    }
+}
+
+fn authority_level_name(value: AuthorityLevel) -> &'static str {
+    match value {
+        AuthorityLevel::Official => "Official",
+        AuthorityLevel::Supporting => "Supporting",
+        AuthorityLevel::Secondary => "Secondary",
+    }
+}
+
+fn parse_authority_level(value: &str) -> CampaignResult<AuthorityLevel> {
+    match value {
+        "Official" => Ok(AuthorityLevel::Official),
+        "Supporting" => Ok(AuthorityLevel::Supporting),
+        "Secondary" => Ok(AuthorityLevel::Secondary),
+        other => Err(format!("unsupported authority level in campaign snapshot {other:?}")),
+    }
+}
+
+fn treatment_name(value: TreatmentKind) -> &'static str {
+    match value {
+        TreatmentKind::Seeds => "Seeds",
+        TreatmentKind::Supports => "Supports",
+        TreatmentKind::Applies => "Applies",
+        TreatmentKind::Follows => "Follows",
+        TreatmentKind::Distinguishes => "Distinguishes",
+        TreatmentKind::Qualifies => "Qualifies",
+        TreatmentKind::Displaces => "Displaces",
+        TreatmentKind::TemporalSuccessor => "TemporalSuccessor",
+        TreatmentKind::Requires => "Requires",
+        TreatmentKind::Intersects => "Intersects",
+    }
+}
+
+fn parse_treatment(value: &str) -> CampaignResult<TreatmentKind> {
+    match value {
+        "Seeds" => Ok(TreatmentKind::Seeds),
+        "Supports" => Ok(TreatmentKind::Supports),
+        "Applies" => Ok(TreatmentKind::Applies),
+        "Follows" => Ok(TreatmentKind::Follows),
+        "Distinguishes" => Ok(TreatmentKind::Distinguishes),
+        "Qualifies" => Ok(TreatmentKind::Qualifies),
+        "Displaces" => Ok(TreatmentKind::Displaces),
+        "TemporalSuccessor" => Ok(TreatmentKind::TemporalSuccessor),
+        "Requires" => Ok(TreatmentKind::Requires),
+        "Intersects" => Ok(TreatmentKind::Intersects),
+        other => Err(format!("unsupported treatment in campaign snapshot {other:?}")),
+    }
+}
+
+pub fn snapshot_trace(trace: &AustralianContractTrace) -> ContractTraceSnapshot {
+    ContractTraceSnapshot {
+        root_ref: trace.root_ref.clone(),
+        nodes: trace
+            .nodes
+            .values()
+            .map(|node| TraceNodeSnapshot {
+                semantic_ref: node.semantic_ref.clone(),
+                label: node.label.clone(),
+                kind: node_kind_name(node.kind).into(),
+                doctrine: node.doctrine.map(doctrine_name).map(str::to_string),
+                jurisdiction_ref: node.jurisdiction_ref.clone(),
+                court_ref: node.court_ref.clone(),
+                decision_or_effective_date: node.decision_or_effective_date.clone(),
+                valid_from: node.valid_from.clone(),
+                valid_to: node.valid_to.clone(),
+                source_role: source_role_name(node.source_role).into(),
+                authority_level: authority_level_name(node.authority_level).into(),
+                source_citation: node.source_citation.clone(),
+                candidate_only: node.candidate_only,
+                creates_legal_authority: node.creates_legal_authority,
+            })
+            .collect(),
+        edges: trace
+            .edges
+            .iter()
+            .map(|edge| TraceEdgeSnapshot {
+                from_ref: edge.from_ref.clone(),
+                to_ref: edge.to_ref.clone(),
+                treatment: treatment_name(edge.treatment).into(),
+                candidate_only: edge.candidate_only,
+                creates_legal_authority: edge.creates_legal_authority,
+            })
+            .collect(),
+        candidate_only: trace.candidate_only,
+        creates_legal_authority: trace.creates_legal_authority,
+    }
+}
+
+pub fn restore_trace(snapshot: &ContractTraceSnapshot) -> CampaignResult<AustralianContractTrace> {
+    let mut nodes = BTreeMap::new();
+    for node in &snapshot.nodes {
+        let restored = ContractTraceNode {
+            semantic_ref: node.semantic_ref.clone(),
+            label: node.label.clone(),
+            kind: parse_node_kind(&node.kind)?,
+            doctrine: node.doctrine.as_deref().map(parse_doctrine).transpose()?,
+            jurisdiction_ref: node.jurisdiction_ref.clone(),
+            court_ref: node.court_ref.clone(),
+            decision_or_effective_date: node.decision_or_effective_date.clone(),
+            valid_from: node.valid_from.clone(),
+            valid_to: node.valid_to.clone(),
+            source_role: parse_source_role(&node.source_role)?,
+            authority_level: parse_authority_level(&node.authority_level)?,
+            source_citation: node.source_citation.clone(),
+            candidate_only: node.candidate_only,
+            creates_legal_authority: node.creates_legal_authority,
+        };
+        nodes.insert(restored.semantic_ref.clone(), restored);
+    }
+    let edges = snapshot
+        .edges
+        .iter()
+        .map(|edge| {
+            Ok(ContractTraceEdge {
+                from_ref: edge.from_ref.clone(),
+                to_ref: edge.to_ref.clone(),
+                treatment: parse_treatment(&edge.treatment)?,
+                candidate_only: edge.candidate_only,
+                creates_legal_authority: edge.creates_legal_authority,
+            })
+        })
+        .collect::<CampaignResult<Vec<_>>>()?;
+    let trace = AustralianContractTrace {
+        root_ref: snapshot.root_ref.clone(),
+        nodes,
+        edges,
+        candidate_only: snapshot.candidate_only,
+        creates_legal_authority: snapshot.creates_legal_authority,
+    };
+    trace.validate()?;
+    Ok(trace)
+}
+
+fn work_item_to_fresh(item: &ContractLandscapeWorkItem) -> FreshFrontierItem {
+    let class = match item.kind {
+        ContractLandscapeWorkKind::AcquirePrimarySource => CampaignFrontierClass::PrimarySource,
+        ContractLandscapeWorkKind::ReviewAuthorityTreatment => CampaignFrontierClass::TreatmentReview,
+        ContractLandscapeWorkKind::ExpandResearchContext => CampaignFrontierClass::ContextExpansion,
+        ContractLandscapeWorkKind::RetainTemporalAlternative => CampaignFrontierClass::TemporalAlternative,
+    };
+    FreshFrontierItem {
+        frontier_ref: item.work_ref.clone(),
+        class,
+        semantic_ref: item.semantic_ref.clone(),
+        related_ref: item.related_ref.clone(),
+        source_citation: item.source_citation.clone(),
+        jurisdiction_ref: item.jurisdiction_ref.clone(),
+        candidate_only: true,
+        creates_legal_authority: false,
+        creates_current_law_conclusion: false,
+    }
+}
+
+fn work_refs(work: &AustralianContractLandscapeWorklist) -> BTreeSet<String> {
+    work.source_items
+        .iter()
+        .chain(work.treatment_items.iter())
+        .chain(work.context_items.iter())
+        .chain(work.temporal_alternatives.iter())
+        .map(|item| item.work_ref.clone())
+        .collect()
+}
+
+fn fresh_work(
+    work: &AustralianContractLandscapeWorklist,
+    observed: &BTreeSet<String>,
+) -> Vec<FreshFrontierItem> {
+    work.source_items
+        .iter()
+        .chain(work.treatment_items.iter())
+        .chain(work.context_items.iter())
+        .chain(work.temporal_alternatives.iter())
+        .filter(|item| !observed.contains(&item.work_ref))
+        .map(work_item_to_fresh)
+        .collect()
+}
+
+pub struct ContractFollowCampaign {
+    config: CampaignConfig,
+    trace: AustralianContractTrace,
+    observed_work_refs: BTreeSet<String>,
+    hops: Vec<CampaignHopReceipt>,
+    reviewed_residuals: Vec<Value>,
+    source_acquisitions: usize,
+    network_requests: u64,
+}
+
+impl ContractFollowCampaign {
+    pub fn new(config: CampaignConfig, trace: AustralianContractTrace) -> CampaignResult<Self> {
+        config.validate()?;
+        trace.validate()?;
+        let work = compile_australian_contract_landscape_worklist(
+            &trace,
+            &config.as_at,
+            config.jurisdiction_filter.as_deref(),
+        )?;
+        Ok(Self {
+            config,
+            trace,
+            observed_work_refs: work_refs(&work),
+            hops: Vec::new(),
+            reviewed_residuals: Vec::new(),
+            source_acquisitions: 0,
+            network_requests: 0,
+        })
+    }
+
+    pub fn from_snapshot(
+        config: CampaignConfig,
+        snapshot: &ContractTraceSnapshot,
+    ) -> CampaignResult<Self> {
+        Self::new(config, restore_trace(snapshot)?)
+    }
+
+    pub fn trace(&self) -> &AustralianContractTrace {
+        &self.trace
+    }
+
+    pub fn recomputed_worklist(&self) -> CampaignResult<AustralianContractLandscapeWorklist> {
+        compile_australian_contract_landscape_worklist(
+            &self.trace,
+            &self.config.as_at,
+            self.config.jurisdiction_filter.as_deref(),
+        )
+    }
+
+    pub fn accept_delta(
+        &mut self,
+        source_ref: &str,
+        delta: ContractLandscapeExpansionDelta,
+    ) -> CampaignResult<&CampaignHopReceipt> {
+        if self.hops.len() >= self.config.budget.max_accepted_hops {
+            return Err("campaign accepted-hop budget exhausted".into());
+        }
+        let (next, receipt) = apply_contract_landscape_expansion(&self.trace, &delta)?;
+        self.trace = next;
+        let work = self.recomputed_worklist()?;
+        let fresh = fresh_work(&work, &self.observed_work_refs);
+        self.observed_work_refs.extend(work_refs(&work));
+        self.hops.push(campaign_hop_receipt(
+            self.hops.len() + 1,
+            source_ref,
+            &receipt,
+            fresh,
+        ));
+        Ok(self.hops.last().expect("just pushed campaign hop"))
+    }
+
+    pub fn preserve_reviewed_residual(&mut self, source_ref: &str, residual: Value) {
+        self.reviewed_residuals.push(json!({
+            "source_artifact": source_ref,
+            "residual": residual,
+        }));
+    }
+
+    pub fn record_source_acquisition(
+        &mut self,
+        network_requests: u64,
+    ) -> CampaignResult<()> {
+        if self.source_acquisitions >= self.config.budget.max_source_acquisitions {
+            return Err("campaign source-acquisition budget exhausted".into());
+        }
+        if self.network_requests.saturating_add(network_requests)
+            > self.config.budget.max_network_requests
+        {
+            return Err("campaign network-request budget exhausted".into());
+        }
+        self.source_acquisitions += 1;
+        self.network_requests += network_requests;
+        Ok(())
+    }
+
+    pub fn receipt_json(&self) -> CampaignResult<Value> {
+        let work = self.recomputed_worklist()?;
+        Ok(json!({
+            "schema_version": "sl.contract_follow_campaign.v0_1",
+            "campaign_ref": self.config.campaign_ref,
+            "as_at": self.config.as_at,
+            "jurisdiction_filter": self.config.jurisdiction_filter,
+            "budget": self.config.budget,
+            "accepted_hop_count": self.hops.len(),
+            "source_acquisition_count": self.source_acquisitions,
+            "network_request_count": self.network_requests,
+            "reviewed_residual_count": self.reviewed_residuals.len(),
+            "reviewed_residuals": self.reviewed_residuals,
+            "trajectory": self.hops,
+            "final_trace": snapshot_trace(&self.trace),
+            "final_frontier_counts": {
+                "primary_source_acquisition": work.source_items.len(),
+                "authority_treatment_review": work.treatment_items.len(),
+                "context_expansion": work.context_items.len(),
+                "temporal_alternatives": work.temporal_alternatives.len(),
+            },
+            "candidate_only": true,
+            "creates_legal_authority": false,
+            "creates_current_law_conclusion": false,
+            "transport": "typed_rust_in_process",
+            "json_is_semantic_command_transport": false,
+        }))
+    }
+}
+
+fn campaign_hop_receipt(
+    hop_index: usize,
+    source_ref: &str,
+    receipt: &ContractLandscapeExpansionReceipt,
+    fresh_frontier: Vec<FreshFrontierItem>,
+) -> CampaignHopReceipt {
+    CampaignHopReceipt {
+        hop_index,
+        source_ref: source_ref.into(),
+        provenance_ref: receipt.provenance_ref.clone(),
+        added_node_count: receipt.added_node_count,
+        added_edge_count: receipt.added_edge_count,
+        recompute_frontier_required: receipt.recompute_frontier_required,
+        old_source_history_preserved: receipt.old_source_history_preserved,
+        old_conclusions_frozen: receipt.old_conclusions_frozen,
+        fresh_frontier,
+        candidate_only: receipt.candidate_only,
+        creates_legal_authority: receipt.creates_legal_authority,
+        creates_current_law_conclusion: receipt.creates_current_law_conclusion,
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OutboundCitationResidual {
+    pub residual_ref: String,
+    pub source_document_ref: String,
+    pub source_semantic_ref: String,
+    pub source_revision_ref: String,
+    pub canonical_text_sha256: String,
+    pub medium_neutral_citation: String,
+    pub citation_locator_refs: Vec<String>,
+    pub anchor_paragraph_locator_refs: Vec<String>,
+    pub first_paragraph_ordinal: u64,
+    pub research_priority: u16,
+    pub priority_is_legal_truth_rank: bool,
+    pub candidate_only: bool,
+    pub creates_legal_authority: bool,
+    pub creates_current_law_conclusion: bool,
+}
+
+fn mnc_parts(value: &str) -> Option<(&str, &str, &str)> {
+    let fields = value.split_whitespace().collect::<Vec<_>>();
+    if fields.len() != 3 {
+        return None;
+    }
+    let year = fields[0];
+    if year.len() != 6
+        || !year.starts_with('[')
+        || !year.ends_with(']')
+        || !year[1..5].bytes().all(|byte| byte.is_ascii_digit())
+        || !fields[1].bytes().all(|byte| byte.is_ascii_alphanumeric())
+        || !fields[2].bytes().all(|byte| byte.is_ascii_digit())
+    {
+        return None;
+    }
+    Some((fields[0], fields[1], fields[2]))
+}
+
+fn australian_court_priority(court: &str) -> Option<u16> {
+    match court {
+        "HCA" => Some(0),
+        "FCAFC" => Some(10),
+        "NSWCA" | "VSCA" | "QCA" | "WASCA" | "SASCFC" | "TASFC" | "ACTCA" | "NTCA" => Some(20),
+        "FCA" => Some(30),
+        "NSWSC" | "VSC" | "QSC" | "WASC" | "SASC" | "TASSC" | "ACTSC" | "NTSC" => Some(40),
+        _ => None,
+    }
+}
+
+fn trace_contains_mnc(trace: &AustralianContractTrace, citation: &str) -> bool {
+    trace.nodes.values().any(|node| {
+        node.source_citation
+            .split(';')
+            .next()
+            .map(str::trim)
+            == Some(citation)
+    })
+}
+
+pub fn discover_outbound_citation_residuals(
+    trace: &AustralianContractTrace,
+    source_semantic_ref: &str,
+    materialization: &OalcJudgmentMaterialisation,
+) -> Vec<OutboundCitationResidual> {
+    let mut grouped: BTreeMap<String, OutboundCitationResidual> = BTreeMap::new();
+    for candidate in &materialization.citation_candidates {
+        let Some((_, court, _)) = mnc_parts(candidate.citation_text.trim()) else {
+            continue;
+        };
+        let Some(priority) = australian_court_priority(court) else {
+            continue;
+        };
+        let citation = candidate.citation_text.trim().to_string();
+        if trace_contains_mnc(trace, &citation) {
+            continue;
+        }
+        let entry = grouped.entry(citation.clone()).or_insert_with(|| OutboundCitationResidual {
+            residual_ref: format!(
+                "campaign:outbound-citation:{}:{}",
+                materialization.source_revision_ref, citation
+            ),
+            source_document_ref: materialization.document_ref.clone(),
+            source_semantic_ref: source_semantic_ref.into(),
+            source_revision_ref: materialization.source_revision_ref.clone(),
+            canonical_text_sha256: materialization.canonical_text_sha256.clone(),
+            medium_neutral_citation: citation,
+            citation_locator_refs: Vec::new(),
+            anchor_paragraph_locator_refs: Vec::new(),
+            first_paragraph_ordinal: candidate.paragraph_ordinal,
+            research_priority: priority,
+            priority_is_legal_truth_rank: false,
+            candidate_only: true,
+            creates_legal_authority: false,
+            creates_current_law_conclusion: false,
+        });
+        entry.first_paragraph_ordinal = entry.first_paragraph_ordinal.min(candidate.paragraph_ordinal);
+        if !entry
+            .citation_locator_refs
+            .contains(&candidate.paragraph_locator_ref)
+        {
+            entry
+                .citation_locator_refs
+                .push(candidate.paragraph_locator_ref.clone());
+        }
+        for anchor in &candidate.anchor_paragraph_locator_refs {
+            if !entry.anchor_paragraph_locator_refs.contains(anchor) {
+                entry.anchor_paragraph_locator_refs.push(anchor.clone());
+            }
+        }
+    }
+    let mut residuals = grouped.into_values().collect::<Vec<_>>();
+    residuals.sort_by(|left, right| {
+        left.research_priority
+            .cmp(&right.research_priority)
+            .then_with(|| left.first_paragraph_ordinal.cmp(&right.first_paragraph_ordinal))
+            .then_with(|| left.medium_neutral_citation.cmp(&right.medium_neutral_citation))
+    });
+    residuals
+}
+
+pub fn select_fresh_outbound_citation(
+    residuals: &[OutboundCitationResidual],
+) -> Option<&OutboundCitationResidual> {
+    residuals.first()
+}
+
+pub fn materialize_retained_oalc_receipt(
+    receipt_path: &Path,
+) -> CampaignResult<(OalcResolvedSourceReceipt, OalcJudgmentMaterialisation)> {
+    let bytes = fs::read(receipt_path)
+        .map_err(|error| format!("read {}: {error}", receipt_path.display()))?;
+    let receipt: OalcResolvedSourceReceipt = serde_json::from_slice(&bytes)
+        .map_err(|error| format!("decode {}: {error}", receipt_path.display()))?;
+    let text = fs::read_to_string(&receipt.local_artifact_ref).map_err(|error| {
+        format!(
+            "read retained judgment {}: {error}",
+            receipt.local_artifact_ref.display()
+        )
+    })?;
+    let materialization = materialize_oalc_judgment(&receipt, &text, &[])
+        .map_err(|error| format!("materialize {}: {error:?}", receipt.citation))?;
+    Ok((receipt, materialization))
+}
+
+pub fn acquire_outbound_citation(
+    residual: &OutboundCitationResidual,
+    output_dir: PathBuf,
+    as_at: &str,
+) -> CampaignResult<OalcResolvedSourceReceipt> {
+    let mut request =
+        OalcCaseFollowRequest::for_citation(&residual.medium_neutral_citation, output_dir);
+    request.as_at = as_at.into();
+    let run = run_live_oalc_case_follow(&request)
+        .map_err(|error| format!("recursive OALC acquisition: {error:?}"))?;
+    let bytes = fs::read(&run.source_receipt_path)
+        .map_err(|error| format!("read {}: {error}", run.source_receipt_path.display()))?;
+    serde_json::from_slice(&bytes)
+        .map_err(|error| format!("decode {}: {error}", run.source_receipt_path.display()))
+}
+
+pub fn write_json<T: Serialize>(path: &Path, value: &T) -> CampaignResult<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|error| format!("create {}: {error}", parent.display()))?;
+    }
+    fs::write(
+        path,
+        serde_json::to_vec_pretty(value)
+            .map_err(|error| format!("encode {}: {error}", path.display()))?,
+    )
+    .map_err(|error| format!("write {}: {error}", path.display()))
+}
+
+pub fn read_campaign_receipt(path: &Path) -> CampaignResult<Value> {
+    let bytes = fs::read(path).map_err(|error| format!("read {}: {error}", path.display()))?;
+    serde_json::from_slice(&bytes)
+        .map_err(|error| format!("decode {}: {error}", path.display()))
+}
+
+pub fn snapshot_from_campaign_receipt(value: &Value) -> CampaignResult<ContractTraceSnapshot> {
+    serde_json::from_value(
+        value
+            .get("final_trace")
+            .cloned()
+            .ok_or_else(|| "campaign receipt missing final_trace".to_string())?,
+    )
+    .map_err(|error| format!("decode campaign final_trace: {error}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sensiblaw_legal_follow_plan::{
+        australian_contract_landscape_seed, trace_extension_delta, waltons_estoppel_trace,
+    };
+
+    #[test]
+    fn campaign_persists_typed_final_trace_and_fresh_frontier() {
+        let base = australian_contract_landscape_seed();
+        let delta = trace_extension_delta(
+            &base,
+            &waltons_estoppel_trace(),
+            "bootstrap:waltons-estoppel-materialisation",
+        )
+        .unwrap();
+        let mut campaign = ContractFollowCampaign::new(
+            CampaignConfig {
+                campaign_ref: "campaign:test".into(),
+                as_at: "2026-09-20".into(),
+                jurisdiction_filter: None,
+                budget: CampaignBudget::default(),
+            },
+            base,
+        )
+        .unwrap();
+        let hop = campaign.accept_delta("bootstrap", delta).unwrap();
+        assert!(hop.recompute_frontier_required);
+        assert!(hop.old_source_history_preserved);
+        assert!(!hop.old_conclusions_frozen);
+        let receipt = campaign.receipt_json().unwrap();
+        assert!(receipt.get("final_trace").is_some());
+        assert_eq!(receipt["transport"], "typed_rust_in_process");
+        assert_eq!(receipt["json_is_semantic_command_transport"], false);
+    }
+
+    #[test]
+    fn snapshot_round_trip_preserves_trace() {
+        let trace = waltons_estoppel_trace();
+        let restored = restore_trace(&snapshot_trace(&trace)).unwrap();
+        assert_eq!(trace, restored);
+    }
+}
