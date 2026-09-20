@@ -538,7 +538,7 @@ pub struct NativeExpansionBatch {
 }
 
 pub fn run_native_expansion_trajectory(
-    mut expanded: AustralianContractTrace,
+    expanded: AustralianContractTrace,
     batches: Vec<NativeExpansionBatch>,
     as_at: &str,
     jurisdiction: Option<&str>,
@@ -548,9 +548,17 @@ pub fn run_native_expansion_trajectory(
         return Err("native contracts trajectory requires an as-at date".into());
     }
 
+    let mut campaign = crate::contract_follow_campaign::ContractFollowCampaign::new(
+        crate::contract_follow_campaign::CampaignConfig {
+            campaign_ref: "campaign:contracts:native-expansion-trajectory".into(),
+            as_at: as_at.into(),
+            jurisdiction_filter: jurisdiction.map(str::to_string),
+            budget: crate::contract_follow_campaign::CampaignBudget::default(),
+        },
+        expanded,
+    )?;
     let mut trajectory = Vec::new();
     let mut reviewed_residuals = Vec::new();
-    let mut hop_index = 0usize;
 
     for batch in batches {
         let NativeExpansionBatch {
@@ -558,31 +566,34 @@ pub fn run_native_expansion_trajectory(
             deltas,
             reviewed_residuals: batch_residuals,
         } = batch;
-        reviewed_residuals.extend(
-            batch_residuals
-                .into_iter()
-                .map(|residual| {
-                    json!({
-                        "source_artifact": source_ref.clone(),
-                        "residual": residual,
-                    })
-                }),
-        );
+        for residual in batch_residuals {
+            let value = serde_json::to_value(&residual)
+                .map_err(|error| format!("encode reviewed residual: {error}"))?;
+            campaign.preserve_reviewed_residual(&source_ref, value.clone());
+            reviewed_residuals.push(json!({
+                "source_artifact": source_ref.clone(),
+                "residual": value,
+            }));
+        }
 
         for delta in deltas {
-            hop_index += 1;
-            let (next, receipt) =
-                apply_contract_landscape_expansion(&expanded, &delta)?;
-            expanded = next;
-            let work = compile_australian_contract_landscape_worklist(
-                &expanded,
-                as_at,
-                jurisdiction,
-            )?;
+            let hop = campaign.accept_delta(&source_ref, delta)?.clone();
+            let work = campaign.recomputed_worklist()?;
             trajectory.push(json!({
-                "hop_index": hop_index,
+                "hop_index": hop.hop_index,
                 "source_ref": source_ref.clone(),
-                "expansion_receipt": expansion_receipt_json(&receipt),
+                "expansion_receipt": {
+                    "provenance_ref": hop.provenance_ref,
+                    "added_node_count": hop.added_node_count,
+                    "added_edge_count": hop.added_edge_count,
+                    "recompute_frontier_required": hop.recompute_frontier_required,
+                    "old_source_history_preserved": hop.old_source_history_preserved,
+                    "old_conclusions_frozen": hop.old_conclusions_frozen,
+                    "candidate_only": hop.candidate_only,
+                    "creates_legal_authority": hop.creates_legal_authority,
+                    "creates_current_law_conclusion": hop.creates_current_law_conclusion,
+                },
+                "fresh_frontier": hop.fresh_frontier,
                 "frontier_counts": {
                     "primary_source_acquisition": work.source_items.len(),
                     "authority_treatment_review": work.treatment_items.len(),
@@ -593,21 +604,22 @@ pub fn run_native_expansion_trajectory(
         }
     }
 
-    let work = compile_australian_contract_landscape_worklist(
-        &expanded,
-        as_at,
-        jurisdiction,
-    )?;
+    let work = campaign.recomputed_worklist()?;
+    let campaign_state = campaign.receipt_json()?;
     Ok(json!({
-        "schema_version": "sl.australian_contract_landscape_native_trajectory.v0_1",
+        "schema_version": "sl.australian_contract_landscape_native_trajectory.v0_2",
         "transport": "typed_rust_in_process",
         "json_is_semantic_command_transport": false,
+        "campaign_runtime": "ContractFollowCampaign",
+        "as_at": as_at,
+        "jurisdiction_filter": jurisdiction,
         "hop_count": trajectory.len(),
         "reviewed_residual_count": reviewed_residuals.len(),
         "reviewed_residuals": reviewed_residuals,
         "trajectory": trajectory,
-        "final_trace": crate::contract_follow_campaign::snapshot_trace(&expanded),
-        "final_recomputed_worklist": plan_json(&expanded, &work),
+        "campaign_state": campaign_state,
+        "final_trace": crate::contract_follow_campaign::snapshot_trace(campaign.trace()),
+        "final_recomputed_worklist": plan_json(campaign.trace(), &work),
         "candidate_only": true,
         "creates_legal_authority": false,
         "creates_current_law_conclusion": false,
