@@ -31,7 +31,9 @@ SLR is the production SensibLaw runtime; DASHI/Agda is the golden semantic/refer
 - [Production roadmap](docs/ROADMAP.md)
 - [Capability-sized sprint board](docs/SPRINTS.md)
 
-The current critical path is: finish the recurrent acquisition machine -> canonical evidence convergence -> full legal issue reasoning -> product. A compile-only, one-file, or one-adapter tranche is progress inside a milestone, not a completed sprint.
+The current critical path is: verify/close the Sprint-2 mixed-family persisted replay gate -> compose the already-rich formal legal machinery into the production Rust evaluator -> run a persisted adaptive Australian legal capstone -> product projections. Digital-ESD is now a regression/capstone workload, not a core-development lane. A compile-only, one-file, or one-adapter tranche is progress inside a milestone, not a completed sprint.
+
+SLR is the production **legal consumer/admission runtime** over the wider ITIR world fabric. It does not own every notion of state: WorldMonitor-style evidence health, StatiBaker temporal observer memory, Casey possibility/workspace state, and Agda/Lean formal/reference work remain distinct authorities. Source-addressable observations enter SLR through canonical evidence/review boundaries; legal interpretation must preserve exact source revision/span/structured-coordinate provenance and never infer applicability or truth from acquisition alone.
 
 ## Build
 
