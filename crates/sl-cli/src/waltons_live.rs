@@ -98,7 +98,24 @@ pub fn status(paths: &WaltonsPaths) -> CliResult {
 /// through generation of the first human paragraph-review worksheet.
 pub fn prepare(paths: &WaltonsPaths) -> CliResult {
     require_live_network_feature()?;
-    waltons::acquire(paths)?;
+    if paths.receipt.exists() && paths.text.exists() {
+        println!(
+            "waltons_live_reuse_root_source receipt={} text={}",
+            paths.receipt.display(),
+            paths.text.display()
+        );
+    } else {
+        for partial in [
+            paths.base.join("oalc-source-receipt.json"),
+            paths.base.join("judgment.txt"),
+        ] {
+            if partial.exists() {
+                fs::remove_file(&partial)
+                    .map_err(|error| format!("remove incomplete {}: {error}", partial.display()))?;
+            }
+        }
+        waltons::acquire(paths)?;
+    }
     waltons::materialise(paths)?;
     waltons::review_prepare(paths)?;
     waltons::cited_by_plan(paths)?;
@@ -194,6 +211,48 @@ fn reacquire_cited_by_candidates_resilient(paths: &WaltonsPaths) -> CliResult<Va
             continue;
         };
         let output_dir = paths.later_dir.join(safe_citation_dir(citation));
+        let receipt_path = output_dir.join("oalc-source-receipt.json");
+        let text_path = output_dir.join("judgment.txt");
+
+        if receipt_path.exists() && text_path.exists() {
+            let receipt = read_json(&receipt_path)?;
+            let citation_matches = receipt["citation"]
+                .as_str()
+                .map_or(false, |value| value.contains(citation));
+            let retained_pair_valid = citation_matches
+                && receipt["candidate_only"] == true
+                && receipt["creates_legal_authority"] == false
+                && receipt["creates_claim_truth"] == false;
+            if retained_pair_valid {
+                resolved.push(json!({
+                    "citation": citation,
+                    "state": "source_resolved",
+                    "source_receipt": receipt_path,
+                    "canonical_text": text_path,
+                    "reused_retained_pair": true,
+                    "candidate_only": true,
+                    "creates_legal_authority": false,
+                }));
+                continue;
+            }
+            residuals.push(json!({
+                "citation": citation,
+                "state": "source_residual",
+                "reason": "existing retained OALC pair failed candidate/identity validation",
+                "missing_source_is_negative_legal_evidence": false,
+                "candidate_only": true,
+                "creates_legal_authority": false,
+            }));
+            continue;
+        }
+
+        for partial in [&receipt_path, &text_path] {
+            if partial.exists() {
+                fs::remove_file(partial)
+                    .map_err(|error| format!("remove incomplete {}: {error}", partial.display()))?;
+            }
+        }
+
         let mut request = OalcCaseFollowRequest::for_citation(citation, output_dir);
         request.as_at = waltons::DEFAULT_AS_AT.into();
         match run_live_oalc_case_follow(&request) {
@@ -202,6 +261,7 @@ fn reacquire_cited_by_candidates_resilient(paths: &WaltonsPaths) -> CliResult<Va
                 "state": "source_resolved",
                 "source_receipt": run.source_receipt_path,
                 "canonical_text": run.canonical_text_path,
+                "reused_retained_pair": false,
                 "candidate_only": true,
                 "creates_legal_authority": false,
             })),
