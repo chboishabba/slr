@@ -187,7 +187,23 @@ pub fn compile_reviewed_authority_identity_to_contract_hop(
     };
 
     if let Some(existing) = trace.nodes.get(&node.semantic_ref) {
-        if existing != &node {
+        let court_compatible = existing.court_ref.is_none()
+            || reviewed.court_ref.is_none()
+            || existing.court_ref == reviewed.court_ref;
+        let citation_compatible = existing
+            .source_citation
+            .contains(&reviewed.source_receipt.citation)
+            || reviewed
+                .source_receipt
+                .citation
+                .contains(&existing.source_citation);
+        let compatible = existing.kind == node.kind
+            && existing.source_role == node.source_role
+            && existing.authority_level == node.authority_level
+            && existing.jurisdiction_ref == node.jurisdiction_ref
+            && court_compatible
+            && citation_compatible;
+        if !compatible {
             residuals.push(residual(
                 ContractReviewedHopResidualKind::SourceIdentityConflict,
                 format!("source-identity:{}", reviewed.semantic_ref),
