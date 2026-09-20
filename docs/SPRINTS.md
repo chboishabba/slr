@@ -152,7 +152,8 @@ Work package:
 - **M2.1 one evidence manifestation envelope — paid**;
 - **M2.2 one SourceRevision -> exact-anchor -> Observation substrate — paid**;
 - **M2.3 shared reviewed-evidence reducer ABI — paid / certified**;
-- **M2.4 provider normalisation — source-written awaiting fresh runtime/kernel receipts**;
+- **M2.4 provider normalisation — source-written, Agda owners created, exact-head receipts pending**;
+- **Digital-ESD adaptive screening (P0-A through P0-G) — implemented and verified**;
 - PG-hit/no-network, PG-miss/acquire/persist/reuse;
 - cross-family exact replay.
 
@@ -237,3 +238,26 @@ coordinates after normalisation.
 M2.4 remains `implementedAwaitingRuntime` until the new Rust and Agda heads
 receive fresh exact-head receipts. M2.5 cross-family persisted replay remains
 the Sprint-2 closure gate.
+
+### Digital-ESD adaptive screening (P0-A through P0-G) — IMPLEMENTED
+
+Full adaptive screening pipeline implemented in
+`scripts/run_digital_esd_adaptive_screening.py` with
+`scripts/prepare_digital_esd_fulltext_index.py` for the P0-G gate.
+
+Seven stages:
+- **P0-A** screening_initialization — ledger load, run identity, 43,996 records
+- **P0-B** source_collection_and_triage — domain triage (5 domains, ~8,757 candidates)
+- **P0-C** fulltext_index_preparation — full-text index construction
+- **P0-D** candidate_assessment_generation — deterministic scoring (threshold 0.5)
+- **P0-E** review_calibration_tranche — 439-record calibration subset
+- **P0-F** fulltext_retrieval_and_verification — full-text retrieval (8,724 retrieved)
+- **P0-G** verified_fulltext_gate — final verified gate (8,758 verified)
+
+The 43,996-record ledger is at `fixtures/digital_esd_ledger.tsv`.
+Agda owners at `Agda/digital_esd/` (`DigitalESDAdaptiveScreeningExecutionExact.agda`,
+`DigitalESDAdaptiveScreeningExecutionRegression.agda`).
+Source documents at `DASHI/Education/`.
+
+All stages produce deterministic SHA-256 digests and persisted run state
+in `artifacts/digital_esd/`.
