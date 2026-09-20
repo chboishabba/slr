@@ -539,10 +539,20 @@ pub fn review_compile(paths: &WaltonsPaths) -> CliResult {
     write_json(&paths.reviewed, &output)?;
     fs::write(&paths.payments, payment_bytes)
         .map_err(|error| format!("write {}: {error}", paths.payments.display()))?;
+
+    let trace = waltons_estoppel_trace();
+    let reviewed_hops = compile_waltons_proposition_receipts_to_contract_hops(
+        &trace,
+        WALTONS_AUTHORITY_REF,
+        &reviewed,
+    );
+    write_json(&paths.proposition_hops, &contract_hop_json(&reviewed_hops))?;
+
     println!(
-        "waltons_reviewed_receipts={} payments={}",
+        "waltons_reviewed_receipts={} payments={} contract_hops={}",
         paths.reviewed.display(),
-        paths.payments.display()
+        paths.payments.display(),
+        paths.proposition_hops.display()
     );
     Ok(())
 }
@@ -1189,7 +1199,16 @@ pub fn genealogy(paths: &WaltonsPaths) -> CliResult {
         "genealogy": genealogy,
     });
     write_json(&paths.genealogy, &output)?;
-    println!("waltons_genealogy={}", paths.genealogy.display());
+
+    let trace = waltons_estoppel_trace();
+    let reviewed_hops = compile_treatment_receipts_to_contract_hops(&trace, &receipts);
+    write_json(&paths.treatment_hops, &contract_hop_json(&reviewed_hops))?;
+
+    println!(
+        "waltons_genealogy={} contract_hops={}",
+        paths.genealogy.display(),
+        paths.treatment_hops.display()
+    );
     Ok(())
 }
 
