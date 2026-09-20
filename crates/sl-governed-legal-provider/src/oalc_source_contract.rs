@@ -426,3 +426,8 @@ mod tests {
     #[test]
     fn legislation_filter_is_document_type_generic() {
         let demand = OalcSourceDemand::from_legislation(&legislation_exact()).unwrap();
+        let predicate = oalc_filter_predicate(&demand).unwrap();
+        assert!(predicate.contains("Property Law Act 2023 (Qld)"));
+        assert!(predicate.contains("\"type\"='primary_legislation'"));
+    }
+}
