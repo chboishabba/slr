@@ -9,7 +9,7 @@ use sensiblaw_governed_legal_provider::{
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
-use std::io::{BufReader, Write};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
@@ -56,15 +56,19 @@ fn section_token(line: &str) -> Option<&str> {
     if rest.is_empty() {
         return None;
     }
-    let mut seen_digit = false;
-    for ch in token.chars() {
-        if ch.is_ascii_digit() {
-            seen_digit = true;
-        } else if !(seen_digit && ch.is_ascii_uppercase()) {
-            return None;
-        }
+
+    let bytes = token.as_bytes();
+    let digit_count = bytes
+        .iter()
+        .take_while(|byte| byte.is_ascii_digit())
+        .count();
+    if digit_count == 0 {
+        return None;
     }
-    seen_digit.then_some(token)
+    let suffix = &bytes[digit_count..];
+    let valid_suffix = suffix.is_empty()
+        || (suffix.len() == 1 && suffix[0].is_ascii_uppercase());
+    valid_suffix.then_some(token)
 }
 
 fn section_spans(text: &str) -> BTreeMap<String, (usize, usize)> {
@@ -409,6 +413,8 @@ mod tests {
         assert_eq!(section_token("  43A Proceedings against public authority"), Some("43A"));
         assert_eq!(section_token("Definitions"), None);
         assert_eq!(section_token("5B"), None);
+        assert_eq!(section_token("5AB Invalid"), None);
+        assert_eq!(section_token("5B2 Invalid"), None);
     }
 
     #[test]
