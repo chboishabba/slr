@@ -80,6 +80,54 @@ pub struct ContractTraceEdge {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum ContractFollowWorkClass {
+    LivePrimarySourceResidual,
+    AuthorityTreatmentResidual,
+    ExternalIdentityMetadata,
+    ContextNavigation,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ContractFollowParetoCoordinate {
+    pub work_class: ContractFollowWorkClass,
+    pub closes_live_legal_residual: bool,
+    pub preserves_exact_source_revision: bool,
+    pub enriches_external_identity: bool,
+    pub network_cost_hint: u16,
+    pub scalar_rank_is_legal_truth_rank: bool,
+}
+
+pub fn primary_source_pareto_coordinate() -> ContractFollowParetoCoordinate {
+    ContractFollowParetoCoordinate {
+        work_class: ContractFollowWorkClass::LivePrimarySourceResidual,
+        closes_live_legal_residual: true,
+        preserves_exact_source_revision: true,
+        enriches_external_identity: false,
+        network_cost_hint: 1,
+        scalar_rank_is_legal_truth_rank: false,
+    }
+}
+
+pub fn external_identity_pareto_coordinate() -> ContractFollowParetoCoordinate {
+    ContractFollowParetoCoordinate {
+        work_class: ContractFollowWorkClass::ExternalIdentityMetadata,
+        closes_live_legal_residual: false,
+        preserves_exact_source_revision: false,
+        enriches_external_identity: true,
+        network_cost_hint: 1,
+        scalar_rank_is_legal_truth_rank: false,
+    }
+}
+
+pub fn primary_source_precedes_optional_identity_by_default() -> bool {
+    let source = primary_source_pareto_coordinate();
+    let identity = external_identity_pareto_coordinate();
+    source.closes_live_legal_residual
+        && source.preserves_exact_source_revision
+        && !identity.closes_live_legal_residual
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ExternalIdentityLookupPriority {
     NotApplicable,
     Opportunistic,
@@ -562,6 +610,13 @@ mod tests {
         assert!(!trace.active_at("legislation:qld:property-law-act-1974:s55", "2025-08-01"));
         assert!(!trace.active_at("legislation:qld:property-law-act-2023:s68", "2025-07-31"));
         assert!(trace.active_at("legislation:qld:property-law-act-2023:s68", "2025-08-01"));
+    }
+
+    #[test]
+    fn live_primary_source_residual_precedes_optional_qid_cleanup_by_default() {
+        assert!(primary_source_precedes_optional_identity_by_default());
+        assert!(!primary_source_pareto_coordinate().scalar_rank_is_legal_truth_rank);
+        assert!(!external_identity_pareto_coordinate().scalar_rank_is_legal_truth_rank);
     }
 
     #[test]
