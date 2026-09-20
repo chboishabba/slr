@@ -211,7 +211,7 @@ pub fn compile_reviewed_waltons_paragraph(
         consumer_id: "consumer:waltons-estoppel-materialisation".into(),
         requirement_id: decision.role.requirement_ref().into(),
         coordinate: EvidenceCoordinateKind::Authority,
-        source_ref: Some(manifestation_ref),
+        source_ref: Some(manifestation_ref.clone()),
         evidence_ref: observation_ref,
         candidate_only: true,
         creates_semantic_authority: false,
