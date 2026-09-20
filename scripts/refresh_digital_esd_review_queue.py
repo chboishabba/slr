@@ -166,8 +166,7 @@ def main() -> int:
     write_jsonl(args.output_dir / "screening_pareto_queue.jsonl", queue)
     write_jsonl(args.output_dir / "calibration_selection.jsonl", calibration)
     (args.output_dir / "calibration_estimate.json").write_text(
-        json.dumps(estimate, indent=2, sort_keys=True) + "
-",
+        json.dumps(estimate, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
 
@@ -186,9 +185,7 @@ def main() -> int:
         "automatic_screening_decisions_created": False,
     }
     (args.output_dir / "adaptive_refresh_manifest.json").write_text(
-        json.dumps(manifest, indent=2, sort_keys=True) + "
-",
-        encoding="utf-8",
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8",
     )
     print(json.dumps(manifest, sort_keys=True))
     return 0

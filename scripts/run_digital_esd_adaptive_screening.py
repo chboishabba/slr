@@ -239,8 +239,7 @@ class DigitalESDAdaptiveScreening:
             "p0g_paid": stages[6]["status"] == "paid",
         }
         manifest = self.artifact_dir / "adaptive_screening_manifest.json"
-        manifest.write_text(json.dumps(result, indent=2, sort_keys=True) + "
-", encoding="utf-8")
+        manifest.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         return result
 
 
