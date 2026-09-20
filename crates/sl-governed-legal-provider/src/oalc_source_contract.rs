@@ -191,13 +191,11 @@ impl OalcSourceDemand {
             | (OalcDocumentKind::Legislation, SourceRole::PrimaryLegislation) => {}
             _ => return Err(OalcSourceContractError::WrongSourceRole),
         }
-        if self.document_kind == OalcDocumentKind::CaseLaw
-            && self
-                .court_ref
-                .as_deref()
-                .is_none_or(|court| court.trim().is_empty())
-        {
-            return Err(OalcSourceContractError::EmptyCourt);
+        if self.document_kind == OalcDocumentKind::CaseLaw {
+            match self.court_ref.as_deref() {
+                Some(court) if !court.trim().is_empty() => {}
+                _ => return Err(OalcSourceContractError::EmptyCourt),
+            }
         }
         if self.dataset_ref != OALC_DATASET_ID {
             return Err(OalcSourceContractError::WrongDataset);
