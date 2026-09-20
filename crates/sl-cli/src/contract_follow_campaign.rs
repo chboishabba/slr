@@ -1068,7 +1068,7 @@ pub fn run(args: Vec<String>) -> CampaignResult<()> {
             let frontier = PathBuf::from(required_arg(rest, "--frontier")?);
             let output_dir = PathBuf::from(required_arg(rest, "--output-dir")?);
             let trajectory = PathBuf::from(required_arg(rest, "--trajectory")?);
-            let as_at = arg_value(rest, "--as-at").unwrap_or_else(|| "2026-09-20".into());
+            let requested_as_at = arg_value(rest, "--as-at");
             let envelope: OutboundFrontierEnvelope = {
                 let bytes = fs::read(&frontier)
                     .map_err(|error| format!("read {}: {error}", frontier.display()))?;
@@ -1079,6 +1079,15 @@ pub fn run(args: Vec<String>) -> CampaignResult<()> {
                 return Err("outbound frontier parent campaign does not match --trajectory".into());
             }
             let mut campaign = resume_from_trajectory(&trajectory)?;
+            if let Some(requested) = requested_as_at.as_deref() {
+                if requested != campaign.config.as_at {
+                    return Err(format!(
+                        "recursive acquisition as-at {requested:?} differs from parent campaign {:?}; create an explicit temporal branch instead",
+                        campaign.config.as_at
+                    ));
+                }
+            }
+            let as_at = campaign.config.as_at.clone();
             if campaign.config.budget != envelope.budget
                 || campaign.accepted_hop_count() != envelope.accepted_hop_count
                 || campaign.source_acquisitions != envelope.source_acquisition_count
