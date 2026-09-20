@@ -11,7 +11,7 @@ use sensiblaw_legal_follow_plan::{
 use sensiblaw_legal_runtime::project_waltons_reviewed_receipts_to_issue;
 use sensiblaw_proof_search_loop::contract_review_expansion::{
     compile_reviewed_authority_identity_to_contract_hop,
-    compile_treatment_receipts_to_contract_hops,
+    compile_treatment_receipts_to_contract_hops_with_aliases,
     compile_waltons_proposition_receipts_to_contract_hops,
     ContractReviewedHopCompilation, ReviewedContractAuthorityIdentity,
 };
@@ -766,6 +766,308 @@ pub fn cited_by_import(paths: &WaltonsPaths, provider_results: &Path) -> CliResu
         "waltons_cited_by_candidates={}",
         paths.citedby_candidates.display()
     );
+    Ok(())
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct AuthorityIdentityReviewWorksheet {
+    schema_version: String,
+    candidate_only: bool,
+    rows: Vec<AuthorityIdentityReviewRow>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct AuthorityIdentityReviewRow {
+    include: bool,
+    source_receipt_path: String,
+    source_document_ref: String,
+    citation: String,
+    version_id: String,
+    date: Option<String>,
+    canonical_url: Option<String>,
+    suggested_semantic_ref: Option<String>,
+    semantic_ref: String,
+    label: String,
+    doctrine: Option<String>,
+    jurisdiction_ref: String,
+    court_ref: Option<String>,
+    reviewer_ref: String,
+    evidence_refs: Vec<String>,
+    review_notes: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct AuthorityIdentityDecisionFile {
+    schema_version: String,
+    decisions: Vec<AuthorityIdentityReviewRow>,
+}
+
+fn jurisdiction_for_court_code(code: &str) -> Option<&'static str> {
+    match code {
+        "HCA" | "FCA" | "FCAFC" => Some("AU"),
+        "NSWCA" | "NSWSC" => Some("AU-NSW"),
+        "VSCA" | "VSC" => Some("AU-VIC"),
+        "QCA" | "QSC" => Some("AU-QLD"),
+        "WASCA" | "WASC" => Some("AU-WA"),
+        "SASCFC" | "SASC" => Some("AU-SA"),
+        "TASFC" | "TASSC" => Some("AU-TAS"),
+        "ACTCA" | "ACTSC" => Some("AU-ACT"),
+        "NTCA" | "NTSC" => Some("AU-NT"),
+        _ => None,
+    }
+}
+
+fn semantic_ref_suggestion(citation: &str) -> Option<(String, String)> {
+    let fields = citation.split_whitespace().collect::<Vec<_>>();
+    if fields.len() != 3 {
+        return None;
+    }
+    let year = fields[0].strip_prefix('[')?.strip_suffix(']')?;
+    if year.len() != 4 || !year.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    let court = fields[1];
+    if !court.bytes().all(|byte| byte.is_ascii_alphanumeric()) {
+        return None;
+    }
+    let number = fields[2];
+    if !number.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    let jurisdiction = jurisdiction_for_court_code(court)?;
+    let jurisdiction_slug = match jurisdiction {
+        "AU" => "au",
+        "AU-NSW" => "nsw",
+        "AU-VIC" => "vic",
+        "AU-QLD" => "qld",
+        "AU-WA" => "wa",
+        "AU-SA" => "sa",
+        "AU-TAS" => "tas",
+        "AU-ACT" => "act",
+        "AU-NT" => "nt",
+        _ => return None,
+    };
+    Some((
+        format!(
+            "case:{jurisdiction_slug}:{}:{year}:{number}",
+            court.to_ascii_lowercase()
+        ),
+        jurisdiction.to_string(),
+    ))
+}
+
+fn parse_contract_doctrine(value: Option<&str>) -> CliResult<Option<ContractDoctrine>> {
+    let Some(value) = value.map(str::trim).filter(|value| !value.is_empty()) else {
+        return Ok(None);
+    };
+    let doctrine = match value {
+        "Formation" | "formation" => ContractDoctrine::Formation,
+        "Intention" | "intention" => ContractDoctrine::Intention,
+        "TermsAndIncorporation" | "terms-and-incorporation" => {
+            ContractDoctrine::TermsAndIncorporation
+        }
+        "Construction" | "construction" => ContractDoctrine::Construction,
+        "Estoppel" | "estoppel" => ContractDoctrine::Estoppel,
+        "Unconscionability" | "unconscionability" => ContractDoctrine::Unconscionability,
+        "Penalties" | "penalties" => ContractDoctrine::Penalties,
+        "RepudiationAndTermination" | "repudiation-and-termination" => {
+            ContractDoctrine::RepudiationAndTermination
+        }
+        "Damages" | "damages" => ContractDoctrine::Damages,
+        "Restitution" | "restitution" => ContractDoctrine::Restitution,
+        "Privity" | "privity" => ContractDoctrine::Privity,
+        "ConsumerLaw" | "consumer-law" => ContractDoctrine::ConsumerLaw,
+        other => return Err(format!("unsupported contract doctrine {other:?}")),
+    };
+    Ok(Some(doctrine))
+}
+
+fn later_authority_receipt_paths(paths: &WaltonsPaths) -> CliResult<Vec<PathBuf>> {
+    let mut receipts = Vec::new();
+    let entries = fs::read_dir(&paths.later_dir)
+        .map_err(|error| format!("read {}: {error}", paths.later_dir.display()))?;
+    for entry in entries {
+        let entry = entry.map_err(|error| format!("read later-authority entry: {error}"))?;
+        let path = entry.path().join("oalc-source-receipt.json");
+        if path.exists() {
+            receipts.push(path);
+        }
+    }
+    receipts.sort();
+    Ok(receipts)
+}
+
+pub fn identity_prepare(paths: &WaltonsPaths) -> CliResult {
+    let receipt_paths = later_authority_receipt_paths(paths)?;
+    if receipt_paths.is_empty() {
+        return Err("no later-authority OALC receipts found".into());
+    }
+
+    let mut rows = Vec::new();
+    for receipt_path in receipt_paths {
+        let receipt: OalcResolvedSourceReceipt = read_json(&receipt_path)?;
+        let suggestion = semantic_ref_suggestion(&receipt.citation);
+        rows.push(AuthorityIdentityReviewRow {
+            include: false,
+            source_receipt_path: receipt_path.display().to_string(),
+            source_document_ref: format!("document:oalc:{}", receipt.version_id),
+            citation: receipt.citation.clone(),
+            version_id: receipt.version_id.clone(),
+            date: receipt.date.clone(),
+            canonical_url: receipt.canonical_url.clone(),
+            suggested_semantic_ref: suggestion.as_ref().map(|(semantic_ref, _)| semantic_ref.clone()),
+            semantic_ref: suggestion
+                .as_ref()
+                .map(|(semantic_ref, _)| semantic_ref.clone())
+                .unwrap_or_default(),
+            label: receipt.citation.clone(),
+            doctrine: None,
+            jurisdiction_ref: suggestion
+                .map(|(_, jurisdiction)| jurisdiction)
+                .unwrap_or_default(),
+            court_ref: receipt.court.clone(),
+            reviewer_ref: String::new(),
+            evidence_refs: Vec::new(),
+            review_notes: String::new(),
+        });
+    }
+
+    write_json(
+        &paths.identity_worksheet,
+        &AuthorityIdentityReviewWorksheet {
+            schema_version: "sl.contract_authority_identity_review_worksheet.v0_1".into(),
+            candidate_only: true,
+            rows,
+        },
+    )?;
+    println!(
+        "authority_identity_review_worksheet={}",
+        paths.identity_worksheet.display()
+    );
+    Ok(())
+}
+
+pub fn identity_finalize(paths: &WaltonsPaths) -> CliResult {
+    let worksheet: AuthorityIdentityReviewWorksheet = read_json(&paths.identity_worksheet)?;
+    if worksheet.schema_version != "sl.contract_authority_identity_review_worksheet.v0_1" {
+        return Err(format!(
+            "unsupported identity worksheet schema {}",
+            worksheet.schema_version
+        ));
+    }
+
+    let mut decisions = Vec::new();
+    for (index, row) in worksheet.rows.into_iter().enumerate() {
+        if !row.include {
+            continue;
+        }
+        for (label, value) in [
+            ("semantic_ref", row.semantic_ref.as_str()),
+            ("label", row.label.as_str()),
+            ("jurisdiction_ref", row.jurisdiction_ref.as_str()),
+            ("reviewer_ref", row.reviewer_ref.as_str()),
+        ] {
+            if value.trim().is_empty() {
+                return Err(format!("identity row {} missing {label}", index + 1));
+            }
+        }
+        if row.evidence_refs.is_empty()
+            || row.evidence_refs.iter().any(|value| value.trim().is_empty())
+        {
+            return Err(format!(
+                "identity row {} requires evidence_refs",
+                index + 1
+            ));
+        }
+        parse_contract_doctrine(row.doctrine.as_deref())?;
+        decisions.push(row);
+    }
+
+    write_json(
+        &paths.identity_decisions,
+        &AuthorityIdentityDecisionFile {
+            schema_version: "sl.contract_authority_identity_review_decisions.v0_1".into(),
+            decisions,
+        },
+    )?;
+    println!(
+        "authority_identity_review_decisions={}",
+        paths.identity_decisions.display()
+    );
+    Ok(())
+}
+
+fn compile_identity_reviews(
+    paths: &WaltonsPaths,
+) -> CliResult<(AustralianContractTrace, ContractReviewedHopCompilation, BTreeMap<String, String>)> {
+    let decisions: AuthorityIdentityDecisionFile = read_json(&paths.identity_decisions)?;
+    if decisions.schema_version != "sl.contract_authority_identity_review_decisions.v0_1" {
+        return Err(format!(
+            "unsupported identity decision schema {}",
+            decisions.schema_version
+        ));
+    }
+
+    let mut trace = waltons_estoppel_trace();
+    let mut deltas = Vec::new();
+    let mut residuals = Vec::new();
+    let mut aliases = BTreeMap::new();
+
+    for decision in decisions.decisions {
+        let receipt: OalcResolvedSourceReceipt =
+            read_json(Path::new(&decision.source_receipt_path))?;
+        if receipt.version_id != decision.version_id || receipt.citation != decision.citation {
+            return Err(format!(
+                "identity review source receipt changed for {}",
+                decision.semantic_ref
+            ));
+        }
+        let reviewed = ReviewedContractAuthorityIdentity {
+            semantic_ref: decision.semantic_ref.clone(),
+            label: decision.label,
+            doctrine: parse_contract_doctrine(decision.doctrine.as_deref())?,
+            jurisdiction_ref: decision.jurisdiction_ref,
+            court_ref: decision.court_ref,
+            source_role: SourceRole::PrimaryCaseLaw,
+            authority_level: AuthorityLevel::Official,
+            reviewer_ref: decision.reviewer_ref,
+            evidence_refs: decision.evidence_refs,
+            source_receipt: receipt,
+            candidate_only: true,
+            creates_legal_authority: false,
+        };
+        let compiled =
+            compile_reviewed_authority_identity_to_contract_hop(&trace, &reviewed);
+        residuals.extend(compiled.residuals);
+        for delta in compiled.deltas {
+            let (next, _) = apply_contract_landscape_expansion(&trace, &delta)
+                .map_err(|error| format!("apply reviewed identity hop: {error}"))?;
+            trace = next;
+            deltas.push(delta);
+        }
+        aliases.insert(decision.source_document_ref, decision.semantic_ref);
+    }
+
+    Ok((
+        trace,
+        ContractReviewedHopCompilation {
+            deltas,
+            residuals,
+            candidate_only: true,
+            creates_legal_authority: false,
+            creates_current_law_conclusion: false,
+        },
+        aliases,
+    ))
+}
+
+pub fn identity_compile(paths: &WaltonsPaths) -> CliResult {
+    let (_, compiled, aliases) = compile_identity_reviews(paths)?;
+    let mut output = contract_hop_json(&compiled);
+    output["reviewed_document_aliases"] = serde_json::to_value(aliases)
+        .map_err(|error| format!("encode reviewed document aliases: {error}"))?;
+    write_json(&paths.identity_hops, &output)?;
+    println!("authority_identity_contract_hops={}", paths.identity_hops.display());
     Ok(())
 }
 
