@@ -239,25 +239,67 @@ M2.4 remains `implementedAwaitingRuntime` until the new Rust and Agda heads
 receive fresh exact-head receipts. M2.5 cross-family persisted replay remains
 the Sprint-2 closure gate.
 
-### Digital-ESD adaptive screening (P0-A through P0-G) — IMPLEMENTED
+### Digital-ESD adaptive screening (P0-A through P0-G) — REAL ERIC EXECUTION LANE
 
-Full adaptive screening pipeline implemented in
-`scripts/run_digital_esd_adaptive_screening.py` with
-`scripts/prepare_digital_esd_fulltext_index.py` for the P0-G gate.
+Digital-ESD now parses the retained ERIC Q1-Q7 exports as actual study
+metadata rather than treating the 43,996-row fixture as if it were already a
+reviewed/full-text corpus.
 
-Seven stages:
-- **P0-A** screening_initialization — ledger load, run identity, 43,996 records
-- **P0-B** source_collection_and_triage — domain triage (5 domains, ~8,757 candidates)
-- **P0-C** fulltext_index_preparation — full-text index construction
-- **P0-D** candidate_assessment_generation — deterministic scoring (threshold 0.5)
-- **P0-E** review_calibration_tranche — 439-record calibration subset
-- **P0-F** fulltext_retrieval_and_verification — full-text retrieval (8,724 retrieved)
-- **P0-G** verified_fulltext_gate — final verified gate (8,758 verified)
+The runtime path is:
 
-The 43,996-record ledger is at `fixtures/digital_esd_ledger.tsv`.
-Agda owners at `Agda/digital_esd/` (`DigitalESDAdaptiveScreeningExecutionExact.agda`,
-`DigitalESDAdaptiveScreeningExecutionRegression.agda`).
-Source documents at `DASHI/Education/`.
+```text
+retained ERIC Q1-Q7 JSON
+  -> SHA-verified ERIC parser
+  -> 46,597 query occurrences
+  -> 43,996 accession-deduplicated metadata studies
+  -> authoritative unresolved screening ledger
+  -> candidate-only title/abstract assessments
+  -> candidate publication/report-family hypotheses
+  -> stratified calibration worklist
+  -> non-scalar Pareto review queue
+  -> explicit reviewer decisions
+  -> include|probable only
+  -> real retrieved full-text artifact + SHA-256
+  -> P0-G verified full-text gate
+```
 
-All stages produce deterministic SHA-256 digests and persisted run state
-in `artifacts/digital_esd/`.
+Current stage semantics:
+
+- **P0-A** exact 43,996-record denominator — implemented; every parsed study
+  begins `unresolved / awaitingScreeningReview`.
+- **P0-B** candidate title/abstract assessment — implemented; advisory only.
+- **P0-C** duplicate/report-family hypotheses — implemented; hypothesis only,
+  never `same empirical study` authority.
+- **P0-D** stratified calibration selection — implemented; selection creates no
+  screening decision.
+- **P0-E** calibration diagnostics — code implemented, but false-negative /
+  disagreement estimates remain unpaid until explicit reviewed decisions exist.
+- **P0-F** five-axis Pareto work queue — implemented; no scalar screening score,
+  no automatic exclusion.
+- **P0-G** full-text verification — fail-closed. A record is eligible only after
+  an authoritative `include|probable` decision and verifies only when a real
+  retrieved artifact exists and its SHA-256 matches the retrieval manifest.
+
+The previous `43,996 verified full-text` status was not a valid full-text
+receipt: the old indexer could fall back to hashing a record identifier when
+text was absent. That fallback has been removed. Missing full text is now
+`pending`, never `verified`.
+
+Primary owners:
+
+```text
+interop_scripts/digital_esd_eric.py
+interop_scripts/digital_esd_screening.py
+scripts/run_digital_esd_real_eric.py
+scripts/run_digital_esd_adaptive_screening.py
+scripts/prepare_digital_esd_fulltext_index.py
+interop_scripts/emit_digital_esd_eric_execution_agda.py
+```
+
+The execution receipt compiler now binds artifact **paths + SHA-256s** and
+re-opens every artifact before emitting the observed Agda receipt; missing or
+drifted artifacts fail closed.
+
+Digital-ESD remains an application workload. None of these screening/runtime
+layers create source truth, SourceAuditAdmission, legal applicability, or
+semantic promotion.
