@@ -18,6 +18,7 @@ type CliResult<T = ()> = Result<T, String>;
 pub struct AuthorityIdentityReviewWorksheet {
     pub schema_version: String,
     pub candidate_only: bool,
+    #[serde(default)]
     pub review_complete: bool,
     pub rows: Vec<AuthorityIdentityReviewRow>,
 }
