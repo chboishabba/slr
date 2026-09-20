@@ -12,6 +12,8 @@ import DASHI.Education.DigitalESDERICStudyExecutionRegression as ERICStudyRegres
 import DASHI.Education.DigitalESDSelectiveFullTextMaterialisationExact as FullText
 import DASHI.Education.DigitalESDSelectiveFullTextMaterialisationRegression as FullTextRegression
 import DASHI.EverythingDigitalESDReciprocalBraid as Braid
+import DASHI.Interop.DigitalESD.ScholarlyFullTextCrossPollinationExact as ScholarlyXPoll
+import DASHI.Interop.DigitalESD.ScholarlyFullTextCrossPollinationRegression as ScholarlyXPollRegression
 
 ------------------------------------------------------------------------
 -- DASHI EVERYTHING
@@ -31,3 +33,9 @@ canonicalSelectiveFullText = FullText.defaultSelectiveFullTextMaterialisationRec
 
 canonicalBraid : Braid.DigitalESDReciprocalBraidBoundary
 canonicalBraid = Braid.canonicalDigitalESDReciprocalBraidBoundary
+
+canonicalScholarlyXPoll : ScholarlyXPoll.ScholarlyFullTextCrossPollinationReceipt
+canonicalScholarlyXPoll = ScholarlyXPoll.defaultScholarlyFullTextCrossPollinationReceipt
+
+canonicalScholarlyXPollRegression : ScholarlyXPollRegression.ScholarlyFullTextCrossPollinationReceipt
+canonicalScholarlyXPollRegression = ScholarlyXPoll.defaultScholarlyFullTextCrossPollinationReceipt
