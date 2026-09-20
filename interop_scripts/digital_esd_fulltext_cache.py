@@ -79,12 +79,21 @@ def write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
 
 
 def free_space_gib(path: Path) -> float:
-    st = path.stat()
-    return st.st_free / (1024 ** 3)
+    path.mkdir(parents=True, exist_ok=True)
+    return shutil.disk_usage(path).free / (1024 ** 3)
 
 
 def fmt_gib(gib: float) -> str:
     return f"{gib:.2f} GiB"
+
+
+def sha256_file(path: Path) -> str:
+    import hashlib
+    h = hashlib.sha256()
+    with path.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
 
 
 class FullTextCacheWrapper:
@@ -135,7 +144,10 @@ class FullTextCacheWrapper:
 
         estimated_bytes = len(selected) * self.planning_size_bytes
         free_gib = free_space_gib(self.cache_dir)
-        fits = estimated_bytes <= (self.max_cache_bytes - self.reserve_bytes) and free_gib >= self.reserve_gib
+        fits_cache_cap = estimated_bytes <= self.max_cache_bytes
+        free_after_gib = free_gib - (estimated_bytes / (1024 ** 3))
+        meets_reserve = free_after_gib >= self.reserve_gib
+        fits = fits_cache_cap and meets_reserve
 
         batch: list[dict[str, Any]] = []
         for item in selected:
@@ -164,9 +176,10 @@ class FullTextCacheWrapper:
             "free_space_gib": round(free_gib, 4),
             "max_cache_bytes": self.max_cache_bytes,
             "reserve_bytes": self.reserve_bytes,
-            "fits_cache_cap": fits,
-            "meets_reserve": free_gib >= self.reserve_gib,
-            "eligible_for_fetch": fits and free_gib >= self.reserve_gib,
+            "fits_cache_cap": fits_cache_cap,
+            "meets_reserve": meets_reserve,
+            "free_space_after_plan_gib": round(free_after_gib, 4),
+            "eligible_for_fetch": fits,
             "batch": batch,
         }
         return result
@@ -176,17 +189,35 @@ class FullTextCacheWrapper:
     # ------------------------------------------------------------------
 
     def register(self, fetch_plan_path: Path | None = None) -> dict[str, Any]:
-        plan = self.plan() if fetch_plan_path is None else json.loads(fetch_plan_path.read_text())
-        batch = plan.get("batch", [])
+        if fetch_plan_path is None:
+            plan = self.plan()
+            batch = plan.get("batch", [])
+        else:
+            raw = fetch_plan_path.read_text(encoding="utf-8").strip()
+            if not raw:
+                batch = []
+            elif raw.startswith("{"):
+                payload = json.loads(raw)
+                batch = payload.get("batch", [])
+            elif raw.startswith("["):
+                batch = json.loads(raw)
+            else:
+                batch = jsonl(fetch_plan_path)
         plan_refs = {str(b["source_identity_reference"]) for b in batch}
 
-        retrieved = jsonl(self.cache_dir.parent / "retrieved-manifest.jsonl") if (self.cache_dir.parent / "retrieved-manifest.jsonl").exists() else []
+        retrieved_path = self.cache_dir.parent / "retrieved-manifest.jsonl"
+        retrieved = jsonl(retrieved_path) if retrieved_path.exists() else []
+        retrieved_by_ref = {
+            str(row.get("source_identity_reference") or ""): row
+            for row in retrieved
+            if str(row.get("source_identity_reference") or "")
+        }
 
         registered: list[dict[str, Any]] = []
         rejected: list[dict[str, Any]] = []
         cache_used = 0
 
-        for ref in plan_refs:
+        for ref in sorted(plan_refs):
             artifact = self.cache_dir / f"{ref}.pdf"
             if not artifact.exists() or not artifact.is_file():
                 rejected.append({
@@ -207,12 +238,39 @@ class FullTextCacheWrapper:
                 })
                 continue
 
+            observed_digest = sha256_file(artifact)
+            receipt = retrieved_by_ref.get(ref)
+            if receipt is not None:
+                expected_digest = str(receipt.get("sha256") or "").lower().removeprefix("sha256:")
+                if expected_digest and expected_digest != observed_digest:
+                    rejected.append({
+                        "source_identity_reference": ref,
+                        "reason": "retrieval-receipt-digest-mismatch",
+                        "expected_sha256": expected_digest,
+                        "observed_sha256": observed_digest,
+                    })
+                    continue
+                revision = str(
+                    receipt.get("source_revision_reference")
+                    or f"fulltext-sha256:{observed_digest}"
+                )
+                retrieval_reference = str(
+                    receipt.get("retrieval_reference") or artifact.resolve()
+                )
+            else:
+                revision = f"fulltext-sha256:{observed_digest}"
+                retrieval_reference = f"local-cache-register:{artifact.resolve()}"
+
             registered.append({
                 "source_identity_reference": ref,
+                "source_revision_reference": revision,
+                "content_sha256": observed_digest,
                 "artifact_path": str(artifact),
                 "artifact_size_bytes": size,
+                "retrieval_reference": retrieval_reference,
                 "registered_at": now_iso(),
                 "in_fetch_plan": True,
+                "retrieval_receipt_observed": receipt is not None,
                 "creates_source_truth": False,
                 "creates_source_audit_admission": False,
             })
