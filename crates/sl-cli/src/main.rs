@@ -3,6 +3,7 @@ mod contracts;
 mod cullen;
 mod oalc;
 mod case_follow;
+mod s14_adaptive_fixture;
 mod waltons;
 
 use std::env;
@@ -17,6 +18,7 @@ USAGE:
   sensiblaw legal-follow case acquire --citation '[YYYY] COURT N' [options]
   sensiblaw legal-follow cullen pnf --operator-opt-in [--output-dir PATH] [--spacy-model MODEL]
   sensiblaw legal-follow contracts landscape <plan|status|expand|acquire> [--as-at YYYY-MM-DD] [--jurisdiction AU-QLD]
+  sensiblaw legal-follow contracts landscape adaptive-fixture [--output PATH]
   sensiblaw legal-follow oalc stream-pinned --revision SHA --citation TEXT [options]
   sensiblaw legal-follow waltons [--base PATH] status
   sensiblaw legal-follow waltons [--base PATH] acquire
@@ -44,6 +46,8 @@ NOTES:
   * review prepare/finalize are human-review file surfaces; they do not make
     legal decisions automatically.
   * Waltons s14-sync is the canonical typed Rust reviewed-hop path.
+  * contracts landscape adaptive-fixture is an executable controller
+    calibration; it does not claim a live human-reviewed campaign.
   * contracts landscape expand --delta is a compatibility/import surface for
     reviewed artifacts, not the semantic command ABI.
   * CitedBy provider results are discovery candidates only and must be
@@ -154,6 +158,14 @@ fn run() -> Result<(), String> {
         }
         [domain, matter, rest @ ..] if domain == "legal-follow" && matter == "cullen" => {
             cullen::run(rest.to_vec())
+        }
+        [domain, matter, scope, command, rest @ ..]
+            if domain == "legal-follow"
+                && matter == "contracts"
+                && scope == "landscape"
+                && command == "adaptive-fixture" =>
+        {
+            s14_adaptive_fixture::run(rest.to_vec())
         }
         [domain, matter, rest @ ..] if domain == "legal-follow" && matter == "contracts" => {
             contracts::run(rest.to_vec())
