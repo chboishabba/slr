@@ -1021,4 +1021,58 @@ mod tests {
         let restored = restore_trace(&snapshot_trace(&trace)).unwrap();
         assert_eq!(trace, restored);
     }
+
+    #[test]
+    fn recursive_selector_skips_preexisting_sidhu_and_surfaces_giumelli() {
+        use sensiblaw_proof_search_loop::judgment_candidates::CitationOccurrenceCandidate;
+
+        let trace = waltons_estoppel_trace();
+        let candidate = |ordinal: u64, citation: &str| CitationOccurrenceCandidate {
+            document_ref: "document:oalc:nsw_caselaw:doueihi-fixture".into(),
+            source_revision_ref: "oalc@fixture:nsw_caselaw:doueihi-fixture".into(),
+            canonical_text_sha256: "sha256:fixture".into(),
+            paragraph_ordinal: ordinal,
+            paragraph_locator_ref: format!(
+                "document:oalc:nsw_caselaw:doueihi-fixture#paragraph-{ordinal}"
+            ),
+            reported_paragraph_label: None,
+            citation_text: citation.into(),
+            paragraph_text: citation.into(),
+            anchor_paragraph_locator_refs: vec![format!(
+                "document:oalc:nsw_caselaw:doueihi-fixture#paragraph-{ordinal}"
+            )],
+            anchor_paragraph_texts: vec![citation.into()],
+            lexical_treatment_hints: vec![],
+            reviewed: false,
+            candidate_only: true,
+        };
+        let materialization = OalcJudgmentMaterialisation {
+            document_ref: "document:oalc:nsw_caselaw:doueihi-fixture".into(),
+            source_revision_ref: "oalc@fixture:nsw_caselaw:doueihi-fixture".into(),
+            canonical_text_sha256: "sha256:fixture".into(),
+            paragraph_candidates: Vec::new(),
+            citation_candidates: vec![
+                candidate(10, "[2014] HCA 19"),
+                candidate(20, "[1999] HCA 10"),
+                candidate(30, "[1990] HCA 39"),
+            ],
+            candidate_only: true,
+            creates_legal_authority: false,
+            creates_claim_truth: false,
+        };
+
+        let residuals = discover_outbound_citation_residuals(
+            &trace,
+            "case:nsw:nswca:2016:105",
+            &materialization,
+        );
+        assert!(residuals
+            .iter()
+            .all(|item| item.medium_neutral_citation != "[2014] HCA 19"));
+        let selected = select_fresh_outbound_citation(&residuals).unwrap();
+        assert_eq!(selected.medium_neutral_citation, "[1999] HCA 10");
+        assert!(!selected.priority_is_legal_truth_rank);
+        assert!(selected.candidate_only);
+        assert!(!selected.creates_legal_authority);
+    }
 }
