@@ -3,8 +3,9 @@ use std::path::PathBuf;
 
 use sensiblaw_legal_runtime::{
     build_australian_calibration_capstone, build_m2_5_mixed_family_campaign,
-    compile_capability_receipt, project_matter_issue_workspace,
-    AustralianCalibrationKind, MixedFamilyReplayReceipt,
+    compile_capability_receipt, project_matter_issue_workspace, project_matter_issue_workbench,
+    AustralianCalibrationKind, MatterEntityKind, MatterEntityProjection, MatterEventProjection,
+    MatterWorkbenchSeed, MixedFamilyReplayReceipt,
 };
 
 fn runtime_error(label: &str, error: impl std::fmt::Debug) -> std::io::Error {
@@ -63,14 +64,58 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let workspace =
             project_matter_issue_workspace(format!("matter:{kind:?}"), &capstone.issue, last);
 
+        let first_evidence = capstone
+            .issue
+            .elements
+            .iter()
+            .flat_map(|element| element.evidence.iter())
+            .next()
+            .ok_or_else(|| std::io::Error::other("capstone has no source-addressable evidence"))?;
+        let workbench = project_matter_issue_workbench(
+            format!("matter:{kind:?}"),
+            &capstone.issue,
+            last,
+            MatterWorkbenchSeed {
+                entities: vec![MatterEntityProjection {
+                    entity_ref: format!("entity:{kind:?}:party"),
+                    label: format!("{kind:?} calibration party"),
+                    kind: MatterEntityKind::Person,
+                    source_revision_refs: vec![first_evidence.source_revision_ref.clone()],
+                    candidate_only: true,
+                }],
+                events: vec![MatterEventProjection {
+                    event_ref: format!("event:{kind:?}:reviewed"),
+                    label: format!("{kind:?} reviewed event"),
+                    time_ref: "2026-09-20T00:00:00+10:00".into(),
+                    observation_refs: vec![first_evidence.observation_ref.clone()],
+                    entity_refs: vec![format!("entity:{kind:?}:party")],
+                    candidate_only: true,
+                }],
+                observation_time_refs: std::collections::BTreeMap::from([(
+                    first_evidence.observation_ref.clone(),
+                    "2026-09-20T00:00:00+10:00".into(),
+                )]),
+            },
+        )
+        .map_err(|error| std::io::Error::other(format!("M4.A workbench failed: {error}")))?;
+        fs::write(
+            output.join(format!("{kind:?}.m4a-workbench.txt").to_lowercase()),
+            format!("{workbench:#?}"),
+        )?;
+
         report.push(format!(
-            "{kind:?}\tapplicability={:?}\tviolation={:?}\tliability={:?}\tremedy={:?}\tresiduals={}\tnodes={}\treceipt_head={}",
+            "{kind:?}\tapplicability={:?}\tviolation={:?}\tliability={:?}\tremedy={:?}\tresiduals={}\tnodes={}\tentities={}\tobservations={}\tevents={}\tdocuments={}\ttimeline={}\treceipt_head={}",
             workspace.applicability,
             workspace.violation,
             workspace.liability,
             workspace.remedy,
             last.residuals.len(),
             workspace.nodes.len(),
+            workbench.entities.len(),
+            workbench.observations.len(),
+            workbench.events.len(),
+            workbench.documents.len(),
+            workbench.timeline.len(),
             capstone.campaign.receipt_head,
         ));
     }
