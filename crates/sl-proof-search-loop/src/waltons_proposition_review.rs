@@ -73,7 +73,10 @@ pub struct ReviewedWaltonsPropositionEvidenceReceipt {
     pub source_revision_ref: String,
     pub canonical_text_sha256: String,
     pub disposition: PropositionEvidenceDisposition,
-    pub reviewed_evidence: ReviewedCanonicalEvidence,
+    pub observation_ref: String,
+    pub review_ref: String,
+    pub manifestation_ref: String,
+    pub reviewed_evidence: Option<ReviewedCanonicalEvidence>,
     pub payment_receipt: Option<ReviewedEvidencePaymentReceipt>,
     pub payment_bytes: Vec<u8>,
     pub reviewer_ref: String,
@@ -216,29 +219,30 @@ pub fn compile_reviewed_waltons_paragraph(
         claim_truth_promoted: false,
     };
 
-    let reviewed_evidence = ReviewedCanonicalEvidence::from_reviewed_coordinate(
-        &review,
-        observation,
-        format!(
-            "payment:waltons:{}:{}",
-            decision.role.requirement_ref(),
-            paragraph.paragraph_ordinal
-        ),
-    )
-    .map_err(|error| WaltonsParagraphReviewError::Evidence(format!("{error:?}")))?;
-
     let spec = waltons_estoppel_consumer_spec(materialization);
     let mut payment_bytes = Vec::new();
-    let payment_receipt = if decision.disposition == PropositionEvidenceDisposition::Supports {
-        Some(compile_reviewed_evidence_payment(
-            &spec,
-            &review,
-            &mut payment_bytes,
-            iteration_index,
-        )?)
-    } else {
-        None
-    };
+    let (reviewed_evidence, payment_receipt) =
+        if decision.disposition == PropositionEvidenceDisposition::Supports {
+            let reviewed = ReviewedCanonicalEvidence::from_reviewed_coordinate(
+                &review,
+                observation,
+                format!(
+                    "payment:waltons:{}:{}",
+                    decision.role.requirement_ref(),
+                    paragraph.paragraph_ordinal
+                ),
+            )
+            .map_err(|error| WaltonsParagraphReviewError::Evidence(format!("{error:?}")))?;
+            let payment = compile_reviewed_evidence_payment(
+                &spec,
+                &review,
+                &mut payment_bytes,
+                iteration_index,
+            )?;
+            (Some(reviewed), Some(payment))
+        } else {
+            (None, None)
+        };
 
     Ok(ReviewedWaltonsPropositionEvidenceReceipt {
         role: decision.role,
@@ -247,6 +251,9 @@ pub fn compile_reviewed_waltons_paragraph(
         source_revision_ref: paragraph.source_revision_ref.clone(),
         canonical_text_sha256: paragraph.canonical_text_sha256.clone(),
         disposition: decision.disposition,
+        observation_ref: review.evidence_ref.clone(),
+        review_ref: review.review_ref.clone(),
+        manifestation_ref,
         reviewed_evidence,
         payment_receipt,
         payment_bytes,
@@ -338,6 +345,7 @@ mod tests {
         let receipt = compile_reviewed_waltons_paragraph(&materialization, &decision, 1).unwrap();
         assert_eq!(receipt.payment_receipt.as_ref().unwrap().payments_emitted, 2);
         assert!(receipt.payment_receipt.as_ref().unwrap().review_emitted);
+        assert!(receipt.reviewed_evidence.is_some());
         assert!(receipt.candidate_only);
         assert!(!receipt.creates_legal_authority);
         assert!(!receipt.claim_truth_promoted);
@@ -364,6 +372,7 @@ mod tests {
             let receipt =
                 compile_reviewed_waltons_paragraph(&materialization, &decision, 1).unwrap();
             assert!(receipt.payment_receipt.is_none());
+            assert!(receipt.reviewed_evidence.is_none());
             assert!(receipt.payment_bytes.is_empty());
             assert!(!receipt.claim_truth_promoted);
         }
