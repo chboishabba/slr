@@ -1,9 +1,13 @@
 use serde_json::json;
+use sensiblaw_governed_legal_provider::{
+    resolve_live_oalc_exact_source, OalcCitationMatch, OalcExactSourceRequest,
+};
 use sensiblaw_legal_follow_plan::{
     australian_contract_landscape_seed, compile_australian_contract_landscape_worklist,
     legal_follow_demand_for_trace_node, plan_legal_sources, AustralianContractLandscapeWorklist,
-    ContractLandscapeWorkItem, PlanState,
+    ContractLandscapeWorkItem, PlanState, SourceRole,
 };
+use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -110,6 +114,167 @@ fn compile(args: &[String]) -> CliResult<(AustralianContractLandscapeWorklist, s
     Ok((work, output))
 }
 
+fn sha256(bytes: &[u8]) -> String {
+    format!("sha256:{:x}", Sha256::digest(bytes))
+}
+
+fn safe_ref(value: &str) -> String {
+    value
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() {
+                ch.to_ascii_lowercase()
+            } else {
+                '-'
+            }
+        })
+        .collect::<String>()
+        .split('-')
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join("-")
+}
+
+fn case_neutral_citation(source_citation: &str) -> String {
+    source_citation
+        .split(';')
+        .next()
+        .unwrap_or(source_citation)
+        .trim()
+        .to_string()
+}
+
+fn legislation_act_citation(source_citation: &str) -> (String, Option<String>) {
+    if let Some((act, section)) = source_citation.rsplit_once(" s ") {
+        let section = section.trim();
+        if !section.is_empty()
+            && section
+                .chars()
+                .all(|ch| ch.is_ascii_alphanumeric() || ch == '(' || ch == ')' || ch == '-')
+        {
+            return (act.trim().to_string(), Some(format!("s {section}")));
+        }
+    }
+    (source_citation.trim().to_string(), None)
+}
+
+fn oalc_jurisdiction(jurisdiction_ref: &str) -> Option<String> {
+    match jurisdiction_ref {
+        "AU" => Some("commonwealth".into()),
+        "AU-NSW" => Some("new_south_wales".into()),
+        "AU-VIC" => Some("victoria".into()),
+        "AU-QLD" => Some("queensland".into()),
+        "AU-WA" => Some("western_australia".into()),
+        "AU-SA" => Some("south_australia".into()),
+        "AU-TAS" => Some("tasmania".into()),
+        "AU-ACT" => Some("australian_capital_territory".into()),
+        "AU-NT" => Some("northern_territory".into()),
+        _ => None,
+    }
+}
+
+fn acquire_primary_sources(
+    work: &AustralianContractLandscapeWorklist,
+    output_dir: &Path,
+) -> CliResult<serde_json::Value> {
+    fs::create_dir_all(output_dir)
+        .map_err(|error| format!("create {}: {error}", output_dir.display()))?;
+    let mut receipts = Vec::new();
+
+    for item in &work.source_items {
+        let (citation, citation_match, document_type, section_ref) = match item.source_role {
+            SourceRole::PrimaryCaseLaw => (
+                case_neutral_citation(&item.source_citation),
+                OalcCitationMatch::Contains,
+                "decision".to_string(),
+                None,
+            ),
+            SourceRole::PrimaryLegislation => {
+                let (act, section) = legislation_act_citation(&item.source_citation);
+                (
+                    act,
+                    OalcCitationMatch::Exact,
+                    "primary_legislation".to_string(),
+                    section,
+                )
+            }
+            _ => continue,
+        };
+
+        let resolved = resolve_live_oalc_exact_source(&OalcExactSourceRequest {
+            citation: citation.clone(),
+            citation_match,
+            document_type,
+            source: None,
+            jurisdiction: oalc_jurisdiction(&item.jurisdiction_ref),
+        })
+        .map_err(|error| {
+            format!(
+                "acquire {} ({citation}): {error:?}",
+                item.semantic_ref
+            )
+        })?;
+
+        let artifact_dir = output_dir.join(safe_ref(&item.semantic_ref));
+        fs::create_dir_all(&artifact_dir)
+            .map_err(|error| format!("create {}: {error}", artifact_dir.display()))?;
+        let artifact = artifact_dir.join("source.txt");
+        fs::write(&artifact, resolved.row.text.as_bytes())
+            .map_err(|error| format!("write {}: {error}", artifact.display()))?;
+        let digest = sha256(resolved.row.text.as_bytes());
+
+        let receipt = json!({
+            "semantic_ref": item.semantic_ref,
+            "work_ref": item.work_ref,
+            "doctrine": item.doctrine.map(|value| format!("{value:?}")),
+            "jurisdiction_ref": item.jurisdiction_ref,
+            "as_at": item.as_at,
+            "source_role": format!("{:?}", item.source_role),
+            "requested_citation": citation,
+            "section_ref": section_ref,
+            "oalc_version_id": resolved.row.version_id,
+            "oalc_corpus_revision": format!(
+                "isaacus/open-australian-legal-corpus@{}",
+                resolved.corpus_revision_sha
+            ),
+            "oalc_source": resolved.row.source,
+            "oalc_jurisdiction": resolved.row.jurisdiction,
+            "oalc_document_type": resolved.row.document_type,
+            "resolved_citation": resolved.row.citation,
+            "decision_or_effective_date": resolved.row.date,
+            "canonical_url": resolved.row.url,
+            "when_scraped": resolved.row.when_scraped,
+            "canonical_text_sha256": digest,
+            "local_artifact_ref": artifact,
+            "resolution_path": resolved.resolution_path,
+            "network_requests": resolved.network_requests,
+            "candidate_only": true,
+            "creates_legal_authority": false,
+            "creates_current_law_conclusion": false,
+            "section_receipt_paid": false,
+            "treatment_review_paid": false,
+        });
+        let receipt_path = artifact_dir.join("source-receipt.json");
+        write_output(&receipt_path, &receipt)?;
+        receipts.push(receipt);
+    }
+
+    Ok(json!({
+        "schema_version": "sl.australian_contract_landscape_acquisition.v0_1",
+        "root_ref": work.root_ref,
+        "as_at": work.as_at,
+        "jurisdiction_filter": work.jurisdiction_filter,
+        "bounded_seed_only": work.bounded_seed_only,
+        "acquired_source_count": receipts.len(),
+        "candidate_only": true,
+        "creates_legal_authority": false,
+        "creates_current_law_conclusion": false,
+        "section_receipts_paid": false,
+        "treatment_review_paid": false,
+        "receipts": receipts,
+    }))
+}
+
 fn write_output(path: &Path, output: &serde_json::Value) -> CliResult {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)
@@ -164,8 +329,27 @@ pub fn run(args: Vec<String>) -> CliResult {
             );
             Ok(())
         }
+        [scope, command, rest @ ..] if scope == "landscape" && command == "acquire" => {
+            let (work, _) = compile(rest)?;
+            let output_dir = value(rest, "--output-dir")
+                .map(PathBuf::from)
+                .unwrap_or_else(|| {
+                    PathBuf::from("artifacts/oalc/contracts/landscape")
+                        .join(&work.as_at)
+                });
+            let receipt = acquire_primary_sources(&work, &output_dir)?;
+            let receipt_path = output_dir.join("landscape-acquisition-receipt.json");
+            write_output(&receipt_path, &receipt)?;
+            println!(
+                "contracts_landscape_acquisition={} sources={} bounded_seed_only={} authority=false current_law_conclusion=false",
+                receipt_path.display(),
+                receipt["acquired_source_count"],
+                work.bounded_seed_only,
+            );
+            Ok(())
+        }
         _ => Err(
-            "usage: sensiblaw legal-follow contracts landscape <plan|status> [--as-at YYYY-MM-DD] [--jurisdiction AU-QLD] [--output PATH]"
+            "usage: sensiblaw legal-follow contracts landscape <plan|status|acquire> [--as-at YYYY-MM-DD] [--jurisdiction AU-QLD] [--output PATH] [--output-dir PATH]"
                 .into(),
         ),
     }
@@ -193,6 +377,18 @@ mod tests {
         assert_eq!(output["bounded_seed_only"], true);
         assert_eq!(output["creates_legal_authority"], false);
         assert_eq!(output["creates_current_law_conclusion"], false);
+    }
+
+    #[test]
+    fn citation_helpers_preserve_section_as_downstream_residual() {
+        assert_eq!(
+            case_neutral_citation("[1988] HCA 7; 164 CLR 387"),
+            "[1988] HCA 7"
+        );
+        assert_eq!(
+            legislation_act_citation("Property Law Act 2023 (Qld) s 68"),
+            ("Property Law Act 2023 (Qld)".into(), Some("s 68".into()))
+        );
     }
 
     #[test]
