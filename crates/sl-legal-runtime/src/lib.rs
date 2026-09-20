@@ -2144,6 +2144,17 @@ mod tests {
     }
 
     #[test]
+    fn glj_contested_formal_route_selects_think_without_authority() {
+        let capstone =
+            build_australian_calibration_capstone(AustralianCalibrationKind::Glj).unwrap();
+        let hop = capstone.campaign.hops.last().unwrap();
+        let action = hop.selected_action.as_ref().unwrap();
+        assert_eq!(action.kind, InformationActionKind::Think);
+        assert!(action.candidate_only);
+        assert!(!action.creates_authority);
+    }
+
+    #[test]
     fn capability_receipt_closes_m2_5_through_m4_a_without_promotion() {
         let receipt = compile_capability_receipt().unwrap();
         assert!(receipt.m2_5_mixed_family_replay);
