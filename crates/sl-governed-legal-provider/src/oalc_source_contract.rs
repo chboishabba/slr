@@ -227,7 +227,7 @@ pub struct OalcResolvedSourceReceipt {
     pub temporal_coverage: OalcTemporalCoverage,
     pub resolution_path: String,
     pub network_requests: u64,
-    pub receipt_authority: &'static str,
+    pub receipt_authority: String,
     pub candidate_only: bool,
     pub creates_legal_authority: bool,
     pub creates_claim_truth: bool,
@@ -265,7 +265,11 @@ impl OalcResolvedSourceReceipt {
         if self.local_artifact_ref.as_os_str().is_empty() {
             return Err(OalcSourceContractError::MissingArtifact);
         }
-        if !self.candidate_only || self.creates_legal_authority || self.creates_claim_truth {
+        if self.receipt_authority != OALC_RECEIPT_AUTHORITY
+            || !self.candidate_only
+            || self.creates_legal_authority
+            || self.creates_claim_truth
+        {
             return Err(OalcSourceContractError::AuthorityPromotion);
         }
         Ok(())
