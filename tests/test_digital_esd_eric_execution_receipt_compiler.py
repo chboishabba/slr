@@ -43,6 +43,8 @@ def _make_receipt(tmp: Path, overrides: dict | None = None) -> tuple[dict, dict[
         "observed_unique_records": EXPECTED_UNIQUE,
         "real_eric": True,
         "full_text_stop": True,
+        "screening_ledger_all_unresolved": True,
+        "scalar_screening_score_used": False,
         "creates_screening_decision": False,
         "creates_source_truth": False,
         "creates_source_audit_admission": False,
@@ -144,5 +146,21 @@ def test_path_hash_key_mismatch_fails_closed():
         tmp = Path(td)
         receipt, _ = _make_receipt(tmp)
         receipt["artifact_paths"].pop("parser_manifest")
+        with pytest.raises(ValueError):
+            emit_agda(_write_receipt(tmp, receipt), tmp / "out.agda")
+
+
+def test_non_unresolved_ledger_receipt_fails():
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        receipt, _ = _make_receipt(tmp, {"screening_ledger_all_unresolved": False})
+        with pytest.raises(ValueError):
+            emit_agda(_write_receipt(tmp, receipt), tmp / "out.agda")
+
+
+def test_scalar_screening_score_receipt_fails():
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        receipt, _ = _make_receipt(tmp, {"scalar_screening_score_used": True})
         with pytest.raises(ValueError):
             emit_agda(_write_receipt(tmp, receipt), tmp / "out.agda")
