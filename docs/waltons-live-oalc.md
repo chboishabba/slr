@@ -34,6 +34,32 @@ cargo run -p sensiblaw-cli --features live-network --bin sensiblaw -- \
 
 ## 1. Live OALC source acquisition
 
+### Minimal live OALC smoke
+
+This is the first command to run against the real provider.  It does not require
+JADE/cited-by results or any review decisions:
+
+```bash
+rm -rf /tmp/waltons-live
+cargo run -p sensiblaw-cli --features live-network --bin sensiblaw -- \
+  legal-follow waltons --base /tmp/waltons-live live prepare
+```
+
+Success means the command has produced and validated all of:
+
+```text
+/tmp/waltons-live/waltons-oalc-source-receipt.json
+/tmp/waltons-live/waltons-stores-v-maher.txt
+/tmp/waltons-live/waltons-oalc-candidate-review-queue.json
+/tmp/waltons-live/waltons-review-worksheet.json
+/tmp/waltons-live/waltons-cited-by-work-manifest.json
+/tmp/waltons-live/waltons-live-pipeline-state.json
+```
+
+The state must stop at `human_paragraph_review`.  A retry is idempotent:
+validated retained OALC pairs are reused; stale/incomplete pairs are removed and
+reacquired.
+
 ```bash
 cargo run -p sensiblaw-cli --features live-network --bin sensiblaw -- \
   legal-follow waltons --base "$WALTONS_BASE" live prepare
@@ -201,3 +227,23 @@ json_is_semantic_command_transport = false
 It also reports separate counts for bootstrap, reviewed identity, reviewed
 proposition, and reviewed treatment hops.  Reviewed residuals remain in the
 trajectory rather than being silently discarded.
+
+
+## Live network evidence
+
+After the final stage, `waltons-live-pipeline-state.json` includes
+`oalc_evidence` with:
+
+```text
+root_oalc_network_requests
+later_oalc_network_requests
+total_oalc_network_requests_recorded
+later_fresh_network_resolved_count
+later_reused_retained_count
+live_network_evidence_present
+retained_receipts_validated
+```
+
+The later-authority acquisition report records the same fresh-vs-reused split.
+A failed later source remains an acquisition residual and does not become
+negative legal evidence.
