@@ -59,7 +59,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .campaign
             .hops
             .last()
-            .ok_or("capstone has no campaign hop")?;
+            .ok_or_else(|| std::io::Error::other("capstone has no campaign hop"))?;
         let workspace =
             project_matter_issue_workspace(format!("matter:{kind:?}"), &capstone.issue, last);
 
