@@ -82,17 +82,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .iter()
         .map(|receipt| {
             json!({
-                "review_unit_ref": receipt.review_unit_ref,
-                "document_ref": receipt.document_ref,
-                "source_revision_ref": receipt.source_revision_ref,
-                "canonical_text_sha256": receipt.canonical_text_sha256,
-                "citation_text": receipt.citation_text,
-                "selected_anchor_paragraph_locator_ref": receipt.selected_anchor_paragraph_locator_ref,
-                "reviewer_ref": receipt.reviewer_ref,
-                "evidence_refs": receipt.evidence_refs,
+                "review_unit_ref": receipt.review_unit_ref.clone(),
+                "document_ref": receipt.document_ref.clone(),
+                "source_revision_ref": receipt.source_revision_ref.clone(),
+                "canonical_text_sha256": receipt.canonical_text_sha256.clone(),
+                "citation_text": receipt.citation_text.clone(),
+                "selected_anchor_paragraph_locator_ref": receipt.selected_anchor_paragraph_locator_ref.clone(),
+                "reviewer_ref": receipt.reviewer_ref.clone(),
+                "evidence_refs": receipt.evidence_refs.clone(),
                 "citation_use": format!("{:?}", receipt.edge.citation_use),
                 "reasoning_role": format!("{:?}", receipt.edge.reasoning_role),
-                "temporal_ref": receipt.edge.temporal_ref,
+                "temporal_ref": receipt.edge.temporal_ref.clone(),
                 "candidate_only": receipt.edge.candidate_only,
                 "reviewed": receipt.edge.reviewed,
             })
