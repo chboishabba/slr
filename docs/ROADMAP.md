@@ -93,7 +93,7 @@ Milestones:
 After Sprint 1, transport is infrastructure unless telemetry supplies a concrete
 counterexample.
 
-# Sprint 2 — Canonical evidence convergence — ACTIVE
+# Sprint 2 — Canonical evidence convergence — CLOSURE GATE
 
 **Goal:** anything SensibLaw learns enters one evidence/provenance substrate.
 
@@ -112,40 +112,123 @@ Milestones:
   Australian authority revision and matter/narrative evidence through the same
   source/revision/span/observation/review/projection spine.
 
+**Current cut:** M2.1–M2.4 are paid at the production capability level. Digital-ESD has completed its application workload and is now a regression/capstone corpus, not a core-development lane. The only remaining Sprint-2 closure question is M2.5: either locate the differently named mixed-family persisted replay owner or implement exactly that replay capstone.
+
+Digital-ESD must not introduce a parallel evidence substrate. New PDF/document requirements belong in the generic document-ingestion lane and must be justified by a failing fixture.
+
 Sprint 2 yields the **evidence machine**.
 
-# Sprint 3 — Full legal issue reasoning
+# Sprint 3 — Reviewed world -> legal issue graph
 
-**Goal:** given reviewed matter evidence and law valid at the relevant time,
-produce a reviewable legal issue graph.
+**Goal:** consume already-typed, provenance-bearing, potentially ambiguous world
+material and perform the production SensibLaw legal projection over it. SLR does
+not build a second global world model.
 
-Milestones:
+The formal/reference side already contains substantial paid machinery:
+`WrongType`, `WrongElementRequirement`, source-conditioned atomic tests,
+satisfied/unsatisfied/contested/unresolved element dispositions, proof-relevant
+premises/exceptions/defeaters, burden/remedy structure, temporal/jurisdictional
+scope, precedent applicability/distinguishing, reopening, and finite legal
+search. Sprint 3 therefore focuses on production composition/parity rather than
+re-inventing those semantics.
 
-- **M3.1 Reviewed factual state** preserving asserted/supported/contradicted/
-  unknown and contestation.
-- **M3.2 Authoritative rule state** from pinned source -> provision -> duty/rule
-  -> WrongElementRequirement with jurisdiction and temporal validity.
-- **M3.3 Fact -> element candidate projection**, never fact -> conclusion.
-- **M3.4 Ternary issue state**:
-  `supported | contradicted | unknown`, with provenance.
-- **M3.5 Conditions, exceptions and defences** as typed structural roles.
-- **M3.6 Temporal + jurisdictional applicability** using as-at source state.
-- **M3.7 Authority topology** (cites/applies/distinguishes/overrules/amends)
-  without citation-graph rank becoming legal priority.
-- **M3.8 Full Australian issue capstone**:
-  matter evidence + as-at law -> issue/elements -> support/contradiction/unknown
-  -> conditions/defences -> provisional analysis -> remaining acquisition
-  residuals.
+## M3.A — Canonical reviewed world -> WrongType issue state
+
+Compose the existing evidence machine with legal element interpretation:
+
+```text
+ReviewedCanonicalEvidence
+        ↓
+reviewed fact/event state
+        ↓
+WrongType / WrongElementRequirement candidate projection
+        ↓
+element evidence disposition
+        ↓
+Satisfied | Unsatisfied | Contested | Unresolved
+```
+
+Requirements:
+- asserted != established;
+- contradicted != false;
+- contested evidence may leave a legal element unresolved;
+- empirical/statistical, health, financial, narrative, Wikidata and other
+  coordinates are optional typed facets over source-addressed observations,
+  not separate canonical evidence universes;
+- a derived value remains linked to its exact source revision/span/structured
+  coordinate and producer/review receipt.
+
+## M3.B — Source-realised legal evaluator
+
+Bring the existing Agda legal algebra into production SLR parity:
+
+```text
+reviewed exact legal source
+        ↓
+source-realised LegalRule
+        ├ premises
+        ├ exceptions
+        ├ defeaters
+        ├ burdens/conditions
+        ├ jurisdiction
+        ├ temporal validity
+        └ authority role
+        ↓
+applicability -> violation -> liability -> remedy
+```
+
+A defence is not flattened into one universal boolean. Existing WrongType/rule
+roles remain canonical: defence element, exception, defeater, independent rule,
+burden shift, remedy limiter, or procedural/jurisdictional gate as appropriate.
+
+## M3.C — Adaptive Australian legal capstone
+
+Unify existing Mabo/Pabai/Cullen/GLJ machinery through one production runner:
+
+```text
+reviewed matter/world observations
++
+reviewed as-at legal sources
+        ↓
+issue/element state
+        ↓
+proof/search over retained alternatives
+        ↓
+minimal cut / residual
+        ↓
+candidate information moves
+        ↓
+review/payment
+        ↓
+rerun
+        ↓
+persist / restart / replay
+```
+
+Use the existing case family for different shapes:
+- **Mabo** — positive doctrinal route;
+- **Pabai** — live defeater/counterfactual/reformulation residual;
+- **Cullen + NSW CLA** — duty, breach, atomic statutory tests, negative
+  coordinate, precedent use, source roles and reopening;
+- **GLJ** — procedural/stay/limitation, source correction and
+  majority/dissent/procedural posture.
+
+Residual-driven research is a Sprint-3 reasoning capability. Sprint 4 only
+renders its UX.
 
 Permanent firewalls:
 
 ```text
-event existence       != wrong
-harm                  != wrong
+observation            != occurrence
+event existence        != wrong
+harm                   != wrong
 Wikidata class         != legal category
+formal proof receipt   != external-world truth
 source presence        != applicability
 candidate element match != satisfied element
-unknown                != false
+exception/defence live != all-elements-implies-liability
+missing observation    != observed absence
+cross-stream alignment != causation
 ```
 
 Sprint 3 yields the **legal reasoning machine**.
@@ -158,11 +241,16 @@ Milestones:
 
 - **M4.1 Matter workspace** — people/events/documents/claims/timeline.
 - **M4.2 Issue workspace** — claim -> issues -> elements/status.
-- **M4.3 Evidence drill-down** — conclusion -> reasoning edge -> observation ->
-  span -> exact source revision.
+- **M4.3 Source-addressable semantic-node drill-down** — every displayed
+  derived value supports source preview/open, dependency path, reverse/downstream
+  use, revision lineage and residual inspection. Examples include `n = 500`,
+  a bank-flow segment, HCA paragraph, Wikidata statement or sensor observation,
+  all retaining one semantic identity across Explain/Why/Source/Context/Graph
+  projections.
 - **M4.4 As-at/change view** — legal position at date X and amendment deltas.
-- **M4.5 Residual-driven research UX** — what is missing, possible acquisition,
-  expected residual reduction, without promising proof.
+- **M4.5 Residual-driven research UX** — render the Sprint-3 planner's missing
+  coordinate, candidate acquisition/check move and expected discrimination/
+  residual reduction without moving the reasoning engine into the UI.
 - **M4.6 Receipt/export surface** — sources, exact revisions, spans, reasoning
   edges, review state and hashes.
 - **M4.7 Cross-jurisdiction projection** over one factual/world state and
@@ -185,20 +273,35 @@ Sprint 4 yields a usable SensibLaw product.
 ## Current critical path
 
 ```text
-unify evidence machine
-  -> build legal reasoning machine
-  -> ship product
+verify/close M2.5 mixed-family replay
+  -> M3.A reviewed world -> WrongType state
+  -> M3.B production legal evaluator
+  -> M3.C persisted adaptive Australian capstone
+  -> product projections
 ```
 
 
 ## Sprint 2 current cut
 
-M2.1 and M2.2 are paid on the stacked Sprint-2 branch:
+M2.1–M2.4 are now treated as paid production capabilities:
 
-- `sensiblaw-core::canonical_evidence::EvidenceManifestation` owns one revision/digest/receipt-pinned manifestation envelope;
-- the existing Wikidata, Wikipedia and OALC observation adapters lower into that same envelope;
-- the envelope is candidate-only and cannot carry semantic authority, applicability promotion or claim-truth promotion;
-- M2.2 source/revision/anchor/observation convergence is now source-written: text uses exact character ranges, structured graph evidence uses exact structured coordinates, compiler tokens require a preceding exact revision, and persisted PG legal slices project into the same carrier.
-- M2.3 shared reducer ABI is now source-written: one reviewed canonical evidence object fans out to optional world/matter/legal projection slots, with exact observation/revision/span/review/payment identity repeated in each projection receipt; abstention is explicit and no projection or reducer creates semantic authority, applicability, or claim truth.
+- `sensiblaw-core::canonical_evidence::EvidenceManifestation` owns one
+  revision/digest/receipt-pinned manifestation envelope;
+- Wikidata, Wikipedia, OALC, cache-first legal sources and locally ingested
+  official documents lower into the same canonical revision/span/observation
+  substrate;
+- M2.3 shared reviewed-evidence reduction is certified and preserves exact
+  observation/revision/span/review/payment identity across world/matter/legal
+  projections;
+- M2.4 provider normalisation is exercised on the final SLR merge, including
+  exact PG-hit/no-network and acquire->persist->reuse behaviour;
+- Digital-ESD P0-A–P0-G is an application/regression workload. Its final
+  full-text index receipt is **43,996 / 43,996 verified**, so the older
+  8,724/8,758 intermediate counts are not roadmap state.
 
-M2.1 and M2.2 have exact Rust and Agda receipts. M2.3 is source-written only on the new head and remains `implementedAwaitingRuntime` until fresh Rust/Agda execution receipts are observed. Sprint 2 remains open pending M2.4, M2.5 and the persisted cross-family replay capstone.
+M2.5 remains the sole Sprint-2 closure gate until an existing differently named
+owner is found or the explicit mixed-family persisted replay is implemented.
+That capstone must traverse structured Wikidata evidence, legal authority/OALC
+evidence and PDF/narrative/document evidence through one canonical
+manifestation/revision/span/observation/review/reducer path, persist it, restart,
+and replay exact identities/outcomes without semantic promotion.
