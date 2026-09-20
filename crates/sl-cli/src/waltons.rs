@@ -70,6 +70,7 @@ pub struct WaltonsPaths {
     pub treatment_decisions: PathBuf,
     pub genealogy: PathBuf,
     pub treatment_hops: PathBuf,
+    pub s14_trajectory: PathBuf,
 }
 
 impl WaltonsPaths {
@@ -95,6 +96,7 @@ impl WaltonsPaths {
             treatment_decisions: base.join("waltons-treatment-reviewed-decisions.json"),
             genealogy: base.join("waltons-temporal-treatment-genealogy.json"),
             treatment_hops: base.join("waltons-reviewed-treatment-contract-hops.json"),
+            s14_trajectory: base.join("waltons-s14-adaptive-trajectory.json"),
             base,
         }
     }
@@ -204,6 +206,7 @@ pub fn status(paths: &WaltonsPaths) {
         ("7 treatment decisions", &paths.treatment_decisions),
         ("8 genealogy", &paths.genealogy),
         ("8 treatment S14 hops", &paths.treatment_hops),
+        ("9 S14 adaptive trajectory", &paths.s14_trajectory),
     ];
     for (label, path) in rows {
         println!(
@@ -1082,6 +1085,43 @@ pub fn identity_compile(paths: &WaltonsPaths) -> CliResult {
     println!("authority_identity_contract_hops={}", paths.identity_hops.display());
     Ok(())
 }
+
+pub fn s14_sync(paths: &WaltonsPaths) -> CliResult {
+    let ordered = [
+        &paths.identity_hops,
+        &paths.proposition_hops,
+        &paths.treatment_hops,
+    ];
+    let available = ordered
+        .iter()
+        .filter(|path| path.exists())
+        .copied()
+        .collect::<Vec<_>>();
+    if available.is_empty() {
+        return Err(
+            "no reviewed contract hop artifacts found; compile identity/proposition/treatment review first"
+                .into(),
+        );
+    }
+
+    let mut args = vec![
+        "landscape".to_string(),
+        "expand".to_string(),
+        "--as-at".to_string(),
+        DEFAULT_AS_AT.to_string(),
+    ];
+    for path in available {
+        args.push("--delta".into());
+        args.push(path.display().to_string());
+    }
+    args.push("--output".into());
+    args.push(paths.s14_trajectory.display().to_string());
+
+    crate::contracts::run(args)?;
+    println!("waltons_s14_trajectory={}", paths.s14_trajectory.display());
+    Ok(())
+}
+
 
 fn safe_citation_dir(citation: &str) -> String {
     citation
