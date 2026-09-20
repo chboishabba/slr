@@ -26,10 +26,12 @@ def main()->int:
         item={"medium_neutral_citation":mnc,"output_dir":str(outdir/safe),"state":"primary_source_acquisition_required"}
         work.append(item)
         if a.execute:
-            raise SystemExit(
-                "generic live OALC case CLI not yet available; use the emitted worklist "
-                "or add candidate support to the governed provider before --execute"
-            )
+            subprocess.run([
+                "cargo","run","-p","sensiblaw-governed-legal-provider",
+                "--features","live-network","--example","live_oalc_case_follow","--",
+                "--operator-opt-in","--citation",mnc,"--output-dir",str(outdir/safe)
+            ],check=True)
+            item["state"]="primary_source_acquired"
     path=outdir/"oalc-acquisition-worklist.json"
     path.write_text(json.dumps({
       "schema_version":"sl.oalc_case_acquisition_worklist.v0_1",
