@@ -79,7 +79,10 @@ impl WaltonsPaths {
         }
     }
 
-    pub fn default() -> Self {
+}
+
+impl Default for WaltonsPaths {
+    fn default() -> Self {
         let base = env::var("SENSIBLAW_OALC_OUTPUT")
             .map(PathBuf::from)
             .unwrap_or_else(|_| PathBuf::from("artifacts/oalc/contracts/waltons"));
@@ -145,7 +148,7 @@ pub fn status(paths: &WaltonsPaths) {
 pub fn acquire(paths: &WaltonsPaths) -> CliResult {
     fs::create_dir_all(&paths.base)
         .map_err(|error| format!("create {}: {error}", paths.base.display()))?;
-    let mut request = OalcCaseFollowRequest::for_citation(WALTONS_MNC, &paths.base);
+    let mut request = OalcCaseFollowRequest::for_citation(WALTONS_MNC, paths.base.clone());
     request.court_ref = "court:HCA".into();
     request.oalc_jurisdiction = "commonwealth".into();
     request.legal_jurisdiction = "AU".into();
@@ -742,7 +745,7 @@ pub fn cited_by_acquire(paths: &WaltonsPaths) -> CliResult {
             .later_dir
             .join(safe_citation_dir(&candidate.medium_neutral_citation));
         let mut request =
-            OalcCaseFollowRequest::for_citation(&candidate.medium_neutral_citation, &output_dir);
+            OalcCaseFollowRequest::for_citation(&candidate.medium_neutral_citation, output_dir.clone());
         request.as_at = DEFAULT_AS_AT.into();
         let receipt = run_live_oalc_case_follow(&request).map_err(|error| {
             format!(
