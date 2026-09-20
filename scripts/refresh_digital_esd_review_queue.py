@@ -49,6 +49,18 @@ def read_jsonl(path: Path) -> list[dict[str, Any]]:
     return rows
 
 
+def explicitly_reviewed(row: dict[str, str]) -> bool:
+    """True only when an authority-changing review receipt has been applied.
+
+    decision == unresolved is not enough to distinguish pending work from a
+    reviewed ambiguity. The applied overlay replaces the unassigned reviewer
+    and records a superseded decision reference.
+    """
+    reviewer = str(row.get("reviewer_or_model_reference") or "").strip()
+    supersedes = str(row.get("supersedes_decision_reference") or "").strip()
+    return reviewer not in {"", "unassigned"} and bool(supersedes)
+
+
 class DSU:
     def __init__(self) -> None:
         self.parent: dict[str, str] = {}
@@ -93,7 +105,7 @@ def calibration_estimate(
     pairs: list[tuple[str, str]] = []
     for row in ledger_rows:
         actual = str(row.get("decision") or "")
-        if actual == "unresolved":
+        if actual == "unresolved" and not explicitly_reviewed(row):
             continue
         ref = str(row["source_identity_reference"])
         assessment = assessment_by_ref.get(ref)
@@ -153,8 +165,15 @@ def main() -> int:
         raise ValueError("ledger and candidate assessment identity sets differ")
 
     sizes = fibre_sizes(hypotheses)
+    title_abstract_pending = [
+        row for row in ledger
+        if not (
+            str(row.get("decision") or "") == "unresolved"
+            and explicitly_reviewed(row)
+        )
+    ]
     queue, calibration, _ = build_adaptive_work_queue(
-        ledger,
+        title_abstract_pending,
         assessments,
         sizes,
         calibration_per_stratum=args.calibration_per_stratum,
@@ -179,6 +198,12 @@ def main() -> int:
         "pareto_front_count": sum(1 for row in queue if row.get("pareto_front") is True),
         "calibration_selection_count": len(calibration),
         "reviewed_pair_count": estimate["reviewed_pair_count"],
+        "reviewed_unresolved_count": sum(
+            1
+            for row in ledger
+            if str(row.get("decision") or "") == "unresolved"
+            and explicitly_reviewed(row)
+        ),
         "candidate_false_negative_proxy": estimate["candidate_false_negative_proxy"],
         "candidate_review_disagreement_rate": estimate["candidate_review_disagreement_rate"],
         "ledger_modified": False,
