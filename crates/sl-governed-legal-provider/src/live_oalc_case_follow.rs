@@ -1055,17 +1055,17 @@ mod tests {
     }
 
     #[test]
-    fn filter_predicate_escapes_single_quotes() {
+    fn filter_predicate_escapes_single_quotes_on_supported_equality_path() {
         let request = OalcExactSourceRequest {
             citation: "O'Brien v Example [2020] HCA 1".into(),
-            citation_match: OalcCitationMatch::Contains,
+            citation_match: OalcCitationMatch::Exact,
             document_type: "decision".into(),
             source: None,
             jurisdiction: None,
         };
         let predicate = oalc_exact_source_filter_predicate(&request).unwrap();
         assert!(predicate.contains("O''Brien"));
-        assert!(predicate.contains("LIKE"));
+        assert!(!predicate.contains("LIKE"));
     }
 
     #[test]
