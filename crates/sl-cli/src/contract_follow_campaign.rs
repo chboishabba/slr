@@ -26,6 +26,8 @@ use std::path::{Path, PathBuf};
 
 pub type CampaignResult<T> = Result<T, String>;
 
+const RECURSIVE_OALC_MAX_REQUESTS_PER_ACQUISITION: u64 = 3;
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CampaignBudget {
     pub max_accepted_hops: usize,
@@ -442,6 +444,7 @@ pub struct ContractFollowCampaign {
     trace: AustralianContractTrace,
     observed_work_refs: BTreeSet<String>,
     hops: Vec<CampaignHopReceipt>,
+    accepted_hops_before: usize,
     reviewed_residuals: Vec<Value>,
     source_acquisitions: usize,
     network_requests: u64,
@@ -461,6 +464,7 @@ impl ContractFollowCampaign {
             trace,
             observed_work_refs: work_refs(&work),
             hops: Vec::new(),
+            accepted_hops_before: 0,
             reviewed_residuals: Vec::new(),
             source_acquisitions: 0,
             network_requests: 0,
@@ -472,6 +476,30 @@ impl ContractFollowCampaign {
         snapshot: &ContractTraceSnapshot,
     ) -> CampaignResult<Self> {
         Self::new(config, restore_trace(snapshot)?)
+    }
+
+    pub fn resume(
+        config: CampaignConfig,
+        trace: AustralianContractTrace,
+        accepted_hops_before: usize,
+        source_acquisitions: usize,
+        network_requests: u64,
+    ) -> CampaignResult<Self> {
+        let mut campaign = Self::new(config, trace)?;
+        if accepted_hops_before > campaign.config.budget.max_accepted_hops
+            || source_acquisitions > campaign.config.budget.max_source_acquisitions
+            || network_requests > campaign.config.budget.max_network_requests
+        {
+            return Err("parent campaign counters already exceed configured budget".into());
+        }
+        campaign.accepted_hops_before = accepted_hops_before;
+        campaign.source_acquisitions = source_acquisitions;
+        campaign.network_requests = network_requests;
+        Ok(campaign)
+    }
+
+    pub fn accepted_hop_count(&self) -> usize {
+        self.accepted_hops_before + self.hops.len()
     }
 
     pub fn trace(&self) -> &AustralianContractTrace {
@@ -491,7 +519,7 @@ impl ContractFollowCampaign {
         source_ref: &str,
         delta: ContractLandscapeExpansionDelta,
     ) -> CampaignResult<&CampaignHopReceipt> {
-        if self.hops.len() >= self.config.budget.max_accepted_hops {
+        if self.accepted_hop_count() >= self.config.budget.max_accepted_hops {
             return Err("campaign accepted-hop budget exhausted".into());
         }
         let (next, receipt) = apply_contract_landscape_expansion(&self.trace, &delta)?;
@@ -500,7 +528,7 @@ impl ContractFollowCampaign {
         let fresh = fresh_work(&work, &self.observed_work_refs);
         self.observed_work_refs.extend(work_refs(&work));
         self.hops.push(campaign_hop_receipt(
-            self.hops.len() + 1,
+            self.accepted_hop_count() + 1,
             source_ref,
             &receipt,
             fresh,
@@ -532,11 +560,15 @@ impl ContractFollowCampaign {
     }
 
     pub fn next_fresh_step(&self) -> CampaignNextStep {
-        if self.hops.len() >= self.config.budget.max_accepted_hops {
+        if self.accepted_hop_count() >= self.config.budget.max_accepted_hops {
             return CampaignNextStep {
                 gate: CampaignOperatorGate::BudgetExhausted,
                 selected: None,
                 selector_is_legal_truth_rank: false,
+                budget: config.budget,
+                accepted_hop_count: counters.accepted_hops,
+                source_acquisition_count: counters.source_acquisitions,
+                network_request_count: counters.network_requests,
                 candidate_only: true,
                 creates_legal_authority: false,
                 creates_current_law_conclusion: false,
@@ -574,18 +606,26 @@ impl ContractFollowCampaign {
         }
     }
 
-    pub fn record_source_acquisition(
-        &mut self,
-        network_requests: u64,
+    pub fn ensure_source_acquisition_budget(
+        &self,
+        reserved_network_requests: u64,
     ) -> CampaignResult<()> {
         if self.source_acquisitions >= self.config.budget.max_source_acquisitions {
             return Err("campaign source-acquisition budget exhausted".into());
         }
-        if self.network_requests.saturating_add(network_requests)
+        if self.network_requests.saturating_add(reserved_network_requests)
             > self.config.budget.max_network_requests
         {
             return Err("campaign network-request budget exhausted".into());
         }
+        Ok(())
+    }
+
+    pub fn record_source_acquisition(
+        &mut self,
+        network_requests: u64,
+    ) -> CampaignResult<()> {
+        self.ensure_source_acquisition_budget(network_requests)?;
         self.source_acquisitions += 1;
         self.network_requests += network_requests;
         Ok(())
@@ -599,7 +639,9 @@ impl ContractFollowCampaign {
             "as_at": self.config.as_at,
             "jurisdiction_filter": self.config.jurisdiction_filter,
             "budget": self.config.budget,
-            "accepted_hop_count": self.hops.len(),
+            "accepted_hop_count": self.accepted_hop_count(),
+            "segment_accepted_hop_count": self.hops.len(),
+            "accepted_hops_before": self.accepted_hops_before,
             "source_acquisition_count": self.source_acquisitions,
             "network_request_count": self.network_requests,
             "reviewed_residual_count": self.reviewed_residuals.len(),
@@ -862,6 +904,47 @@ fn trace_snapshot_from_trajectory(path: &Path) -> CampaignResult<ContractTraceSn
     ))
 }
 
+#[derive(Debug, Clone, Copy)]
+struct CampaignCounters {
+    accepted_hops: usize,
+    source_acquisitions: usize,
+    network_requests: u64,
+}
+
+fn counters_from_trajectory(path: &Path) -> CampaignResult<CampaignCounters> {
+    let value = read_campaign_receipt(path)?;
+    let state = value.get("campaign_state").unwrap_or(&value);
+    Ok(CampaignCounters {
+        accepted_hops: state
+            .get("accepted_hop_count")
+            .and_then(Value::as_u64)
+            .unwrap_or_else(|| {
+                value.get("hop_count").and_then(Value::as_u64).unwrap_or_default()
+            }) as usize,
+        source_acquisitions: state
+            .get("source_acquisition_count")
+            .and_then(Value::as_u64)
+            .unwrap_or_default() as usize,
+        network_requests: state
+            .get("network_request_count")
+            .and_then(Value::as_u64)
+            .unwrap_or_default(),
+    })
+}
+
+fn resume_from_trajectory(path: &Path) -> CampaignResult<ContractFollowCampaign> {
+    let snapshot = trace_snapshot_from_trajectory(path)?;
+    let trace = restore_trace(&snapshot)?;
+    let counters = counters_from_trajectory(path)?;
+    ContractFollowCampaign::resume(
+        config_from_trajectory(path)?,
+        trace,
+        counters.accepted_hops,
+        counters.source_acquisitions,
+        counters.network_requests,
+    )
+}
+
 fn config_from_trajectory(path: &Path) -> CampaignResult<CampaignConfig> {
     let value = read_campaign_receipt(path)?;
     let as_at = value
@@ -895,12 +978,17 @@ fn config_from_trajectory(path: &Path) -> CampaignResult<CampaignConfig> {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct OutboundFrontierEnvelope {
     schema_version: String,
+    parent_campaign_receipt: String,
     source_receipt_path: String,
     source_semantic_ref: String,
     residual_count: usize,
     selected: Option<OutboundCitationResidual>,
     residuals: Vec<OutboundCitationResidual>,
     selector_is_legal_truth_rank: bool,
+    budget: CampaignBudget,
+    accepted_hop_count: usize,
+    source_acquisition_count: usize,
+    network_request_count: u64,
     candidate_only: bool,
     creates_legal_authority: bool,
     creates_current_law_conclusion: bool,
@@ -915,12 +1003,15 @@ pub fn run(args: Vec<String>) -> CampaignResult<()> {
             let output = PathBuf::from(required_arg(rest, "--output")?);
             let snapshot = trace_snapshot_from_trajectory(&trajectory)?;
             let trace = restore_trace(&snapshot)?;
+            let config = config_from_trajectory(&trajectory)?;
+            let counters = counters_from_trajectory(&trajectory)?;
             let (_, materialization) = materialize_retained_oalc_receipt(&source_receipt)?;
             let residuals =
                 discover_outbound_citation_residuals(&trace, &source_semantic_ref, &materialization);
             let selected = select_fresh_outbound_citation(&residuals).cloned();
             let envelope = OutboundFrontierEnvelope {
-                schema_version: "sl.contract_follow.outbound_frontier.v0_1".into(),
+                schema_version: "sl.contract_follow.outbound_frontier.v0_2".into(),
+                parent_campaign_receipt: trajectory.display().to_string(),
                 source_receipt_path: source_receipt.display().to_string(),
                 source_semantic_ref,
                 residual_count: residuals.len(),
@@ -947,6 +1038,7 @@ pub fn run(args: Vec<String>) -> CampaignResult<()> {
         [command, rest @ ..] if command == "acquire-next" => {
             let frontier = PathBuf::from(required_arg(rest, "--frontier")?);
             let output_dir = PathBuf::from(required_arg(rest, "--output-dir")?);
+            let trajectory = PathBuf::from(required_arg(rest, "--trajectory")?);
             let as_at = arg_value(rest, "--as-at").unwrap_or_else(|| "2026-09-20".into());
             let envelope: OutboundFrontierEnvelope = {
                 let bytes = fs::read(&frontier)
@@ -954,10 +1046,25 @@ pub fn run(args: Vec<String>) -> CampaignResult<()> {
                 serde_json::from_slice(&bytes)
                     .map_err(|error| format!("decode {}: {error}", frontier.display()))?
             };
+            if envelope.parent_campaign_receipt != trajectory.display().to_string() {
+                return Err("outbound frontier parent campaign does not match --trajectory".into());
+            }
+            let mut campaign = resume_from_trajectory(&trajectory)?;
+            if campaign.config.budget != envelope.budget
+                || campaign.accepted_hop_count() != envelope.accepted_hop_count
+                || campaign.source_acquisitions != envelope.source_acquisition_count
+                || campaign.network_requests != envelope.network_request_count
+            {
+                return Err("outbound frontier budget/counter snapshot no longer matches parent campaign".into());
+            }
+            campaign.ensure_source_acquisition_budget(
+                RECURSIVE_OALC_MAX_REQUESTS_PER_ACQUISITION,
+            )?;
             let selected = envelope
                 .selected
                 .ok_or_else(|| "outbound frontier has no selected candidate".to_string())?;
             let receipt = acquire_outbound_citation(&selected, output_dir.clone(), &as_at)?;
+            campaign.record_source_acquisition(receipt.network_requests)?;
             let summary = json!({
                 "schema_version": "sl.contract_follow.recursive_source_acquisition.v0_1",
                 "selected_residual_ref": selected.residual_ref,
@@ -966,6 +1073,10 @@ pub fn run(args: Vec<String>) -> CampaignResult<()> {
                 "version_id": receipt.version_id,
                 "corpus_revision_ref": receipt.corpus_revision_ref,
                 "network_requests": receipt.network_requests,
+                "campaign_source_acquisition_count": campaign.source_acquisitions,
+                "campaign_network_request_count": campaign.network_requests,
+                "campaign_budget": campaign.config.budget,
+                "parent_campaign_receipt": trajectory,
                 "candidate_only": true,
                 "creates_legal_authority": false,
                 "creates_current_law_conclusion": false,
@@ -996,8 +1107,8 @@ pub fn run(args: Vec<String>) -> CampaignResult<()> {
             crate::contract_identity::finalize(&worksheet, &decisions)?;
             let snapshot = trace_snapshot_from_trajectory(&trajectory)?;
             let trace = restore_trace(&snapshot)?;
-            let compiled = crate::contract_identity::compile_against(&decisions, trace.clone())?;
-            let mut campaign = ContractFollowCampaign::new(config_from_trajectory(&trajectory)?, trace)?;
+            let compiled = crate::contract_identity::compile_against(&decisions, trace)?;
+            let mut campaign = resume_from_trajectory(&trajectory)?;
             for residual in &compiled.compilation.residuals {
                 campaign.preserve_reviewed_residual(
                     &decisions.display().to_string(),
@@ -1055,7 +1166,7 @@ pub fn run(args: Vec<String>) -> CampaignResult<()> {
             let trace = restore_trace(&snapshot)?;
             let compiled =
                 crate::contract_treatment::compile_treatment_review(&queue, &decisions, &trace)?;
-            let mut campaign = ContractFollowCampaign::new(config_from_trajectory(&trajectory)?, trace)?;
+            let mut campaign = resume_from_trajectory(&trajectory)?;
             for residual in &compiled.compilation.residuals {
                 campaign.preserve_reviewed_residual(
                     &decisions.display().to_string(),
