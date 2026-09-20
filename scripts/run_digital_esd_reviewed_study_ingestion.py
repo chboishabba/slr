@@ -20,8 +20,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 from typing import Any
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from interop_scripts.digital_esd.scholarly_fulltext import run as run_scholarly_fulltext
 from interop_scripts.digital_esd_fulltext_cache import FullTextCacheWrapper
