@@ -32,6 +32,7 @@ pub struct MatterEntityProjection {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MatterObservationProjection {
     pub observation_ref: String,
+    pub manifestation_ref: Option<String>,
     pub source_revision_ref: String,
     pub span_ref: String,
     pub element_refs: Vec<String>,
@@ -42,6 +43,7 @@ pub struct MatterObservationProjection {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MatterDocumentProjection {
     pub document_ref: String,
+    pub manifestation_refs: Vec<String>,
     pub source_revision_ref: String,
     pub span_refs: Vec<String>,
     pub observation_refs: Vec<String>,
@@ -203,13 +205,15 @@ pub fn project_matter_issue_workbench(
                 .entry(evidence.observation_ref.clone())
                 .or_insert_with(|| MatterObservationProjection {
                     observation_ref: evidence.observation_ref.clone(),
+                    manifestation_ref: evidence.manifestation_ref.clone(),
                     source_revision_ref: evidence.source_revision_ref.clone(),
                     span_ref: evidence.span_ref.clone(),
                     element_refs: Vec::new(),
                     disposition_refs: Vec::new(),
                     candidate_only: true,
                 });
-            if entry.source_revision_ref != evidence.source_revision_ref
+            if entry.manifestation_ref != evidence.manifestation_ref
+                || entry.source_revision_ref != evidence.source_revision_ref
                 || entry.span_ref != evidence.span_ref
             {
                 return Err(format!(
@@ -234,11 +238,17 @@ pub fn project_matter_issue_workbench(
             .entry(observation.source_revision_ref.clone())
             .or_insert_with(|| MatterDocumentProjection {
                 document_ref: format!("document:{}", observation.source_revision_ref),
+                manifestation_refs: observation.manifestation_ref.clone().into_iter().collect(),
                 source_revision_ref: observation.source_revision_ref.clone(),
                 span_refs: Vec::new(),
                 observation_refs: Vec::new(),
                 candidate_only: true,
             });
+        if let Some(manifestation_ref) = &observation.manifestation_ref {
+            if !document.manifestation_refs.contains(manifestation_ref) {
+                document.manifestation_refs.push(manifestation_ref.clone());
+            }
+        }
         if !document.span_refs.contains(&observation.span_ref) {
             document.span_refs.push(observation.span_ref.clone());
         }
