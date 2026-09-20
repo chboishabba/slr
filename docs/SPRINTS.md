@@ -143,7 +143,7 @@ M1.5 restart/replay           strict validator + capstone replay + durable PG au
 
 Certified at exact SLR head `4bc8ce04eee4d79ccf15ef9131d80c8e19647bfb`: workspace tests passed, the persisted PostgreSQL campaign replayed with an intact hop/world chain and non-promotion invariants, and the corresponding Agda golden modules typechecked green. The certified Sprint-1 branch is intentionally left unchanged after those receipts.
 
-## Sprint 2 — Canonical evidence convergence — ACTIVE
+## Sprint 2 — Canonical evidence convergence — CLOSURE GATE
 
 **Single deliverable:** world, legal-source and narrative evidence converge on
 one canonical evidence/provenance substrate.
@@ -152,21 +152,57 @@ Work package:
 - **M2.1 one evidence manifestation envelope — paid**;
 - **M2.2 one SourceRevision -> exact-anchor -> Observation substrate — paid**;
 - **M2.3 shared reviewed-evidence reducer ABI — paid / certified**;
-- **M2.4 provider normalisation — source-written, Agda owners created, exact-head receipts pending**;
-- **Digital-ESD adaptive screening (P0-A through P0-G) — implemented and verified**;
-- PG-hit/no-network, PG-miss/acquire/persist/reuse;
-- cross-family exact replay.
+- **M2.4 provider normalisation — paid at the production capability level**;
+- **Digital-ESD adaptive screening (P0-A through P0-G) — application workload complete; retained as regression/capstone corpus**;
+- **M2.5 cross-family persisted replay — sole remaining closure gate unless an existing differently named owner is located**.
 
-## Sprint 3 — World-to-law weld
+Document/PDF work is generic infrastructure. A new corpus does not justify a new evidence substrate or parser architecture absent a concrete failing fixture.
 
-**Single deliverable:** one reviewed matter projects into a legal issue graph
-without promoting event/harm/classification into legal conclusions.
+## Sprint 3 — Reviewed world -> legal issue graph
 
-## Sprint 4 — Legal reasoning + product surface
+**Single deliverable:** one production SLR runner consumes reviewed,
+source-addressable world observations and source-realised legal rules, evaluates
+the existing WrongType/legal algebra without silent promotion, emits residuals,
+and survives persist/restart/replay.
 
-**Single deliverable:** complete legal-issue reasoning and user navigation over
-matter -> issue -> rule -> evidence -> receipt, with why/what-missing/as-at
-queries and no parallel UI ontology.
+Sprint 3 is recut into three capability gates rather than eight greenfield
+projects:
+
+- **M3.A reviewed world -> WrongType issue state**
+  - reviewed facts/events stay distinct from source observations;
+  - element dispositions use the existing
+    `Satisfied | Unsatisfied | Contested | Unresolved` semantics;
+  - statistical-study, sensor/health, finance, narrative and Wikidata
+    coordinates are optional typed facets over canonical source-addressed
+    observations, not new canonical evidence universes.
+- **M3.B source-realised legal evaluator**
+  - Rust parity for the existing Agda rule algebra:
+    premises, exceptions, defeaters, conditions/burdens, jurisdiction,
+    temporal validity, authority role, applicability, violation, liability and
+    remedy;
+  - defence structure reuses WrongType/rule roles rather than one universal
+    boolean.
+- **M3.C adaptive Australian legal capstone**
+  - one generic persisted runner across the existing Mabo, Pabai, Cullen/NSW
+    CLA and GLJ calibration lanes;
+  - proof/search + discriminator/experiment-planning machinery selects
+    consumer-relevant residual work;
+  - persist/restart/replay reproduces issue state, residuals and source links.
+
+SLR is a legal consumer/admission runtime over the wider ITIR world fabric. It
+does not replace WorldMonitor evidence-health state, StatiBaker temporal
+observer state, Casey possibility/workspace state or formal/reference workers.
+
+## Sprint 4 — Product projections
+
+**Single deliverable:** user navigation over the already-built reasoning and
+world fabric without introducing a second ontology.
+
+Every displayed semantic/derived node should support the same basic affordance:
+source preview/open, why/dependency path, cited-by/cites-where where meaningful,
+downstream uses, revision lineage and unresolved residuals. A proof tree,
+timeline, Sankey/ribbon and source pane are projections of underlying objects,
+not competing truth stores.
 
 ## Definition of sprint complete
 
@@ -235,9 +271,10 @@ requests; post-persist verification likewise retains zero network requests.
 The stored source revision and resolution receipt remain the evidence identity
 coordinates after normalisation.
 
-M2.4 remains `implementedAwaitingRuntime` until the new Rust and Agda heads
-receive fresh exact-head receipts. M2.5 cross-family persisted replay remains
-the Sprint-2 closure gate.
+M2.4 is now treated as paid at the production capability level after the final
+SLR merge/verification. M2.5 cross-family persisted replay remains the sole
+Sprint-2 closure gate unless an equivalent differently named replay owner is
+identified.
 
 ### Digital-ESD adaptive screening (P0-A through P0-G) — IMPLEMENTED
 
@@ -248,11 +285,11 @@ Full adaptive screening pipeline implemented in
 Seven stages:
 - **P0-A** screening_initialization — ledger load, run identity, 43,996 records
 - **P0-B** source_collection_and_triage — domain triage (5 domains, ~8,757 candidates)
-- **P0-C** fulltext_index_preparation — full-text index construction
+- **P0-C** fulltext_index_preparation — generic full-text index construction
 - **P0-D** candidate_assessment_generation — deterministic scoring (threshold 0.5)
 - **P0-E** review_calibration_tranche — 439-record calibration subset
-- **P0-F** fulltext_retrieval_and_verification — full-text retrieval (8,724 retrieved)
-- **P0-G** verified_fulltext_gate — final verified gate (8,758 verified)
+- **P0-F** fulltext_retrieval_and_verification — generic full-text retrieval/verification
+- **P0-G** verified_fulltext_gate — final full-text index receipt **43,996 records / 43,996 verified / 0 failed**
 
 The 43,996-record ledger is at `fixtures/digital_esd_ledger.tsv`.
 Agda owners at `Agda/digital_esd/` (`DigitalESDAdaptiveScreeningExecutionExact.agda`,
@@ -260,4 +297,7 @@ Agda owners at `Agda/digital_esd/` (`DigitalESDAdaptiveScreeningExecutionExact.a
 Source documents at `DASHI/Education/`.
 
 All stages produce deterministic SHA-256 digests and persisted run state
-in `artifacts/digital_esd/`.
+in `artifacts/digital_esd/`. Digital-ESD is now a regression/capstone workload:
+large-corpus denominator integrity, adaptive review, duplicate/report-family
+handling, generic PDF/full-text ingestion and candidate-vs-review authority.
+It must not become an ESD-specific core evidence subsystem.
