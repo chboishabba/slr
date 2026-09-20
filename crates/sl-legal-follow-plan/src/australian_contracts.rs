@@ -9,8 +9,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
-    AuthorityLevel, LegalSourcePlan, PlanState, SourceRole, OALC_DATASET_ID,
-    OALC_PROVIDER_PROFILE,
+    AuthorityLevel, LegalSourceDemand, LegalSourcePlan, PlanState, SourceRole,
+    OALC_DATASET_ID, OALC_PROVIDER_PROFILE,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -339,6 +339,39 @@ pub fn australian_contract_landscape_seed() -> AustralianContractTrace {
     trace
 }
 
+
+pub fn legal_follow_demand_for_trace_node(
+    node: &ContractTraceNode,
+    as_at: &str,
+) -> Option<LegalSourceDemand> {
+    let requested_facets = match node.source_role {
+        SourceRole::PrimaryCaseLaw => vec![
+            "case.full_text".into(),
+            "case.citation_graph".into(),
+            "case.treatment".into(),
+        ],
+        SourceRole::PrimaryLegislation => vec![
+            "legislation.text".into(),
+            "legislation.version_history".into(),
+        ],
+        SourceRole::OfficialRecord | SourceRole::ResearchIndex | SourceRole::SecondaryAnalysis => {
+            return None;
+        }
+    };
+    Some(LegalSourceDemand {
+        demand_ref: format!("contract-follow:{}", node.semantic_ref),
+        origin_ref: node.semantic_ref.clone(),
+        jurisdiction_ref: Some(node.jurisdiction_ref.clone()),
+        source_roles: vec![node.source_role],
+        authority_levels: vec![node.authority_level],
+        provider_profile_refs: vec![OALC_PROVIDER_PROFILE.into()],
+        requested_facets,
+        temporal_refs: vec![format!("as_at:{as_at}")],
+        provenance_refs: vec!["australian-contracts-follow:v1".into()],
+        priority: 100,
+    })
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExactCaseLawSourceDemand {
     pub demand_ref: String,
@@ -441,6 +474,21 @@ mod tests {
         assert!(!trace.active_at("legislation:qld:property-law-act-1974:s55", "2025-08-01"));
         assert!(!trace.active_at("legislation:qld:property-law-act-2023:s68", "2025-07-31"));
         assert!(trace.active_at("legislation:qld:property-law-act-2023:s68", "2025-08-01"));
+    }
+
+    #[test]
+    fn trace_nodes_compile_into_existing_legal_follow_demands() {
+        let waltons = waltons_estoppel_trace();
+        let waltons_node = &waltons.nodes["case:au:hca:1988:7"];
+        let case_demand = legal_follow_demand_for_trace_node(waltons_node, "2026-09-20").unwrap();
+        assert_eq!(case_demand.source_roles, vec![SourceRole::PrimaryCaseLaw]);
+        assert!(case_demand.requested_facets.contains(&"case.citation_graph".to_string()));
+
+        let landscape = australian_contract_landscape_seed();
+        let qld = &landscape.nodes["legislation:qld:property-law-act-2023:s68"];
+        let statute_demand = legal_follow_demand_for_trace_node(qld, "2026-09-20").unwrap();
+        assert_eq!(statute_demand.jurisdiction_ref.as_deref(), Some("AU-QLD"));
+        assert_eq!(statute_demand.source_roles, vec![SourceRole::PrimaryLegislation]);
     }
 
     #[test]
