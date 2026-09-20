@@ -18,6 +18,9 @@ ARTIFACT_NAMES = (
     "parser_manifest",
     "screening_ledger",
     "candidate_assessment",
+    "study_family_hypotheses",
+    "calibration_selection",
+    "calibration_estimate",
     "pareto_queue",
 )
 
