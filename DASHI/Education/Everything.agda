@@ -11,6 +11,10 @@ import DASHI.Education.DigitalESDERICStudyExecutionExact as ERICStudyExact
 import DASHI.Education.DigitalESDERICStudyExecutionRegression as ERICStudyRegression
 import DASHI.Education.DigitalESDSelectiveFullTextMaterialisationExact as FullTextExact
 import DASHI.Education.DigitalESDSelectiveFullTextMaterialisationRegression as FullTextRegression
+import DASHI.Education.DigitalESDReviewedScreeningDecisionBridgeRegression as DecisionBridgeRegression
+import DASHI.Education.DigitalESDReviewedScreeningDecisionBridgeExact as DecisionBridgeExact
+import DASHI.Education.DigitalESDStudyProcessingCensusRegression as CensusRegression
+import DASHI.Education.DigitalESDStudyProcessingCensusExact as CensusExact
 
 ------------------------------------------------------------------------
 -- DIGITAL-ESD EDUCATION MODULE COMPOSITION
@@ -27,3 +31,13 @@ ericStudyExact = ERICStudyExact.defaultRealERICStudyExecutionReceipt
 
 fullTextExact : FullTextExact.SelectiveFullTextMaterialisationReceipt
 fullTextExact = FullTextExact.defaultSelectiveFullTextMaterialisationReceipt
+
+
+studyProcessingCensusBoundary : CensusExact.StudyProcessingCensusBoundary
+studyProcessingCensusBoundary =
+  CensusExact.canonicalStudyProcessingCensusBoundary
+
+reviewedScreeningDecisionBoundary :
+  DecisionBridgeExact.ReviewedScreeningDecisionBoundary
+reviewedScreeningDecisionBoundary =
+  DecisionBridgeExact.canonicalReviewedScreeningDecisionBoundary
