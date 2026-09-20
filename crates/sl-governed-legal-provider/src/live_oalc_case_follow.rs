@@ -309,6 +309,9 @@ mod live {
         "https://huggingface.co/api/datasets/isaacus/open-australian-legal-corpus";
     const HF_FILTER_API: &str = "https://datasets-server.huggingface.co/filter";
     const HF_SEARCH_API: &str = "https://datasets-server.huggingface.co/search";
+    // The pinned corpus is roughly 9.4 GB.  This is a whole-response deadline,
+    // not an in-memory buffer: parsing remains line-by-line through BufReader.
+    const PINNED_STREAM_TIMEOUT_SECONDS: u64 = 900;
 
     #[derive(Debug, Deserialize)]
     struct DatasetInfo {
@@ -492,7 +495,7 @@ mod live {
             request.revision
         );
         let agent = ureq::AgentBuilder::new()
-            .timeout(Duration::from_secs(120))
+            .timeout(Duration::from_secs(PINNED_STREAM_TIMEOUT_SECONDS))
             .build();
         let response = match agent
             .get(&url)
