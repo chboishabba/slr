@@ -1437,6 +1437,34 @@ mod tests {
     }
 
     #[test]
+    fn s14_sync_bootstraps_waltons_without_review_artifacts() {
+        let base = std::env::temp_dir().join(format!(
+            "sensiblaw-waltons-s14-sync-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&base);
+        let paths = WaltonsPaths::from_base(base.clone());
+        s14_sync(&paths).unwrap();
+
+        let output: Value = read_json(&paths.s14_trajectory).unwrap();
+        assert_eq!(output["schema_version"], "sl.waltons_s14_reviewed_sync.v0_1");
+        assert_eq!(output["transport"], "typed_rust_in_process");
+        assert_eq!(output["json_is_semantic_command_transport"], false);
+        assert_eq!(output["waltons_bootstrap_included"], true);
+        assert_eq!(output["identity_review_present"], false);
+        assert_eq!(output["proposition_review_present"], false);
+        assert_eq!(output["treatment_review_present"], false);
+        assert_eq!(output["reviewed_residuals_preserved"], true);
+        assert_eq!(output["creates_legal_authority"], false);
+        assert_eq!(output["creates_current_law_conclusion"], false);
+        assert!(output["hop_count"].as_u64().unwrap_or_default() >= 1);
+        assert!(output
+            .to_string()
+            .contains("requirement:estoppel:reliance"));
+        let _ = fs::remove_dir_all(base);
+    }
+
+    #[test]
     fn requirement_roles_are_typed_and_not_inferred_from_arbitrary_strings() {
         assert_eq!(
             role_for_requirement("requirement:estoppel:reliance"),
