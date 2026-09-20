@@ -3,10 +3,11 @@ use std::path::PathBuf;
 
 use sensiblaw_legal_runtime::{
     build_australian_calibration_capstone, build_m2_5_mixed_family_campaign,
-    compile_capability_receipt, compile_explanation_index, compile_projection,
-    project_matter_issue_workspace, project_matter_issue_workbench, AustralianCalibrationKind,
-    MatterEntityKind, MatterEntityProjection, MatterEventProjection, MatterWorkbenchSeed,
-    MixedFamilyReplayReceipt, ProjectionContext, ProjectionKind, ProjectionQuery,
+    compile_capability_receipt, compile_explanation_index, compile_matter_runtime,
+    compile_projection, lower_reader_intent, project_matter_issue_workspace,
+    project_matter_issue_workbench, AustralianCalibrationKind, MatterCommand, MatterEntityKind,
+    MatterEntityProjection, MatterEventProjection, MatterWorkbenchSeed, MixedFamilyReplayReceipt,
+    ProjectionContext, ProjectionKind, ProjectionQuery,
 };
 
 fn runtime_error(label: &str, error: impl std::fmt::Debug) -> std::io::Error {
@@ -155,6 +156,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             ));
         }
 
+        let mut runtime = compile_matter_runtime(
+            workbench.clone(),
+            &capstone.issue,
+            last,
+            projection_context.clone(),
+        )
+        .map_err(|error| std::io::Error::other(format!("S8 runtime failed: {error}")))?;
+        runtime
+            .dispatch(MatterCommand::SelectObject(first_evidence.observation_ref.clone()))
+            .map_err(|error| std::io::Error::other(format!("S8 selection failed: {error}")))?;
+        let reader_command = lower_reader_intent(
+            sensiblaw_reader_model::ReaderIntent::OpenSource,
+            Some(first_evidence.observation_ref.as_str()),
+        )
+        .map_err(|error| std::io::Error::other(format!("S8 reader lowering failed: {error}")))?;
+        let source_receipt = runtime
+            .dispatch(reader_command)
+            .map_err(|error| std::io::Error::other(format!("S8 source dispatch failed: {error}")))?;
+        fs::write(
+            output.join(format!("{kind:?}.m8-runtime.txt").to_lowercase()),
+            format!("{runtime:#?}\n{source_receipt:#?}"),
+        )?;
+
         report.push(format!(
             "{kind:?}\tapplicability={:?}\tviolation={:?}\tliability={:?}\tremedy={:?}\tresiduals={}\tnodes={}\tentities={}\tobservations={}\tevents={}\tdocuments={}\ttimeline={}\treceipt_head={}\tm6_records={}\tm7_projections={}",
             workspace.applicability,
@@ -177,7 +201,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let receipt = compile_capability_receipt()
         .map_err(|error| runtime_error("capability receipt failed", error))?;
     report.push(format!(
-        "capability\tm2_5={}\tm3_a={}\tm3_b={}\tm3_c={}\tm3_c_replay={}\tm4_a={}\tm6={}\tm6_reverse={}\tm7={}\tm7_identity={}\tcandidate_only={}\tsemantic_authority={}\tdigest={}",
+        "capability\tm2_5={}\tm3_a={}\tm3_b={}\tm3_c={}\tm3_c_replay={}\tm4_a={}\tm6={}\tm6_reverse={}\tm7={}\tm7_identity={}\ts8={}\ts8_reducer={}\ts8_reader={}\tcandidate_only={}\tsemantic_authority={}\tdigest={}",
         receipt.m2_5_mixed_family_replay,
         receipt.m3_a_reviewed_world_to_wrong_type,
         receipt.m3_b_source_realised_evaluator,
@@ -188,6 +212,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         receipt.m6_reverse_material_impact,
         receipt.m7_projection_fabric,
         receipt.m7_same_identity_cross_projection,
+        receipt.s8_matter_runtime,
+        receipt.s8_shared_command_reducer,
+        receipt.s8_reader_command_weld,
         receipt.candidate_only,
         receipt.creates_semantic_authority,
         receipt.receipt_digest,
