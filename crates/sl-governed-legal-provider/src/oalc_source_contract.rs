@@ -314,11 +314,16 @@ pub fn classify_exact_filter<T>(
 
 pub fn oalc_filter_predicate(demand: &OalcSourceDemand) -> Result<String, OalcSourceContractError> {
     demand.validate()?;
-    let citation = demand.citation.replace(''', "''");
-    let kind = demand.document_kind.expected_oalc_type().replace(''', "''");
-    Ok(format!(
-        "\"citation\"='{citation}' AND \"type\"='{kind}'"
-    ))
+    let citation = demand.citation.replace('\'', "''");
+    let kind = demand.document_kind.expected_oalc_type().replace('\'', "''");
+    match demand.document_kind {
+        OalcDocumentKind::CaseLaw => Ok(format!(
+            "\"citation\" LIKE '%{citation}%' AND \"type\"='{kind}'"
+        )),
+        OalcDocumentKind::Legislation => Ok(format!(
+            "\"citation\"='{citation}' AND \"type\"='{kind}'"
+        )),
+    }
 }
 
 #[cfg(test)]
@@ -406,7 +411,8 @@ mod tests {
         let demand = OalcSourceDemand::from_case_law(&case_exact()).unwrap();
         let predicate = oalc_filter_predicate(&demand).unwrap();
         assert!(predicate.contains("[1988] HCA 7"));
-        assert!(predicate.contains("\"type\"='case'"));
+        assert!(predicate.contains("\"type\"='decision'"));
+        assert!(predicate.contains("LIKE"));
     }
 
     #[test]
