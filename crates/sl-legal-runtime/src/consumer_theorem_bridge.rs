@@ -692,6 +692,16 @@ mod tests {
         assert!(residual
             .witness_refs
             .contains(&"world:treatment-missing".into()));
+        assert_eq!(residual.formal_verifier, "agda");
+        assert!(valid_sha256_ref(&residual.verification_receipt_digest));
+        assert_eq!(
+            residual.nonfactorability_theorem_ref,
+            "coarseTreatmentDefect"
+        );
+        assert_eq!(
+            residual.nonfactorability_theorem_module_ref,
+            "DASHI.Law.ConsumerDirectedLegalFollowAdequacyExact"
+        );
         assert!(!residual.creates_semantic_authority);
     }
 }
