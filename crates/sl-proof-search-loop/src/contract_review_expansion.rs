@@ -452,8 +452,16 @@ pub fn compile_treatment_receipts_to_contract_hops_with_aliases(
     receipts: &[ReviewedCitationReviewUnitReceipt],
     reviewed_document_aliases: &BTreeMap<String, String>,
 ) -> ContractReviewedHopCompilation {
-    let mut deltas = Vec::new();
     let mut residuals = Vec::new();
+
+    // Several reviewed source spans may support the same semantic treatment
+    // edge.  Preserve every review unit in provenance, but emit only one graph
+    // delta per unique (from, to, treatment) edge.  This keeps the trajectory
+    // about semantic growth rather than paragraph multiplicity.
+    let mut supported: BTreeMap<
+        (String, String, TreatmentKind),
+        Vec<String>,
+    > = BTreeMap::new();
 
     for receipt in receipts {
         let edge = &receipt.edge;
@@ -498,20 +506,35 @@ pub fn compile_treatment_receipts_to_contract_hops_with_aliases(
             continue;
         }
 
-        deltas.push(ContractLandscapeExpansionDelta {
-            discovered_nodes: Vec::new(),
-            discovered_edges: vec![ContractTraceEdge {
-                from_ref: citing_document_ref,
-                to_ref: cited_document_ref,
-                treatment,
+        supported
+            .entry((citing_document_ref, cited_document_ref, treatment))
+            .or_default()
+            .push(receipt.review_unit_ref.clone());
+    }
+
+    let deltas = supported
+        .into_iter()
+        .map(|((from_ref, to_ref, treatment), mut review_units)| {
+            review_units.sort();
+            review_units.dedup();
+            ContractLandscapeExpansionDelta {
+                discovered_nodes: Vec::new(),
+                discovered_edges: vec![ContractTraceEdge {
+                    from_ref,
+                    to_ref,
+                    treatment,
+                    candidate_only: true,
+                    creates_legal_authority: false,
+                }],
+                provenance_ref: format!(
+                    "reviewed-treatment-bundle:{}",
+                    review_units.join("+")
+                ),
                 candidate_only: true,
                 creates_legal_authority: false,
-            }],
-            provenance_ref: receipt.review_unit_ref.clone(),
-            candidate_only: true,
-            creates_legal_authority: false,
-        });
-    }
+            }
+        })
+        .collect();
 
     ContractReviewedHopCompilation {
         deltas,
@@ -781,4 +804,33 @@ mod tests {
             ContractReviewedHopResidualKind::MissingTreatmentIdentity
         );
     }
+
+    #[test]
+    fn duplicate_reviewed_treatment_units_collapse_to_one_semantic_delta() {
+        let trace = waltons_estoppel_trace();
+        let first = treatment_receipt(CitationUse::ReliedOn);
+        let mut second = first.clone();
+        second.review_unit_ref = "review-unit:sidhu-waltons:corroborating".into();
+        second.edge.pinpoint_ref = Some("sidhu#paragraph-2".into());
+
+        let compiled = compile_treatment_receipts_to_contract_hops(
+            &trace,
+            &[first, second],
+        );
+
+        assert!(compiled.residuals.is_empty());
+        assert_eq!(compiled.deltas.len(), 1);
+        assert_eq!(compiled.deltas[0].discovered_edges.len(), 1);
+        assert_eq!(
+            compiled.deltas[0].discovered_edges[0].treatment,
+            TreatmentKind::Supports
+        );
+        assert!(compiled.deltas[0]
+            .provenance_ref
+            .contains("review-unit:sidhu-waltons"));
+        assert!(compiled.deltas[0]
+            .provenance_ref
+            .contains("review-unit:sidhu-waltons:corroborating"));
+    }
+
 }
