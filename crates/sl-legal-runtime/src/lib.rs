@@ -2600,3 +2600,5 @@ pub mod matter_runtime;
 pub use matter_runtime::*;
 pub mod consumer_adequacy;
 pub use consumer_adequacy::*;
+pub mod visualisation_ir;
+pub use visualisation_ir::*;
