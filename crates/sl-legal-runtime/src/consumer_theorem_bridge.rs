@@ -304,6 +304,16 @@ impl KernelCheckedNonFactorabilityWitness {
     pub fn verification_receipt_digest(&self) -> &str {
         &self.verification_receipt_digest
     }
+
+    #[must_use]
+    pub fn verifier(&self) -> &str {
+        &self.verifier
+    }
+
+    #[must_use]
+    pub fn command_ref(&self) -> &str {
+        &self.command_ref
+    }
 }
 
 pub fn kernel_checked_nonfactorability_witness(
@@ -384,7 +394,12 @@ pub struct ExactConsumerResidual {
     pub projection_digest: String,
     pub lost_axis: ConsumerAxis,
     pub demand: ConsumerResearchDemand,
+    pub nonfactorability_theorem_module_ref: String,
     pub nonfactorability_theorem_ref: String,
+    pub theorem_artifact_digest: String,
+    pub formal_verifier: String,
+    pub formal_command_ref: String,
+    pub verification_receipt_digest: String,
     pub witness_refs: Vec<String>,
     pub reason_ref: String,
     pub candidate_only: bool,
@@ -487,7 +502,12 @@ pub fn compile_nonfactorability_residual(
             creates_semantic_authority: false,
             creates_claim_truth: false,
         },
+        nonfactorability_theorem_module_ref: witness.theorem_module_ref.clone(),
         nonfactorability_theorem_ref: witness.theorem_ref.clone(),
+        theorem_artifact_digest: witness.theorem_artifact_digest.clone(),
+        formal_verifier: checked.verifier().to_owned(),
+        formal_command_ref: checked.command_ref().to_owned(),
+        verification_receipt_digest: checked.verification_receipt_digest().to_owned(),
         witness_refs: vec![
             witness.left_world_ref.clone(),
             witness.right_world_ref.clone(),
