@@ -12,7 +12,8 @@ use std::{env, fs, path::PathBuf};
 
 use sensiblaw_pg_source_store::{
     load_database_config, load_discovery_identity_baseline,
-    load_latent_world_rows_with_budget, load_reviewed_source_expansion_rows,
+    load_latent_world_rows_with_budget,
+    load_reviewed_context_source_revision_coordinates,
     materialize_reviewed_context_expansion, LatentWorldBudget,
 };
 use sensiblaw_wikimedia_candidate_provider::fetch_entity_rdf_revision_receipt;
@@ -56,9 +57,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap_or_else(|| PathBuf::from("artifacts/mabo/revision-reviews/pending"));
 
     let config = load_database_config(None)?;
-    let reviewed_rows = load_reviewed_source_expansion_rows(&config)?;
+    let reviewed_rows = load_reviewed_context_source_revision_coordinates(&config)?;
     println!("seed_ref={seed_ref}");
-    println!("reviewed_source_expansion_receipts={}", reviewed_rows.len());
+    println!("reviewed_context_revision_coordinates={}", reviewed_rows.len());
     println!("revision_probe_max_sources={max_sources}");
 
     let probe = probe_latest_mabo_revision_changes(&reviewed_rows, max_sources)?;
@@ -66,6 +67,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("probed_source_count={}", probe.probed_source_count);
     println!("revision_reopen_count={}", probe.reopen_residuals.len());
     println!("unchanged_source_count={}", probe.unchanged_source_refs.len());
+    println!("unprobed_source_count={}", probe.unprobed_source_refs.len());
+    println!("probe_truncated={}", probe.probe_truncated);
     println!("candidate_only={}", probe.candidate_only);
     println!("creates_semantic_authority={}", probe.creates_semantic_authority);
     println!("applicability_promoted={}", probe.applicability_promoted);
