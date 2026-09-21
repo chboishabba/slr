@@ -1816,6 +1816,11 @@ pub struct LegalRuntimeCapabilityReceipt {
     pub s15_exact_residual_compiler: bool,
     pub s15_admissible_research_frontier: bool,
     pub s15_stop_semantics: bool,
+    pub s18_first_class_legal_world: bool,
+    pub s18_authority_validity: bool,
+    pub s18_jurisdiction_scoped_coverage: bool,
+    pub s18_revision_invalidation: bool,
+    pub s18_affected_proof_cone: bool,
     pub candidate_only: bool,
     pub creates_semantic_authority: bool,
     pub receipt_digest: String,
@@ -2094,7 +2099,12 @@ pub fn compile_capability_receipt() -> Result<LegalRuntimeCapabilityReceipt, Leg
             .chain(std::iter::once("S15:theorem-adequacy-bridge"))
             .chain(std::iter::once("S15:exact-residual-compiler"))
             .chain(std::iter::once("S15:admissible-research-frontier"))
-            .chain(std::iter::once("S15:stop-semantics")),
+            .chain(std::iter::once("S15:stop-semantics"))
+            .chain(std::iter::once("S18:first-class-legal-world"))
+            .chain(std::iter::once("S18:authority-validity"))
+            .chain(std::iter::once("S18:jurisdiction-scoped-coverage"))
+            .chain(std::iter::once("S18:revision-invalidation"))
+            .chain(std::iter::once("S18:affected-proof-cone")),
     );
 
     Ok(LegalRuntimeCapabilityReceipt {
@@ -2121,6 +2131,11 @@ pub fn compile_capability_receipt() -> Result<LegalRuntimeCapabilityReceipt, Leg
         s15_exact_residual_compiler: true,
         s15_admissible_research_frontier: true,
         s15_stop_semantics: true,
+        s18_first_class_legal_world: true,
+        s18_authority_validity: true,
+        s18_jurisdiction_scoped_coverage: true,
+        s18_revision_invalidation: true,
+        s18_affected_proof_cone: true,
         candidate_only: true,
         creates_semantic_authority: false,
         receipt_digest,
@@ -2733,3 +2748,5 @@ pub mod visualisation_ir;
 pub use visualisation_ir::*;
 pub mod legal_follow_campaign;
 pub use legal_follow_campaign::*;
+pub mod legal_world;
+pub use legal_world::*;
