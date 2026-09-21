@@ -43,7 +43,8 @@ pub struct QueryWorldRunDecision {
     pub unproved_demand_reason_refs: Vec<String>,
     pub theorem_adequacy: Option<TheoremBackedConsumerAdequacyReceipt>,
     pub explicitly_unresolved: Option<ExplicitlyUnresolvedCompilation>,
-    pub current_frontier_closed: bool,
+    pub operational_frontier_closed: bool,
+    pub run_may_stop: bool,
     pub consumer_adequate_formally_proved: bool,
     pub candidate_only: bool,
     pub creates_semantic_authority: bool,
@@ -82,6 +83,7 @@ fn decision_from_adequacy(
     formal_witnesses: QueryWorldFormalWitnessDisposition,
     world_change_consumer_invariant: bool,
     adequacy: ConsumerAdequacyCompilation,
+    operational_state: OperationalResearchState,
 ) -> Result<QueryWorldRunDecision, String> {
     let query_ref = impact.query_ref.clone();
 
@@ -91,7 +93,8 @@ fn decision_from_adequacy(
         unproved_demand_reason_refs,
         theorem_adequacy,
         explicitly_unresolved,
-        current_frontier_closed,
+        operational_frontier_closed,
+        run_may_stop,
         consumer_adequate_formally_proved,
     ) = match adequacy {
         ConsumerAdequacyCompilation::ConsumerAdequate(receipt) => {
@@ -106,6 +109,7 @@ fn decision_from_adequacy(
                 Vec::new(),
                 Some(receipt),
                 None,
+                operational_state == OperationalResearchState::CurrentFrontierClosed,
                 true,
                 true,
             )
@@ -122,16 +126,21 @@ fn decision_from_adequacy(
             None,
             false,
             false,
-        ),
-        ConsumerAdequacyCompilation::ExplicitlyUnresolved(receipt) => (
-            QueryWorldRunDecisionKind::ExplicitlyUnresolved,
-            Vec::new(),
-            Vec::new(),
-            None,
-            Some(receipt),
-            true,
             false,
         ),
+        ConsumerAdequacyCompilation::ExplicitlyUnresolved(receipt) => {
+            let closed = receipt.operational_frontier_closed;
+            (
+                QueryWorldRunDecisionKind::ExplicitlyUnresolved,
+                Vec::new(),
+                Vec::new(),
+                None,
+                Some(receipt),
+                closed,
+                true,
+                false,
+            )
+        }
         ConsumerAdequacyCompilation::CurrentFrontierClosedWithoutAdequacy(receipt) => {
             let kind = if world_change_consumer_invariant {
                 QueryWorldRunDecisionKind::PreserveOperationalClosureByInvariance
@@ -144,7 +153,8 @@ fn decision_from_adequacy(
                 Vec::new(),
                 None,
                 None,
-                receipt.runtime_receipt.research_demands.is_empty(),
+                true,
+                true,
                 false,
             )
         }
@@ -155,6 +165,7 @@ fn decision_from_adequacy(
             None,
             None,
             false,
+            true,
             false,
         ),
         ConsumerAdequacyCompilation::AdequacyProofRequired { runtime_receipt, .. } => (
@@ -163,8 +174,9 @@ fn decision_from_adequacy(
             Vec::new(),
             None,
             None,
-            runtime_receipt.research_demands.is_empty()
-                && world_change_consumer_invariant,
+            operational_state == OperationalResearchState::CurrentFrontierClosed
+                && runtime_receipt.research_demands.is_empty(),
+            operational_state == OperationalResearchState::CurrentFrontierClosed,
             false,
         ),
     };
@@ -198,7 +210,8 @@ fn decision_from_adequacy(
         unproved_demand_reason_refs,
         theorem_adequacy,
         explicitly_unresolved,
-        current_frontier_closed,
+        operational_frontier_closed,
+        run_may_stop,
         consumer_adequate_formally_proved,
         candidate_only: true,
         creates_semantic_authority: false,
@@ -232,7 +245,13 @@ pub fn decide_query_world_run(
         nonfactorability_witnesses,
     )?;
     let (impact, adequacy, formal_witnesses, invariant) = parts(outcome);
-    decision_from_adequacy(impact, formal_witnesses, invariant, adequacy)
+    decision_from_adequacy(
+        impact,
+        formal_witnesses,
+        invariant,
+        adequacy,
+        operational_state,
+    )
 }
 
 
@@ -366,7 +385,8 @@ mod tests {
             decision.kind,
             QueryWorldRunDecisionKind::PreserveOperationalClosureByInvariance
         );
-        assert!(decision.current_frontier_closed);
+        assert!(decision.operational_frontier_closed);
+        assert!(decision.run_may_stop);
         assert!(!decision.consumer_adequate_formally_proved);
         assert!(!decision.impact.query_projection_digest_changed);
     }
@@ -399,7 +419,8 @@ mod tests {
             decision.kind,
             QueryWorldRunDecisionKind::ReopenExactResearch
         );
-        assert!(!decision.current_frontier_closed);
+        assert!(!decision.operational_frontier_closed);
+        assert!(!decision.run_may_stop);
         assert!(!decision.consumer_adequate_formally_proved);
     }
 
@@ -430,7 +451,8 @@ mod tests {
             decision.kind,
             QueryWorldRunDecisionKind::RequireFreshAdequacyWitness
         );
-        assert!(decision.current_frontier_closed);
+        assert!(decision.operational_frontier_closed);
+        assert!(decision.run_may_stop);
         assert!(!decision.consumer_adequate_formally_proved);
     }
 
@@ -491,7 +513,8 @@ mod tests {
         .unwrap();
 
         assert_eq!(decision.kind, QueryWorldRunDecisionKind::ConsumerAdequate);
-        assert!(decision.current_frontier_closed);
+        assert!(decision.operational_frontier_closed);
+        assert!(decision.run_may_stop);
         assert!(decision.consumer_adequate_formally_proved);
         assert!(decision.theorem_adequacy.is_some());
     }
