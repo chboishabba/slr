@@ -21,7 +21,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use sensiblaw_legal_runtime::{
     ConsumerAxis, ConsumerCoverage, ConsumerQueryDemand, LegalWorldCoordinate,
     OperationalResearchState, ProjectionGraph, ProjectionKind, ProjectionNode,
-    QueryDependencySlice, RevisionDependencyIndex,
+    QueryDependencySlice, QueryWorldRunDecision, RevisionDependencyIndex,
+    KernelCheckedFactorsThroughWitness, KernelCheckedNonFactorabilityWitness,
+    decide_query_world_run,
 };
 use sensiblaw_pg_source_store::{
     ContextRevisionWorldSlice, DiscoveryIdentityBaseline, LatentWorldRows,
@@ -402,6 +404,26 @@ pub fn compile_mabo_query_world_snapshot(
 }
 
 impl MaboQueryWorldSnapshot {
+    pub fn decide_current_world(
+        &self,
+        formal_adequacy: Option<&KernelCheckedFactorsThroughWitness>,
+        nonfactorability_witnesses: &[KernelCheckedNonFactorabilityWitness],
+    ) -> Result<QueryWorldRunDecision, String> {
+        self.validate()?;
+        decide_query_world_run(
+            &self.world,
+            &self.world,
+            &self.dependencies,
+            &self.query_dependency_slice,
+            &self.query_demand,
+            &self.projection,
+            &self.coverage,
+            self.operational_state,
+            formal_adequacy,
+            nonfactorability_witnesses,
+        )
+    }
+
     pub fn validate(&self) -> Result<(), String> {
         if self.schema_version != "sl.mabo_query_world_snapshot.v0_1"
             || self.consumer_ref != MABO_CONTEXT_IDENTITY_CONSUMER
@@ -587,4 +609,69 @@ mod tests {
         );
         assert_eq!(snapshot.operational_state, OperationalResearchState::Open);
     }
+
+    #[test]
+    fn mature_closed_snapshot_requires_fresh_adequacy_witness() {
+        let baseline = DiscoveryIdentityBaseline {
+            identity_class_refs: BTreeSet::from(["world-object:known".into()]),
+            representation_identity_class_refs: BTreeMap::from([(
+                "QKNOWN".into(),
+                "world-object:known".into(),
+            )]),
+        };
+        let context_slice = ContextRevisionWorldSlice {
+            wikidata_source_revisions: BTreeMap::from([(
+                "QROOT".into(),
+                "wikidata:QROOT:oldid:100".into(),
+            )]),
+        };
+        let snapshot = compile_mabo_query_world_snapshot(
+            "QROOT",
+            "2026-09-22",
+            &mature_world(),
+            &baseline,
+            &context_slice,
+            &probe(),
+        )
+        .unwrap();
+
+        let decision = snapshot.decide_current_world(None, &[]).unwrap();
+        assert_eq!(
+            decision.kind,
+            sensiblaw_legal_runtime::QueryWorldRunDecisionKind::RequireFreshAdequacyWitness
+        );
+        assert!(decision.operational_frontier_closed);
+        assert!(decision.run_may_stop);
+        assert!(!decision.consumer_adequate_formally_proved);
+    }
+
+    #[test]
+    fn unresolved_identity_snapshot_reopens_research_without_fabricated_proof() {
+        let context_slice = ContextRevisionWorldSlice {
+            wikidata_source_revisions: BTreeMap::from([(
+                "QROOT".into(),
+                "wikidata:QROOT:oldid:100".into(),
+            )]),
+        };
+        let snapshot = compile_mabo_query_world_snapshot(
+            "QROOT",
+            "2026-09-22",
+            &mature_world(),
+            &DiscoveryIdentityBaseline::default(),
+            &context_slice,
+            &probe(),
+        )
+        .unwrap();
+
+        let decision = snapshot.decide_current_world(None, &[]).unwrap();
+        assert_eq!(
+            decision.kind,
+            sensiblaw_legal_runtime::QueryWorldRunDecisionKind::ReopenExactResearch
+        );
+        assert!(!decision.operational_frontier_closed);
+        assert!(!decision.run_may_stop);
+        assert!(!decision.consumer_adequate_formally_proved);
+        assert!(!decision.unproved_demand_reason_refs.is_empty());
+    }
+
 }
