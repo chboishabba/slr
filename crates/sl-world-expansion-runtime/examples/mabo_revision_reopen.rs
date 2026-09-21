@@ -93,21 +93,59 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("unchanged_source_count={}", probe.unchanged_source_refs.len());
     println!("unprobed_source_count={}", probe.unprobed_source_refs.len());
     println!("probe_truncated={}", probe.probe_truncated);
+    println!("probe_complete={}", probe.probe_complete);
+    println!("revision_probe_blockers={}", probe.blockers.len());
+    for blocker in &probe.blockers {
+        println!(
+            "revision_probe_blocker={} retryable={} http_status={:?} detail={}",
+            blocker.source_ref,
+            blocker.retryable,
+            blocker.http_status_code,
+            blocker.detail
+        );
+    }
     println!("candidate_only={}", probe.candidate_only);
     println!("creates_semantic_authority={}", probe.creates_semantic_authority);
     println!("applicability_promoted={}", probe.applicability_promoted);
     println!("claim_truth_promoted={}", probe.claim_truth_promoted);
 
+    let blocker_values = probe
+        .blockers
+        .iter()
+        .map(|blocker| {
+            json!({
+                "source_ref": blocker.source_ref,
+                "detail": blocker.detail,
+                "retryable": blocker.retryable,
+                "http_status_code": blocker.http_status_code,
+                "candidate_only": blocker.candidate_only,
+                "creates_semantic_authority": blocker.creates_semantic_authority,
+                "claim_truth_promoted": blocker.claim_truth_promoted
+            })
+        })
+        .collect::<Vec<_>>();
+
     if probe.reopen_residuals.is_empty() {
-        let (stop, closure_reason, current_frontier_closed) = if probe.probe_truncated {
-            ("RevisionProbeBudgetExhausted", "UnprobedReviewedSourcesRemain", false)
-        } else {
-            (
-                "CurrentFrontierClosedWithoutAdequacy",
-                "NoRevisionPerturbation",
-                true,
-            )
-        };
+        let (stop, closure_reason, current_frontier_closed) =
+            if !probe.blockers.is_empty() {
+                (
+                    "RevisionProbeBlocked",
+                    "RevisionLookupBlockersRemain",
+                    false,
+                )
+            } else if probe.probe_truncated {
+                (
+                    "RevisionProbeBudgetExhausted",
+                    "UnprobedReviewedSourcesRemain",
+                    false,
+                )
+            } else {
+                (
+                    "CurrentFrontierClosedWithoutAdequacy",
+                    "NoRevisionPerturbation",
+                    true,
+                )
+            };
         println!("stop={stop}");
         println!("closure_reason={closure_reason}");
         println!("consumer_adequate_inferred=false");
@@ -123,7 +161,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "reviewed_source_count": probe.reviewed_source_count,
                 "probed_source_count": probe.probed_source_count,
                 "probe_truncated": probe.probe_truncated,
+                "probe_complete": probe.probe_complete,
                 "unprobed_source_refs": probe.unprobed_source_refs,
+                "revision_probe_blockers": blocker_values,
                 "revision_reopen_count": 0,
                 "reviewed_context_revisions_paid": 0,
                 "reviewed_identity_deltas_applied": 0,
@@ -206,7 +246,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     "processed_revision_deltas": processed_revision_deltas,
                     "reviewed_identity_deltas_applied": 0,
                     "probe_truncated": probe.probe_truncated,
+                    "probe_complete": probe.probe_complete,
                     "unprobed_source_refs": probe.unprobed_source_refs,
+                    "revision_probe_blockers": blocker_values,
                     "candidate_only": true,
                     "creates_semantic_authority": false,
                     "applicability_promoted": false,
@@ -287,13 +329,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 )
             }
             Err(sensiblaw_legal_runtime::GenericCampaignStop::NoFreshDemand) => {
-                println!("stop=CurrentFrontierClosedWithoutAdequacy");
-                (
-                    "CurrentFrontierClosedWithoutAdequacy",
-                    true,
-                    None,
-                    None,
-                )
+                if !probe.blockers.is_empty() {
+                    println!("stop=RevisionProbeBlocked");
+                    ("RevisionProbeBlocked", false, None, None)
+                } else if probe.probe_truncated {
+                    println!("stop=RevisionProbeBudgetExhausted");
+                    ("RevisionProbeBudgetExhausted", false, None, None)
+                } else {
+                    println!("stop=CurrentFrontierClosedWithoutAdequacy");
+                    (
+                        "CurrentFrontierClosedWithoutAdequacy",
+                        true,
+                        None,
+                        None,
+                    )
+                }
             }
             Err(sensiblaw_legal_runtime::GenericCampaignStop::BudgetExhausted) => {
                 println!("stop=BudgetExhaustedWithoutAdequacy");
@@ -317,7 +367,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "next_representation_ref": next_representation_ref,
             "next_residual_ref": next_residual_ref,
             "probe_truncated": probe.probe_truncated,
+            "probe_complete": probe.probe_complete,
             "unprobed_source_refs": probe.unprobed_source_refs,
+            "revision_probe_blockers": blocker_values,
             "candidate_only": true,
             "creates_semantic_authority": false,
             "applicability_promoted": false,
