@@ -866,6 +866,57 @@ pub fn query_scoped_world_impact_self_check() -> Result<(), String> {
         return Err("query-world self-check failed required jurisdiction reopening".into());
     }
 
+    let temporal_demand = ConsumerQueryDemand {
+        query_ref: "query:q".into(),
+        required_axes: {
+            let mut axes = base_slice.required_axes.clone();
+            axes.insert(ConsumerAxis::Temporal);
+            axes
+        },
+        required_semantic_refs: BTreeSet::from(["prop:q".into()]),
+        candidate_only: true,
+        creates_semantic_authority: false,
+    };
+    let mut temporal_slice = base_slice.clone();
+    temporal_slice.required_axes.insert(ConsumerAxis::Temporal);
+    let paid_old_world = ConsumerCoverage {
+        paid_axes: BTreeSet::from([
+            ConsumerAxis::Temporal,
+            ConsumerAxis::SourceRevision,
+            ConsumerAxis::SourceSpan,
+            ConsumerAxis::Provenance,
+        ]),
+        ..ConsumerCoverage::default()
+    };
+    let reopened = compile_query_world_research(
+        &old,
+        &later,
+        &dependencies,
+        &temporal_slice,
+        &temporal_demand,
+        &graph,
+        &paid_old_world,
+        OperationalResearchState::CurrentFrontierClosed,
+        None,
+        &[],
+    )?;
+    let QueryWorldResearchOutcome::WorldChangedConsumerResidual {
+        adequacy: ConsumerAdequacyCompilation::NeedsResearch(research),
+        ..
+    } = reopened
+    else {
+        return Err(
+            "query-world self-check failed stale temporal payment reopening".into(),
+        );
+    };
+    if !research.runtime_receipt.missing_axes.contains(&ConsumerAxis::Temporal)
+        || research.runtime_receipt.paid_axes.contains(&ConsumerAxis::Temporal)
+    {
+        return Err(
+            "query-world self-check allowed W0 temporal payment to survive W1".into(),
+        );
+    }
+
     if irrelevant.creates_semantic_authority
         || irrelevant.creates_claim_truth
         || relevant.creates_semantic_authority
