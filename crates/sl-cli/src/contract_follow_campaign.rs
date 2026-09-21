@@ -9,6 +9,9 @@ use sensiblaw_governed_legal_provider::{
     run_live_oalc_case_follow_with_mode, OalcCaseAcquisitionMode, OalcCaseFollowRequest,
     OalcResolvedSourceReceipt, OALC_RANGE_MAX_REQUESTS_PER_ACQUISITION,
 };
+use sensiblaw_legal_runtime::{
+    ConsumerResearchDemand, ConsumerResearchDemandKind,
+};
 use sensiblaw_legal_follow_plan::{
     apply_contract_landscape_expansion, compile_australian_contract_landscape_worklist,
     AustralianContractLandscapeWorklist, AustralianContractTrace, AuthorityLevel, ContractDoctrine,
@@ -92,6 +95,53 @@ pub enum CampaignOperatorGate {
     OutboundCitationAcquisition,
     BudgetExhausted,
     None,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ConsumerDemandCampaignRoute {
+    pub demand_kind: ConsumerResearchDemandKind,
+    pub target_ref: String,
+    pub frontier_class: CampaignFrontierClass,
+    pub gate: CampaignOperatorGate,
+    pub candidate_only: bool,
+    pub creates_legal_authority: bool,
+    pub creates_current_law_conclusion: bool,
+}
+
+pub fn route_consumer_research_demand(
+    demand: &ConsumerResearchDemand,
+) -> ConsumerDemandCampaignRoute {
+    let (frontier_class, gate) = match demand.kind {
+        ConsumerResearchDemandKind::AcquireSource
+        | ConsumerResearchDemandKind::RecoverProvenance => (
+            CampaignFrontierClass::PrimarySource,
+            CampaignOperatorGate::PrimarySourceAcquisition,
+        ),
+        ConsumerResearchDemandKind::ReviewTreatment => (
+            CampaignFrontierClass::TreatmentReview,
+            CampaignOperatorGate::AuthorityTreatmentReview,
+        ),
+        ConsumerResearchDemandKind::ResolveTemporalCoordinate => (
+            CampaignFrontierClass::TemporalAlternative,
+            CampaignOperatorGate::TemporalAlternative,
+        ),
+        ConsumerResearchDemandKind::ResolveJurisdiction
+        | ConsumerResearchDemandKind::ReviewFact
+        | ConsumerResearchDemandKind::ReviewBurdenOrException
+        | ConsumerResearchDemandKind::ResolveSemanticIdentity => (
+            CampaignFrontierClass::ContextExpansion,
+            CampaignOperatorGate::ContextExpansion,
+        ),
+    };
+    ConsumerDemandCampaignRoute {
+        demand_kind: demand.kind,
+        target_ref: demand.target_ref.clone(),
+        frontier_class,
+        gate,
+        candidate_only: true,
+        creates_legal_authority: false,
+        creates_current_law_conclusion: false,
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -1774,6 +1824,70 @@ mod tests {
             assert_eq!(receipt.disposition, expected);
             assert!(!receipt.deterministic_action_executed);
             assert!(!receipt.review_gate_bypassed);
+        }
+    }
+
+
+    #[test]
+    fn consumer_nonadequacy_routes_to_existing_campaign_gates() {
+        use sensiblaw_legal_runtime::{ConsumerAxis, ConsumerResearchDemand};
+
+        let route = |kind, axis| {
+            route_consumer_research_demand(&ConsumerResearchDemand {
+                axis,
+                kind,
+                target_ref: "case:fixture".into(),
+                reason_ref: "consumer:fixture".into(),
+                candidate_only: true,
+                creates_semantic_authority: false,
+                creates_claim_truth: false,
+            })
+        };
+
+        let source = route(
+            ConsumerResearchDemandKind::AcquireSource,
+            ConsumerAxis::SourceRevision,
+        );
+        assert_eq!(source.frontier_class, CampaignFrontierClass::PrimarySource);
+        assert_eq!(source.gate, CampaignOperatorGate::PrimarySourceAcquisition);
+
+        let treatment = route(
+            ConsumerResearchDemandKind::ReviewTreatment,
+            ConsumerAxis::Treatment,
+        );
+        assert_eq!(
+            treatment.frontier_class,
+            CampaignFrontierClass::TreatmentReview
+        );
+        assert_eq!(
+            treatment.gate,
+            CampaignOperatorGate::AuthorityTreatmentReview
+        );
+
+        let temporal = route(
+            ConsumerResearchDemandKind::ResolveTemporalCoordinate,
+            ConsumerAxis::Temporal,
+        );
+        assert_eq!(
+            temporal.frontier_class,
+            CampaignFrontierClass::TemporalAlternative
+        );
+        assert_eq!(temporal.gate, CampaignOperatorGate::TemporalAlternative);
+
+        let jurisdiction = route(
+            ConsumerResearchDemandKind::ResolveJurisdiction,
+            ConsumerAxis::Jurisdiction,
+        );
+        assert_eq!(
+            jurisdiction.frontier_class,
+            CampaignFrontierClass::ContextExpansion
+        );
+        assert_eq!(jurisdiction.gate, CampaignOperatorGate::ContextExpansion);
+
+        for routed in [source, treatment, temporal, jurisdiction] {
+            assert!(routed.candidate_only);
+            assert!(!routed.creates_legal_authority);
+            assert!(!routed.creates_current_law_conclusion);
         }
     }
 
