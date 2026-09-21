@@ -2044,6 +2044,9 @@ pub fn compile_capability_receipt() -> Result<LegalRuntimeCapabilityReceipt, Leg
         ));
     }
 
+    generic_campaign_kernel_self_check()
+        .map_err(LegalRuntimeError::Projection)?;
+
     let research_flow = research_flow_sankey(&[
         ResearchFlowEvent {
             event_ref: "capability:frontier-to-demand".into(),
