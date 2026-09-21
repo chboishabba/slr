@@ -75,6 +75,46 @@ pub struct MaboLegalFollowDemand {
     pub claim_truth_promoted: bool,
 }
 
+pub fn pending_mabo_identity_review_bundle(
+    demand: &MaboLegalFollowDemand,
+) -> Result<String, String> {
+    if demand.representation_ref.trim().is_empty()
+        || demand.residual_ref.trim().is_empty()
+        || !demand.candidate_only
+        || demand.creates_semantic_authority
+        || demand.applicability_promoted
+        || demand.claim_truth_promoted
+    {
+        return Err("cannot render pending bundle for invalid/promoting Mabo demand".into());
+    }
+
+    let mut source_revisions = demand.source_revision_refs.clone();
+    source_revisions.sort();
+    source_revisions.dedup();
+    let mut relation_types = demand.relation_type_refs.clone();
+    relation_types.sort();
+    relation_types.dedup();
+
+    let mut out = String::new();
+    out.push_str("# status=IdentityReviewRequired\n");
+    out.push_str(&format!(
+        "# representation_ref={}\n",
+        demand.representation_ref
+    ));
+    out.push_str(&format!("# residual_ref={}\n", demand.residual_ref));
+    for revision in source_revisions {
+        out.push_str(&format!("# source_revision_ref={revision}\n"));
+    }
+    for relation in relation_types {
+        out.push_str(&format!("# relation_type_ref={relation}\n"));
+    }
+    out.push_str(&format!(
+        "# review_manifest_template\t{}\tworld-object:<reviewed-id>\treview:<operator-ref>\n",
+        demand.representation_ref
+    ));
+    Ok(out)
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MaboReviewedIdentityDelta {
     pub assignment: MaboIdentityReviewAssignment,
@@ -433,4 +473,26 @@ mod tests {
         assert_eq!(campaign.next_demand().unwrap().representation_ref, "Q200");
         assert_eq!(campaign.state().accepted_reviewed_deltas, 1);
     }
+
+    #[test]
+    fn pending_identity_bundle_is_comment_only_and_cannot_authorize_itself() {
+        let demand = MaboLegalFollowDemand {
+            representation_ref: "Q200".into(),
+            residual_ref: "residual:mabo:world-identity:Q200".into(),
+            source_revision_refs: vec!["wikidata:Q1:oldid:2".into()],
+            relation_type_refs: vec!["context:wikidata:participant".into()],
+            candidate_only: true,
+            creates_semantic_authority: false,
+            applicability_promoted: false,
+            claim_truth_promoted: false,
+        };
+        let bundle = pending_mabo_identity_review_bundle(&demand).unwrap();
+        assert!(bundle.lines().all(|line| line.starts_with('#')));
+        assert!(bundle.contains("representation_ref=Q200"));
+        assert!(bundle.contains("review_manifest_template"));
+        assert!(crate::parse_mabo_identity_review_tsv(&bundle)
+            .unwrap()
+            .is_empty());
+    }
+
 }
