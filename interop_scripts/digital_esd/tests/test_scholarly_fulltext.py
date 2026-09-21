@@ -304,3 +304,46 @@ def test_scholarly_parser_prototype_fails_closed_on_missing_parser(tmp_path: Pat
 
     assert parser.supported is not None
     assert "md" in parser.supported or "txt" in parser.supported
+
+def test_scholarly_parser_pdf_uses_materialised_text_not_raw_binary(
+    tmp_path: Path, monkeypatch
+) -> None:
+    import interop_scripts.document_text as dt
+    from interop_scripts.digital_esd.scholarly_parser_prototype import ScholarlyParserPrototype
+
+    artifact = tmp_path / "study.pdf"
+    artifact.write_bytes(b"%PDF-binary-fixture")
+    digest = hashlib.sha256(artifact.read_bytes()).hexdigest()
+
+    def fake_pypdf(_path: Path):
+        text, anchors = dt._anchors_from_pages([
+            "Population sample of 120 students in an online learning study.",
+            "Outcome results showed improvement after the intervention.",
+        ])
+        return text, "pypdf", "fixture", anchors, 2
+
+    monkeypatch.setattr(dt, "_pdf_with_pypdf", fake_pypdf)
+
+    parser = ScholarlyParserPrototype(
+        REPO / "interop_scripts" / "digital_esd" / "scholarly_fulltext.prototype.json"
+    )
+    result = parser.parse_file(
+        artifact,
+        {
+            "request_reference": "scholarly-request:ERIC:PDF:001",
+            "source_identity_reference": "ERIC:PDF:001",
+            "source_revision_reference": "rev:pdf:1",
+            "content_sha256": digest,
+            "artifact_path": str(artifact),
+        },
+    )
+
+    assert result["parser_success"] is True
+    assert result["content_sha256"] == digest
+    assert result["extraction_engine"] == "pypdf"
+    assert result["page_count"] == 2
+    assert result["extracted_text_sha256"] == result["extraction_receipt"]["extracted_text_sha256"]
+    assert result["extraction_receipt"]["source_artifact_sha256"] == digest
+    assert any(node.get("page_number") in {1, 2} for node in result["document_nodes"])
+    assert result["candidate_only"] is True
+    assert result["creates_study_truth"] is False
