@@ -17,6 +17,10 @@ use crate::{
     GenericCampaignStop, GenericLegalFollowCampaign, InformationAction,
     LegalCampaignState, LegalEvaluationContext, LegalFollowCampaignDomain,
     LegalResidual, LegalResidualKind, LegalWorldCoordinate, SourceRealisedLegalRule,
+    ConsumerCoverage, ConsumerQueryDemand, KernelCheckedFactorsThroughWitness,
+    KernelCheckedNonFactorabilityWitness, OperationalResearchState, ProjectionGraph,
+    QueryDependencySlice, QueryWorldRunDecision, RevisionDependencyIndex,
+    decide_query_world_run,
 };
 use std::collections::BTreeMap;
 
@@ -213,6 +217,47 @@ pub fn source_realised_world_coordinate(
     Ok(coordinate)
 }
 
+#[allow(clippy::too_many_arguments)]
+pub fn decide_source_realised_query_world_run(
+    old_world_ref: impl Into<String>,
+    new_world_ref: impl Into<String>,
+    matter_ref: impl Into<String> + Clone,
+    old_world: &SourceRealisedLegalWorld,
+    new_world: &SourceRealisedLegalWorld,
+    dependencies: &RevisionDependencyIndex,
+    slice: &QueryDependencySlice,
+    demand: &ConsumerQueryDemand,
+    graph: &ProjectionGraph,
+    coverage: &ConsumerCoverage,
+    operational_state: OperationalResearchState,
+    formal_adequacy: Option<&KernelCheckedFactorsThroughWitness>,
+    nonfactorability_witnesses: &[KernelCheckedNonFactorabilityWitness],
+) -> Result<QueryWorldRunDecision, String> {
+    let old_coordinate = source_realised_world_coordinate(
+        old_world_ref,
+        matter_ref.clone(),
+        old_world,
+    )?;
+    let new_coordinate = source_realised_world_coordinate(
+        new_world_ref,
+        matter_ref,
+        new_world,
+    )?;
+    decide_query_world_run(
+        &old_coordinate,
+        &new_coordinate,
+        dependencies,
+        slice,
+        demand,
+        graph,
+        coverage,
+        operational_state,
+        formal_adequacy,
+        nonfactorability_witnesses,
+    )
+}
+
+
 pub fn source_realised_legal_campaign(
     rule: SourceRealisedLegalRule,
     initial_state: LegalCampaignState,
@@ -340,6 +385,100 @@ mod tests {
         build_australian_calibration_capstone, AustralianCalibrationKind,
         InformationActionKind,
     };
+
+    #[test]
+    fn cullen_source_realised_world_uses_common_query_world_controller() {
+        use crate::{ConsumerAxis, ProjectionKind, ProjectionNode, QueryWorldRunDecisionKind};
+        use std::collections::BTreeSet;
+
+        let capstone =
+            build_australian_calibration_capstone(AustralianCalibrationKind::CullenNswCla)
+                .unwrap();
+        let initial = capstone.campaign.hops[0].clone();
+        let world = SourceRealisedLegalWorld::from_state(
+            capstone.rule.clone(),
+            initial,
+            capstone.context.jurisdiction_ref.clone(),
+            capstone.context.as_at.clone(),
+        )
+        .unwrap();
+
+        let axes = BTreeSet::from([
+            ConsumerAxis::SemanticIdentity,
+            ConsumerAxis::SourceRevision,
+            ConsumerAxis::SourceSpan,
+            ConsumerAxis::Provenance,
+        ]);
+        let graph = ProjectionGraph {
+            kind: ProjectionKind::IssueProof,
+            nodes: vec![ProjectionNode {
+                semantic_ref: capstone.rule.conclusion_ref.clone(),
+                semantic_kind: "SourceRealisedConclusion".into(),
+                manifestation_refs: vec![],
+                source_revision_refs: vec![capstone.rule.source_revision_ref.clone()],
+                span_refs: capstone.rule.source_span_refs.clone(),
+                projection_role: "IssueProof".into(),
+            }],
+            edges: vec![],
+            deterministic_digest: "sha256:cullen-query-world-adapter".into(),
+            projection_only: true,
+            creates_semantic_authority: false,
+        };
+        let dependencies = RevisionDependencyIndex {
+            source_to_propositions: BTreeMap::from([(
+                capstone.rule.rule_ref.clone(),
+                BTreeSet::from([capstone.rule.conclusion_ref.clone()]),
+            )]),
+            proposition_dependents: BTreeMap::new(),
+        };
+        let slice = QueryDependencySlice {
+            query_ref: "query:cullen:fixture".into(),
+            required_axes: axes.clone(),
+            semantic_refs: BTreeSet::from([capstone.rule.conclusion_ref.clone()]),
+            proof_refs: BTreeSet::new(),
+            source_refs: BTreeSet::from([capstone.rule.rule_ref.clone()]),
+            source_revision_refs: BTreeSet::from([capstone.rule.source_revision_ref.clone()]),
+            candidate_only: true,
+            creates_semantic_authority: false,
+            creates_claim_truth: false,
+        };
+        let demand = ConsumerQueryDemand {
+            query_ref: "query:cullen:fixture".into(),
+            required_axes: axes.clone(),
+            required_semantic_refs: BTreeSet::from([capstone.rule.conclusion_ref.clone()]),
+            candidate_only: true,
+            creates_semantic_authority: false,
+        };
+        let coverage = ConsumerCoverage {
+            paid_axes: axes,
+            ..ConsumerCoverage::default()
+        };
+
+        let decision = decide_source_realised_query_world_run(
+            "world:cullen:old",
+            "world:cullen:new",
+            "matter:cullen",
+            &world,
+            &world,
+            &dependencies,
+            &slice,
+            &demand,
+            &graph,
+            &coverage,
+            OperationalResearchState::CurrentFrontierClosed,
+            None,
+            &[],
+        )
+        .unwrap();
+
+        assert_eq!(
+            decision.kind,
+            QueryWorldRunDecisionKind::RequireFreshAdequacyWitness
+        );
+        assert!(decision.operational_frontier_closed);
+        assert!(decision.run_may_stop);
+        assert!(!decision.consumer_adequate_formally_proved);
+    }
 
     #[test]
     fn cullen_source_realised_world_compiles_to_first_class_legal_world() {
