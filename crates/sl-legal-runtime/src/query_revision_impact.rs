@@ -130,7 +130,7 @@ pub fn compile_query_dependency_slice(
     Ok(slice)
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct QueryScopedProjection {
     pub query_ref: String,
     pub graph: ProjectionGraph,
@@ -257,7 +257,7 @@ pub enum QueryRevisionImpactKind {
     RevisionChangedConsumerRelevant,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct QueryRevisionImpact {
     pub query_ref: String,
     pub kind: QueryRevisionImpactKind,
@@ -390,7 +390,7 @@ pub fn compile_query_revision_impact(
 }
 
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum QueryRevisionResearchOutcome {
     NoWorldRevisionChange {
         impact: QueryRevisionImpact,
