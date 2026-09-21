@@ -96,7 +96,7 @@ fn exact_witnesses_by_axis<'a>(
             if existing != witness {
                 return Err(format!(
                     "multiple nonfactorability witnesses disagree for axis {:?}",
-                    witness.lost_axis
+                    metadata.lost_axis
                 ));
             }
         }
