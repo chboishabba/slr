@@ -6,11 +6,12 @@
 //! emits typed research demands for missing coordinates, and can explicitly
 //! terminate unresolved when a missing coordinate is known closed.
 
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
 use crate::ProjectionGraph;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum ConsumerAxis {
     SemanticIdentity,
     SourceRevision,
@@ -23,7 +24,7 @@ pub enum ConsumerAxis {
     BurdenOrException,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ConsumerQueryDemand {
     pub query_ref: String,
     pub required_axes: BTreeSet<ConsumerAxis>,
@@ -32,7 +33,7 @@ pub struct ConsumerQueryDemand {
     pub creates_semantic_authority: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct ConsumerCoverage {
     /// Coordinates independently paid by the caller/world.
     pub paid_axes: BTreeSet<ConsumerAxis>,
@@ -42,7 +43,7 @@ pub struct ConsumerCoverage {
     pub unresolved_refs: BTreeSet<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum ConsumerResearchDemandKind {
     AcquireSource,
     ReviewTreatment,
@@ -54,7 +55,7 @@ pub enum ConsumerResearchDemandKind {
     ResolveSemanticIdentity,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ConsumerResearchDemand {
     pub axis: ConsumerAxis,
     pub kind: ConsumerResearchDemandKind,
@@ -65,14 +66,14 @@ pub struct ConsumerResearchDemand {
     pub creates_claim_truth: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ConsumerAdequacyDisposition {
     Adequate,
     NeedsResearch,
     ExplicitlyUnresolved,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ConsumerAdequacyReceipt {
     pub query_ref: String,
     pub disposition: ConsumerAdequacyDisposition,
