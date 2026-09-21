@@ -757,6 +757,7 @@ impl ContractFollowCampaign {
             "reviewed_residuals": self.reviewed_residuals,
             "trajectory": self.hops,
             "next_fresh_step": self.next_fresh_step(),
+            "closure": campaign_closure_for_gate(self.next_fresh_step().gate),
             "final_trace": snapshot_trace(&self.trace),
             // Legacy field retained as total worklist inventory for schema
             // compatibility.  Actionable frontier state is reported separately.
@@ -1146,12 +1147,45 @@ fn campaign_step(gate: CampaignOperatorGate) -> CampaignNextStep {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CampaignClosureKind {
+    Open,
+    NoSelectableResidual,
+    BudgetExhausted,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CampaignClosureReceipt {
+    pub kind: CampaignClosureKind,
+    pub current_frontier_closed: bool,
+    pub consumer_adequacy_formally_proved: bool,
+    pub creates_legal_authority: bool,
+    pub creates_current_law_conclusion: bool,
+}
+
+fn campaign_closure_for_gate(gate: CampaignOperatorGate) -> CampaignClosureReceipt {
+    let kind = match gate {
+        CampaignOperatorGate::None => CampaignClosureKind::NoSelectableResidual,
+        CampaignOperatorGate::BudgetExhausted => CampaignClosureKind::BudgetExhausted,
+        _ => CampaignClosureKind::Open,
+    };
+    CampaignClosureReceipt {
+        kind,
+        current_frontier_closed: gate == CampaignOperatorGate::None,
+        // Frontier exhaustion is operational closure only; it is not itself
+        // a formal FactorsThrough/consumer-adequacy proof.
+        consumer_adequacy_formally_proved: false,
+        creates_legal_authority: false,
+        creates_current_law_conclusion: false,
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CampaignDriveDisposition {
     ExecutedOutboundAcquisition,
     AwaitIdentityReview,
     AwaitTreatmentReview,
     BudgetExhausted,
-    Complete,
+    CurrentFrontierClosed,
     AwaitExplicitOperator,
 }
 
@@ -1205,7 +1239,7 @@ fn drive_receipt_for_gate(
             None,
         ),
         CampaignOperatorGate::None => (
-            CampaignDriveDisposition::Complete,
+            CampaignDriveDisposition::CurrentFrontierClosed,
             None,
         ),
         _ => (
@@ -1426,6 +1460,11 @@ pub fn run(args: Vec<String>) -> CampaignResult<()> {
             next_campaign["next_operator_gate"] =
                 serde_json::to_value(campaign_step(CampaignOperatorGate::AuthorityIdentityReview))
                     .map_err(|error| format!("encode identity operator gate: {error}"))?;
+            next_campaign["closure"] =
+                serde_json::to_value(campaign_closure_for_gate(
+                    CampaignOperatorGate::AuthorityIdentityReview,
+                ))
+                .map_err(|error| format!("encode identity closure: {error}"))?;
             next_campaign["continuation_only"] = json!(true);
             next_campaign["last_action"] = json!("governed_source_acquisition");
             next_campaign["last_acquired_medium_neutral_citation"] =
@@ -1554,6 +1593,11 @@ pub fn run(args: Vec<String>) -> CampaignResult<()> {
             receipt["next_operator_gate"] =
                 serde_json::to_value(campaign_step(CampaignOperatorGate::AuthorityTreatmentReview))
                     .map_err(|error| format!("encode treatment operator gate: {error}"))?;
+            receipt["closure"] =
+                serde_json::to_value(campaign_closure_for_gate(
+                    CampaignOperatorGate::AuthorityTreatmentReview,
+                ))
+                .map_err(|error| format!("encode treatment closure: {error}"))?;
             write_json(&output, &receipt)?;
             println!(
                 "contract_follow_identity_continuation={} hops={} residuals={} authority=false",
@@ -1659,15 +1703,17 @@ pub fn run(args: Vec<String>) -> CampaignResult<()> {
             receipt["pending_recursive_review"] = Value::Null;
             receipt["next_outbound_frontier"] =
                 json!(next_frontier_path.display().to_string());
+            let final_gate = if next_frontier.selected.is_some() {
+                CampaignOperatorGate::OutboundCitationAcquisition
+            } else {
+                CampaignOperatorGate::None
+            };
             receipt["next_operator_gate"] =
-                serde_json::to_value(
-                    if next_frontier.selected.is_some() {
-                        campaign_step(CampaignOperatorGate::OutboundCitationAcquisition)
-                    } else {
-                        campaign_step(CampaignOperatorGate::None)
-                    }
-                )
-                .map_err(|error| format!("encode next operator gate: {error}"))?;
+                serde_json::to_value(campaign_step(final_gate))
+                    .map_err(|error| format!("encode next operator gate: {error}"))?;
+            receipt["closure"] =
+                serde_json::to_value(campaign_closure_for_gate(final_gate))
+                    .map_err(|error| format!("encode campaign closure: {error}"))?;
             write_json(&output, &receipt)?;
             write_json(&next_frontier_path, &next_frontier)?;
             println!(
@@ -1875,7 +1921,7 @@ mod tests {
             ),
             (
                 CampaignOperatorGate::None,
-                CampaignDriveDisposition::Complete,
+                CampaignDriveDisposition::CurrentFrontierClosed,
             ),
         ] {
             let receipt = drive_receipt_for_gate(
@@ -2080,6 +2126,36 @@ mod tests {
             !(item.class == CampaignFrontierClass::PrimarySource
                 && item.semantic_ref == "case:au:hca:2099:1")
         }));
+    }
+
+
+    #[test]
+    fn no_gate_means_current_frontier_closed_not_consumer_truth_proved() {
+        let closure = campaign_closure_for_gate(CampaignOperatorGate::None);
+        assert_eq!(closure.kind, CampaignClosureKind::NoSelectableResidual);
+        assert!(closure.current_frontier_closed);
+        assert!(!closure.consumer_adequacy_formally_proved);
+        assert!(!closure.creates_legal_authority);
+        assert!(!closure.creates_current_law_conclusion);
+
+        let drive = drive_receipt_for_gate(
+            Path::new("/tmp/campaign.json"),
+            &json!({}),
+            CampaignOperatorGate::None,
+        );
+        assert_eq!(
+            drive.disposition,
+            CampaignDriveDisposition::CurrentFrontierClosed
+        );
+    }
+
+    #[test]
+    fn review_gate_keeps_campaign_open() {
+        let closure =
+            campaign_closure_for_gate(CampaignOperatorGate::AuthorityTreatmentReview);
+        assert_eq!(closure.kind, CampaignClosureKind::Open);
+        assert!(!closure.current_frontier_closed);
+        assert!(!closure.consumer_adequacy_formally_proved);
     }
 
 }
