@@ -56,8 +56,9 @@ pub use discovery_lineage::{
     DiscoveryLineageInput, DiscoveryLineageMaterializationReceipt, DiscoveryLineageRow,
 };
 pub use latent_world::{
-    load_latent_world_rows, load_latent_world_rows_with_budget, LatentWorldBudget,
-    LatentWorldEdgeRow, LatentWorldError, LatentWorldRows,
+    load_latent_world_rows, load_latent_world_rows_with_budget,
+    load_latent_world_rows_with_context_revision_slice, ContextRevisionWorldSlice,
+    LatentWorldBudget, LatentWorldEdgeRow, LatentWorldError, LatentWorldRows,
 };
 pub use legal_ir_materialization::{
     materialize_reviewed_proposition_support, LegalIrMaterializationError, MaterializedLegalIrRefs,
