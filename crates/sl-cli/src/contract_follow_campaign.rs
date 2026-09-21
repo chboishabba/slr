@@ -1033,6 +1033,88 @@ fn campaign_step(gate: CampaignOperatorGate) -> CampaignNextStep {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CampaignDriveDisposition {
+    ExecutedOutboundAcquisition,
+    AwaitIdentityReview,
+    AwaitTreatmentReview,
+    BudgetExhausted,
+    Complete,
+    AwaitExplicitOperator,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CampaignDriveReceipt {
+    pub schema_version: String,
+    pub trajectory: String,
+    pub observed_gate: CampaignOperatorGate,
+    pub disposition: CampaignDriveDisposition,
+    pub review_artifact: Option<String>,
+    pub deterministic_action_executed: bool,
+    pub review_gate_bypassed: bool,
+    pub candidate_only: bool,
+    pub creates_legal_authority: bool,
+    pub creates_current_law_conclusion: bool,
+}
+
+fn campaign_gate_from_receipt(value: &Value) -> CampaignResult<CampaignOperatorGate> {
+    let step: CampaignNextStep = serde_json::from_value(
+        value
+            .get("next_operator_gate")
+            .cloned()
+            .ok_or_else(|| "campaign receipt has no next_operator_gate".to_string())?,
+    )
+    .map_err(|error| format!("decode campaign next_operator_gate: {error}"))?;
+    Ok(step.gate)
+}
+
+fn drive_receipt_for_gate(
+    trajectory: &Path,
+    value: &Value,
+    gate: CampaignOperatorGate,
+) -> CampaignDriveReceipt {
+    let (disposition, review_artifact) = match gate {
+        CampaignOperatorGate::AuthorityIdentityReview => (
+            CampaignDriveDisposition::AwaitIdentityReview,
+            value
+                .get("identity_review_worksheet")
+                .and_then(Value::as_str)
+                .map(str::to_owned),
+        ),
+        CampaignOperatorGate::AuthorityTreatmentReview => (
+            CampaignDriveDisposition::AwaitTreatmentReview,
+            value
+                .get("treatment_review_worksheet")
+                .and_then(Value::as_str)
+                .map(str::to_owned),
+        ),
+        CampaignOperatorGate::BudgetExhausted => (
+            CampaignDriveDisposition::BudgetExhausted,
+            None,
+        ),
+        CampaignOperatorGate::None => (
+            CampaignDriveDisposition::Complete,
+            None,
+        ),
+        _ => (
+            CampaignDriveDisposition::AwaitExplicitOperator,
+            None,
+        ),
+    };
+    CampaignDriveReceipt {
+        schema_version: "sl.contract_follow.campaign_drive.v0_1".into(),
+        trajectory: trajectory.display().to_string(),
+        observed_gate: gate,
+        disposition,
+        review_artifact,
+        deterministic_action_executed: false,
+        review_gate_bypassed: false,
+        candidate_only: true,
+        creates_legal_authority: false,
+        creates_current_law_conclusion: false,
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct OutboundFrontierEnvelope {
     schema_version: String,
@@ -1054,6 +1136,76 @@ struct OutboundFrontierEnvelope {
 
 pub fn run(args: Vec<String>) -> CampaignResult<()> {
     match args.as_slice() {
+        [command, rest @ ..] if command == "drive" => {
+            let trajectory = PathBuf::from(required_arg(rest, "--trajectory")?);
+            let status_output = arg_value(rest, "--status-output").map(PathBuf::from);
+            let value = read_campaign_receipt(&trajectory)?;
+            let gate = campaign_gate_from_receipt(&value)?;
+
+            if gate == CampaignOperatorGate::OutboundCitationAcquisition {
+                let frontier = arg_value(rest, "--frontier")
+                    .map(PathBuf::from)
+                    .or_else(|| {
+                        value
+                            .get("next_outbound_frontier")
+                            .and_then(Value::as_str)
+                            .map(PathBuf::from)
+                    })
+                    .ok_or_else(|| {
+                        "campaign drive needs --frontier or trajectory next_outbound_frontier for outbound acquisition".to_string()
+                    })?;
+                let output_dir = PathBuf::from(required_arg(rest, "--output-dir")?);
+                let mut nested = vec![
+                    "acquire-next".to_string(),
+                    "--trajectory".to_string(),
+                    trajectory.display().to_string(),
+                    "--frontier".to_string(),
+                    frontier.display().to_string(),
+                    "--output-dir".to_string(),
+                    output_dir.display().to_string(),
+                ];
+                if let Some(as_at) = arg_value(rest, "--as-at") {
+                    nested.push("--as-at".to_string());
+                    nested.push(as_at);
+                }
+                if let Some(path) = status_output {
+                    let receipt = CampaignDriveReceipt {
+                        schema_version: "sl.contract_follow.campaign_drive.v0_1".into(),
+                        trajectory: trajectory.display().to_string(),
+                        observed_gate: gate,
+                        disposition: CampaignDriveDisposition::ExecutedOutboundAcquisition,
+                        review_artifact: Some(
+                            output_dir
+                                .join("authority-identity-review-worksheet.json")
+                                .display()
+                                .to_string(),
+                        ),
+                        deterministic_action_executed: true,
+                        review_gate_bypassed: false,
+                        candidate_only: true,
+                        creates_legal_authority: false,
+                        creates_current_law_conclusion: false,
+                    };
+                    write_json(&path, &receipt)?;
+                }
+                // Reuse the exact existing governed acquisition path.  The
+                // nested command deterministically stops at identity review.
+                return run(nested);
+            }
+
+            let receipt = drive_receipt_for_gate(&trajectory, &value, gate);
+            if let Some(path) = status_output {
+                write_json(&path, &receipt)?;
+            }
+            println!(
+                "contract_follow_drive trajectory={} gate={:?} disposition={:?} review={} bypass=false authority=false current_law_conclusion=false",
+                trajectory.display(),
+                receipt.observed_gate,
+                receipt.disposition,
+                receipt.review_artifact.as_deref().unwrap_or("none"),
+            );
+            Ok(())
+        }
         [command, rest @ ..] if command == "discover" => {
             let trajectory = PathBuf::from(required_arg(rest, "--trajectory")?);
             let source_receipt = PathBuf::from(required_arg(rest, "--source-receipt")?);
@@ -1415,7 +1567,7 @@ pub fn run(args: Vec<String>) -> CampaignResult<()> {
             Ok(())
         }
         _ => Err(
-            "usage: sensiblaw legal-follow contracts campaign <discover|acquire-next|identity-prepare|identity-reviewed|treatment-prepare|treatment-reviewed> ...; acquire-next prepares identity review, identity-reviewed prepares treatment review, treatment-reviewed emits next outbound frontier"
+            "usage: sensiblaw legal-follow contracts campaign <drive|discover|acquire-next|identity-prepare|identity-reviewed|treatment-prepare|treatment-reviewed> ...; drive executes deterministic outbound acquisition and stops at explicit review/terminal gates"
                 .into(),
         ),
     }
@@ -1557,4 +1709,72 @@ mod tests {
             .ensure_source_acquisition_budget(RECURSIVE_OALC_MAX_REQUESTS_PER_ACQUISITION)
             .is_err());
     }
+
+    #[test]
+    fn campaign_drive_stops_at_identity_review_without_bypass() {
+        let value = json!({
+            "identity_review_worksheet": "/tmp/identity.json"
+        });
+        let receipt = drive_receipt_for_gate(
+            Path::new("/tmp/campaign.json"),
+            &value,
+            CampaignOperatorGate::AuthorityIdentityReview,
+        );
+        assert_eq!(
+            receipt.disposition,
+            CampaignDriveDisposition::AwaitIdentityReview
+        );
+        assert_eq!(
+            receipt.review_artifact.as_deref(),
+            Some("/tmp/identity.json")
+        );
+        assert!(!receipt.deterministic_action_executed);
+        assert!(!receipt.review_gate_bypassed);
+        assert!(!receipt.creates_legal_authority);
+    }
+
+    #[test]
+    fn campaign_drive_stops_at_treatment_review_without_bypass() {
+        let value = json!({
+            "treatment_review_worksheet": "/tmp/treatment.json"
+        });
+        let receipt = drive_receipt_for_gate(
+            Path::new("/tmp/campaign.json"),
+            &value,
+            CampaignOperatorGate::AuthorityTreatmentReview,
+        );
+        assert_eq!(
+            receipt.disposition,
+            CampaignDriveDisposition::AwaitTreatmentReview
+        );
+        assert_eq!(
+            receipt.review_artifact.as_deref(),
+            Some("/tmp/treatment.json")
+        );
+        assert!(!receipt.review_gate_bypassed);
+    }
+
+    #[test]
+    fn campaign_drive_classifies_terminal_gates_without_inventing_work() {
+        for (gate, expected) in [
+            (
+                CampaignOperatorGate::BudgetExhausted,
+                CampaignDriveDisposition::BudgetExhausted,
+            ),
+            (
+                CampaignOperatorGate::None,
+                CampaignDriveDisposition::Complete,
+            ),
+        ] {
+            let receipt = drive_receipt_for_gate(
+                Path::new("/tmp/campaign.json"),
+                &json!({}),
+                gate,
+            );
+            assert_eq!(receipt.disposition, expected);
+            assert!(!receipt.deterministic_action_executed);
+            assert!(!receipt.review_gate_bypassed);
+        }
+    }
+
 }
