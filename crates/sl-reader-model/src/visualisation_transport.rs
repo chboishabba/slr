@@ -5,6 +5,34 @@
 //! promotion visible at every frontend boundary.
 
 use serde::{Deserialize, Serialize};
+use crate::ReaderIntent;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReaderPickIntent {
+    pub target_ref: String,
+    pub intent: ReaderIntent,
+}
+
+impl ReaderPickIntent {
+    pub fn new(target_ref: impl Into<String>, intent: ReaderIntent) -> Result<Self, String> {
+        let target_ref = target_ref.into();
+        if target_ref.trim().is_empty() {
+            return Err("visual pick target_ref must be non-empty".into());
+        }
+        Ok(Self { target_ref, intent })
+    }
+
+    #[must_use]
+    pub const fn creates_semantic_authority(&self) -> bool {
+        false
+    }
+
+    #[must_use]
+    pub const fn creates_evidence_payment(&self) -> bool {
+        false
+    }
+}
+
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct VisualNodeIr {
@@ -161,6 +189,15 @@ mod tests {
     }
 
     #[test]
+    #[test]
+    fn visual_pick_wraps_existing_reader_intent_without_payment() {
+        let pick = ReaderPickIntent::new("case:fixture", ReaderIntent::ExpandProofCone).unwrap();
+        assert_eq!(pick.target_ref, "case:fixture");
+        assert_eq!(pick.intent, ReaderIntent::ExpandProofCone);
+        assert!(!pick.creates_semantic_authority());
+        assert!(!pick.creates_evidence_payment());
+    }
+
     fn visualisation_transport_is_read_only() {
         let envelope = VisualisationEnvelope {
             source_projection_digest: "sha256:fixture".into(),
