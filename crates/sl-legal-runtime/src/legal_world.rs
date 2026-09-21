@@ -261,6 +261,33 @@ pub struct AffectedProofCone {
     pub creates_claim_truth: bool,
 }
 
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RevisionReReviewKind {
+    ReacquireChangedSource,
+    ReReviewDirectEvidence,
+    RecomputeDependentProof,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RevisionReReviewDemand {
+    pub demand_ref: String,
+    pub kind: RevisionReReviewKind,
+    pub target_ref: String,
+    pub reason_ref: String,
+    pub candidate_only: bool,
+    pub creates_semantic_authority: bool,
+    pub creates_claim_truth: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RevisionReReviewPlan {
+    pub demands: Vec<RevisionReReviewDemand>,
+    pub candidate_only: bool,
+    pub creates_semantic_authority: bool,
+    pub creates_claim_truth: bool,
+}
+
 pub fn affected_proof_cone(
     invalidation: &RevisionInvalidationReceipt,
     dependencies: &RevisionDependencyIndex,
@@ -311,6 +338,69 @@ pub fn affected_proof_cone(
         transitively_affected_refs: affected,
         stale_evidence_refs,
         re_review_required: !invalidation.changes.is_empty(),
+        candidate_only: true,
+        creates_semantic_authority: false,
+        creates_claim_truth: false,
+    })
+}
+
+
+pub fn revision_rereview_plan(
+    invalidation: &RevisionInvalidationReceipt,
+    cone: &AffectedProofCone,
+) -> Result<RevisionReReviewPlan, String> {
+    if !invalidation.candidate_only
+        || invalidation.creates_semantic_authority
+        || invalidation.creates_claim_truth
+        || !cone.candidate_only
+        || cone.creates_semantic_authority
+        || cone.creates_claim_truth
+    {
+        return Err("revision re-review plan crossed non-promotion boundary".into());
+    }
+
+    let mut demands = Vec::new();
+    for source_ref in &cone.changed_source_refs {
+        demands.push(RevisionReReviewDemand {
+            demand_ref: format!("revision-rereview:source:{source_ref}"),
+            kind: RevisionReReviewKind::ReacquireChangedSource,
+            target_ref: source_ref.clone(),
+            reason_ref: format!("source-revision-changed:{source_ref}"),
+            candidate_only: true,
+            creates_semantic_authority: false,
+            creates_claim_truth: false,
+        });
+    }
+    for proposition_ref in &cone.directly_affected_proposition_refs {
+        demands.push(RevisionReReviewDemand {
+            demand_ref: format!("revision-rereview:evidence:{proposition_ref}"),
+            kind: RevisionReReviewKind::ReReviewDirectEvidence,
+            target_ref: proposition_ref.clone(),
+            reason_ref: format!("direct-source-dependency-stale:{proposition_ref}"),
+            candidate_only: true,
+            creates_semantic_authority: false,
+            creates_claim_truth: false,
+        });
+    }
+    for reference in cone
+        .transitively_affected_refs
+        .difference(&cone.directly_affected_proposition_refs)
+    {
+        demands.push(RevisionReReviewDemand {
+            demand_ref: format!("revision-rereview:recompute:{reference}"),
+            kind: RevisionReReviewKind::RecomputeDependentProof,
+            target_ref: reference.clone(),
+            reason_ref: format!("transitive-revision-dependency:{reference}"),
+            candidate_only: true,
+            creates_semantic_authority: false,
+            creates_claim_truth: false,
+        });
+    }
+    demands.sort_by(|left, right| left.demand_ref.cmp(&right.demand_ref));
+    demands.dedup_by(|left, right| left.demand_ref == right.demand_ref);
+
+    Ok(RevisionReReviewPlan {
+        demands,
         candidate_only: true,
         creates_semantic_authority: false,
         creates_claim_truth: false,
@@ -408,4 +498,39 @@ mod tests {
         assert!(!cone.re_review_required);
         assert!(cone.transitively_affected_refs.is_empty());
     }
+
+    #[test]
+    fn revision_change_compiles_to_source_review_and_proof_recompute_obligations() {
+        let old = world("world:old", "AU", "2026-09-20", "rev:1");
+        let new = world("world:new", "AU", "2026-09-21", "rev:2");
+        let invalidation = diff_world_revisions(&old, &new).unwrap();
+        let dependencies = RevisionDependencyIndex {
+            source_to_propositions: BTreeMap::from([(
+                "source:case".into(),
+                BTreeSet::from(["prop:a".into()]),
+            )]),
+            proposition_dependents: BTreeMap::from([
+                ("prop:a".into(), BTreeSet::from(["prop:b".into()])),
+                ("prop:b".into(), BTreeSet::from(["proof:query".into()])),
+            ]),
+        };
+        let cone = affected_proof_cone(&invalidation, &dependencies).unwrap();
+        let plan = revision_rereview_plan(&invalidation, &cone).unwrap();
+
+        assert!(plan.demands.iter().any(|demand| {
+            demand.kind == RevisionReReviewKind::ReacquireChangedSource
+                && demand.target_ref == "source:case"
+        }));
+        assert!(plan.demands.iter().any(|demand| {
+            demand.kind == RevisionReReviewKind::ReReviewDirectEvidence
+                && demand.target_ref == "prop:a"
+        }));
+        assert!(plan.demands.iter().any(|demand| {
+            demand.kind == RevisionReReviewKind::RecomputeDependentProof
+                && demand.target_ref == "proof:query"
+        }));
+        assert!(!plan.creates_semantic_authority);
+        assert!(!plan.creates_claim_truth);
+    }
+
 }
