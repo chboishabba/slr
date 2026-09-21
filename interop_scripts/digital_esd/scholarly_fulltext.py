@@ -233,6 +233,14 @@ def verify(
             })
             continue
 
+        if item.get("parser_success") is False:
+            rejected.append({
+                "source_identity_reference": ref,
+                "reason": str(item.get("reason") or "parser-failed"),
+                "failure_reference": str(item.get("failure_reference") or ""),
+            })
+            continue
+
         if item.get("content_sha256") != request.get("content_sha256"):
             rejected.append({
                 "source_identity_reference": ref,
