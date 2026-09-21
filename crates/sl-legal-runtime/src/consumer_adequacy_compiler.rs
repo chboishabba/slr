@@ -82,7 +82,10 @@ fn exact_witnesses_by_axis<'a>(
     witnesses: &'a [KernelCheckedNonFactorabilityWitness],
     query_ref: &str,
     projection_digest: &str,
-) -> Result<BTreeMap<ConsumerAxis, &'a NonFactorabilityWitnessReceipt>, String> {
+) -> Result<
+    BTreeMap<ConsumerAxis, &'a KernelCheckedNonFactorabilityWitness>,
+    String,
+> {
     let mut by_axis = BTreeMap::new();
     for witness in witnesses {
         let metadata = witness.metadata();
