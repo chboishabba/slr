@@ -1812,6 +1812,10 @@ pub struct LegalRuntimeCapabilityReceipt {
     pub s11_research_flow_sankey: bool,
     pub s14_6_generic_campaign_kernel: bool,
     pub s14_7_consumer_adequacy_runtime: bool,
+    pub s15_theorem_adequacy_bridge: bool,
+    pub s15_exact_residual_compiler: bool,
+    pub s15_admissible_research_frontier: bool,
+    pub s15_stop_semantics: bool,
     pub candidate_only: bool,
     pub creates_semantic_authority: bool,
     pub receipt_digest: String,
@@ -2086,7 +2090,11 @@ pub fn compile_capability_receipt() -> Result<LegalRuntimeCapabilityReceipt, Leg
             .chain(std::iter::once("S11:visualisation-ir"))
             .chain(std::iter::once("S11:research-flow-sankey"))
             .chain(std::iter::once("S14.6:generic-campaign-kernel"))
-            .chain(std::iter::once("S14.7:consumer-adequacy-runtime")),
+            .chain(std::iter::once("S14.7:consumer-adequacy-runtime"))
+            .chain(std::iter::once("S15:theorem-adequacy-bridge"))
+            .chain(std::iter::once("S15:exact-residual-compiler"))
+            .chain(std::iter::once("S15:admissible-research-frontier"))
+            .chain(std::iter::once("S15:stop-semantics")),
     );
 
     Ok(LegalRuntimeCapabilityReceipt {
@@ -2109,6 +2117,10 @@ pub fn compile_capability_receipt() -> Result<LegalRuntimeCapabilityReceipt, Leg
         s11_research_flow_sankey: true,
         s14_6_generic_campaign_kernel: true,
         s14_7_consumer_adequacy_runtime: true,
+        s15_theorem_adequacy_bridge: true,
+        s15_exact_residual_compiler: true,
+        s15_admissible_research_frontier: true,
+        s15_stop_semantics: true,
         candidate_only: true,
         creates_semantic_authority: false,
         receipt_digest,
@@ -2713,6 +2725,10 @@ pub mod matter_runtime;
 pub use matter_runtime::*;
 pub mod consumer_adequacy;
 pub use consumer_adequacy::*;
+pub mod consumer_theorem_bridge;
+pub use consumer_theorem_bridge::*;
+pub mod consumer_research_planner;
+pub use consumer_research_planner::*;
 pub mod visualisation_ir;
 pub use visualisation_ir::*;
 pub mod legal_follow_campaign;
