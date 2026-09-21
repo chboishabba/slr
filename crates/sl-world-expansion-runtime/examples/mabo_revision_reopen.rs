@@ -1,0 +1,184 @@
+//! Combined S15/S16/S18 live experiment:
+//! closed Mabo world -> source revision perturbation -> exact context re-review
+//! -> recompute identity frontier -> generic LegalFollow reviewed deltas.
+//!
+//! Usage:
+//!   cargo run -p sensiblaw-world-expansion-runtime --example mabo_revision_reopen -- //!     <seed_ref> <context_review.tsv> <identity_review.tsv> [max_sources] [pending_dir]
+//!
+//! Both review manifests may be empty files.  Missing review is an explicit
+//! stop and a pending review bundle is written; no decision is fabricated.
+
+use std::{env, fs, path::PathBuf};
+
+use sensiblaw_pg_source_store::{
+    load_database_config, load_discovery_identity_baseline,
+    load_latent_world_rows_with_budget, load_reviewed_source_expansion_rows,
+    materialize_reviewed_context_expansion, LatentWorldBudget,
+};
+use sensiblaw_wikimedia_candidate_provider::fetch_entity_rdf_revision_receipt;
+use sensiblaw_world_expansion_runtime::{
+    adaptive_campaign::parse_bounded_target_context,
+    adaptive_context_review::{
+        bounded_context_candidate_set_sha256, matching_context_review,
+        parse_mabo_context_review_tsv, pending_context_review_bundle,
+        prepare_reviewed_context_expansion,
+    },
+    mabo_generic_legal_follow::{
+        apply_reviewed_mabo_sequence, mabo_generic_campaign_from_world,
+        mabo_generic_campaign_receipt,
+    },
+    mabo_revision_campaign::{
+        probe_latest_mabo_revision_changes, select_next_mabo_revision_reopen,
+    },
+    parse_mabo_identity_review_tsv,
+};
+
+fn parse_or<T: std::str::FromStr>(arg: Option<&String>, default: T) -> T {
+    arg.and_then(|value| value.parse::<T>().ok()).unwrap_or(default)
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let args = env::args().skip(1).collect::<Vec<_>>();
+    if args.len() < 3 {
+        return Err(
+            "usage: mabo_revision_reopen <seed_ref> <context_review.tsv> <identity_review.tsv> [max_sources] [pending_dir]"
+                .into(),
+        );
+    }
+
+    let seed_ref = &args[0];
+    let context_review_path = PathBuf::from(&args[1]);
+    let identity_review_path = PathBuf::from(&args[2]);
+    let max_sources = parse_or(args.get(3), 32_usize);
+    let pending_dir = args
+        .get(4)
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("artifacts/mabo/revision-reviews/pending"));
+
+    let config = load_database_config(None)?;
+    let reviewed_rows = load_reviewed_source_expansion_rows(&config)?;
+    println!("seed_ref={seed_ref}");
+    println!("reviewed_source_expansion_receipts={}", reviewed_rows.len());
+    println!("revision_probe_max_sources={max_sources}");
+
+    let probe = probe_latest_mabo_revision_changes(&reviewed_rows, max_sources)?;
+    println!("reviewed_source_count={}", probe.reviewed_source_count);
+    println!("probed_source_count={}", probe.probed_source_count);
+    println!("revision_reopen_count={}", probe.reopen_residuals.len());
+    println!("unchanged_source_count={}", probe.unchanged_source_refs.len());
+    println!("candidate_only={}", probe.candidate_only);
+    println!("creates_semantic_authority={}", probe.creates_semantic_authority);
+    println!("applicability_promoted={}", probe.applicability_promoted);
+    println!("claim_truth_promoted={}", probe.claim_truth_promoted);
+
+    let Some(reopened) = select_next_mabo_revision_reopen(&probe).cloned() else {
+        println!("stop=NoRevisionPerturbation");
+        println!("consumer_adequate_inferred=false");
+        return Ok(());
+    };
+
+    println!("selected_revision_residual={}", reopened.residual_ref);
+    println!("selected_source_ref={}", reopened.source_ref);
+    println!("reviewed_revision_ref={}", reopened.reviewed_revision_ref);
+    println!("latest_revision_ref={}", reopened.latest_revision_ref);
+
+    // Reacquire the exact revision discovered by the bounded coordinate probe.
+    // We deliberately do not call a second "latest content" operation here.
+    let acquired =
+        fetch_entity_rdf_revision_receipt(&reopened.source_ref, reopened.latest_revision_id)?;
+    if acquired.source_revision_ref != reopened.latest_revision_ref
+        || acquired.qid != reopened.source_ref
+        || !acquired.candidate_only
+        || acquired.semantic_promotion
+    {
+        return Err(std::io::Error::other(
+            "revision re-acquisition did not return exact candidate-only source coordinate",
+        )
+        .into());
+    }
+
+    let candidates = parse_bounded_target_context(&acquired)?;
+    let digest =
+        bounded_context_candidate_set_sha256(&acquired.source_revision_ref, &candidates)?;
+    println!("latest_bounded_candidate_count={}", candidates.len());
+    println!("latest_bounded_candidate_set_sha256={digest}");
+
+    let context_review_text = fs::read_to_string(&context_review_path)?;
+    let context_reviews = parse_mabo_context_review_tsv(&context_review_text)?;
+    let Some(context_review) =
+        matching_context_review(&acquired.source_revision_ref, &digest, &context_reviews)
+    else {
+        fs::create_dir_all(&pending_dir)?;
+        let pending = pending_context_review_bundle(
+            &acquired.qid,
+            &acquired.source_revision_ref,
+            &candidates,
+        )?;
+        let pending_path = pending_dir.join(format!(
+            "{}__{}.pending.tsv",
+            acquired.qid, acquired.revision_id
+        ));
+        fs::write(&pending_path, pending)?;
+        println!("stop=ContextReviewRequired");
+        println!("pending_context_review={}", pending_path.display());
+        println!("consumer_adequate_inferred=false");
+        return Ok(());
+    };
+
+    let prepared = prepare_reviewed_context_expansion(&candidates, context_review)?;
+    let materialized =
+        materialize_reviewed_context_expansion(&config, &prepared.edges, &prepared.expansion)?;
+    println!("context_review_ref={}", context_review.review_ref);
+    println!(
+        "reviewed_context_materialized_count={}",
+        materialized.materialized_count
+    );
+    println!("context_revision_reopened_and_paid=true");
+
+    // Recompute from durable state after the reviewed revision delta.
+    let world = load_latent_world_rows_with_budget(
+        &config,
+        seed_ref,
+        LatentWorldBudget {
+            max_hops: 100,
+            max_nodes: 10_000,
+            max_edges: 50_000,
+        },
+    )?;
+    let baseline = load_discovery_identity_baseline(&config)?;
+    let mut campaign = mabo_generic_campaign_from_world(&world, &baseline, 1_000)?;
+    println!(
+        "post_revision_identity_residuals={}",
+        campaign.state().residuals.len()
+    );
+
+    let identity_review_text = fs::read_to_string(&identity_review_path)?;
+    let identity_reviews = parse_mabo_identity_review_tsv(&identity_review_text)?;
+    let reviewed_deltas_applied =
+        apply_reviewed_mabo_sequence(&mut campaign, &identity_reviews)?;
+    let receipt = mabo_generic_campaign_receipt(&campaign);
+    println!("reviewed_identity_deltas_applied={reviewed_deltas_applied}");
+    println!("residuals_remaining={}", receipt.residuals_remaining);
+    println!("reviewed_identity_count={}", receipt.reviewed_identity_count);
+    println!("authority_promoted={}", receipt.creates_semantic_authority);
+    println!("applicability_promoted={}", receipt.applicability_promoted);
+    println!("claim_truth_promoted={}", receipt.claim_truth_promoted);
+
+    match campaign.next_demand() {
+        Ok(next) => {
+            println!("stop=IdentityReviewRequired");
+            println!("next_representation_ref={}", next.representation_ref);
+            println!("next_residual_ref={}", next.residual_ref);
+            println!(
+                "identity_review_manifest_template={}	world-object:<reviewed-id>	review:<operator-ref>",
+                next.representation_ref
+            );
+        }
+        Err(stop) => {
+            println!("stop={stop:?}");
+        }
+    }
+    println!("consumer_adequate_inferred=false");
+
+    Ok(())
+}
