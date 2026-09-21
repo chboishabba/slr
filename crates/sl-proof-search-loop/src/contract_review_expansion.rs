@@ -833,4 +833,132 @@ mod tests {
             .contains("review-unit:sidhu-waltons:corroborating"));
     }
 
+
+    #[test]
+    fn live_giumelli_shape_two_substantive_units_become_one_supports_edge() {
+        let mut trace = waltons_estoppel_trace();
+        for (semantic_ref, label, citation, date, court, jurisdiction) in [
+            (
+                "case:nsw:nswca:2016:105",
+                "Doueihi v Construction Technologies Australia Pty Ltd",
+                "[2016] NSWCA 105",
+                "2016-05-12",
+                "court:NSWCA",
+                "AU-NSW",
+            ),
+            (
+                "case:au:hca:1999:10",
+                "Giumelli v Giumelli",
+                "[1999] HCA 10",
+                "1999-03-24",
+                "court:HCA",
+                "AU",
+            ),
+        ] {
+            trace.nodes.insert(
+                semantic_ref.into(),
+                ContractTraceNode {
+                    semantic_ref: semantic_ref.into(),
+                    label: label.into(),
+                    kind: TraceNodeKind::CaseAuthority,
+                    doctrine: Some(
+                        sensiblaw_legal_follow_plan::ContractDoctrine::Estoppel,
+                    ),
+                    jurisdiction_ref: jurisdiction.into(),
+                    court_ref: Some(court.into()),
+                    decision_or_effective_date: Some(date.into()),
+                    valid_from: None,
+                    valid_to: None,
+                    source_role: SourceRole::PrimaryCaseLaw,
+                    authority_level: AuthorityLevel::Official,
+                    source_citation: citation.into(),
+                    candidate_only: true,
+                    creates_legal_authority: false,
+                },
+            );
+        }
+
+        let reviewed_unit = |unit_ref: &str, pinpoint: &str, proposition: &str| {
+            ReviewedCitationReviewUnitReceipt {
+                review_unit_ref: unit_ref.into(),
+                document_ref:
+                    "document:oalc:nsw_caselaw:5732b7a4e4b05f2c4f04de6b".into(),
+                source_revision_ref:
+                    "isaacus/open-australian-legal-corpus@ef45e3fec41a960919a31149eee6dab9aa39f725:nsw_caselaw:5732b7a4e4b05f2c4f04de6b".into(),
+                canonical_text_sha256:
+                    "sha256:82455d8834f96d6a054d85e9d488f6a1a3751a18304323983abcf7e6d9ac9cc3".into(),
+                citation_text: "[1999] HCA 10".into(),
+                citation_locator_refs: vec![format!("{pinpoint}::[1999] HCA 10")],
+                anchor_paragraph_locator_refs: vec![pinpoint.into()],
+                selected_anchor_paragraph_locator_ref: pinpoint.into(),
+                matched_criterion_refs: vec![
+                    "criterion:treatment:exact-citation:[1999] HCA 10".into(),
+                ],
+                reviewer_ref:
+                    "reviewer:openai-gpt-5.6-sol:standin-human-review:2026-09-21".into(),
+                evidence_refs: vec![pinpoint.into()],
+                edge: PropositionReasoningEdge {
+                    citing_document_ref:
+                        "document:oalc:nsw_caselaw:5732b7a4e4b05f2c4f04de6b".into(),
+                    citing_proposition_ref: format!("prop:doueihi:{proposition}"),
+                    cited_document_ref: "case:au:hca:1999:10".into(),
+                    cited_proposition_ref: format!("prop:giumelli:{proposition}"),
+                    citation_use: CitationUse::ReliedOn,
+                    reasoning_role: ReasoningRole::Rule,
+                    condition_coordinates: Vec::new(),
+                    pinpoint_ref: Some(pinpoint.into()),
+                    judge_or_speaker_ref: None,
+                    court_ref: Some("court:NSWCA".into()),
+                    jurisdiction_ref: Some("AU-NSW".into()),
+                    temporal_ref: Some("2016-05-12".into()),
+                    outcome_ref: None,
+                    remedy_ref: None,
+                    burden_refs: Vec::new(),
+                    exception_refs: Vec::new(),
+                    lexical_realisation: "reviewed Giumelli treatment regression".into(),
+                    reviewed: true,
+                    candidate_only: true,
+                },
+                receipt_authority: "experimental_candidate_only",
+            }
+        };
+
+        let aliases = BTreeMap::from([(
+            "document:oalc:nsw_caselaw:5732b7a4e4b05f2c4f04de6b".into(),
+            "case:nsw:nswca:2016:105".into(),
+        )]);
+        let compiled = compile_treatment_receipts_to_contract_hops_with_aliases(
+            &trace,
+            &[
+                reviewed_unit(
+                    "review-unit:sha256:261e4a3feb77115a10865a9abd7c10402c0ed980880ff16bc0642c77df39fea0",
+                    "document:oalc:nsw_caselaw:5732b7a4e4b05f2c4f04de6b#paragraph-357",
+                    "proprietary-estoppel-future-property-assumption",
+                ),
+                reviewed_unit(
+                    "review-unit:sha256:429e909eb33ad1553c649af72ca19339599ec5b6f87755fda935e0806a618fb6",
+                    "document:oalc:nsw_caselaw:5732b7a4e4b05f2c4f04de6b#paragraph-435",
+                    "assurance-expectation-reliance-equitable-principle",
+                ),
+            ],
+            &aliases,
+        );
+
+        assert!(compiled.residuals.is_empty());
+        assert_eq!(compiled.deltas.len(), 1);
+        let delta = &compiled.deltas[0];
+        assert_eq!(delta.discovered_edges.len(), 1);
+        let edge = &delta.discovered_edges[0];
+        assert_eq!(edge.from_ref, "case:nsw:nswca:2016:105");
+        assert_eq!(edge.to_ref, "case:au:hca:1999:10");
+        assert_eq!(edge.treatment, TreatmentKind::Supports);
+        assert!(delta.provenance_ref.contains(
+            "review-unit:sha256:261e4a3feb77115a10865a9abd7c10402c0ed980880ff16bc0642c77df39fea0"
+        ));
+        assert!(delta.provenance_ref.contains(
+            "review-unit:sha256:429e909eb33ad1553c649af72ca19339599ec5b6f87755fda935e0806a618fb6"
+        ));
+        assert!(!delta.creates_legal_authority);
+    }
+
 }
