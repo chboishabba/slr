@@ -165,7 +165,7 @@ fn decision_from_adequacy(
                 false,
             )
         }
-        ConsumerAdequacyCompilation::CurrentFrontierClosedWithoutAdequacy(receipt) => {
+        ConsumerAdequacyCompilation::CurrentFrontierClosedWithoutAdequacy(_receipt) => {
             let kind = if world_change_consumer_invariant {
                 QueryWorldRunDecisionKind::PreserveOperationalClosureByInvariance
             } else {

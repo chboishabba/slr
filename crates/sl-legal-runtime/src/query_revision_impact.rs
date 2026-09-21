@@ -1423,6 +1423,7 @@ mod tests {
         let QueryWorldResearchOutcome::WorldChangedConsumerResidual {
             impact,
             adequacy,
+            ..
         } = outcome
         else {
             panic!("required as-at change must reopen consumer research");

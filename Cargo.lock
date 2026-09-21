@@ -1291,6 +1291,9 @@ dependencies = [
 [[package]]
 name = "sensiblaw-reader-model"
 version = "0.1.0"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "sensiblaw-residual-planner"
@@ -1391,6 +1394,7 @@ dependencies = [
  "sensiblaw-consumer-residual",
  "sensiblaw-core",
  "sensiblaw-governed-legal-provider",
+ "sensiblaw-legal-runtime",
  "sensiblaw-pg-source-store",
  "sensiblaw-proof-search-loop",
  "sensiblaw-proof-search-scheduler",
