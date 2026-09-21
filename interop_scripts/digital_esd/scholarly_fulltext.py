@@ -204,7 +204,9 @@ def verify(
       source identity matches
       source revision matches
       content digest matches
-      every document span belongs to the revision
+      extraction receipt names the exact source artifact digest
+      extracted-text digest is explicit and stable
+      every document node is anchored to that extracted-text digest
       every facet references a known document node
       every observation uses that exact node span
       candidate_only = true
@@ -245,6 +247,47 @@ def verify(
             })
             continue
 
+        extraction = item.get("extraction_receipt")
+        if not isinstance(extraction, dict):
+            rejected.append({
+                "source_identity_reference": ref,
+                "reason": "missing-extraction-receipt",
+            })
+            continue
+        if extraction.get("source_artifact_sha256") != request.get("content_sha256"):
+            rejected.append({
+                "source_identity_reference": ref,
+                "reason": "extraction-source-digest-mismatch",
+            })
+            continue
+
+        extracted_text_sha256 = str(item.get("extracted_text_sha256") or "")
+        if not extracted_text_sha256 or extracted_text_sha256 != extraction.get("extracted_text_sha256"):
+            rejected.append({
+                "source_identity_reference": ref,
+                "reason": "extracted-text-digest-mismatch",
+            })
+            continue
+
+        nodes = item.get("document_nodes", [])
+        if not isinstance(nodes, list):
+            rejected.append({
+                "source_identity_reference": ref,
+                "reason": "document-nodes-not-list",
+            })
+            continue
+        bad_node_digest = any(
+            not isinstance(node, dict)
+            or node.get("extracted_text_sha256") != extracted_text_sha256
+            for node in nodes
+        )
+        if bad_node_digest:
+            rejected.append({
+                "source_identity_reference": ref,
+                "reason": "document-node-text-digest-mismatch",
+            })
+            continue
+
         candidate_only = item.get("candidate_only", False)
         creates_semantic = item.get("creates_semantic_authority", False)
         if candidate_only is False:
@@ -256,7 +299,7 @@ def verify(
         if creates_semantic:
             rejected.append({
                 "source_identity_reference": ref,
-                "reason": "creates_semantic_authority-not-false",
+                "reason": "creates-semantic-authority-not-false",
             })
             continue
 
@@ -264,7 +307,12 @@ def verify(
             "source_identity_reference": ref,
             "source_revision_reference": item.get("source_revision_reference"),
             "content_sha256": item.get("content_sha256"),
-            "document_node_count": len(item.get("document_nodes", [])),
+            "extracted_text_sha256": extracted_text_sha256,
+            "extraction_engine": item.get("extraction_engine"),
+            "extraction_engine_version": item.get("extraction_engine_version"),
+            "page_count": item.get("page_count"),
+            "paragraph_count": item.get("paragraph_count"),
+            "document_node_count": len(nodes),
             "study_facet_count": len(item.get("study_facets", [])),
             "candidate_only": True,
             "creates_semantic_authority": False,
