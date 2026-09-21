@@ -9,6 +9,7 @@ rust-version.workspace = true
 sensiblaw-core = { path = "../sl-core" }
 sensiblaw-consumer-residual = { path = "../sl-consumer-residual" }
 sensiblaw-governed-legal-provider = { path = "../sl-governed-legal-provider" }
+sensiblaw-legal-runtime = { path = "../sl-legal-runtime" }
 sensiblaw-proof-search-loop = { path = "../sl-proof-search-loop" }
 sensiblaw-proof-search-scheduler = { path = "../sl-proof-search-scheduler" }
 sensiblaw-pg-source-store = { path = "../sl-pg-source-store" }
