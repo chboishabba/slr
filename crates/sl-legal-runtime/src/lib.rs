@@ -1826,6 +1826,7 @@ pub struct LegalRuntimeCapabilityReceipt {
     pub s18_affected_proof_cone: bool,
     pub s18_revision_consumer_reopening: bool,
     pub s18_query_scoped_world_impact: bool,
+    pub s15_s18_query_world_run_controller: bool,
     pub candidate_only: bool,
     pub creates_semantic_authority: bool,
     pub receipt_digest: String,
@@ -2120,7 +2121,8 @@ pub fn compile_capability_receipt() -> Result<LegalRuntimeCapabilityReceipt, Leg
             .chain(std::iter::once("S18:revision-invalidation"))
             .chain(std::iter::once("S18:affected-proof-cone"))
             .chain(std::iter::once("S18:revision-consumer-reopening"))
-            .chain(std::iter::once("S18:query-scoped-world-impact")),
+            .chain(std::iter::once("S18:query-scoped-world-impact"))
+            .chain(std::iter::once("S15/S18:query-world-run-controller")),
     );
 
     Ok(LegalRuntimeCapabilityReceipt {
@@ -2157,6 +2159,7 @@ pub fn compile_capability_receipt() -> Result<LegalRuntimeCapabilityReceipt, Leg
         s18_affected_proof_cone: true,
         s18_revision_consumer_reopening: true,
         s18_query_scoped_world_impact: true,
+        s15_s18_query_world_run_controller: true,
         candidate_only: true,
         creates_semantic_authority: false,
         receipt_digest,
@@ -2737,6 +2740,7 @@ mod tests {
         assert!(receipt.s15_query_dependency_slice);
         assert!(receipt.s16_source_realised_generic_legal_follow);
         assert!(receipt.s18_query_scoped_world_impact);
+        assert!(receipt.s15_s18_query_world_run_controller);
         assert!(receipt.candidate_only);
         assert!(!receipt.creates_semantic_authority);
         assert!(receipt.receipt_digest.starts_with("sha256:"));
@@ -2782,3 +2786,5 @@ pub mod revision_consumer_bridge;
 pub use revision_consumer_bridge::*;
 pub mod query_revision_impact;
 pub use query_revision_impact::*;
+pub mod query_world_run_controller;
+pub use query_world_run_controller::*;
