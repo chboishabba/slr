@@ -11,7 +11,7 @@
 
 use std::collections::BTreeMap;
 
-use sensiblaw_pg_source_store::ReviewedSourceExpansionRow;
+use sensiblaw_pg_source_store::ReviewedContextSourceRevisionCoordinate;
 use sensiblaw_wikimedia_candidate_provider::fetch_latest_revision_id;
 use thiserror::Error;
 
@@ -20,8 +20,8 @@ pub struct MaboReviewedRevisionCoordinate {
     pub source_ref: String,
     pub reviewed_revision_id: u64,
     pub reviewed_revision_ref: String,
-    pub review_ref: String,
-    pub receipt_sha256: String,
+    pub coordinate_ref: String,
+    pub coordinate_origin: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -32,8 +32,8 @@ pub struct MaboRevisionReopenResidual {
     pub reviewed_revision_ref: String,
     pub latest_revision_id: u64,
     pub latest_revision_ref: String,
-    pub triggering_review_ref: String,
-    pub triggering_receipt_sha256: String,
+    pub triggering_coordinate_ref: String,
+    pub triggering_coordinate_origin: String,
     pub candidate_only: bool,
     pub creates_semantic_authority: bool,
     pub applicability_promoted: bool,
@@ -46,6 +46,8 @@ pub struct MaboRevisionProbeReceipt {
     pub probed_source_count: usize,
     pub reopen_residuals: Vec<MaboRevisionReopenResidual>,
     pub unchanged_source_refs: Vec<String>,
+    pub unprobed_source_refs: Vec<String>,
+    pub probe_truncated: bool,
     pub candidate_only: bool,
     pub creates_semantic_authority: bool,
     pub applicability_promoted: bool,
@@ -100,7 +102,7 @@ fn parse_revision_ref(
 }
 
 pub fn highest_reviewed_mabo_revisions(
-    rows: &[ReviewedSourceExpansionRow],
+    rows: &[ReviewedContextSourceRevisionCoordinate],
 ) -> Result<Vec<MaboReviewedRevisionCoordinate>, MaboRevisionCampaignError> {
     let mut highest: BTreeMap<String, MaboReviewedRevisionCoordinate> = BTreeMap::new();
 
@@ -109,8 +111,6 @@ pub fn highest_reviewed_mabo_revisions(
             || row.creates_semantic_authority
             || row.applicability_promoted
             || row.claim_truth_promoted
-            || row.counts_as_novel_identity
-            || row.pays_claim_residual
         {
             return Err(MaboRevisionCampaignError::ReviewedExpansionPromoted);
         }
@@ -119,8 +119,8 @@ pub fn highest_reviewed_mabo_revisions(
             source_ref: row.source_ref.clone(),
             reviewed_revision_id: revision_id,
             reviewed_revision_ref: row.source_revision_ref.clone(),
-            review_ref: row.review_ref.clone(),
-            receipt_sha256: row.receipt_sha256.clone(),
+            coordinate_ref: row.coordinate_ref.clone(),
+            coordinate_origin: row.coordinate_origin.to_owned(),
         };
 
         match highest.get(&row.source_ref) {
@@ -175,8 +175,8 @@ pub fn compile_mabo_revision_probe(
             reviewed_revision_ref: coordinate.reviewed_revision_ref.clone(),
             latest_revision_id,
             latest_revision_ref,
-            triggering_review_ref: coordinate.review_ref.clone(),
-            triggering_receipt_sha256: coordinate.receipt_sha256.clone(),
+            triggering_coordinate_ref: coordinate.coordinate_ref.clone(),
+            triggering_coordinate_origin: coordinate.coordinate_origin.clone(),
             candidate_only: true,
             creates_semantic_authority: false,
             applicability_promoted: false,
@@ -197,6 +197,8 @@ pub fn compile_mabo_revision_probe(
         probed_source_count: latest_revision_ids.len(),
         reopen_residuals,
         unchanged_source_refs,
+        unprobed_source_refs: Vec::new(),
+        probe_truncated: false,
         candidate_only: true,
         creates_semantic_authority: false,
         applicability_promoted: false,
@@ -209,7 +211,7 @@ pub fn compile_mabo_revision_probe(
 /// Only the highest reviewed coordinate per source is probed.  This call does
 /// not acquire RDF content and cannot by itself pay the reopened residual.
 pub fn probe_latest_mabo_revision_changes(
-    rows: &[ReviewedSourceExpansionRow],
+    rows: &[ReviewedContextSourceRevisionCoordinate],
     max_sources: usize,
 ) -> Result<MaboRevisionProbeReceipt, MaboRevisionCampaignError> {
     if max_sources == 0 {
@@ -221,6 +223,11 @@ pub fn probe_latest_mabo_revision_changes(
         .take(max_sources)
         .cloned()
         .collect::<Vec<_>>();
+    let unprobed_source_refs = reviewed
+        .iter()
+        .skip(max_sources)
+        .map(|coordinate| coordinate.source_ref.clone())
+        .collect::<Vec<_>>();
     let mut latest = BTreeMap::new();
     for coordinate in &bounded {
         let revision_id = fetch_latest_revision_id(&coordinate.source_ref).map_err(|error| {
@@ -231,7 +238,12 @@ pub fn probe_latest_mabo_revision_changes(
         })?;
         latest.insert(coordinate.source_ref.clone(), revision_id);
     }
-    compile_mabo_revision_probe(&bounded, &latest)
+    let mut receipt = compile_mabo_revision_probe(&bounded, &latest)?;
+    receipt.reviewed_source_count = reviewed.len();
+    receipt.probed_source_count = bounded.len();
+    receipt.unprobed_source_refs = unprobed_source_refs;
+    receipt.probe_truncated = receipt.probed_source_count < receipt.reviewed_source_count;
+    Ok(receipt)
 }
 
 #[must_use]
@@ -245,20 +257,16 @@ pub fn select_next_mabo_revision_reopen(
 mod tests {
     use super::*;
 
-    fn row(source: &str, revision: u64, review: &str) -> ReviewedSourceExpansionRow {
-        ReviewedSourceExpansionRow {
+    fn row(source: &str, revision: u64, review: &str) -> ReviewedContextSourceRevisionCoordinate {
+        ReviewedContextSourceRevisionCoordinate {
             source_ref: source.into(),
             source_revision_ref: format!("wikidata:{source}:oldid:{revision}"),
-            review_ref: review.into(),
-            bounded_candidate_count: 2,
+            coordinate_ref: format!("coord:{source}:{revision}:{review}"),
+            coordinate_origin: "source_expansion_receipt",
             candidate_only: true,
             creates_semantic_authority: false,
             applicability_promoted: false,
             claim_truth_promoted: false,
-            counts_as_novel_identity: false,
-            pays_claim_residual: false,
-            receipt_authority: "reviewed_bounded_context_expansion_only",
-            receipt_sha256: format!("sha256:{source}:{revision}"),
         }
     }
 
@@ -311,4 +319,18 @@ mod tests {
             Err(MaboRevisionCampaignError::LatestRevisionRegressed { .. })
         ));
     }
+
+    #[test]
+    fn probe_receipt_can_explicitly_report_unprobed_sources() {
+        let reviewed = highest_reviewed_mabo_revisions(&[
+            row("Q1", 100, "r1"),
+            row("Q2", 200, "r2"),
+        ])
+        .unwrap();
+        let latest = BTreeMap::from([("Q1".into(), 100_u64)]);
+        let receipt = compile_mabo_revision_probe(&reviewed[..1], &latest).unwrap();
+        assert_eq!(receipt.reviewed_source_count, 1);
+        assert!(!receipt.probe_truncated);
+    }
+
 }
