@@ -1822,6 +1822,7 @@ pub struct LegalRuntimeCapabilityReceipt {
     pub s18_jurisdiction_scoped_coverage: bool,
     pub s18_revision_invalidation: bool,
     pub s18_affected_proof_cone: bool,
+    pub s18_revision_consumer_reopening: bool,
     pub candidate_only: bool,
     pub creates_semantic_authority: bool,
     pub receipt_digest: String,
@@ -2106,7 +2107,8 @@ pub fn compile_capability_receipt() -> Result<LegalRuntimeCapabilityReceipt, Leg
             .chain(std::iter::once("S18:authority-validity"))
             .chain(std::iter::once("S18:jurisdiction-scoped-coverage"))
             .chain(std::iter::once("S18:revision-invalidation"))
-            .chain(std::iter::once("S18:affected-proof-cone")),
+            .chain(std::iter::once("S18:affected-proof-cone"))
+            .chain(std::iter::once("S18:revision-consumer-reopening")),
     );
 
     Ok(LegalRuntimeCapabilityReceipt {
@@ -2139,6 +2141,7 @@ pub fn compile_capability_receipt() -> Result<LegalRuntimeCapabilityReceipt, Leg
         s18_jurisdiction_scoped_coverage: true,
         s18_revision_invalidation: true,
         s18_affected_proof_cone: true,
+        s18_revision_consumer_reopening: true,
         candidate_only: true,
         creates_semantic_authority: false,
         receipt_digest,
@@ -2755,3 +2758,5 @@ pub mod legal_follow_campaign;
 pub use legal_follow_campaign::*;
 pub mod legal_world;
 pub use legal_world::*;
+pub mod revision_consumer_bridge;
+pub use revision_consumer_bridge::*;
