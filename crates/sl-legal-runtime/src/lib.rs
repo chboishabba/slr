@@ -1809,6 +1809,7 @@ pub struct LegalRuntimeCapabilityReceipt {
     pub s8_contract_follow_trace: bool,
     pub s11_visualisation_ir: bool,
     pub s11_research_flow_sankey: bool,
+    pub s14_6_generic_campaign_kernel: bool,
     pub s14_7_consumer_adequacy_runtime: bool,
     pub candidate_only: bool,
     pub creates_semantic_authority: bool,
@@ -2080,6 +2081,7 @@ pub fn compile_capability_receipt() -> Result<LegalRuntimeCapabilityReceipt, Leg
             .chain(std::iter::once("S8:contract-follow-trace"))
             .chain(std::iter::once("S11:visualisation-ir"))
             .chain(std::iter::once("S11:research-flow-sankey"))
+            .chain(std::iter::once("S14.6:generic-campaign-kernel"))
             .chain(std::iter::once("S14.7:consumer-adequacy-runtime")),
     );
 
@@ -2101,6 +2103,7 @@ pub fn compile_capability_receipt() -> Result<LegalRuntimeCapabilityReceipt, Leg
         s8_contract_follow_trace: true,
         s11_visualisation_ir: true,
         s11_research_flow_sankey: true,
+        s14_6_generic_campaign_kernel: true,
         s14_7_consumer_adequacy_runtime: true,
         candidate_only: true,
         creates_semantic_authority: false,
@@ -2702,3 +2705,5 @@ pub mod consumer_adequacy;
 pub use consumer_adequacy::*;
 pub mod visualisation_ir;
 pub use visualisation_ir::*;
+pub mod legal_follow_campaign;
+pub use legal_follow_campaign::*;
