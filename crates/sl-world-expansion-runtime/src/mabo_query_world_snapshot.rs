@@ -674,4 +674,49 @@ mod tests {
         assert!(!decision.unproved_demand_reason_refs.is_empty());
     }
 
+
+    #[test]
+    fn snapshot_json_roundtrip_preserves_controller_decision() {
+        let baseline = DiscoveryIdentityBaseline {
+            identity_class_refs: BTreeSet::from(["world-object:known".into()]),
+            representation_identity_class_refs: BTreeMap::from([(
+                "QKNOWN".into(),
+                "world-object:known".into(),
+            )]),
+        };
+        let context_slice = ContextRevisionWorldSlice {
+            wikidata_source_revisions: BTreeMap::from([(
+                "QROOT".into(),
+                "wikidata:QROOT:oldid:100".into(),
+            )]),
+        };
+        let snapshot = compile_mabo_query_world_snapshot(
+            "QROOT",
+            "2026-09-22",
+            &mature_world(),
+            &baseline,
+            &context_slice,
+            &probe(),
+        )
+        .unwrap();
+
+        let before = snapshot.decide_current_world(None, &[]).unwrap();
+        let json = serde_json::to_string(&snapshot).unwrap();
+        let decoded: MaboQueryWorldSnapshot = serde_json::from_str(&json).unwrap();
+        decoded.validate().unwrap();
+        let after = decoded.decide_current_world(None, &[]).unwrap();
+
+        assert_eq!(before.kind, after.kind);
+        assert_eq!(before.query_ref, after.query_ref);
+        assert_eq!(
+            before.impact.new_projection.graph.deterministic_digest,
+            after.impact.new_projection.graph.deterministic_digest
+        );
+        assert_eq!(
+            after.kind,
+            sensiblaw_legal_runtime::QueryWorldRunDecisionKind::RequireFreshAdequacyWitness
+        );
+        assert!(!after.consumer_adequate_formally_proved);
+    }
+
 }
