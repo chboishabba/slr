@@ -505,20 +505,20 @@ mod tests {
 
     fn mature_world() -> LatentWorldRows {
         LatentWorldRows {
-            seed_ref: "QROOT".into(),
+            seed_ref: "Q1".into(),
             max_hops: 100,
             requested_max_hops: 100,
-            visited_refs: vec!["QROOT".into(), "QKNOWN".into()],
+            visited_refs: vec!["Q1".into(), "Q2".into()],
             deepest_observed_hop: 1,
             frontier_exhausted: true,
             frontier_refs: vec![],
             residual_refs: vec![],
             edges: vec![LatentWorldEdgeRow {
-                from_ref: "QROOT".into(),
-                to_ref: "QKNOWN".into(),
+                from_ref: "Q1".into(),
+                to_ref: "Q2".into(),
                 relation_ref: "context:wikidata:participant".into(),
                 provenance_refs: vec![
-                    "context:wikidata:wikidata:QROOT:oldid:100".into(),
+                    "context:wikidata:wikidata:Q1:oldid:100".into(),
                 ],
             }],
             creates_semantic_authority: false,
@@ -532,7 +532,7 @@ mod tests {
             reviewed_source_count: 1,
             probed_source_count: 1,
             reopen_residuals: vec![],
-            unchanged_source_refs: vec!["QROOT".into()],
+            unchanged_source_refs: vec!["Q1".into()],
             unprobed_source_refs: vec![],
             blockers: vec![],
             probe_truncated: false,
@@ -549,18 +549,18 @@ mod tests {
         let baseline = DiscoveryIdentityBaseline {
             identity_class_refs: BTreeSet::from(["world-object:known".into()]),
             representation_identity_class_refs: BTreeMap::from([(
-                "QKNOWN".into(),
+                "Q2".into(),
                 "world-object:known".into(),
             )]),
         };
         let context_slice = ContextRevisionWorldSlice {
             wikidata_source_revisions: BTreeMap::from([(
-                "QROOT".into(),
-                "wikidata:QROOT:oldid:100".into(),
+                "Q1".into(),
+                "wikidata:Q1:oldid:100".into(),
             )]),
         };
         let snapshot = compile_mabo_query_world_snapshot(
-            "QROOT",
+            "Q1",
             "2026-09-22",
             &mature_world(),
             &baseline,
@@ -575,7 +575,7 @@ mod tests {
         );
         assert_eq!(
             snapshot.query_demand.required_semantic_refs,
-            BTreeSet::from(["QKNOWN".into()])
+            BTreeSet::from(["Q2".into()])
         );
         assert_eq!(snapshot.projection.nodes.len(), 1);
         assert!(snapshot.diagnosed_identity_residual_refs.is_empty());
@@ -588,12 +588,12 @@ mod tests {
         let baseline = DiscoveryIdentityBaseline::default();
         let context_slice = ContextRevisionWorldSlice {
             wikidata_source_revisions: BTreeMap::from([(
-                "QROOT".into(),
-                "wikidata:QROOT:oldid:100".into(),
+                "Q1".into(),
+                "wikidata:Q1:oldid:100".into(),
             )]),
         };
         let snapshot = compile_mabo_query_world_snapshot(
-            "QROOT",
+            "Q1",
             "2026-09-22",
             &mature_world(),
             &baseline,
@@ -605,7 +605,7 @@ mod tests {
         assert_eq!(snapshot.projection.nodes.len(), 0);
         assert_eq!(
             snapshot.diagnosed_identity_residual_refs,
-            vec!["residual:mabo:world-identity:QKNOWN"]
+            vec!["residual:mabo:world-identity:Q2"]
         );
         assert_eq!(snapshot.operational_state, OperationalResearchState::Open);
     }
@@ -615,18 +615,18 @@ mod tests {
         let baseline = DiscoveryIdentityBaseline {
             identity_class_refs: BTreeSet::from(["world-object:known".into()]),
             representation_identity_class_refs: BTreeMap::from([(
-                "QKNOWN".into(),
+                "Q2".into(),
                 "world-object:known".into(),
             )]),
         };
         let context_slice = ContextRevisionWorldSlice {
             wikidata_source_revisions: BTreeMap::from([(
-                "QROOT".into(),
-                "wikidata:QROOT:oldid:100".into(),
+                "Q1".into(),
+                "wikidata:Q1:oldid:100".into(),
             )]),
         };
         let snapshot = compile_mabo_query_world_snapshot(
-            "QROOT",
+            "Q1",
             "2026-09-22",
             &mature_world(),
             &baseline,
@@ -649,12 +649,12 @@ mod tests {
     fn unresolved_identity_snapshot_reopens_research_without_fabricated_proof() {
         let context_slice = ContextRevisionWorldSlice {
             wikidata_source_revisions: BTreeMap::from([(
-                "QROOT".into(),
-                "wikidata:QROOT:oldid:100".into(),
+                "Q1".into(),
+                "wikidata:Q1:oldid:100".into(),
             )]),
         };
         let snapshot = compile_mabo_query_world_snapshot(
-            "QROOT",
+            "Q1",
             "2026-09-22",
             &mature_world(),
             &DiscoveryIdentityBaseline::default(),
@@ -680,18 +680,18 @@ mod tests {
         let baseline = DiscoveryIdentityBaseline {
             identity_class_refs: BTreeSet::from(["world-object:known".into()]),
             representation_identity_class_refs: BTreeMap::from([(
-                "QKNOWN".into(),
+                "Q2".into(),
                 "world-object:known".into(),
             )]),
         };
         let context_slice = ContextRevisionWorldSlice {
             wikidata_source_revisions: BTreeMap::from([(
-                "QROOT".into(),
-                "wikidata:QROOT:oldid:100".into(),
+                "Q1".into(),
+                "wikidata:Q1:oldid:100".into(),
             )]),
         };
         let snapshot = compile_mabo_query_world_snapshot(
-            "QROOT",
+            "Q1",
             "2026-09-22",
             &mature_world(),
             &baseline,
