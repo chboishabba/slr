@@ -699,6 +699,154 @@ pub fn compile_query_world_research(
     }
 }
 
+
+pub fn query_scoped_world_impact_self_check() -> Result<(), String> {
+    use std::collections::BTreeMap;
+
+    let world = |world_ref: &str,
+                 jurisdiction_ref: &str,
+                 as_at: &str,
+                 a_revision: &str,
+                 b_revision: &str| {
+        LegalWorldCoordinate {
+            world_ref: world_ref.to_owned(),
+            matter_ref: "matter:query-world-self-check".into(),
+            jurisdiction_ref: jurisdiction_ref.to_owned(),
+            as_at: as_at.to_owned(),
+            source_revisions: BTreeMap::from([
+                ("source:a".into(), a_revision.into()),
+                ("source:b".into(), b_revision.into()),
+            ]),
+            candidate_only: true,
+            creates_semantic_authority: false,
+            creates_claim_truth: false,
+        }
+    };
+
+    let graph = ProjectionGraph {
+        kind: crate::ProjectionKind::IssueProof,
+        nodes: vec![
+            ProjectionNode {
+                semantic_ref: "prop:q".into(),
+                semantic_kind: "Proposition".into(),
+                manifestation_refs: vec!["manifestation:q".into()],
+                source_revision_refs: vec!["rev:a:1".into()],
+                span_refs: vec!["span:q".into()],
+                projection_role: "IssueProof".into(),
+            },
+            ProjectionNode {
+                semantic_ref: "prop:other".into(),
+                semantic_kind: "Proposition".into(),
+                manifestation_refs: vec!["manifestation:other".into()],
+                source_revision_refs: vec!["rev:b:1".into()],
+                span_refs: vec!["span:other".into()],
+                projection_role: "IssueProof".into(),
+            },
+        ],
+        edges: Vec::new(),
+        deterministic_digest: "sha256:query-world-self-check".into(),
+        projection_only: true,
+        creates_semantic_authority: false,
+    };
+
+    let dependencies = RevisionDependencyIndex {
+        source_to_propositions: BTreeMap::from([
+            ("source:a".into(), BTreeSet::from(["prop:q".into()])),
+            ("source:b".into(), BTreeSet::from(["prop:other".into()])),
+        ]),
+        proposition_dependents: BTreeMap::from([
+            ("prop:q".into(), BTreeSet::from(["proof:q".into()])),
+            ("prop:other".into(), BTreeSet::from(["proof:other".into()])),
+        ]),
+    };
+
+    let base_slice = QueryDependencySlice {
+        query_ref: "query:q".into(),
+        required_axes: BTreeSet::from([
+            ConsumerAxis::SemanticIdentity,
+            ConsumerAxis::SourceRevision,
+            ConsumerAxis::SourceSpan,
+            ConsumerAxis::Provenance,
+        ]),
+        semantic_refs: BTreeSet::from(["prop:q".into()]),
+        proof_refs: BTreeSet::from(["proof:q".into()]),
+        source_refs: BTreeSet::from(["source:a".into()]),
+        source_revision_refs: BTreeSet::from(["rev:a:1".into()]),
+        candidate_only: true,
+        creates_semantic_authority: false,
+        creates_claim_truth: false,
+    };
+
+    let old = world("world:old", "AU", "2026-09-21", "rev:a:1", "rev:b:1");
+
+    let irrelevant_revision =
+        world("world:irrelevant", "AU", "2026-09-21", "rev:a:1", "rev:b:2");
+    let irrelevant = compile_query_world_impact(
+        &old,
+        &irrelevant_revision,
+        &dependencies,
+        &base_slice,
+        &graph,
+    )?;
+    if irrelevant.kind != QueryWorldImpactKind::WorldChangedConsumerInvariant
+        || irrelevant.query_projection_digest_changed
+        || irrelevant.reopens_consumer_research
+    {
+        return Err("query-world self-check failed irrelevant revision invariance".into());
+    }
+
+    let relevant_revision =
+        world("world:relevant", "AU", "2026-09-21", "rev:a:2", "rev:b:1");
+    let relevant = compile_query_world_impact(
+        &old,
+        &relevant_revision,
+        &dependencies,
+        &base_slice,
+        &graph,
+    )?;
+    if relevant.kind != QueryWorldImpactKind::WorldChangedConsumerRelevant
+        || !relevant.query_projection_digest_changed
+        || !relevant.reopens_consumer_research
+    {
+        return Err("query-world self-check failed relevant revision reopening".into());
+    }
+
+    let later = world("world:later", "AU", "2027-09-21", "rev:a:1", "rev:b:1");
+    let time_invariant =
+        compile_query_world_impact(&old, &later, &dependencies, &base_slice, &graph)?;
+    if time_invariant.kind != QueryWorldImpactKind::WorldChangedConsumerInvariant
+        || time_invariant.query_projection_digest_changed
+    {
+        return Err("query-world self-check failed unrequired temporal invariance".into());
+    }
+
+    let mut jurisdiction_slice = base_slice.clone();
+    jurisdiction_slice
+        .required_axes
+        .insert(ConsumerAxis::Jurisdiction);
+    let nsw = world("world:nsw", "AU-NSW", "2026-09-21", "rev:a:1", "rev:b:1");
+    let jurisdiction =
+        compile_query_world_impact(&old, &nsw, &dependencies, &jurisdiction_slice, &graph)?;
+    if jurisdiction.kind != QueryWorldImpactKind::WorldChangedConsumerRelevant
+        || !jurisdiction.jurisdiction_relevant
+        || !jurisdiction.query_projection_digest_changed
+    {
+        return Err("query-world self-check failed required jurisdiction reopening".into());
+    }
+
+    if irrelevant.creates_semantic_authority
+        || irrelevant.creates_claim_truth
+        || relevant.creates_semantic_authority
+        || relevant.creates_claim_truth
+        || jurisdiction.creates_semantic_authority
+        || jurisdiction.creates_claim_truth
+    {
+        return Err("query-world self-check crossed non-promotion boundary".into());
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
