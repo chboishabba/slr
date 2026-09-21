@@ -1807,6 +1807,9 @@ pub struct LegalRuntimeCapabilityReceipt {
     pub s8_reader_command_weld: bool,
     pub s8_unseen_contract_matter: bool,
     pub s8_contract_follow_trace: bool,
+    pub s11_visualisation_ir: bool,
+    pub s11_research_flow_sankey: bool,
+    pub s14_7_consumer_adequacy_runtime: bool,
     pub candidate_only: bool,
     pub creates_semantic_authority: bool,
     pub receipt_digest: String,
@@ -1926,6 +1929,72 @@ pub fn compile_capability_receipt() -> Result<LegalRuntimeCapabilityReceipt, Leg
                     "Sprint 7 projection {projection_kind:?} rewrote canonical provenance"
                 )));
             }
+
+            let visual = visualisation_from_projection(&graph)
+                .map_err(LegalRuntimeError::Projection)?;
+            if !visual.projection_only
+                || visual.creates_semantic_authority
+                || visual.creates_legal_authority
+            {
+                return Err(LegalRuntimeError::Projection(
+                    "Sprint 11 VisualisationIR crossed authority boundary".into(),
+                ));
+            }
+            if projection_kind == ProjectionKind::Flow {
+                let VisualisationIr::Sankey(sankey) = visual.ir else {
+                    return Err(LegalRuntimeError::Projection(
+                        "Sprint 11 flow projection did not lower to SankeyIR".into(),
+                    ));
+                };
+                if sankey.weights_are_legal_importance {
+                    return Err(LegalRuntimeError::Projection(
+                        "Sprint 11 Sankey weight was promoted to legal importance".into(),
+                    ));
+                }
+            }
+        }
+
+        // Runtime adequacy is intentionally weaker than the formal Agda
+        // FactorsThrough witness.  Here source identity/provenance are paid by
+        // the projection, while treatment remains a typed research demand.
+        let mut adequacy_query = ProjectionQuery::new(ProjectionKind::IssueProof);
+        adequacy_query.semantic_selection.insert(anchor.clone());
+        let adequacy_graph = compile_projection(
+            &workbench,
+            &explanation,
+            &adequacy_query,
+            &projection_context,
+        )
+        .map_err(LegalRuntimeError::Projection)?;
+        let adequacy = assess_consumer_adequacy(
+            &ConsumerQueryDemand {
+                query_ref: format!("query:{:?}:source-plus-treatment", capstone.kind),
+                required_axes: BTreeSet::from([
+                    ConsumerAxis::SemanticIdentity,
+                    ConsumerAxis::SourceRevision,
+                    ConsumerAxis::SourceSpan,
+                    ConsumerAxis::Provenance,
+                    ConsumerAxis::Treatment,
+                ]),
+                required_semantic_refs: BTreeSet::from([anchor.clone()]),
+                candidate_only: true,
+                creates_semantic_authority: false,
+            },
+            &adequacy_graph,
+            &ConsumerCoverage::default(),
+        )
+        .map_err(LegalRuntimeError::Projection)?;
+        if adequacy.disposition != ConsumerAdequacyDisposition::NeedsResearch
+            || adequacy.research_demands.len() != 1
+            || adequacy.research_demands[0].kind
+                != ConsumerResearchDemandKind::ReviewTreatment
+            || adequacy.factors_through_formally_proved
+            || adequacy.creates_semantic_authority
+            || adequacy.creates_claim_truth
+        {
+            return Err(LegalRuntimeError::Projection(
+                "Sprint 14.7 consumer-adequacy routing invariant failed".into(),
+            ));
         }
 
         let mut runtime = compile_matter_runtime(
@@ -1974,6 +2043,31 @@ pub fn compile_capability_receipt() -> Result<LegalRuntimeCapabilityReceipt, Leg
         ));
     }
 
+    let research_flow = research_flow_sankey(&[
+        ResearchFlowEvent {
+            event_ref: "capability:frontier-to-demand".into(),
+            from_stage: ResearchFlowStage::FrontierResidual,
+            to_stage: ResearchFlowStage::SelectedDemand,
+            count: 1,
+            candidate_only: true,
+        },
+        ResearchFlowEvent {
+            event_ref: "capability:demand-to-source".into(),
+            from_stage: ResearchFlowStage::SelectedDemand,
+            to_stage: ResearchFlowStage::SourceAcquired,
+            count: 1,
+            candidate_only: true,
+        },
+    ])
+    .map_err(LegalRuntimeError::Projection)?;
+    if research_flow.sankey.weights_are_legal_importance
+        || research_flow.creates_semantic_authority
+    {
+        return Err(LegalRuntimeError::Projection(
+            "Sprint 11 research-flow Sankey crossed semantic boundary".into(),
+        ));
+    }
+
     let receipt_digest = digest(
         std::iter::once(LEGAL_RUNTIME_VERSION)
             .chain(std::iter::once(mixed.receipt_head.as_str()))
@@ -1983,7 +2077,10 @@ pub fn compile_capability_receipt() -> Result<LegalRuntimeCapabilityReceipt, Leg
             .chain(std::iter::once("S8:matter-runtime"))
             .chain(std::iter::once("S8:shared-command-reducer"))
             .chain(std::iter::once("S8:unseen-contract-matter"))
-            .chain(std::iter::once("S8:contract-follow-trace")),
+            .chain(std::iter::once("S8:contract-follow-trace"))
+            .chain(std::iter::once("S11:visualisation-ir"))
+            .chain(std::iter::once("S11:research-flow-sankey"))
+            .chain(std::iter::once("S14.7:consumer-adequacy-runtime")),
     );
 
     Ok(LegalRuntimeCapabilityReceipt {
@@ -2002,6 +2099,9 @@ pub fn compile_capability_receipt() -> Result<LegalRuntimeCapabilityReceipt, Leg
         s8_reader_command_weld: true,
         s8_unseen_contract_matter: true,
         s8_contract_follow_trace: true,
+        s11_visualisation_ir: true,
+        s11_research_flow_sankey: true,
+        s14_7_consumer_adequacy_runtime: true,
         candidate_only: true,
         creates_semantic_authority: false,
         receipt_digest,
