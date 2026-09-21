@@ -16,8 +16,9 @@ use crate::{
     compile_legal_campaign_state, AustralianCalibrationKind, GenericCampaignBudget,
     GenericCampaignStop, GenericLegalFollowCampaign, InformationAction,
     LegalCampaignState, LegalEvaluationContext, LegalFollowCampaignDomain,
-    LegalResidual, LegalResidualKind, SourceRealisedLegalRule,
+    LegalResidual, LegalResidualKind, LegalWorldCoordinate, SourceRealisedLegalRule,
 };
+use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SourceRealisedLegalWorld {
@@ -190,6 +191,28 @@ impl LegalFollowCampaignDomain for SourceRealisedLegalDomain {
 pub type GenericSourceRealisedLegalCampaign =
     GenericLegalFollowCampaign<SourceRealisedLegalDomain>;
 
+pub fn source_realised_world_coordinate(
+    world_ref: impl Into<String>,
+    matter_ref: impl Into<String>,
+    world: &SourceRealisedLegalWorld,
+) -> Result<LegalWorldCoordinate, String> {
+    let coordinate = LegalWorldCoordinate {
+        world_ref: world_ref.into(),
+        matter_ref: matter_ref.into(),
+        jurisdiction_ref: world.jurisdiction_ref.clone(),
+        as_at: world.as_at.clone(),
+        source_revisions: BTreeMap::from([(
+            world.rule.rule_ref.clone(),
+            world.rule.source_revision_ref.clone(),
+        )]),
+        candidate_only: true,
+        creates_semantic_authority: false,
+        creates_claim_truth: false,
+    };
+    coordinate.validate()?;
+    Ok(coordinate)
+}
+
 pub fn source_realised_legal_campaign(
     rule: SourceRealisedLegalRule,
     initial_state: LegalCampaignState,
@@ -299,6 +322,33 @@ mod tests {
         build_australian_calibration_capstone, AustralianCalibrationKind,
         InformationActionKind,
     };
+
+    #[test]
+    fn cullen_source_realised_world_compiles_to_first_class_legal_world() {
+        let capstone =
+            build_australian_calibration_capstone(AustralianCalibrationKind::CullenNswCla)
+                .unwrap();
+        let initial = capstone.campaign.hops[0].clone();
+        let world = SourceRealisedLegalWorld::from_state(
+            capstone.rule.clone(),
+            initial,
+            capstone.context.jurisdiction_ref.clone(),
+            capstone.context.as_at.clone(),
+        )
+        .unwrap();
+        let coordinate =
+            source_realised_world_coordinate("world:cullen:fixture", "matter:cullen", &world)
+                .unwrap();
+
+        assert_eq!(coordinate.jurisdiction_ref, capstone.context.jurisdiction_ref);
+        assert_eq!(coordinate.as_at, capstone.context.as_at);
+        assert_eq!(
+            coordinate.source_revisions.get(&capstone.rule.rule_ref),
+            Some(&capstone.rule.source_revision_ref)
+        );
+        assert!(!coordinate.creates_semantic_authority);
+        assert!(!coordinate.creates_claim_truth);
+    }
 
     #[test]
     fn cullen_reviewed_hop_replays_exactly_through_generic_kernel() {
