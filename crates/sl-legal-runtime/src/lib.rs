@@ -2760,3 +2760,5 @@ pub mod legal_world;
 pub use legal_world::*;
 pub mod revision_consumer_bridge;
 pub use revision_consumer_bridge::*;
+pub mod query_revision_impact;
+pub use query_revision_impact::*;
