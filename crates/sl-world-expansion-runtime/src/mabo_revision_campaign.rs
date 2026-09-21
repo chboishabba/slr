@@ -41,13 +41,26 @@ pub struct MaboRevisionReopenResidual {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MaboRevisionProbeBlocker {
+    pub source_ref: String,
+    pub detail: String,
+    pub retryable: bool,
+    pub http_status_code: Option<u16>,
+    pub candidate_only: bool,
+    pub creates_semantic_authority: bool,
+    pub claim_truth_promoted: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MaboRevisionProbeReceipt {
     pub reviewed_source_count: usize,
     pub probed_source_count: usize,
     pub reopen_residuals: Vec<MaboRevisionReopenResidual>,
     pub unchanged_source_refs: Vec<String>,
     pub unprobed_source_refs: Vec<String>,
+    pub blockers: Vec<MaboRevisionProbeBlocker>,
     pub probe_truncated: bool,
+    pub probe_complete: bool,
     pub candidate_only: bool,
     pub creates_semantic_authority: bool,
     pub applicability_promoted: bool,
@@ -198,7 +211,9 @@ pub fn compile_mabo_revision_probe(
         reopen_residuals,
         unchanged_source_refs,
         unprobed_source_refs: Vec::new(),
+        blockers: Vec::new(),
         probe_truncated: false,
+        probe_complete: true,
         candidate_only: true,
         creates_semantic_authority: false,
         applicability_promoted: false,
@@ -229,20 +244,42 @@ pub fn probe_latest_mabo_revision_changes(
         .map(|coordinate| coordinate.source_ref.clone())
         .collect::<Vec<_>>();
     let mut latest = BTreeMap::new();
+    let mut blockers = Vec::new();
     for coordinate in &bounded {
-        let revision_id = fetch_latest_revision_id(&coordinate.source_ref).map_err(|error| {
-            MaboRevisionCampaignError::LatestRevisionLookup {
-                source_ref: coordinate.source_ref.clone(),
-                detail: error.to_string(),
+        match fetch_latest_revision_id(&coordinate.source_ref) {
+            Ok(revision_id) => {
+                latest.insert(coordinate.source_ref.clone(), revision_id);
             }
-        })?;
-        latest.insert(coordinate.source_ref.clone(), revision_id);
+            Err(error) => {
+                blockers.push(MaboRevisionProbeBlocker {
+                    source_ref: coordinate.source_ref.clone(),
+                    detail: error.to_string(),
+                    retryable: error.network_is_retryable(),
+                    http_status_code: error.network_status_code(),
+                    candidate_only: true,
+                    creates_semantic_authority: false,
+                    claim_truth_promoted: false,
+                });
+            }
+        }
     }
-    let mut receipt = compile_mabo_revision_probe(&bounded, &latest)?;
+
+    // Compile only coordinates whose latest revision was actually observed.
+    // Blocked sources remain explicit and therefore cannot be counted unchanged.
+    let observed = bounded
+        .iter()
+        .filter(|coordinate| latest.contains_key(&coordinate.source_ref))
+        .cloned()
+        .collect::<Vec<_>>();
+    let mut receipt = compile_mabo_revision_probe(&observed, &latest)?;
     receipt.reviewed_source_count = reviewed.len();
-    receipt.probed_source_count = bounded.len();
+    receipt.probed_source_count = latest.len();
     receipt.unprobed_source_refs = unprobed_source_refs;
-    receipt.probe_truncated = receipt.probed_source_count < receipt.reviewed_source_count;
+    receipt.blockers = blockers;
+    receipt.probe_truncated =
+        bounded.len() < receipt.reviewed_source_count;
+    receipt.probe_complete =
+        !receipt.probe_truncated && receipt.blockers.is_empty();
     Ok(receipt)
 }
 
@@ -304,6 +341,8 @@ mod tests {
             "wikidata:Q1:oldid:121"
         );
         assert_eq!(receipt.unchanged_source_refs, vec!["Q2"]);
+        assert!(receipt.probe_complete);
+        assert!(receipt.blockers.is_empty());
         assert!(!reopened.creates_semantic_authority);
         assert!(!reopened.applicability_promoted);
         assert!(!reopened.claim_truth_promoted);
@@ -331,6 +370,7 @@ mod tests {
         let receipt = compile_mabo_revision_probe(&reviewed[..1], &latest).unwrap();
         assert_eq!(receipt.reviewed_source_count, 1);
         assert!(!receipt.probe_truncated);
+        assert!(receipt.probe_complete);
     }
 
 }
