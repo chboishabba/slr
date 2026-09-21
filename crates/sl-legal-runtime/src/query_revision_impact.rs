@@ -15,9 +15,10 @@ use std::collections::BTreeSet;
 use crate::{
     affected_proof_cone, compile_consumer_adequacy, diff_world_revisions,
     ConsumerAdequacyCompilation, ConsumerAxis, ConsumerCoverage, ConsumerQueryDemand,
-    KernelCheckedFactorsThroughWitness, KernelCheckedNonFactorabilityWitness,
-    LegalWorldCoordinate, OperationalResearchState, ProjectionEdge, ProjectionGraph,
-    ProjectionNode, RevisionDependencyIndex, RevisionInvalidationReceipt,
+    ExplanationIndex, KernelCheckedFactorsThroughWitness,
+    KernelCheckedNonFactorabilityWitness, LegalWorldCoordinate,
+    OperationalResearchState, ProjectionEdge, ProjectionGraph, ProjectionNode,
+    RevisionDependencyIndex, RevisionInvalidationReceipt,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -27,6 +28,7 @@ pub struct QueryDependencySlice {
     pub semantic_refs: BTreeSet<String>,
     pub proof_refs: BTreeSet<String>,
     pub source_refs: BTreeSet<String>,
+    pub source_revision_refs: BTreeSet<String>,
     pub candidate_only: bool,
     pub creates_semantic_authority: bool,
     pub creates_claim_truth: bool,
@@ -46,6 +48,7 @@ impl QueryDependencySlice {
             semantic_refs: demand.required_semantic_refs.clone(),
             proof_refs: BTreeSet::new(),
             source_refs: BTreeSet::new(),
+            source_revision_refs: BTreeSet::new(),
             candidate_only: true,
             creates_semantic_authority: false,
             creates_claim_truth: false,
@@ -65,6 +68,7 @@ impl QueryDependencySlice {
             .iter()
             .chain(self.proof_refs.iter())
             .chain(self.source_refs.iter())
+            .chain(self.source_revision_refs.iter())
             .any(|reference| reference.trim().is_empty())
         {
             return Err("query dependency slice contains an empty coordinate".into());
@@ -79,6 +83,51 @@ impl QueryDependencySlice {
             .cloned()
             .collect()
     }
+}
+
+pub fn compile_query_dependency_slice(
+    demand: &ConsumerQueryDemand,
+    index: &ExplanationIndex,
+) -> Result<QueryDependencySlice, String> {
+    let mut slice = QueryDependencySlice::from_demand(demand)?;
+    index.validate()?;
+
+    let mut seen = BTreeSet::new();
+    let mut frontier = demand
+        .required_semantic_refs
+        .iter()
+        .cloned()
+        .collect::<Vec<_>>();
+
+    while let Some(reference) = frontier.pop() {
+        if !seen.insert(reference.clone()) {
+            continue;
+        }
+        let Some(record) = index.records.get(&reference) else {
+            // Missing required semantics remain visible to the adequacy
+            // compiler; dependency discovery simply cannot expand through a
+            // record that is not present.
+            continue;
+        };
+
+        for provenance in &record.provenance {
+            slice
+                .source_revision_refs
+                .insert(provenance.source_revision_ref.clone());
+        }
+        for dependency in &record.dependencies {
+            if !seen.contains(dependency) {
+                frontier.push(dependency.clone());
+            }
+        }
+    }
+
+    slice.proof_refs = seen
+        .difference(&slice.semantic_refs)
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    slice.validate()?;
+    Ok(slice)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -156,6 +205,12 @@ pub fn compile_query_scoped_projection(
             .iter()
             .map(|reference| format!("source:{reference}")),
     );
+    parts.extend(
+        slice
+            .source_revision_refs
+            .iter()
+            .map(|reference| format!("source-revision:{reference}")),
+    );
     parts.extend(nodes.iter().flat_map(|node| {
         [
             format!("node:{}", node.semantic_ref),
@@ -211,6 +266,7 @@ pub struct QueryRevisionImpact {
     pub new_projection: QueryScopedProjection,
     pub changed_source_refs: BTreeSet<String>,
     pub query_relevant_changed_source_refs: BTreeSet<String>,
+    pub query_relevant_changed_revision_refs: BTreeSet<String>,
     pub query_relevant_affected_refs: BTreeSet<String>,
     pub query_projection_digest_changed: bool,
     pub reopens_consumer_research: bool,
@@ -240,6 +296,13 @@ pub fn compile_query_revision_impact(
         .intersection(&slice.source_refs)
         .cloned()
         .collect::<BTreeSet<_>>();
+    let query_relevant_changed_revision_refs = invalidation
+        .changes
+        .iter()
+        .filter_map(|change| change.old_revision_ref.as_ref())
+        .filter(|revision| slice.source_revision_refs.contains(*revision))
+        .cloned()
+        .collect::<BTreeSet<_>>();
     let query_refs = slice.all_semantic_or_proof_refs();
     let query_relevant_affected_refs = cone
         .transitively_affected_refs
@@ -248,6 +311,7 @@ pub fn compile_query_revision_impact(
         .collect::<BTreeSet<_>>();
 
     let consumer_relevant = !query_relevant_changed_source_refs.is_empty()
+        || !query_relevant_changed_revision_refs.is_empty()
         || !query_relevant_affected_refs.is_empty();
 
     // Only stale coordinates inside Q's declared dependency slice are removed.
@@ -258,6 +322,12 @@ pub fn compile_query_revision_impact(
         .iter()
         .filter(|change| {
             query_relevant_changed_source_refs.contains(&change.source_ref)
+                || change
+                    .old_revision_ref
+                    .as_ref()
+                    .is_some_and(|revision| {
+                        query_relevant_changed_revision_refs.contains(revision)
+                    })
                 || dependencies
                     .source_to_propositions
                     .get(&change.source_ref)
@@ -308,6 +378,7 @@ pub fn compile_query_revision_impact(
         new_projection,
         changed_source_refs,
         query_relevant_changed_source_refs,
+        query_relevant_changed_revision_refs,
         query_relevant_affected_refs,
         query_projection_digest_changed: digest_changed,
         reopens_consumer_research:
@@ -469,6 +540,7 @@ mod tests {
             semantic_refs: BTreeSet::from(["prop:q".into()]),
             proof_refs: BTreeSet::from(["proof:q".into()]),
             source_refs: BTreeSet::from(["source:a".into()]),
+            source_revision_refs: BTreeSet::from(["rev:a:1".into()]),
             candidate_only: true,
             creates_semantic_authority: false,
             creates_claim_truth: false,
@@ -644,6 +716,84 @@ mod tests {
             .runtime_receipt
             .missing_axes
             .contains(&ConsumerAxis::SourceRevision));
+    }
+
+
+    #[test]
+    fn explanation_index_compiles_query_dependency_revisions_transitively() {
+        use crate::{
+            ExplainableKind, ExplanationClass, ExplainableRef, ProvenanceAddress,
+        };
+        use std::collections::BTreeMap;
+
+        let index = ExplanationIndex {
+            records: BTreeMap::from([
+                (
+                    "prop:q".into(),
+                    ExplainableRef {
+                        semantic_ref: "prop:q".into(),
+                        kind: ExplainableKind::LegalIssue,
+                        class: ExplanationClass::SourceBacked,
+                        provenance: vec![ProvenanceAddress {
+                            manifestation_ref: Some("manifestation:q".into()),
+                            source_revision_ref: "rev:a:1".into(),
+                            span_ref: Some("span:q".into()),
+                        }],
+                        dependencies: vec!["reviewed:q".into()],
+                        reverse_dependencies: vec![],
+                        evidence_uses: vec![],
+                        legal_uses: vec![],
+                        residuals: vec![],
+                        revision_lineage: vec![],
+                    },
+                ),
+                (
+                    "reviewed:q".into(),
+                    ExplainableRef {
+                        semantic_ref: "reviewed:q".into(),
+                        kind: ExplainableKind::ReviewedEvidence,
+                        class: ExplanationClass::SourceBacked,
+                        provenance: vec![ProvenanceAddress {
+                            manifestation_ref: Some("manifestation:q".into()),
+                            source_revision_ref: "rev:a:1".into(),
+                            span_ref: Some("span:q".into()),
+                        }],
+                        dependencies: vec![],
+                        reverse_dependencies: vec!["prop:q".into()],
+                        evidence_uses: vec![],
+                        legal_uses: vec![],
+                        residuals: vec![],
+                        revision_lineage: vec![],
+                    },
+                ),
+            ]),
+            residual_explanations: BTreeMap::new(),
+            candidate_only: true,
+            creates_semantic_authority: false,
+        };
+        let demand = ConsumerQueryDemand {
+            query_ref: "query:q".into(),
+            required_axes: BTreeSet::from([ConsumerAxis::SourceRevision]),
+            required_semantic_refs: BTreeSet::from(["prop:q".into()]),
+            candidate_only: true,
+            creates_semantic_authority: false,
+        };
+
+        let compiled = compile_query_dependency_slice(&demand, &index).unwrap();
+        assert_eq!(
+            compiled.semantic_refs,
+            BTreeSet::from(["prop:q".into()])
+        );
+        assert_eq!(
+            compiled.proof_refs,
+            BTreeSet::from(["reviewed:q".into()])
+        );
+        assert_eq!(
+            compiled.source_revision_refs,
+            BTreeSet::from(["rev:a:1".into()])
+        );
+        assert!(compiled.source_refs.is_empty());
+        assert!(!compiled.creates_semantic_authority);
     }
 
 }
