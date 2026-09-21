@@ -33,6 +33,30 @@ pub enum QueryWorldRunDecisionKind {
     BudgetExhausted,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct QueryWorldRunReceipt {
+    pub schema_version: String,
+    pub decision: QueryWorldRunDecisionKind,
+    pub query_ref: String,
+    pub world_impact_kind: crate::QueryWorldImpactKind,
+    pub old_projection_digest: String,
+    pub new_projection_digest: String,
+    pub query_projection_digest_changed: bool,
+    pub reopens_consumer_research: bool,
+    pub positive_witness_usable: bool,
+    pub positive_witness_stale: bool,
+    pub usable_nonfactorability_witness_count: usize,
+    pub stale_nonfactorability_witness_count: usize,
+    pub exact_residual_refs: Vec<String>,
+    pub unproved_demand_reason_refs: Vec<String>,
+    pub operational_frontier_closed: bool,
+    pub run_may_stop: bool,
+    pub consumer_adequate_formally_proved: bool,
+    pub candidate_only: bool,
+    pub creates_semantic_authority: bool,
+    pub creates_claim_truth: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct QueryWorldRunDecision {
     pub kind: QueryWorldRunDecisionKind,
@@ -256,6 +280,62 @@ pub fn decide_query_world_run(
 
 
 
+pub fn query_world_run_receipt(
+    decision: &QueryWorldRunDecision,
+) -> QueryWorldRunReceipt {
+    let mut exact_residual_refs = decision
+        .exact_residuals
+        .iter()
+        .map(|residual| residual.residual_ref.clone())
+        .collect::<Vec<_>>();
+    exact_residual_refs.sort();
+    exact_residual_refs.dedup();
+
+    let mut unproved_demand_reason_refs =
+        decision.unproved_demand_reason_refs.clone();
+    unproved_demand_reason_refs.sort();
+    unproved_demand_reason_refs.dedup();
+
+    QueryWorldRunReceipt {
+        schema_version: "sl.query_world_run.v0_1".into(),
+        decision: decision.kind,
+        query_ref: decision.query_ref.clone(),
+        world_impact_kind: decision.impact.kind,
+        old_projection_digest: decision
+            .impact
+            .old_projection
+            .graph
+            .deterministic_digest
+            .clone(),
+        new_projection_digest: decision
+            .impact
+            .new_projection
+            .graph
+            .deterministic_digest
+            .clone(),
+        query_projection_digest_changed:
+            decision.impact.query_projection_digest_changed,
+        reopens_consumer_research: decision.impact.reopens_consumer_research,
+        positive_witness_usable:
+            decision.formal_witnesses.positive_witness_usable,
+        positive_witness_stale:
+            decision.formal_witnesses.positive_witness_stale,
+        usable_nonfactorability_witness_count:
+            decision.formal_witnesses.usable_nonfactorability_witness_count,
+        stale_nonfactorability_witness_count:
+            decision.formal_witnesses.stale_nonfactorability_witness_count,
+        exact_residual_refs,
+        unproved_demand_reason_refs,
+        operational_frontier_closed: decision.operational_frontier_closed,
+        run_may_stop: decision.run_may_stop,
+        consumer_adequate_formally_proved:
+            decision.consumer_adequate_formally_proved,
+        candidate_only: true,
+        creates_semantic_authority: false,
+        creates_claim_truth: false,
+    }
+}
+
 pub fn query_world_run_controller_self_check() -> Result<(), String> {
     use crate::{
         kernel_checked_factors_through_witness, AgdaFactorsThroughTypecheckReceipt,
@@ -361,6 +441,16 @@ pub fn query_world_run_controller_self_check() -> Result<(), String> {
         || invariant.consumer_adequate_formally_proved
     {
         return Err("query-world controller self-check failed invariant closure path".into());
+    }
+    let invariant_receipt = query_world_run_receipt(&invariant);
+    if invariant_receipt.schema_version != "sl.query_world_run.v0_1"
+        || invariant_receipt.query_projection_digest_changed
+        || invariant_receipt.reopens_consumer_research
+        || !invariant_receipt.operational_frontier_closed
+        || !invariant_receipt.run_may_stop
+        || invariant_receipt.consumer_adequate_formally_proved
+    {
+        return Err("query-world controller self-check failed receipt projection".into());
     }
 
     let relevant = world("world:relevant", "rev:a:2", "rev:b:1");
@@ -634,6 +724,38 @@ mod tests {
         assert!(decision.operational_frontier_closed);
         assert!(decision.run_may_stop);
         assert!(!decision.consumer_adequate_formally_proved);
+    }
+
+    #[test]
+    fn run_receipt_is_machine_readable_without_semantic_promotion() {
+        let old = world("world:old", "2026-09-21", "AU", "rev:a:1", "rev:b:1");
+        let new = world("world:new", "2026-09-21", "AU", "rev:a:1", "rev:b:2");
+        let axes = base_axes();
+        let coverage = ConsumerCoverage {
+            paid_axes: axes.clone(),
+            ..ConsumerCoverage::default()
+        };
+        let decision = decide_query_world_run(
+            &old,
+            &new,
+            &dependencies(),
+            &slice(axes.clone()),
+            &demand(axes),
+            &graph(),
+            &coverage,
+            OperationalResearchState::CurrentFrontierClosed,
+            None,
+            &[],
+        )
+        .unwrap();
+        let receipt = query_world_run_receipt(&decision);
+        let encoded = serde_json::to_string(&receipt).unwrap();
+        let decoded: QueryWorldRunReceipt = serde_json::from_str(&encoded).unwrap();
+        assert_eq!(decoded, receipt);
+        assert!(decoded.run_may_stop);
+        assert!(!decoded.consumer_adequate_formally_proved);
+        assert!(!decoded.creates_semantic_authority);
+        assert!(!decoded.creates_claim_truth);
     }
 
     #[test]
