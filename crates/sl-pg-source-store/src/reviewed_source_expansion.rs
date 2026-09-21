@@ -309,6 +309,64 @@ pub fn materialize_reviewed_context_expansion(
     })
 }
 
+/// Load exact, explicitly reviewed bounded-context source manifestations.
+///
+/// Unlike \`load_reviewed_context_expansion_sources\`, this retains the pinned
+/// revision and review coordinate.  It is the revision-aware input for S18:
+/// "source QID has been reviewed sometime" is not enough to establish that the
+/// *current* source manifestation has been reviewed.
+pub fn load_reviewed_source_expansion_rows(
+    config: &DatabaseConfig,
+) -> Result<Vec<ReviewedSourceExpansionRow>, ReviewedSourceExpansionError> {
+    let mut client = Client::connect(config.database_url(), NoTls)?;
+    client.batch_execute(REVIEWED_SOURCE_EXPANSION_SCHEMA_SQL)?;
+    let rows = client.query(
+        "SELECT source_ref, source_revision_ref, review_ref, bounded_candidate_count, \
+                candidate_only, creates_semantic_authority, applicability_promoted, \
+                claim_truth_promoted, counts_as_novel_identity, pays_claim_residual, \
+                receipt_authority, receipt_sha256 \
+         FROM context.reviewed_source_expansion_receipt \
+         WHERE candidate_only = TRUE \
+           AND creates_semantic_authority = FALSE \
+           AND applicability_promoted = FALSE \
+           AND claim_truth_promoted = FALSE \
+           AND counts_as_novel_identity = FALSE \
+           AND pays_claim_residual = FALSE \
+         ORDER BY source_ref, source_revision_ref, review_ref",
+        &[],
+    )?;
+
+    rows.into_iter()
+        .map(|row| {
+            let bounded_candidate_count_i64 = row.get::<_, i64>(3);
+            let bounded_candidate_count =
+                usize::try_from(bounded_candidate_count_i64).map_err(|_| {
+                    ReviewedSourceExpansionError::CandidateCountOutOfRange
+                })?;
+            let receipt_authority = row.get::<_, String>(10);
+            if receipt_authority != "reviewed_bounded_context_expansion_only" {
+                return Err(ReviewedSourceExpansionError::Postgres(format!(
+                    "unexpected source-expansion receipt authority {receipt_authority}"
+                )));
+            }
+            Ok(ReviewedSourceExpansionRow {
+                source_ref: row.get(0),
+                source_revision_ref: row.get(1),
+                review_ref: row.get(2),
+                bounded_candidate_count,
+                candidate_only: row.get(4),
+                creates_semantic_authority: row.get(5),
+                applicability_promoted: row.get(6),
+                claim_truth_promoted: row.get(7),
+                counts_as_novel_identity: row.get(8),
+                pays_claim_residual: row.get(9),
+                receipt_authority: "reviewed_bounded_context_expansion_only",
+                receipt_sha256: row.get(11),
+            })
+        })
+        .collect()
+}
+
 /// Sources with an already-reviewed outgoing relation are treated as legacy
 /// expanded sources. Explicit source-expansion receipts additionally close the
 /// zero-bounded-candidate case and make the expansion state restart-stable.
