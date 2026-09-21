@@ -439,6 +439,7 @@ pub fn load_latent_world_rows(
             max_edges,
         },
     )
+}
 
 #[cfg(test)]
 mod revision_slice_tests {
@@ -481,6 +482,4 @@ mod revision_slice_tests {
             vec!["wikidata:Q1:oldid:10", "wikidata:Q2:oldid:20"]
         );
     }
-}
-
 }
