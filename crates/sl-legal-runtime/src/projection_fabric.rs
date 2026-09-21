@@ -3,9 +3,10 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use sha2::{Digest, Sha256};
+use serde::{Deserialize, Serialize};
 use crate::{ExplanationIndex, MatterIssueWorkbench};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum ProjectionKind {
     SourceView, Timeline, IssueProof, EntityRelationship, CitationAuthority, Flow, Comparative,
 }
@@ -30,7 +31,7 @@ impl ProjectionQuery {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProjectionNode {
     pub semantic_ref: String,
     pub semantic_kind: String,
@@ -40,14 +41,14 @@ pub struct ProjectionNode {
     pub projection_role: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProjectionEdge {
     pub from_ref: String,
     pub to_ref: String,
     pub relation: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProjectionGraph {
     pub kind: ProjectionKind,
     pub nodes: Vec<ProjectionNode>,
