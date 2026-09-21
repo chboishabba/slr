@@ -2756,6 +2756,8 @@ pub mod visualisation_ir;
 pub use visualisation_ir::*;
 pub mod legal_follow_campaign;
 pub use legal_follow_campaign::*;
+pub mod source_realised_legal_follow;
+pub use source_realised_legal_follow::*;
 pub mod legal_world;
 pub use legal_world::*;
 pub mod revision_consumer_bridge;
