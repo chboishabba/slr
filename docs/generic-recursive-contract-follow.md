@@ -456,3 +456,54 @@ frontier residual
 ```
 
 while remaining a downstream projection consumer.
+
+### Paid work cannot resurrect itself
+
+A reviewed delta is itself payment of the work coordinate it represents.  The
+campaign therefore marks matching worklist items as observed before computing
+the next fresh frontier:
+
+```text
+reviewed identity delta
+    -> identity/source work for that exact node is paid
+
+reviewed treatment delta
+    -> treatment-review work for that exact edge is paid
+```
+
+Secondary consequences may still become fresh work.  What is forbidden is the
+self-loop:
+
+```text
+review treatment
+    -> add reviewed Supports edge
+    -> rediscover the exact same edge as "needs treatment review"
+```
+
+The total worklist inventory is intentionally different from the actionable
+fresh frontier.  Receipts therefore expose:
+
+```text
+final_worklist_inventory_counts
+final_fresh_frontier_count
+```
+
+while retaining the legacy `final_frontier_counts` field for compatibility.
+
+### Frontier closure is operational, not semantic omniscience
+
+`CampaignOperatorGate::None` now lowers to an explicit closure receipt:
+
+```text
+kind = NoSelectableResidual
+current_frontier_closed = true
+consumer_adequacy_formally_proved = false
+creates_legal_authority = false
+creates_current_law_conclusion = false
+```
+
+The driver disposition is named `CurrentFrontierClosed`, not `Complete`.
+This records exactly what the controller has established: there is no selectable
+residual in the current declared frontier.  It does not assert that every
+possible legal question is answered or that a formal query-indexed
+`FactorsThrough` witness exists.
