@@ -287,6 +287,24 @@ pub fn source_realised_legal_campaign_self_check() -> Result<(), String> {
         capstone.context.as_at.clone(),
         4,
     )?;
+    let coordinate = source_realised_world_coordinate(
+        "world:cullen:generic-self-check",
+        "matter:cullen",
+        &campaign.state().world,
+    )?;
+    if coordinate.jurisdiction_ref != capstone.context.jurisdiction_ref
+        || coordinate.as_at != capstone.context.as_at
+        || coordinate
+            .source_revisions
+            .get(&capstone.rule.rule_ref)
+            != Some(&capstone.rule.source_revision_ref)
+        || coordinate.creates_semantic_authority
+        || coordinate.creates_claim_truth
+    {
+        return Err(
+            "Cullen generic LegalFollow self-check failed first-class world binding".into(),
+        );
+    }
     if campaign.next_demand().map(|demand| demand.residual_ref)
         != Ok(selected.residual_ref.clone())
     {
