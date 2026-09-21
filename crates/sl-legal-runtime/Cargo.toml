@@ -15,5 +15,5 @@ sensiblaw-reviewed-evidence-payment = { path = "../sl-reviewed-evidence-payment"
 sensiblaw-legal-counterfactual = { path = "../sl-legal-counterfactual" }
 sensiblaw-proof-search-loop = { path = "../sl-proof-search-loop" }
 sensiblaw-legal-follow-plan = { path = "../sl-legal-follow-plan" }
-sensiblaw-reader-model = { path = "../sl-reader-model" }
+sensiblaw-reader-model = { path = "../sl-reader-model", features = ["serde"] }
 sha2 = "0.10"
