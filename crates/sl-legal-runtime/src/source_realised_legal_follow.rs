@@ -242,6 +242,56 @@ pub fn source_realised_legal_campaign_receipt(
     }
 }
 
+
+pub fn source_realised_legal_campaign_self_check() -> Result<(), String> {
+    let capstone =
+        crate::build_australian_calibration_capstone(AustralianCalibrationKind::CullenNswCla)
+            .map_err(|error| format!("build Cullen source-realised capstone: {error:?}"))?;
+    if capstone.campaign.hops.len() != 2 {
+        return Err("Cullen generic LegalFollow self-check expected exactly two canonical hops".into());
+    }
+    let initial = capstone.campaign.hops[0].clone();
+    let expected = capstone.campaign.hops[1].clone();
+    let selected = initial
+        .selected_action
+        .clone()
+        .ok_or_else(|| "Cullen generic LegalFollow self-check missing reviewed demand".to_string())?;
+
+    let mut campaign = source_realised_legal_campaign(
+        capstone.rule.clone(),
+        initial,
+        capstone.context.jurisdiction_ref.clone(),
+        capstone.context.as_at.clone(),
+        4,
+    )?;
+    if campaign.next_demand().map(|demand| demand.residual_ref)
+        != Ok(selected.residual_ref.clone())
+    {
+        return Err("Cullen generic LegalFollow self-check selected the wrong residual".into());
+    }
+
+    let delta = ReviewedLegalContextDelta::new(
+        "review:cullen:secondary-review",
+        selected.residual_ref,
+        capstone.context.clone(),
+    )?;
+    campaign.accept_reviewed_delta(&delta)?;
+    if campaign.state().world.state != expected {
+        return Err("generic Cullen replay diverged from canonical reviewed hop".into());
+    }
+    if campaign.next_demand() != Err(GenericCampaignStop::NoFreshDemand) {
+        return Err("generic Cullen replay did not close its bounded reviewed frontier".into());
+    }
+    if campaign.state().creates_legal_authority
+        || campaign.state().creates_claim_truth
+        || campaign.state().world.creates_semantic_authority
+        || campaign.state().world.creates_claim_truth
+    {
+        return Err("generic Cullen replay crossed non-promotion boundary".into());
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
