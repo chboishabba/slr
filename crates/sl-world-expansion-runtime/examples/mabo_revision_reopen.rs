@@ -18,6 +18,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use sensiblaw_legal_runtime::{query_world_run_receipt, QueryWorldRunReceipt};
 use sensiblaw_pg_source_store::{
     load_database_config, load_discovery_identity_baseline,
     load_latent_world_rows_with_context_revision_slice,
@@ -73,6 +74,7 @@ struct SnapshotEmission {
     path: Option<String>,
     world_ref: Option<String>,
     projection_digest: Option<String>,
+    controller_receipt: Option<QueryWorldRunReceipt>,
     blocker: Option<String>,
 }
 
@@ -91,6 +93,7 @@ fn emit_query_world_snapshot(
             path: None,
             world_ref: None,
             projection_digest: None,
+            controller_receipt: None,
             blocker: Some("MissingAsAtCoordinate".into()),
         });
     };
@@ -115,10 +118,18 @@ fn emit_query_world_snapshot(
         println!("query_world_snapshot_path={}", path.display());
     }
 
+    let decision = snapshot.decide_current_world(None, &[])?;
+    let controller_receipt = query_world_run_receipt(&decision);
+    println!(
+        "query_world_controller_receipt_json={}",
+        serde_json::to_string(&controller_receipt)?
+    );
+
     Ok(SnapshotEmission {
         path: output.map(|path| path.display().to_string()),
         world_ref: Some(snapshot.world.world_ref.clone()),
         projection_digest: Some(snapshot.projection.deterministic_digest.clone()),
+        controller_receipt: Some(controller_receipt),
         blocker: None,
     })
 }
@@ -280,6 +291,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "query_world_snapshot_path": snapshot.path,
                 "query_world_snapshot_world_ref": snapshot.world_ref,
                 "query_world_projection_digest": snapshot.projection_digest,
+                "query_world_controller_receipt": snapshot.controller_receipt,
                 "query_world_snapshot_blocker": snapshot.blocker,
                 "candidate_only": true,
                 "creates_semantic_authority": false,
@@ -543,6 +555,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "query_world_snapshot_path": snapshot.path,
             "query_world_snapshot_world_ref": snapshot.world_ref,
             "query_world_projection_digest": snapshot.projection_digest,
+            "query_world_controller_receipt": snapshot.controller_receipt,
             "query_world_snapshot_blocker": snapshot.blocker,
             "probe_truncated": probe.probe_truncated,
             "probe_complete": probe.probe_complete,
