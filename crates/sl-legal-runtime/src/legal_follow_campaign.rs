@@ -120,6 +120,70 @@ where
     }
 }
 
+#[derive(Clone)]
+struct KernelSelfCheckDomain;
+
+impl LegalFollowCampaignDomain for KernelSelfCheckDomain {
+    type World = Vec<bool>;
+    type Residual = usize;
+    type Demand = usize;
+    type Delta = usize;
+
+    fn recompute_residuals(&self, world: &Self::World) -> Vec<Self::Residual> {
+        world
+            .iter()
+            .enumerate()
+            .filter_map(|(index, paid)| (!paid).then_some(index))
+            .collect()
+    }
+
+    fn select_fresh(
+        &self,
+        _world: &Self::World,
+        residuals: &[Self::Residual],
+    ) -> Option<Self::Demand> {
+        residuals.first().copied()
+    }
+
+    fn apply_reviewed_delta(
+        &self,
+        world: &Self::World,
+        delta: &Self::Delta,
+    ) -> Result<Self::World, String> {
+        let mut next = world.clone();
+        let paid = next
+            .get_mut(*delta)
+            .ok_or_else(|| format!("unknown self-check coordinate {delta}"))?;
+        *paid = true;
+        Ok(next)
+    }
+}
+
+pub fn generic_campaign_kernel_self_check() -> Result<(), String> {
+    let mut campaign = GenericLegalFollowCampaign::new(
+        KernelSelfCheckDomain,
+        vec![false, false],
+        GenericCampaignBudget {
+            max_reviewed_deltas: 3,
+        },
+    )?;
+    if campaign.next_demand() != Ok(0) {
+        return Err("generic campaign self-check failed first demand".into());
+    }
+    campaign.accept_reviewed_delta(&0)?;
+    if campaign.next_demand() != Ok(1) {
+        return Err("generic campaign self-check failed recomputed demand".into());
+    }
+    campaign.accept_reviewed_delta(&1)?;
+    if campaign.next_demand() != Err(GenericCampaignStop::NoFreshDemand) {
+        return Err("generic campaign self-check failed terminal state".into());
+    }
+    if campaign.state().creates_legal_authority || campaign.state().creates_claim_truth {
+        return Err("generic campaign self-check crossed promotion boundary".into());
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
