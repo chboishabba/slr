@@ -1,14 +1,20 @@
 //! Combined S15/S16/S18 live experiment:
-//! closed Mabo world -> source revision perturbation -> exact context re-review
-//! -> recompute identity frontier -> generic LegalFollow reviewed deltas.
+//! closed Mabo world -> bounded source revision perturbations -> exact context
+//! re-review -> recompute identity frontier -> generic LegalFollow reviewed
+//! deltas.
 //!
 //! Usage:
-//!   cargo run -p sensiblaw-world-expansion-runtime --example mabo_revision_reopen -- //!     <seed_ref> <context_review.tsv> <identity_review.tsv> [max_sources] [pending_dir] [receipt.json]
+//!   cargo run -p sensiblaw-world-expansion-runtime --example mabo_revision_reopen -- \
+//!     <seed_ref> <context_review.tsv> <identity_review.tsv> //!     [max_sources] [pending_dir] [receipt.json]
 //!
-//! Both review manifests may be empty files.  Missing review is an explicit
-//! stop and a pending review bundle is written; no decision is fabricated.
+//! Both review manifests may be empty files. Missing review is an explicit stop
+//! and a pending review bundle is written; no decision is fabricated. The
+//! review manifest never determines scheduling order.
 
-use std::{env, fs, path::{Path, PathBuf}};
+use std::{
+    env, fs,
+    path::{Path, PathBuf},
+};
 
 use sensiblaw_pg_source_store::{
     load_database_config, load_discovery_identity_baseline,
@@ -17,7 +23,6 @@ use sensiblaw_pg_source_store::{
     materialize_reviewed_context_expansion, LatentWorldBudget,
 };
 use sensiblaw_wikimedia_candidate_provider::fetch_entity_rdf_revision_receipt;
-use serde_json::{json, Value};
 use sensiblaw_world_expansion_runtime::{
     adaptive_campaign::parse_bounded_target_context,
     adaptive_context_review::{
@@ -29,11 +34,10 @@ use sensiblaw_world_expansion_runtime::{
         apply_reviewed_mabo_sequence, mabo_generic_campaign_from_world,
         mabo_generic_campaign_receipt,
     },
-    mabo_revision_campaign::{
-        probe_latest_mabo_revision_changes, select_next_mabo_revision_reopen,
-    },
+    mabo_revision_campaign::probe_latest_mabo_revision_changes,
     parse_mabo_identity_review_tsv,
 };
+use serde_json::{json, Value};
 
 fn parse_or<T: std::str::FromStr>(arg: Option<&String>, default: T) -> T {
     arg.and_then(|value| value.parse::<T>().ok()).unwrap_or(default)
@@ -94,7 +98,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("applicability_promoted={}", probe.applicability_promoted);
     println!("claim_truth_promoted={}", probe.claim_truth_promoted);
 
-    let Some(reopened) = select_next_mabo_revision_reopen(&probe).cloned() else {
+    if probe.reopen_residuals.is_empty() {
         let (stop, closure_reason, current_frontier_closed) = if probe.probe_truncated {
             ("RevisionProbeBudgetExhausted", "UnprobedReviewedSourcesRemain", false)
         } else {
@@ -110,7 +114,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         emit_terminal_receipt(
             receipt_path.as_deref(),
             &json!({
-                "schema_version": "sl.mabo_revision_reopen.v0_1",
+                "schema_version": "sl.mabo_revision_reopen.v0_2",
                 "seed_ref": seed_ref,
                 "stop": stop,
                 "closure_reason": closure_reason,
@@ -121,7 +125,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "probe_truncated": probe.probe_truncated,
                 "unprobed_source_refs": probe.unprobed_source_refs,
                 "revision_reopen_count": 0,
-                "reviewed_context_delta_applied": false,
+                "reviewed_context_revisions_paid": 0,
                 "reviewed_identity_deltas_applied": 0,
                 "candidate_only": true,
                 "creates_semantic_authority": false,
@@ -130,89 +134,113 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }),
         )?;
         return Ok(());
-    };
-
-    println!("selected_revision_residual={}", reopened.residual_ref);
-    println!("selected_source_ref={}", reopened.source_ref);
-    println!("reviewed_revision_ref={}", reopened.reviewed_revision_ref);
-    println!("latest_revision_ref={}", reopened.latest_revision_ref);
-
-    // Reacquire the exact revision discovered by the bounded coordinate probe.
-    // We deliberately do not call a second "latest content" operation here.
-    let acquired =
-        fetch_entity_rdf_revision_receipt(&reopened.source_ref, reopened.latest_revision_id)?;
-    if acquired.source_revision_ref != reopened.latest_revision_ref
-        || acquired.qid != reopened.source_ref
-        || !acquired.candidate_only
-        || acquired.semantic_promotion
-    {
-        return Err(std::io::Error::other(
-            "revision re-acquisition did not return exact candidate-only source coordinate",
-        )
-        .into());
     }
-
-    let candidates = parse_bounded_target_context(&acquired)?;
-    let digest =
-        bounded_context_candidate_set_sha256(&acquired.source_revision_ref, &candidates)?;
-    println!("latest_bounded_candidate_count={}", candidates.len());
-    println!("latest_bounded_candidate_set_sha256={digest}");
 
     let context_review_text = fs::read_to_string(&context_review_path)?;
     let context_reviews = parse_mabo_context_review_tsv(&context_review_text)?;
-    let Some(context_review) =
-        matching_context_review(&acquired.source_revision_ref, &digest, &context_reviews)
-    else {
-        fs::create_dir_all(&pending_dir)?;
-        let pending = pending_context_review_bundle(
-            &acquired.qid,
-            &acquired.source_revision_ref,
-            &candidates,
-        )?;
-        let pending_path = pending_dir.join(format!(
-            "{}__{}.pending.tsv",
-            acquired.qid, acquired.revision_id
-        ));
-        fs::write(&pending_path, pending)?;
-        println!("stop=ContextReviewRequired");
-        println!("pending_context_review={}", pending_path.display());
-        println!("consumer_adequate_inferred=false");
-        emit_terminal_receipt(
-            receipt_path.as_deref(),
-            &json!({
-                "schema_version": "sl.mabo_revision_reopen.v0_1",
-                "seed_ref": seed_ref,
-                "stop": "ContextReviewRequired",
-                "current_frontier_closed": false,
-                "consumer_adequate_formally_proved": false,
-                "selected_revision_residual": reopened.residual_ref,
-                "source_ref": reopened.source_ref,
-                "reviewed_revision_ref": reopened.reviewed_revision_ref,
-                "latest_revision_ref": reopened.latest_revision_ref,
-                "candidate_set_sha256": digest,
-                "pending_context_review": pending_path,
-                "reviewed_context_delta_applied": false,
-                "reviewed_identity_deltas_applied": 0,
-                "candidate_only": true,
-                "creates_semantic_authority": false,
-                "applicability_promoted": false,
-                "claim_truth_promoted": false
-            }),
-        )?;
-        return Ok(());
-    };
+    let mut reviewed_context_revisions_paid = 0usize;
+    let mut processed_revision_deltas = Vec::<Value>::new();
 
-    let prepared = prepare_reviewed_context_expansion(&candidates, context_review)?;
-    let materialized =
-        materialize_reviewed_context_expansion(&config, &prepared.edges, &prepared.expansion)?;
-    println!("context_review_ref={}", context_review.review_ref);
-    println!(
-        "reviewed_context_materialized_count={}",
-        materialized.materialized_count
-    );
-    println!("context_revision_reopened_and_paid=true");
+    // Deterministic source order comes from the revision probe. Review-manifest
+    // presence is never used to reorder or select work.
+    for reopened in &probe.reopen_residuals {
+        println!("selected_revision_residual={}", reopened.residual_ref);
+        println!("selected_source_ref={}", reopened.source_ref);
+        println!("reviewed_revision_ref={}", reopened.reviewed_revision_ref);
+        println!("latest_revision_ref={}", reopened.latest_revision_ref);
 
-    // Recompute from durable state after the reviewed revision delta.
+        // Reacquire the exact revision discovered by the bounded coordinate
+        // probe. We deliberately do not call a second "latest content" operation.
+        let acquired =
+            fetch_entity_rdf_revision_receipt(&reopened.source_ref, reopened.latest_revision_id)?;
+        if acquired.source_revision_ref != reopened.latest_revision_ref
+            || acquired.qid != reopened.source_ref
+            || !acquired.candidate_only
+            || acquired.semantic_promotion
+        {
+            return Err(std::io::Error::other(
+                "revision re-acquisition did not return exact candidate-only source coordinate",
+            )
+            .into());
+        }
+
+        let candidates = parse_bounded_target_context(&acquired)?;
+        let digest =
+            bounded_context_candidate_set_sha256(&acquired.source_revision_ref, &candidates)?;
+        println!("latest_bounded_candidate_count={}", candidates.len());
+        println!("latest_bounded_candidate_set_sha256={digest}");
+
+        let Some(context_review) =
+            matching_context_review(&acquired.source_revision_ref, &digest, &context_reviews)
+        else {
+            fs::create_dir_all(&pending_dir)?;
+            let pending = pending_context_review_bundle(
+                &acquired.qid,
+                &acquired.source_revision_ref,
+                &candidates,
+            )?;
+            let pending_path = pending_dir.join(format!(
+                "{}__{}.pending.tsv",
+                acquired.qid, acquired.revision_id
+            ));
+            fs::write(&pending_path, pending)?;
+            println!("stop=ContextReviewRequired");
+            println!("pending_context_review={}", pending_path.display());
+            println!("consumer_adequate_inferred=false");
+            emit_terminal_receipt(
+                receipt_path.as_deref(),
+                &json!({
+                    "schema_version": "sl.mabo_revision_reopen.v0_2",
+                    "seed_ref": seed_ref,
+                    "stop": "ContextReviewRequired",
+                    "current_frontier_closed": false,
+                    "consumer_adequate_formally_proved": false,
+                    "selected_revision_residual": reopened.residual_ref,
+                    "source_ref": reopened.source_ref,
+                    "reviewed_revision_ref": reopened.reviewed_revision_ref,
+                    "latest_revision_ref": reopened.latest_revision_ref,
+                    "candidate_set_sha256": digest,
+                    "pending_context_review": pending_path,
+                    "revision_reopen_count": probe.reopen_residuals.len(),
+                    "reviewed_context_revisions_paid": reviewed_context_revisions_paid,
+                    "processed_revision_deltas": processed_revision_deltas,
+                    "reviewed_identity_deltas_applied": 0,
+                    "probe_truncated": probe.probe_truncated,
+                    "unprobed_source_refs": probe.unprobed_source_refs,
+                    "candidate_only": true,
+                    "creates_semantic_authority": false,
+                    "applicability_promoted": false,
+                    "claim_truth_promoted": false
+                }),
+            )?;
+            return Ok(());
+        };
+
+        let prepared = prepare_reviewed_context_expansion(&candidates, context_review)?;
+        let materialized =
+            materialize_reviewed_context_expansion(&config, &prepared.edges, &prepared.expansion)?;
+        println!("context_review_ref={}", context_review.review_ref);
+        println!(
+            "reviewed_context_materialized_count={}",
+            materialized.materialized_count
+        );
+        println!("context_revision_reopened_and_paid=true");
+
+        reviewed_context_revisions_paid += 1;
+        processed_revision_deltas.push(json!({
+            "residual_ref": reopened.residual_ref,
+            "source_ref": reopened.source_ref,
+            "reviewed_revision_ref": reopened.reviewed_revision_ref,
+            "latest_revision_ref": reopened.latest_revision_ref,
+            "candidate_set_sha256": digest,
+            "review_ref": context_review.review_ref,
+            "bounded_candidate_count": candidates.len(),
+            "materialized_count": materialized.materialized_count
+        }));
+    }
+
+    // Recompute once from durable state after every payable reviewed revision
+    // delta has been committed.
     let world = load_latent_world_rows_with_budget(
         &config,
         seed_ref,
@@ -276,21 +304,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     emit_terminal_receipt(
         receipt_path.as_deref(),
         &json!({
-            "schema_version": "sl.mabo_revision_reopen.v0_1",
+            "schema_version": "sl.mabo_revision_reopen.v0_2",
             "seed_ref": seed_ref,
             "stop": stop,
             "current_frontier_closed": current_frontier_closed,
             "consumer_adequate_formally_proved": false,
-            "selected_revision_residual": reopened.residual_ref,
-            "source_ref": reopened.source_ref,
-            "reviewed_revision_ref": reopened.reviewed_revision_ref,
-            "latest_revision_ref": reopened.latest_revision_ref,
-            "reviewed_context_delta_applied": true,
-            "context_review_ref": context_review.review_ref,
+            "revision_reopen_count": probe.reopen_residuals.len(),
+            "reviewed_context_revisions_paid": reviewed_context_revisions_paid,
+            "processed_revision_deltas": processed_revision_deltas,
             "reviewed_identity_deltas_applied": reviewed_deltas_applied,
             "residuals_remaining": receipt.residuals_remaining,
             "next_representation_ref": next_representation_ref,
             "next_residual_ref": next_residual_ref,
+            "probe_truncated": probe.probe_truncated,
+            "unprobed_source_refs": probe.unprobed_source_refs,
             "candidate_only": true,
             "creates_semantic_authority": false,
             "applicability_promoted": false,
