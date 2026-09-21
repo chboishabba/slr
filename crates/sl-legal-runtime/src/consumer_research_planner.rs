@@ -288,7 +288,16 @@ mod tests {
                 creates_semantic_authority: false,
                 creates_claim_truth: false,
             },
+            nonfactorability_theorem_module_ref: "DASHI.Law.Fixture".into(),
             nonfactorability_theorem_ref: "theorem:defect".into(),
+            theorem_artifact_digest:
+                "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+                    .into(),
+            formal_verifier: "agda".into(),
+            formal_command_ref: "agda -i . DASHI/Law/Fixture.agda".into(),
+            verification_receipt_digest:
+                "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+                    .into(),
             witness_refs: vec!["world:left".into(), "world:right".into()],
             reason_ref: "reason:fixture".into(),
             candidate_only: true,
