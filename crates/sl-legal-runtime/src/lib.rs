@@ -2598,7 +2598,5 @@ pub use projection_fabric::*;
 
 pub mod matter_runtime;
 pub use matter_runtime::*;
-
-
-pub mod contract_specimens;
-pub use contract_specimens::*;
+pub mod consumer_adequacy;
+pub use consumer_adequacy::*;
