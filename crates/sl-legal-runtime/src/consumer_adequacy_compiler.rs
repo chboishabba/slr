@@ -13,7 +13,7 @@ use crate::{
     compile_nonfactorability_residual, ConsumerAdequacyDisposition,
     ConsumerAdequacyReceipt, ConsumerAxis, ConsumerCoverage, ConsumerQueryDemand,
     ExactConsumerResidual, KernelCheckedFactorsThroughWitness,
-    NonFactorabilityWitnessReceipt, ProjectionGraph,
+    KernelCheckedNonFactorabilityWitness, ProjectionGraph,
     TheoremBackedConsumerAdequacyReceipt,
 };
 
@@ -79,19 +79,20 @@ pub enum ConsumerAdequacyCompilation {
 }
 
 fn exact_witnesses_by_axis<'a>(
-    witnesses: &'a [NonFactorabilityWitnessReceipt],
+    witnesses: &'a [KernelCheckedNonFactorabilityWitness],
     query_ref: &str,
     projection_digest: &str,
 ) -> Result<BTreeMap<ConsumerAxis, &'a NonFactorabilityWitnessReceipt>, String> {
     let mut by_axis = BTreeMap::new();
     for witness in witnesses {
-        if witness.query_ref != query_ref || witness.projection_digest != projection_digest {
+        let metadata = witness.metadata();
+        if metadata.query_ref != query_ref || metadata.projection_digest != projection_digest {
             return Err(
                 "nonfactorability witness does not match compiler query/projection coordinates"
                     .into(),
             );
         }
-        if let Some(existing) = by_axis.insert(witness.lost_axis, witness) {
+        if let Some(existing) = by_axis.insert(metadata.lost_axis, witness) {
             if existing != witness {
                 return Err(format!(
                     "multiple nonfactorability witnesses disagree for axis {:?}",
@@ -109,7 +110,7 @@ pub fn compile_consumer_adequacy(
     coverage: &ConsumerCoverage,
     operational_state: OperationalResearchState,
     formal_adequacy: Option<&KernelCheckedFactorsThroughWitness>,
-    nonfactorability_witnesses: &[NonFactorabilityWitnessReceipt],
+    nonfactorability_witnesses: &[KernelCheckedNonFactorabilityWitness],
 ) -> Result<ConsumerAdequacyCompilation, String> {
     let runtime = assess_consumer_adequacy(demand, graph, coverage)?;
 
@@ -214,8 +215,10 @@ pub fn compile_consumer_adequacy(
 mod tests {
     use super::*;
     use crate::{
-        kernel_checked_factors_through_witness, AgdaFactorsThroughTypecheckReceipt,
-        ConsumerResearchDemandKind, ProjectionKind, ProjectionNode,
+        kernel_checked_factors_through_witness,
+        kernel_checked_nonfactorability_witness, AgdaFactorsThroughTypecheckReceipt,
+        AgdaNonFactorabilityTypecheckReceipt, ConsumerResearchDemandKind,
+        NonFactorabilityWitnessReceipt, ProjectionKind, ProjectionNode,
     };
     use std::collections::BTreeSet;
 
@@ -339,8 +342,8 @@ mod tests {
             shared_projection_ref: "projection:time-erased".into(),
             left_answer_ref: "answer:old-law".into(),
             right_answer_ref: "answer:new-law".into(),
-            theorem_module_ref: "DASHI.Law.LegalWorldRevisionReconstructionExact".into(),
-            theorem_ref: "temporalProjectionDefect".into(),
+            theorem_module_ref: "DASHI.Law.ClosedIsNotAdequateExact".into(),
+            theorem_ref: "timeErasureDefect".into(),
             theorem_artifact_digest:
                 "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
                     .into(),
@@ -349,13 +352,24 @@ mod tests {
             creates_semantic_authority: false,
             creates_claim_truth: false,
         };
+        let checked_defect = kernel_checked_nonfactorability_witness(
+            &AgdaNonFactorabilityTypecheckReceipt {
+                schema_version: "sl.formal.agda_nonfactorability_typecheck.v0_1".into(),
+                verifier: "agda".into(),
+                command_ref: "agda -i . DASHI/Law/ClosedIsNotAdequateExact.agda".into(),
+                exit_code: 0,
+                witness: defect,
+                query_adequacy_defect_claim: true,
+            },
+        )
+        .unwrap();
         let result = compile_consumer_adequacy(
             &demand,
             &graph(),
             &ConsumerCoverage::default(),
             OperationalResearchState::CurrentFrontierClosed,
             None,
-            &[defect],
+            &[checked_defect],
         )
         .unwrap();
 
