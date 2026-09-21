@@ -13,8 +13,8 @@ use sensiblaw_reader_model::ReaderIntent;
 use crate::{
     compile_explanation_index_from_state, compile_projection,
     ExplanationIndex, LegalCampaignState, LegalProjectionState, MatterIssueWorkbench,
-    ProjectionContext, ProjectionGraph, ProjectionKind, ProjectionQuery, ProvenanceAddress,
-    WrongTypeIssueState,
+    LegalWorldCoordinate, ProjectionContext, ProjectionGraph, ProjectionKind, ProjectionQuery,
+    ProvenanceAddress, WrongTypeIssueState,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -102,6 +102,84 @@ pub struct MatterRuntime {
     pub interaction: MatterInteractionState,
     pub candidate_only: bool,
     pub creates_semantic_authority: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorldBoundMatterRuntime {
+    pub world: LegalWorldCoordinate,
+    pub runtime: MatterRuntime,
+    pub candidate_only: bool,
+    pub creates_semantic_authority: bool,
+    pub creates_claim_truth: bool,
+}
+
+impl WorldBoundMatterRuntime {
+    pub fn new(
+        mut runtime: MatterRuntime,
+        world: LegalWorldCoordinate,
+    ) -> Result<Self, String> {
+        runtime.validate()?;
+        world.validate()?;
+
+        runtime.interaction.projection_query.as_at = Some(world.as_at.clone());
+        runtime.interaction.projection_query.jurisdiction_slice =
+            BTreeSet::from([world.jurisdiction_ref.clone()]);
+
+        let bound = Self {
+            world,
+            runtime,
+            candidate_only: true,
+            creates_semantic_authority: false,
+            creates_claim_truth: false,
+        };
+        bound.validate()?;
+        Ok(bound)
+    }
+
+    pub fn validate(&self) -> Result<(), String> {
+        self.world.validate()?;
+        self.runtime.validate()?;
+        if !self.candidate_only
+            || self.creates_semantic_authority
+            || self.creates_claim_truth
+        {
+            return Err("WorldBoundMatterRuntime crossed non-promotion boundary".into());
+        }
+        if self.runtime.interaction.projection_query.as_at.as_deref()
+            != Some(self.world.as_at.as_str())
+            || self.runtime.interaction.projection_query.jurisdiction_slice
+                != BTreeSet::from([self.world.jurisdiction_ref.clone()])
+        {
+            return Err("MatterRuntime projection coordinates drifted from bound legal world".into());
+        }
+        Ok(())
+    }
+
+    pub fn current_projection(&self) -> Result<ProjectionGraph, String> {
+        self.validate()?;
+        self.runtime.current_projection()
+    }
+
+    /// Dispatch ordinary semantic/read commands while preserving the bound
+    /// world.  SetRange/SetJurisdiction are rejected here; callers must create a
+    /// distinct LegalWorldCoordinate and rebind explicitly.
+    pub fn dispatch(
+        &mut self,
+        command: MatterCommand,
+    ) -> Result<MatterRuntimeReceipt, String> {
+        if matches!(
+            command,
+            MatterCommand::SetRange { .. } | MatterCommand::SetJurisdiction { .. }
+        ) {
+            return Err(
+                "world-bound runtime requires explicit rebind for time/jurisdiction change"
+                    .into(),
+            );
+        }
+        let receipt = self.runtime.dispatch(command)?;
+        self.validate()?;
+        Ok(receipt)
+    }
 }
 
 pub fn compile_matter_runtime_from_state(
@@ -421,4 +499,43 @@ mod tests {
         assert!(runtime.explanation.get(&anchor).is_some());
         assert!(!graph.creates_semantic_authority);
     }
+
+    #[test]
+    fn world_binding_pays_projection_time_and_jurisdiction_without_silent_mutation() {
+        use std::collections::BTreeMap;
+
+        let runtime = runtime(AustralianCalibrationKind::Mabo);
+        let world = LegalWorldCoordinate {
+            world_ref: "world:mabo:qld:2026-09-21".into(),
+            matter_ref: "matter:s8:Mabo".into(),
+            jurisdiction_ref: "AU-QLD".into(),
+            as_at: "2026-09-21".into(),
+            source_revisions: BTreeMap::new(),
+            candidate_only: true,
+            creates_semantic_authority: false,
+            creates_claim_truth: false,
+        };
+        let mut bound = WorldBoundMatterRuntime::new(runtime, world).unwrap();
+        assert_eq!(
+            bound.runtime.interaction.projection_query.as_at.as_deref(),
+            Some("2026-09-21")
+        );
+        assert_eq!(
+            bound.runtime.interaction.projection_query.jurisdiction_slice,
+            BTreeSet::from(["AU-QLD".into()])
+        );
+        assert!(bound
+            .dispatch(MatterCommand::SetRange {
+                as_at: Some("2025-01-01".into())
+            })
+            .is_err());
+        assert!(bound
+            .dispatch(MatterCommand::SetJurisdiction {
+                jurisdictions: BTreeSet::from(["AU-NSW".into()])
+            })
+            .is_err());
+        assert!(!bound.creates_semantic_authority);
+        assert!(!bound.creates_claim_truth);
+    }
+
 }
