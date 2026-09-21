@@ -2069,6 +2069,9 @@ pub fn compile_capability_receipt() -> Result<LegalRuntimeCapabilityReceipt, Leg
     query_scoped_world_impact_self_check()
         .map_err(LegalRuntimeError::Projection)?;
 
+    query_world_run_controller_self_check()
+        .map_err(LegalRuntimeError::Projection)?;
+
     let research_flow = research_flow_sankey(&[
         ResearchFlowEvent {
             event_ref: "capability:frontier-to-demand".into(),
