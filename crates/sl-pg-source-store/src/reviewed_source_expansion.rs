@@ -62,6 +62,20 @@ pub struct ReviewedSourceExpansionRow {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReviewedContextSourceRevisionCoordinate {
+    pub source_ref: String,
+    pub source_revision_ref: String,
+    /// Durable coordinate proving that this exact source manifestation
+    /// participated in an explicit reviewed bounded-context surface.
+    pub coordinate_ref: String,
+    pub coordinate_origin: &'static str,
+    pub candidate_only: bool,
+    pub creates_semantic_authority: bool,
+    pub applicability_promoted: bool,
+    pub claim_truth_promoted: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReviewedSourceExpansionMaterializationReceipt {
     pub attempted_count: usize,
     pub materialized_count: usize,
@@ -307,6 +321,76 @@ pub fn materialize_reviewed_context_expansion(
         counts_as_novel_identity: false,
         pays_claim_residual: false,
     })
+}
+
+/// Load exact reviewed bounded-context source revision coordinates across both
+/// generations of persistence.
+///
+/// New campaigns write one explicit source-expansion receipt.  Older durable
+/// worlds may only have reviewed Wikidata relation receipts.  Both are valid
+/// evidence that a specific pinned source manifestation was reviewed for
+/// bounded context; neither says that the latest source revision has been
+/// reviewed.
+pub fn load_reviewed_context_source_revision_coordinates(
+    config: &DatabaseConfig,
+) -> Result<Vec<ReviewedContextSourceRevisionCoordinate>, ReviewedSourceExpansionError> {
+    let mut client = Client::connect(config.database_url(), NoTls)?;
+    client.batch_execute(CONTEXT_RECEIPT_SCHEMA_SQL)?;
+    client.batch_execute(REVIEWED_SOURCE_EXPANSION_SCHEMA_SQL)?;
+
+    let rows = client.query(
+        "SELECT source_ref, source_revision_ref, coordinate_ref, origin \
+         FROM ( \
+           SELECT source_ref, source_revision_ref, receipt_sha256 AS coordinate_ref, \
+                  'source_expansion_receipt'::TEXT AS origin \
+           FROM context.reviewed_source_expansion_receipt \
+           WHERE candidate_only = TRUE \
+             AND creates_semantic_authority = FALSE \
+             AND applicability_promoted = FALSE \
+             AND claim_truth_promoted = FALSE \
+             AND counts_as_novel_identity = FALSE \
+             AND pays_claim_residual = FALSE \
+           UNION \
+           SELECT relation.left_ref AS source_ref, receipt.source_revision_ref, \
+                  relation.relation_ref AS coordinate_ref, \
+                  'reviewed_relation_receipt'::TEXT AS origin \
+           FROM algebra.relation AS relation \
+           JOIN context.reviewed_relation_receipt AS receipt \
+             ON receipt.relation_ref = relation.relation_ref \
+           WHERE receipt.candidate_only = TRUE \
+             AND receipt.creates_semantic_authority = FALSE \
+             AND receipt.applicability_promoted = FALSE \
+             AND receipt.claim_truth_promoted = FALSE \
+             AND relation.relation_type_ref LIKE 'context:wikidata:%' \
+         ) AS reviewed_coordinates \
+         ORDER BY source_ref, source_revision_ref, coordinate_ref",
+        &[],
+    )?;
+
+    rows.into_iter()
+        .map(|row| {
+            let origin = row.get::<_, String>(3);
+            let coordinate_origin = match origin.as_str() {
+                "source_expansion_receipt" => "source_expansion_receipt",
+                "reviewed_relation_receipt" => "reviewed_relation_receipt",
+                _ => {
+                    return Err(ReviewedSourceExpansionError::Postgres(format!(
+                        "unexpected reviewed context coordinate origin {origin}"
+                    )))
+                }
+            };
+            Ok(ReviewedContextSourceRevisionCoordinate {
+                source_ref: row.get(0),
+                source_revision_ref: row.get(1),
+                coordinate_ref: row.get(2),
+                coordinate_origin,
+                candidate_only: true,
+                creates_semantic_authority: false,
+                applicability_promoted: false,
+                claim_truth_promoted: false,
+            })
+        })
+        .collect()
 }
 
 /// Load exact, explicitly reviewed bounded-context source manifestations.
