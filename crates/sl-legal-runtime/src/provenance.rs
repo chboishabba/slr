@@ -161,7 +161,15 @@ pub fn compile_explanation_index_from_state(
     }
 
     for element in &issue.elements {
-        let mut er = bare(&element.element.element_ref, ExplainableKind::LegalElement, ExplanationClass::SourceBacked);
+        // An unpaid element remains a projection/residual coordinate.  It
+        // must not be labelled source-backed merely because the surrounding
+        // issue has other reviewed evidence.
+        let class = if element.evidence.is_empty() {
+            ExplanationClass::ProjectionMetadata
+        } else {
+            ExplanationClass::SourceBacked
+        };
+        let mut er = bare(&element.element.element_ref, ExplainableKind::LegalElement, class);
         for evidence in &element.evidence {
             er.provenance.push(manifested_address(
                 evidence.manifestation_ref.as_deref(),

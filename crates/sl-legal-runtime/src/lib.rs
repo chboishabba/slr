@@ -25,6 +25,7 @@ use sensiblaw_reviewed_evidence_payment::{
 };
 use sha2::{Digest, Sha256};
 
+
 pub const LEGAL_RUNTIME_VERSION: &str = "sl-legal-runtime:v1";
 
 fn digest(parts: impl IntoIterator<Item = impl AsRef<str>>) -> String {
@@ -2693,6 +2694,12 @@ mod tests {
 
 
 pub mod workbench;
+
+pub mod contract_specimens;
+pub use contract_specimens::{
+    build_mann_unseen_matter_runtime, project_waltons_reviewed_receipts_to_issue,
+    waltons_estoppel_materialisation_specimen,
+};
 pub use workbench::*;
 
 
