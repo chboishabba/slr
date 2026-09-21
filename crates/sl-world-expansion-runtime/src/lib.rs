@@ -15,6 +15,7 @@ pub mod sprint2_provider_normalisation;
 pub mod zelph_hf_physical;
 pub mod mabo_generic_legal_follow;
 pub mod mabo_revision_campaign;
+pub mod mabo_query_world_snapshot;
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::io::Cursor;
