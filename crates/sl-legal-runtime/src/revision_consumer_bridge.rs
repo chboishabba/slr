@@ -7,7 +7,6 @@
 //! projection with stale coordinates removed and a new deterministic digest,
 //! then run the ordinary S15.6 adequacy compiler over that derived projection.
 
-use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
 
@@ -20,7 +19,7 @@ use crate::{
     AffectedProofCone,
 };
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RevisionInvalidatedProjection {
     pub graph: ProjectionGraph,
     pub stale_semantic_refs: BTreeSet<String>,
@@ -107,7 +106,7 @@ pub fn invalidate_projection_for_revision(
     })
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RevisionReopenedConsumerResearch {
     pub invalidation: RevisionInvalidationReceipt,
     pub affected_proof_cone: AffectedProofCone,
