@@ -22,7 +22,7 @@ use crate::{
     QueryDependencySlice, QueryWorldRunDecision, RevisionDependencyIndex,
     decide_query_world_run,
 };
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SourceRealisedLegalWorld {
@@ -348,6 +348,82 @@ pub fn source_realised_legal_campaign_self_check() -> Result<(), String> {
     {
         return Err(
             "Cullen generic LegalFollow self-check failed first-class world binding".into(),
+        );
+    }
+
+    let query_axes = BTreeSet::from([
+        crate::ConsumerAxis::SemanticIdentity,
+        crate::ConsumerAxis::SourceRevision,
+        crate::ConsumerAxis::SourceSpan,
+        crate::ConsumerAxis::Provenance,
+    ]);
+    let query_graph = ProjectionGraph {
+        kind: crate::ProjectionKind::IssueProof,
+        nodes: vec![crate::ProjectionNode {
+            semantic_ref: capstone.rule.conclusion_ref.clone(),
+            semantic_kind: "SourceRealisedConclusion".into(),
+            manifestation_refs: vec![],
+            source_revision_refs: vec![capstone.rule.source_revision_ref.clone()],
+            span_refs: capstone.rule.source_span_refs.clone(),
+            projection_role: "IssueProof".into(),
+        }],
+        edges: vec![],
+        deterministic_digest: "sha256:cullen-source-realised-controller-self-check".into(),
+        projection_only: true,
+        creates_semantic_authority: false,
+    };
+    let query_dependencies = RevisionDependencyIndex {
+        source_to_propositions: BTreeMap::from([(
+            capstone.rule.rule_ref.clone(),
+            BTreeSet::from([capstone.rule.conclusion_ref.clone()]),
+        )]),
+        proposition_dependents: BTreeMap::new(),
+    };
+    let query_slice = QueryDependencySlice {
+        query_ref: "query:cullen:source-realised-self-check".into(),
+        required_axes: query_axes.clone(),
+        semantic_refs: BTreeSet::from([capstone.rule.conclusion_ref.clone()]),
+        proof_refs: BTreeSet::new(),
+        source_refs: BTreeSet::from([capstone.rule.rule_ref.clone()]),
+        source_revision_refs: BTreeSet::from([capstone.rule.source_revision_ref.clone()]),
+        candidate_only: true,
+        creates_semantic_authority: false,
+        creates_claim_truth: false,
+    };
+    let query_demand = ConsumerQueryDemand {
+        query_ref: query_slice.query_ref.clone(),
+        required_axes: query_axes.clone(),
+        required_semantic_refs: BTreeSet::from([capstone.rule.conclusion_ref.clone()]),
+        candidate_only: true,
+        creates_semantic_authority: false,
+    };
+    let query_coverage = ConsumerCoverage {
+        paid_axes: query_axes,
+        ..ConsumerCoverage::default()
+    };
+    let controller_decision = decide_source_realised_query_world_run(
+        "world:cullen:source-realised:self-check:old",
+        "world:cullen:source-realised:self-check:new",
+        "matter:cullen",
+        &campaign.state().world,
+        &campaign.state().world,
+        &query_dependencies,
+        &query_slice,
+        &query_demand,
+        &query_graph,
+        &query_coverage,
+        OperationalResearchState::CurrentFrontierClosed,
+        None,
+        &[],
+    )?;
+    if controller_decision.kind
+        != crate::QueryWorldRunDecisionKind::RequireFreshAdequacyWitness
+        || !controller_decision.operational_frontier_closed
+        || !controller_decision.run_may_stop
+        || controller_decision.consumer_adequate_formally_proved
+    {
+        return Err(
+            "Cullen source-realised self-check diverged from common query-world controller".into(),
         );
     }
     if campaign.next_demand().map(|demand| demand.residual_ref)
