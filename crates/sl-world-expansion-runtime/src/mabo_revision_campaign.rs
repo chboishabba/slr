@@ -9,10 +9,15 @@
 //! A revision change reopens source/context observation only.  It does not
 //! directly invalidate or fabricate SameObject/identity conclusions.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
-use sensiblaw_pg_source_store::ReviewedContextSourceRevisionCoordinate;
+use sensiblaw_pg_source_store::{
+    bounded_wikidata_relation_type, LatentWorldEdgeRow, LatentWorldRows,
+    ReviewedContextSourceRevisionCoordinate,
+};
 use sensiblaw_wikimedia_candidate_provider::fetch_latest_revision_id;
+
+use crate::adaptive_campaign::ParsedBoundedContextCandidate;
 use thiserror::Error;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -290,6 +295,224 @@ pub fn select_next_mabo_revision_reopen(
     receipt.reopen_residuals.first()
 }
 
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ShadowContextRevisionReceipt {
+    pub source_ref: String,
+    pub source_revision_ref: String,
+    pub removed_current_context_edges: usize,
+    pub added_shadow_context_edges: usize,
+    pub base_edge_count: usize,
+    pub shadow_edge_count: usize,
+    pub base_visited_count: usize,
+    pub shadow_visited_count: usize,
+    pub candidate_only: bool,
+    pub creates_semantic_authority: bool,
+    pub applicability_promoted: bool,
+    pub claim_truth_promoted: bool,
+}
+
+fn shadow_edge_from_candidate(
+    source_ref: &str,
+    source_revision_ref: &str,
+    candidate: &ParsedBoundedContextCandidate,
+) -> Result<LatentWorldEdgeRow, MaboRevisionCampaignError> {
+    if candidate.source_qid != source_ref || candidate.source_revision_ref != source_revision_ref {
+        return Err(MaboRevisionCampaignError::InvalidReviewedRevision(format!(
+            "shadow candidate coordinate mismatch: source={} revision={}",
+            candidate.source_qid, candidate.source_revision_ref
+        )));
+    }
+    let relation_type_ref = bounded_wikidata_relation_type(&candidate.property_ref)
+        .ok_or_else(|| {
+            MaboRevisionCampaignError::InvalidReviewedRevision(format!(
+                "shadow candidate uses unsupported bounded property {}",
+                candidate.property_ref
+            ))
+        })?;
+    Ok(LatentWorldEdgeRow {
+        from_ref: source_ref.to_owned(),
+        to_ref: candidate.target_qid.clone(),
+        relation_ref: relation_type_ref.to_owned(),
+        provenance_refs: vec![format!("shadow-context:{source_revision_ref}")],
+    })
+}
+
+fn recompute_shadow_reachability(
+    seed_ref: &str,
+    max_hops: u32,
+    edges: &[LatentWorldEdgeRow],
+) -> (Vec<String>, u32, Vec<String>, bool) {
+    let mut adjacency: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    for edge in edges {
+        adjacency
+            .entry(edge.from_ref.clone())
+            .or_default()
+            .insert(edge.to_ref.clone());
+        adjacency
+            .entry(edge.to_ref.clone())
+            .or_default()
+            .insert(edge.from_ref.clone());
+    }
+
+    let mut depth = BTreeMap::from([(seed_ref.to_owned(), 0_u32)]);
+    let mut queue = VecDeque::from([seed_ref.to_owned()]);
+    let mut retained_frontier = BTreeSet::new();
+
+    while let Some(reference) = queue.pop_front() {
+        let current_depth = depth[&reference];
+        let Some(neighbours) = adjacency.get(&reference) else {
+            continue;
+        };
+        if current_depth >= max_hops {
+            for neighbour in neighbours {
+                if !depth.contains_key(neighbour) {
+                    retained_frontier.insert(neighbour.clone());
+                }
+            }
+            continue;
+        }
+        for neighbour in neighbours {
+            if depth.contains_key(neighbour) {
+                continue;
+            }
+            depth.insert(neighbour.clone(), current_depth + 1);
+            queue.push_back(neighbour.clone());
+        }
+    }
+
+    let deepest = depth.values().copied().max().unwrap_or(0);
+    let mut visited = depth.keys().cloned().collect::<Vec<_>>();
+    visited.sort_by(|left, right| {
+        depth[left]
+            .cmp(&depth[right])
+            .then_with(|| left.cmp(right))
+    });
+    (
+        visited,
+        deepest,
+        retained_frontier.iter().cloned().collect(),
+        retained_frontier.is_empty(),
+    )
+}
+
+/// Construct a non-persisted historical/context counterfactual over an already
+/// loaded revision-sliced world.
+///
+/// The fixture replaces only one source's bounded Wikidata context edges, then
+/// recomputes reachability over the same finite edge universe.  It cannot
+/// create reviewed evidence, authority, applicability or claim truth and must
+/// never be persisted as if it were an operator review.
+pub fn shadow_context_revision_world(
+    base: &LatentWorldRows,
+    source_ref: &str,
+    source_revision_ref: &str,
+    candidates: &[ParsedBoundedContextCandidate],
+) -> Result<(LatentWorldRows, ShadowContextRevisionReceipt), MaboRevisionCampaignError> {
+    if !base.creates_semantic_authority && !base.applicability_promoted && !base.claim_truth_promoted
+    {
+        // expected non-promoting base
+    } else {
+        return Err(MaboRevisionCampaignError::ReviewedExpansionPromoted);
+    }
+    parse_revision_ref(source_ref, source_revision_ref)?;
+
+    let mut removed = 0usize;
+    let mut edge_map: BTreeMap<
+        (String, String, String),
+        BTreeSet<String>,
+    > = BTreeMap::new();
+
+    for edge in &base.edges {
+        if edge.from_ref == source_ref && edge.relation_ref.starts_with("context:wikidata:") {
+            removed += 1;
+            continue;
+        }
+        edge_map
+            .entry((
+                edge.from_ref.clone(),
+                edge.to_ref.clone(),
+                edge.relation_ref.clone(),
+            ))
+            .or_default()
+            .extend(edge.provenance_refs.iter().cloned());
+    }
+
+    let mut added = 0usize;
+    let mut canonical = candidates.to_vec();
+    canonical.sort();
+    canonical.dedup();
+    for candidate in &canonical {
+        let edge = shadow_edge_from_candidate(source_ref, source_revision_ref, candidate)?;
+        let key = (
+            edge.from_ref.clone(),
+            edge.to_ref.clone(),
+            edge.relation_ref.clone(),
+        );
+        let entry = edge_map.entry(key).or_default();
+        let before = entry.len();
+        entry.extend(edge.provenance_refs);
+        if entry.len() > before {
+            added += 1;
+        }
+    }
+
+    let edges = edge_map
+        .into_iter()
+        .map(
+            |((from_ref, to_ref, relation_ref), provenance_refs)| LatentWorldEdgeRow {
+                from_ref,
+                to_ref,
+                relation_ref,
+                provenance_refs: provenance_refs.into_iter().collect(),
+            },
+        )
+        .collect::<Vec<_>>();
+
+    let (visited_refs, deepest_observed_hop, frontier_refs, frontier_exhausted) =
+        recompute_shadow_reachability(
+            &base.seed_ref,
+            base.requested_max_hops,
+            &edges,
+        );
+    let residual_refs = if frontier_exhausted {
+        Vec::new()
+    } else {
+        vec!["world-residual:hop-limit".into()]
+    };
+
+    let shadow = LatentWorldRows {
+        seed_ref: base.seed_ref.clone(),
+        max_hops: base.max_hops,
+        requested_max_hops: base.requested_max_hops,
+        visited_refs,
+        deepest_observed_hop,
+        frontier_exhausted,
+        frontier_refs,
+        residual_refs,
+        edges,
+        creates_semantic_authority: false,
+        applicability_promoted: false,
+        claim_truth_promoted: false,
+    };
+
+    let receipt = ShadowContextRevisionReceipt {
+        source_ref: source_ref.to_owned(),
+        source_revision_ref: source_revision_ref.to_owned(),
+        removed_current_context_edges: removed,
+        added_shadow_context_edges: added,
+        base_edge_count: base.edges.len(),
+        shadow_edge_count: shadow.edges.len(),
+        base_visited_count: base.visited_refs.len(),
+        shadow_visited_count: shadow.visited_refs.len(),
+        candidate_only: true,
+        creates_semantic_authority: false,
+        applicability_promoted: false,
+        claim_truth_promoted: false,
+    };
+    Ok((shadow, receipt))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -371,6 +594,58 @@ mod tests {
         assert_eq!(receipt.reviewed_source_count, 1);
         assert!(!receipt.probe_truncated);
         assert!(receipt.probe_complete);
+    }
+
+
+    #[test]
+    fn shadow_revision_replaces_source_context_and_recomputes_reachability() {
+        let base = LatentWorldRows {
+            seed_ref: "QROOT".into(),
+            max_hops: 10,
+            requested_max_hops: 10,
+            visited_refs: vec!["QROOT".into(), "Q1".into(), "QOLD".into()],
+            deepest_observed_hop: 2,
+            frontier_exhausted: true,
+            frontier_refs: vec![],
+            residual_refs: vec![],
+            edges: vec![
+                LatentWorldEdgeRow {
+                    from_ref: "QROOT".into(),
+                    to_ref: "Q1".into(),
+                    relation_ref: "context:wikidata:participant".into(),
+                    provenance_refs: vec!["persisted:root".into()],
+                },
+                LatentWorldEdgeRow {
+                    from_ref: "Q1".into(),
+                    to_ref: "QOLD".into(),
+                    relation_ref: "context:wikidata:court".into(),
+                    provenance_refs: vec!["context:wikidata:Q1:oldid:100".into()],
+                },
+            ],
+            creates_semantic_authority: false,
+            applicability_promoted: false,
+            claim_truth_promoted: false,
+        };
+        let candidates = vec![ParsedBoundedContextCandidate {
+            candidate_id: "wikidata:Q1:P4884:QNEW".into(),
+            source_qid: "Q1".into(),
+            target_qid: "QNEW".into(),
+            property_ref: "P4884".into(),
+            source_revision_ref: "wikidata:Q1:oldid:90".into(),
+        }];
+        let (shadow, receipt) = shadow_context_revision_world(
+            &base,
+            "Q1",
+            "wikidata:Q1:oldid:90",
+            &candidates,
+        )
+        .unwrap();
+        assert!(shadow.visited_refs.contains(&"QNEW".into()));
+        assert!(!shadow.visited_refs.contains(&"QOLD".into()));
+        assert_eq!(receipt.removed_current_context_edges, 1);
+        assert_eq!(receipt.added_shadow_context_edges, 1);
+        assert!(!receipt.creates_semantic_authority);
+        assert!(!receipt.claim_truth_promoted);
     }
 
 }
