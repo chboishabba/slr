@@ -1,127 +1,18 @@
-//! Typed visualisation IR over read-only legal projections.
+//! Typed visualisation compiler over read-only legal projections.
 //!
-//! Rendering is downstream.  These types may reorganise a ProjectionGraph for
-//! timeline/graph/Sankey/spatial consumers, but cannot create semantic
-//! identities or legal authority.  Sankey weights are explicit flow counts,
-//! never legal importance or authority weight.
+//! DTO ownership lives in `sensiblaw-reader-model`, the stable frontend ABI.
+//! This module owns only semantic-to-read-model compilation and research-flow
+//! aggregation.
 
-use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 use crate::{ProjectionGraph, ProjectionKind};
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct VisualNodeIr {
-    pub semantic_ref: String,
-    pub semantic_kind: String,
-    pub label: String,
-    pub source_revision_refs: Vec<String>,
-    pub span_refs: Vec<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct VisualEdgeIr {
-    pub from_ref: String,
-    pub to_ref: String,
-    pub relation: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct GraphIr {
-    pub nodes: Vec<VisualNodeIr>,
-    pub edges: Vec<VisualEdgeIr>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct TimelineEntryIr {
-    pub semantic_ref: String,
-    pub label: String,
-    pub source_revision_refs: Vec<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct TimelineIr {
-    pub entries: Vec<TimelineEntryIr>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct SankeyNodeIr {
-    pub node_ref: String,
-    pub label: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct SankeyLinkIr {
-    pub from_ref: String,
-    pub to_ref: String,
-    pub weight: u64,
-    pub weight_semantics: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct SankeyIr {
-    pub nodes: Vec<SankeyNodeIr>,
-    pub links: Vec<SankeyLinkIr>,
-    pub weights_are_legal_importance: bool,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub enum ResearchFlowStage {
-    FrontierResidual,
-    SelectedDemand,
-    SourceAcquired,
-    IdentityReview,
-    TreatmentReview,
-    AcceptedHop,
-    PreservedResidual,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ResearchFlowEvent {
-    pub event_ref: String,
-    pub from_stage: ResearchFlowStage,
-    pub to_stage: ResearchFlowStage,
-    pub count: u64,
-    pub candidate_only: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ResearchFrontierIr {
-    pub events: Vec<ResearchFlowEvent>,
-    pub sankey: SankeyIr,
-    pub creates_semantic_authority: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ProofTopologyIr {
-    pub nodes: Vec<VisualNodeIr>,
-    pub dependency_edges: Vec<VisualEdgeIr>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ComparativeIr {
-    pub nodes: Vec<VisualNodeIr>,
-    pub edges: Vec<VisualEdgeIr>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum VisualisationIr {
-    Timeline(TimelineIr),
-    Graph(GraphIr),
-    Sankey(SankeyIr),
-    ResearchFrontier(ResearchFrontierIr),
-    ProofTopology(ProofTopologyIr),
-    Comparative(ComparativeIr),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct VisualisationEnvelope {
-    pub source_projection_digest: String,
-    pub ir: VisualisationIr,
-    pub projection_only: bool,
-    pub creates_semantic_authority: bool,
-    pub creates_legal_authority: bool,
-}
+pub use sensiblaw_reader_model::{
+    ComparativeIr, GraphIr, ProofTopologyIr, ResearchFlowEvent, ResearchFlowStage,
+    ResearchFrontierIr, SankeyIr, SankeyLinkIr, SankeyNodeIr, TimelineEntryIr,
+    TimelineIr, VisualEdgeIr, VisualNodeIr, VisualisationEnvelope, VisualisationIr,
+};
 
 fn nodes(graph: &ProjectionGraph) -> Vec<VisualNodeIr> {
     graph
@@ -150,27 +41,25 @@ fn edges(graph: &ProjectionGraph) -> Vec<VisualEdgeIr> {
 }
 
 fn projection_sankey(graph: &ProjectionGraph) -> SankeyIr {
-    let nodes = graph
-        .nodes
-        .iter()
-        .map(|node| SankeyNodeIr {
-            node_ref: node.semantic_ref.clone(),
-            label: node.semantic_ref.clone(),
-        })
-        .collect();
-    let links = graph
-        .edges
-        .iter()
-        .map(|edge| SankeyLinkIr {
-            from_ref: edge.from_ref.clone(),
-            to_ref: edge.to_ref.clone(),
-            weight: 1,
-            weight_semantics: "topology-edge-count".into(),
-        })
-        .collect();
     SankeyIr {
-        nodes,
-        links,
+        nodes: graph
+            .nodes
+            .iter()
+            .map(|node| SankeyNodeIr {
+                node_ref: node.semantic_ref.clone(),
+                label: node.semantic_ref.clone(),
+            })
+            .collect(),
+        links: graph
+            .edges
+            .iter()
+            .map(|edge| SankeyLinkIr {
+                from_ref: edge.from_ref.clone(),
+                to_ref: edge.to_ref.clone(),
+                weight: 1,
+                weight_semantics: "topology-edge-count".into(),
+            })
+            .collect(),
         weights_are_legal_importance: false,
     }
 }
@@ -194,7 +83,11 @@ pub fn visualisation_from_projection(
                 })
                 .collect(),
         }),
-        ProjectionKind::Flow => VisualisationIr::Sankey(projection_sankey(graph)),
+        ProjectionKind::Flow => {
+            let sankey = projection_sankey(graph);
+            sankey.validate_count_semantics()?;
+            VisualisationIr::Sankey(sankey)
+        }
         ProjectionKind::IssueProof => VisualisationIr::ProofTopology(ProofTopologyIr {
             nodes: nodes(graph),
             dependency_edges: edges(graph),
@@ -211,13 +104,15 @@ pub fn visualisation_from_projection(
         }),
     };
 
-    Ok(VisualisationEnvelope {
+    let envelope = VisualisationEnvelope {
         source_projection_digest: graph.deterministic_digest.clone(),
         ir,
         projection_only: true,
         creates_semantic_authority: false,
         creates_legal_authority: false,
-    })
+    };
+    envelope.validate_read_only()?;
+    Ok(envelope)
 }
 
 pub fn research_flow_sankey(
@@ -265,6 +160,7 @@ pub fn research_flow_sankey(
             .collect(),
         weights_are_legal_importance: false,
     };
+    sankey.validate_count_semantics()?;
 
     Ok(ResearchFrontierIr {
         events: events.to_vec(),
