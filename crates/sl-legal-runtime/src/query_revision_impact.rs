@@ -734,7 +734,7 @@ pub fn compile_query_world_research(
         if metadata.query_ref == demand.query_ref
             && metadata.projection_digest == new_digest
         {
-            usable_negative.push(witness.clone());
+            usable_negative.push((*witness).clone());
         } else {
             stale_negative_count += 1;
         }
