@@ -12,15 +12,17 @@
 //! review manifest never determines scheduling order.
 
 use std::{
+    collections::BTreeMap,
     env, fs,
     path::{Path, PathBuf},
 };
 
 use sensiblaw_pg_source_store::{
     load_database_config, load_discovery_identity_baseline,
-    load_latent_world_rows_with_budget,
+    load_latent_world_rows_with_context_revision_slice,
     load_reviewed_context_source_revision_coordinates,
-    materialize_reviewed_context_expansion, LatentWorldBudget,
+    materialize_reviewed_context_expansion, ContextRevisionWorldSlice,
+    LatentWorldBudget,
 };
 use sensiblaw_wikimedia_candidate_provider::fetch_entity_rdf_revision_receipt;
 use sensiblaw_world_expansion_runtime::{
@@ -34,7 +36,9 @@ use sensiblaw_world_expansion_runtime::{
         apply_reviewed_mabo_sequence, mabo_generic_campaign_from_world,
         mabo_generic_campaign_receipt, pending_mabo_identity_review_bundle,
     },
-    mabo_revision_campaign::probe_latest_mabo_revision_changes,
+    mabo_revision_campaign::{
+        highest_reviewed_mabo_revisions, probe_latest_mabo_revision_changes,
+    },
     parse_mabo_identity_review_tsv,
 };
 use serde_json::{json, Value};
@@ -282,8 +286,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Recompute once from durable state after every payable reviewed revision
-    // delta has been committed.
-    let world = load_latent_world_rows_with_budget(
+    // delta has been committed.  The world slice selects the highest reviewed
+    // Wikidata manifestation per source; historical context remains durable
+    // provenance but cannot contaminate the R1 traversal.
+    let current_reviewed_coordinates =
+        load_reviewed_context_source_revision_coordinates(&config)?;
+    let highest_reviewed =
+        highest_reviewed_mabo_revisions(&current_reviewed_coordinates)?;
+    let context_slice = ContextRevisionWorldSlice {
+        wikidata_source_revisions: highest_reviewed
+            .iter()
+            .map(|coordinate| {
+                (
+                    coordinate.source_ref.clone(),
+                    coordinate.reviewed_revision_ref.clone(),
+                )
+            })
+            .collect::<BTreeMap<_, _>>(),
+    };
+    println!(
+        "world_context_revision_slice_sources={}",
+        context_slice.wikidata_source_revisions.len()
+    );
+    let world = load_latent_world_rows_with_context_revision_slice(
         &config,
         seed_ref,
         LatentWorldBudget {
@@ -291,6 +316,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             max_nodes: 10_000,
             max_edges: 50_000,
         },
+        &context_slice,
     )?;
     let baseline = load_discovery_identity_baseline(&config)?;
     let mut campaign = mabo_generic_campaign_from_world(&world, &baseline, 1_000)?;
@@ -378,6 +404,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "revision_reopen_count": probe.reopen_residuals.len(),
             "reviewed_context_revisions_paid": reviewed_context_revisions_paid,
             "processed_revision_deltas": processed_revision_deltas,
+            "world_context_revision_slice": context_slice.wikidata_source_revisions,
             "reviewed_identity_deltas_applied": reviewed_deltas_applied,
             "residuals_remaining": receipt.residuals_remaining,
             "next_representation_ref": next_representation_ref,
