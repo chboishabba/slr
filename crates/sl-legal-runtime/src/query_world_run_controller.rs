@@ -217,7 +217,7 @@ pub fn decide_query_world_run(
     coverage: &ConsumerCoverage,
     operational_state: OperationalResearchState,
     formal_adequacy: Option<&KernelCheckedFactorsThroughWitness>,
-    nonfactorability_witnesses: &[KernelCheckedNonfactorabilityWitness],
+    nonfactorability_witnesses: &[KernelCheckedNonFactorabilityWitness],
 ) -> Result<QueryWorldRunDecision, String> {
     let outcome = compile_query_world_research(
         old_world,
@@ -235,9 +235,6 @@ pub fn decide_query_world_run(
     decision_from_adequacy(impact, formal_witnesses, invariant, adequacy)
 }
 
-// Alias with the canonical exported type spelling.  Kept private to this
-// module's implementation so call sites use KernelCheckedNonFactorabilityWitness.
-type KernelCheckedNonfactorabilityWitness = KernelCheckedNonFactorabilityWitness;
 
 #[cfg(test)]
 mod tests {
