@@ -32,7 +32,7 @@ use sensiblaw_world_expansion_runtime::{
     },
     mabo_generic_legal_follow::{
         apply_reviewed_mabo_sequence, mabo_generic_campaign_from_world,
-        mabo_generic_campaign_receipt,
+        mabo_generic_campaign_receipt, pending_mabo_identity_review_bundle,
     },
     mabo_revision_campaign::probe_latest_mabo_revision_changes,
     parse_mabo_identity_review_tsv,
@@ -311,8 +311,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("applicability_promoted={}", receipt.applicability_promoted);
     println!("claim_truth_promoted={}", receipt.claim_truth_promoted);
 
-    let (stop, current_frontier_closed, next_representation_ref, next_residual_ref) =
-        match campaign.next_demand() {
+    let (
+        stop,
+        current_frontier_closed,
+        next_representation_ref,
+        next_residual_ref,
+        pending_identity_review,
+    ) = match campaign.next_demand() {
             Ok(next) => {
                 println!("stop=IdentityReviewRequired");
                 println!("next_representation_ref={}", next.representation_ref);
@@ -321,20 +326,30 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     "identity_review_manifest_template={}\tworld-object:<reviewed-id>\treview:<operator-ref>",
                     next.representation_ref
                 );
+
+                fs::create_dir_all(&pending_dir)?;
+                let bundle = pending_mabo_identity_review_bundle(&next)?;
+                let safe_ref = next.representation_ref.replace(':', "__");
+                let pending_path =
+                    pending_dir.join(format!("identity__{safe_ref}.pending.tsv"));
+                fs::write(&pending_path, bundle)?;
+                println!("pending_identity_review={}", pending_path.display());
+
                 (
                     "IdentityReviewRequired",
                     false,
                     Some(next.representation_ref),
                     Some(next.residual_ref),
+                    Some(pending_path.display().to_string()),
                 )
             }
             Err(sensiblaw_legal_runtime::GenericCampaignStop::NoFreshDemand) => {
                 if !probe.blockers.is_empty() {
                     println!("stop=RevisionProbeBlocked");
-                    ("RevisionProbeBlocked", false, None, None)
+                    ("RevisionProbeBlocked", false, None, None, None)
                 } else if probe.probe_truncated {
                     println!("stop=RevisionProbeBudgetExhausted");
-                    ("RevisionProbeBudgetExhausted", false, None, None)
+                    ("RevisionProbeBudgetExhausted", false, None, None, None)
                 } else {
                     println!("stop=CurrentFrontierClosedWithoutAdequacy");
                     (
@@ -342,12 +357,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         true,
                         None,
                         None,
+                        None,
                     )
                 }
             }
             Err(sensiblaw_legal_runtime::GenericCampaignStop::BudgetExhausted) => {
                 println!("stop=BudgetExhaustedWithoutAdequacy");
-                ("BudgetExhaustedWithoutAdequacy", false, None, None)
+                ("BudgetExhaustedWithoutAdequacy", false, None, None, None)
             }
         };
     println!("consumer_adequate_inferred=false");
@@ -366,6 +382,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "residuals_remaining": receipt.residuals_remaining,
             "next_representation_ref": next_representation_ref,
             "next_residual_ref": next_residual_ref,
+            "pending_identity_review": pending_identity_review,
             "probe_truncated": probe.probe_truncated,
             "probe_complete": probe.probe_complete,
             "unprobed_source_refs": probe.unprobed_source_refs,
