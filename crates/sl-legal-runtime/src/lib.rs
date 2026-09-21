@@ -1816,6 +1816,7 @@ pub struct LegalRuntimeCapabilityReceipt {
     pub s15_exact_residual_compiler: bool,
     pub s15_admissible_research_frontier: bool,
     pub s15_stop_semantics: bool,
+    pub s15_adequacy_witness_compiler: bool,
     pub s18_first_class_legal_world: bool,
     pub s18_authority_validity: bool,
     pub s18_jurisdiction_scoped_coverage: bool,
@@ -2100,6 +2101,7 @@ pub fn compile_capability_receipt() -> Result<LegalRuntimeCapabilityReceipt, Leg
             .chain(std::iter::once("S15:exact-residual-compiler"))
             .chain(std::iter::once("S15:admissible-research-frontier"))
             .chain(std::iter::once("S15:stop-semantics"))
+            .chain(std::iter::once("S15:adequacy-witness-compiler"))
             .chain(std::iter::once("S18:first-class-legal-world"))
             .chain(std::iter::once("S18:authority-validity"))
             .chain(std::iter::once("S18:jurisdiction-scoped-coverage"))
@@ -2131,6 +2133,7 @@ pub fn compile_capability_receipt() -> Result<LegalRuntimeCapabilityReceipt, Leg
         s15_exact_residual_compiler: true,
         s15_admissible_research_frontier: true,
         s15_stop_semantics: true,
+        s15_adequacy_witness_compiler: true,
         s18_first_class_legal_world: true,
         s18_authority_validity: true,
         s18_jurisdiction_scoped_coverage: true,
@@ -2744,6 +2747,8 @@ pub mod consumer_theorem_bridge;
 pub use consumer_theorem_bridge::*;
 pub mod consumer_research_planner;
 pub use consumer_research_planner::*;
+pub mod consumer_adequacy_compiler;
+pub use consumer_adequacy_compiler::*;
 pub mod visualisation_ir;
 pub use visualisation_ir::*;
 pub mod legal_follow_campaign;
