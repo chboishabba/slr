@@ -13,9 +13,11 @@ use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
 
 use crate::{
-    affected_proof_cone, diff_world_revisions, ConsumerAxis, ConsumerQueryDemand,
-    LegalWorldCoordinate, ProjectionEdge, ProjectionGraph, ProjectionNode,
-    RevisionDependencyIndex, RevisionInvalidationReceipt,
+    affected_proof_cone, compile_consumer_adequacy, diff_world_revisions,
+    ConsumerAdequacyCompilation, ConsumerAxis, ConsumerCoverage, ConsumerQueryDemand,
+    KernelCheckedFactorsThroughWitness, KernelCheckedNonFactorabilityWitness,
+    LegalWorldCoordinate, OperationalResearchState, ProjectionEdge, ProjectionGraph,
+    ProjectionNode, RevisionDependencyIndex, RevisionInvalidationReceipt,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -316,6 +318,95 @@ pub fn compile_query_revision_impact(
     })
 }
 
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum QueryRevisionResearchOutcome {
+    NoWorldRevisionChange {
+        impact: QueryRevisionImpact,
+        adequacy: ConsumerAdequacyCompilation,
+    },
+    RevisionChangedConsumerInvariant {
+        impact: QueryRevisionImpact,
+        adequacy: ConsumerAdequacyCompilation,
+    },
+    RevisionChangedConsumerResidual {
+        impact: QueryRevisionImpact,
+        adequacy: ConsumerAdequacyCompilation,
+    },
+}
+
+pub fn compile_query_revision_research(
+    old_world: &LegalWorldCoordinate,
+    new_world: &LegalWorldCoordinate,
+    dependencies: &RevisionDependencyIndex,
+    slice: &QueryDependencySlice,
+    demand: &ConsumerQueryDemand,
+    graph: &ProjectionGraph,
+    coverage: &ConsumerCoverage,
+    operational_state: OperationalResearchState,
+    formal_adequacy: Option<&KernelCheckedFactorsThroughWitness>,
+    nonfactorability_witnesses: &[KernelCheckedNonFactorabilityWitness],
+) -> Result<QueryRevisionResearchOutcome, String> {
+    if slice.query_ref != demand.query_ref {
+        return Err("query dependency slice does not match consumer demand query_ref".into());
+    }
+    if !demand
+        .required_semantic_refs
+        .is_subset(&slice.semantic_refs)
+    {
+        return Err(
+            "query dependency slice omitted a semantic coordinate required by the demand".into(),
+        );
+    }
+    if !demand.required_axes.is_subset(&slice.required_axes) {
+        return Err("query dependency slice omitted an axis required by the demand".into());
+    }
+
+    let impact =
+        compile_query_revision_impact(old_world, new_world, dependencies, slice, graph)?;
+
+    let adequacy = compile_consumer_adequacy(
+        demand,
+        &impact.new_projection.graph,
+        coverage,
+        operational_state,
+        formal_adequacy,
+        nonfactorability_witnesses,
+    )?;
+
+    match impact.kind {
+        QueryRevisionImpactKind::NoWorldRevisionChange => {
+            Ok(QueryRevisionResearchOutcome::NoWorldRevisionChange {
+                impact,
+                adequacy,
+            })
+        }
+        QueryRevisionImpactKind::RevisionChangedConsumerInvariant => {
+            if impact.query_projection_digest_changed || impact.reopens_consumer_research {
+                return Err(
+                    "consumer-invariant revision may not mutate query projection or reopen research"
+                        .into(),
+                );
+            }
+            Ok(QueryRevisionResearchOutcome::RevisionChangedConsumerInvariant {
+                impact,
+                adequacy,
+            })
+        }
+        QueryRevisionImpactKind::RevisionChangedConsumerRelevant => {
+            if !impact.reopens_consumer_research {
+                return Err(
+                    "consumer-relevant revision must reopen consumer research".into(),
+                );
+            }
+            Ok(QueryRevisionResearchOutcome::RevisionChangedConsumerResidual {
+                impact,
+                adequacy,
+            })
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -475,4 +566,84 @@ mod tests {
         assert!(!impact.reopens_consumer_research);
         assert!(!impact.query_projection_digest_changed);
     }
+
+    #[test]
+    fn invariant_world_change_preserves_query_digest_and_does_not_reopen() {
+        let old = world("world:old", "rev:a:1", "rev:b:1");
+        let new = world("world:new", "rev:a:1", "rev:b:2");
+        let demand = ConsumerQueryDemand {
+            query_ref: "query:q".into(),
+            required_axes: slice().required_axes.clone(),
+            required_semantic_refs: BTreeSet::from(["prop:q".into()]),
+            candidate_only: true,
+            creates_semantic_authority: false,
+        };
+        let outcome = compile_query_revision_research(
+            &old,
+            &new,
+            &dependencies(),
+            &slice(),
+            &demand,
+            &graph(),
+            &ConsumerCoverage::default(),
+            OperationalResearchState::CurrentFrontierClosed,
+            None,
+            &[],
+        )
+        .unwrap();
+
+        let QueryRevisionResearchOutcome::RevisionChangedConsumerInvariant {
+            impact,
+            adequacy: _,
+        } = outcome
+        else {
+            panic!("unrelated source revision must be consumer invariant");
+        };
+        assert!(!impact.query_projection_digest_changed);
+        assert!(!impact.reopens_consumer_research);
+    }
+
+    #[test]
+    fn relevant_world_change_reopens_query_scoped_research() {
+        let old = world("world:old", "rev:a:1", "rev:b:1");
+        let new = world("world:new", "rev:a:2", "rev:b:1");
+        let demand = ConsumerQueryDemand {
+            query_ref: "query:q".into(),
+            required_axes: slice().required_axes.clone(),
+            required_semantic_refs: BTreeSet::from(["prop:q".into()]),
+            candidate_only: true,
+            creates_semantic_authority: false,
+        };
+        let outcome = compile_query_revision_research(
+            &old,
+            &new,
+            &dependencies(),
+            &slice(),
+            &demand,
+            &graph(),
+            &ConsumerCoverage::default(),
+            OperationalResearchState::CurrentFrontierClosed,
+            None,
+            &[],
+        )
+        .unwrap();
+
+        let QueryRevisionResearchOutcome::RevisionChangedConsumerResidual {
+            impact,
+            adequacy,
+        } = outcome
+        else {
+            panic!("query-relevant source revision must reopen research");
+        };
+        assert!(impact.query_projection_digest_changed);
+        assert!(impact.reopens_consumer_research);
+        let ConsumerAdequacyCompilation::NeedsResearch(research) = adequacy else {
+            panic!("stale query source coordinate must require research");
+        };
+        assert!(research
+            .runtime_receipt
+            .missing_axes
+            .contains(&ConsumerAxis::SourceRevision));
+    }
+
 }
