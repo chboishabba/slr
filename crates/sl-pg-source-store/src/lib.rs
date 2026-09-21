@@ -77,8 +77,9 @@ pub use reviewed_pnf::{
     ReviewedPnfValidationError,
 };
 pub use reviewed_source_expansion::{
-    load_reviewed_context_expansion_sources, materialize_reviewed_context_expansion,
-    materialize_reviewed_source_expansions, reviewed_source_expansion_row,
+    load_reviewed_context_expansion_sources, load_reviewed_source_expansion_rows,
+    materialize_reviewed_context_expansion, materialize_reviewed_source_expansions,
+    reviewed_source_expansion_row,
     ReviewedSourceExpansionError, ReviewedSourceExpansionInput,
     ReviewedSourceExpansionMaterializationReceipt, ReviewedSourceExpansionRow,
 };
