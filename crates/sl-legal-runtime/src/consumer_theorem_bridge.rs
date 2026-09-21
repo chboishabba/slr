@@ -277,6 +277,107 @@ pub struct NonFactorabilityWitnessReceipt {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AgdaNonFactorabilityTypecheckReceipt {
+    pub schema_version: String,
+    pub verifier: String,
+    pub command_ref: String,
+    pub exit_code: i32,
+    pub witness: NonFactorabilityWitnessReceipt,
+    pub query_adequacy_defect_claim: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct KernelCheckedNonFactorabilityWitness {
+    metadata: NonFactorabilityWitnessReceipt,
+    verifier: String,
+    command_ref: String,
+    verification_receipt_digest: String,
+}
+
+impl KernelCheckedNonFactorabilityWitness {
+    #[must_use]
+    pub fn metadata(&self) -> &NonFactorabilityWitnessReceipt {
+        &self.metadata
+    }
+
+    #[must_use]
+    pub fn verification_receipt_digest(&self) -> &str {
+        &self.verification_receipt_digest
+    }
+}
+
+pub fn kernel_checked_nonfactorability_witness(
+    receipt: &AgdaNonFactorabilityTypecheckReceipt,
+) -> Result<KernelCheckedNonFactorabilityWitness, String> {
+    if receipt.schema_version != "sl.formal.agda_nonfactorability_typecheck.v0_1" {
+        return Err("unsupported NonFactorability typecheck receipt schema".into());
+    }
+    if receipt.verifier != "agda" || receipt.exit_code != 0 {
+        return Err("NonFactorability witness requires successful Agda typecheck".into());
+    }
+    if receipt.command_ref.trim().is_empty() || !receipt.query_adequacy_defect_claim {
+        return Err("NonFactorability formal receipt does not certify QueryAdequacyDefect".into());
+    }
+
+    let witness = &receipt.witness;
+    if witness.query_ref.trim().is_empty()
+        || witness.projection_digest.trim().is_empty()
+        || witness.left_world_ref.trim().is_empty()
+        || witness.right_world_ref.trim().is_empty()
+        || witness.shared_projection_ref.trim().is_empty()
+        || witness.left_answer_ref.trim().is_empty()
+        || witness.right_answer_ref.trim().is_empty()
+        || witness.theorem_ref.trim().is_empty()
+        || witness.theorem_module_ref.trim().is_empty()
+        || !valid_sha256_ref(&witness.theorem_artifact_digest)
+    {
+        return Err("NonFactorability formal receipt has incomplete coordinates".into());
+    }
+    if witness.left_world_ref == witness.right_world_ref {
+        return Err("NonFactorability witness must compare distinct worlds".into());
+    }
+    if witness.left_answer_ref == witness.right_answer_ref {
+        return Err("NonFactorability witness must expose distinct consumer answers".into());
+    }
+    if !witness.exact_fibre_collision {
+        return Err("NonFactorability witness must certify exact fibre collision".into());
+    }
+    if !witness.candidate_only
+        || witness.creates_semantic_authority
+        || witness.creates_claim_truth
+    {
+        return Err("NonFactorability witness crossed non-promotion boundary".into());
+    }
+
+    let exit_code = receipt.exit_code.to_string();
+    let verification_receipt_digest = digest_parts(&[
+        receipt.schema_version.as_str(),
+        receipt.verifier.as_str(),
+        receipt.command_ref.as_str(),
+        exit_code.as_str(),
+        witness.query_ref.as_str(),
+        witness.projection_digest.as_str(),
+        witness.theorem_module_ref.as_str(),
+        witness.theorem_ref.as_str(),
+        witness.theorem_artifact_digest.as_str(),
+        &format!("{:?}", witness.lost_axis),
+        witness.left_world_ref.as_str(),
+        witness.right_world_ref.as_str(),
+        witness.shared_projection_ref.as_str(),
+        witness.left_answer_ref.as_str(),
+        witness.right_answer_ref.as_str(),
+        "query-adequacy-defect=true",
+    ]);
+
+    Ok(KernelCheckedNonFactorabilityWitness {
+        metadata: witness.clone(),
+        verifier: receipt.verifier.clone(),
+        command_ref: receipt.command_ref.clone(),
+        verification_receipt_digest,
+    })
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ExactConsumerResidual {
     pub residual_ref: String,
     pub query_ref: String,
@@ -323,9 +424,10 @@ fn axis_slug(axis: ConsumerAxis) -> &'static str {
 }
 
 pub fn compile_nonfactorability_residual(
-    witness: &NonFactorabilityWitnessReceipt,
+    checked: &KernelCheckedNonFactorabilityWitness,
     target_ref: impl Into<String>,
 ) -> Result<ExactConsumerResidual, String> {
+    let witness = checked.metadata();
     if witness.query_ref.trim().is_empty()
         || witness.projection_digest.trim().is_empty()
         || witness.left_world_ref.trim().is_empty()
@@ -497,6 +599,38 @@ mod tests {
     }
 
     #[test]
+    fn nonfactorability_metadata_alone_cannot_compile_exact_residual() {
+        let metadata = NonFactorabilityWitnessReceipt {
+            query_ref: "query:treatment".into(),
+            projection_digest: "sha256:projection".into(),
+            lost_axis: ConsumerAxis::Treatment,
+            left_world_ref: "world:left".into(),
+            right_world_ref: "world:right".into(),
+            shared_projection_ref: "projection:same".into(),
+            left_answer_ref: "answer:left".into(),
+            right_answer_ref: "answer:right".into(),
+            theorem_module_ref: "DASHI.Law.ClosedIsNotAdequateExact".into(),
+            theorem_ref: "timeErasureDefect".into(),
+            theorem_artifact_digest:
+                "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+                    .into(),
+            exact_fibre_collision: true,
+            candidate_only: true,
+            creates_semantic_authority: false,
+            creates_claim_truth: false,
+        };
+        let bad = AgdaNonFactorabilityTypecheckReceipt {
+            schema_version: "sl.formal.agda_nonfactorability_typecheck.v0_1".into(),
+            verifier: "agda".into(),
+            command_ref: "agda fixture".into(),
+            exit_code: 1,
+            witness: metadata,
+            query_adequacy_defect_claim: true,
+        };
+        assert!(kernel_checked_nonfactorability_witness(&bad).is_err());
+    }
+
+    #[test]
     fn exact_collision_compiles_to_exact_treatment_residual() {
         let witness = NonFactorabilityWitnessReceipt {
             query_ref: "query:treatment".into(),
@@ -509,14 +643,27 @@ mod tests {
             right_answer_ref: "answer:resolved".into(),
             theorem_module_ref: "DASHI.Law.ConsumerDirectedLegalFollowAdequacyExact".into(),
             theorem_ref: "coarseTreatmentDefect".into(),
-            theorem_artifact_digest: "sha256:collision".into(),
+            theorem_artifact_digest:
+                "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc".into(),
             exact_fibre_collision: true,
             candidate_only: true,
             creates_semantic_authority: false,
             creates_claim_truth: false,
         };
+        let checked = kernel_checked_nonfactorability_witness(
+            &AgdaNonFactorabilityTypecheckReceipt {
+                schema_version: "sl.formal.agda_nonfactorability_typecheck.v0_1".into(),
+                verifier: "agda".into(),
+                command_ref:
+                    "agda -i . DASHI/Law/ConsumerDirectedLegalFollowAdequacyExact.agda".into(),
+                exit_code: 0,
+                witness,
+                query_adequacy_defect_claim: true,
+            },
+        )
+        .unwrap();
         let residual =
-            compile_nonfactorability_residual(&witness, "case:target").unwrap();
+            compile_nonfactorability_residual(&checked, "case:target").unwrap();
         assert_eq!(residual.lost_axis, ConsumerAxis::Treatment);
         assert_eq!(
             residual.demand.kind,
