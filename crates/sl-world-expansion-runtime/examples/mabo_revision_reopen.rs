@@ -5,7 +5,8 @@
 //!
 //! Usage:
 //!   cargo run -p sensiblaw-world-expansion-runtime --example mabo_revision_reopen -- \
-//!     <seed_ref> <context_review.tsv> <identity_review.tsv> //!     [max_sources] [pending_dir] [receipt.json]
+//!     <seed_ref> <context_review.tsv> <identity_review.tsv> \
+//!     [max_sources] [pending_dir] [receipt.json]
 //!
 //! Both review manifests may be empty files. Missing review is an explicit stop
 //! and a pending review bundle is written; no decision is fabricated. The
