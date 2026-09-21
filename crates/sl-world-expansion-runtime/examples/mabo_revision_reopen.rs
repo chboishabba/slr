@@ -6,7 +6,7 @@
 //! Usage:
 //!   cargo run -p sensiblaw-world-expansion-runtime --example mabo_revision_reopen -- \
 //!     <seed_ref> <context_review.tsv> <identity_review.tsv> \
-//!     [max_sources] [pending_dir] [receipt.json]
+//!     [max_sources] [pending_dir] [receipt.json] [as_at] [snapshot.json]
 //!
 //! Both review manifests may be empty files. Missing review is an explicit stop
 //! and a pending review bundle is written; no decision is fabricated. The
@@ -23,7 +23,7 @@ use sensiblaw_pg_source_store::{
     load_latent_world_rows_with_context_revision_slice,
     load_reviewed_context_source_revision_coordinates,
     materialize_reviewed_context_expansion, ContextRevisionWorldSlice,
-    LatentWorldBudget,
+    DiscoveryIdentityBaseline, LatentWorldBudget, LatentWorldRows,
 };
 use sensiblaw_wikimedia_candidate_provider::fetch_entity_rdf_revision_receipt;
 use sensiblaw_world_expansion_runtime::{
@@ -37,8 +37,10 @@ use sensiblaw_world_expansion_runtime::{
         apply_reviewed_mabo_sequence, mabo_generic_campaign_from_world,
         mabo_generic_campaign_receipt, pending_mabo_identity_review_bundle,
     },
+    mabo_query_world_snapshot::compile_mabo_query_world_snapshot,
     mabo_revision_campaign::{
         highest_reviewed_mabo_revisions, probe_latest_mabo_revision_changes,
+        MaboRevisionProbeReceipt,
     },
     parse_mabo_identity_review_tsv,
 };
@@ -66,11 +68,66 @@ fn emit_terminal_receipt(
     Ok(())
 }
 
+#[derive(Debug, Clone)]
+struct SnapshotEmission {
+    path: Option<String>,
+    world_ref: Option<String>,
+    projection_digest: Option<String>,
+    blocker: Option<String>,
+}
+
+fn emit_query_world_snapshot(
+    output: Option<&Path>,
+    seed_ref: &str,
+    as_at: Option<&str>,
+    world: &LatentWorldRows,
+    baseline: &DiscoveryIdentityBaseline,
+    context_slice: &ContextRevisionWorldSlice,
+    probe: &MaboRevisionProbeReceipt,
+) -> Result<SnapshotEmission, Box<dyn std::error::Error>> {
+    let Some(as_at) = as_at else {
+        println!("query_world_snapshot_blocker=MissingAsAtCoordinate");
+        return Ok(SnapshotEmission {
+            path: None,
+            world_ref: None,
+            projection_digest: None,
+            blocker: Some("MissingAsAtCoordinate".into()),
+        });
+    };
+
+    let snapshot = compile_mabo_query_world_snapshot(
+        seed_ref,
+        as_at,
+        world,
+        baseline,
+        context_slice,
+        probe,
+    )?;
+    let compact = serde_json::to_string(&snapshot)?;
+    println!("query_world_snapshot_json={compact}");
+    if let Some(path) = output {
+        if let Some(parent) = path.parent() {
+            if !parent.as_os_str().is_empty() {
+                fs::create_dir_all(parent)?;
+            }
+        }
+        fs::write(path, serde_json::to_vec_pretty(&snapshot)?)?;
+        println!("query_world_snapshot_path={}", path.display());
+    }
+
+    Ok(SnapshotEmission {
+        path: output.map(|path| path.display().to_string()),
+        world_ref: Some(snapshot.world.world_ref.clone()),
+        projection_digest: Some(snapshot.projection.deterministic_digest.clone()),
+        blocker: None,
+    })
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = env::args().skip(1).collect::<Vec<_>>();
     if args.len() < 3 {
         return Err(
-            "usage: mabo_revision_reopen <seed_ref> <context_review.tsv> <identity_review.tsv> [max_sources] [pending_dir] [receipt.json]"
+            "usage: mabo_revision_reopen <seed_ref> <context_review.tsv> <identity_review.tsv> [max_sources] [pending_dir] [receipt.json] [as_at] [snapshot.json]"
                 .into(),
         );
     }
@@ -84,6 +141,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("artifacts/mabo/revision-reviews/pending"));
     let receipt_path = args.get(5).map(PathBuf::from);
+    let as_at = args
+        .get(6)
+        .cloned()
+        .or_else(|| env::var("SENSIBLAW_AS_AT").ok());
+    let snapshot_path = args
+        .get(7)
+        .map(PathBuf::from)
+        .or_else(|| {
+            as_at.as_ref().map(|_| {
+                receipt_path
+                    .as_ref()
+                    .and_then(|path| path.parent().map(Path::to_path_buf))
+                    .unwrap_or_else(|| pending_dir.clone())
+                    .join(format!("{seed_ref}__query-world-snapshot.json"))
+            })
+        });
 
     let config = load_database_config(None)?;
     let reviewed_rows = load_reviewed_context_source_revision_coordinates(&config)?;
@@ -131,6 +204,38 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .collect::<Vec<_>>();
 
     if probe.reopen_residuals.is_empty() {
+        let highest_reviewed = highest_reviewed_mabo_revisions(&reviewed_rows)?;
+        let context_slice = ContextRevisionWorldSlice {
+            wikidata_source_revisions: highest_reviewed
+                .iter()
+                .map(|coordinate| {
+                    (
+                        coordinate.source_ref.clone(),
+                        coordinate.reviewed_revision_ref.clone(),
+                    )
+                })
+                .collect::<BTreeMap<_, _>>(),
+        };
+        let world = load_latent_world_rows_with_context_revision_slice(
+            &config,
+            seed_ref,
+            LatentWorldBudget {
+                max_hops: 100,
+                max_nodes: 10_000,
+                max_edges: 50_000,
+            },
+            &context_slice,
+        )?;
+        let baseline = load_discovery_identity_baseline(&config)?;
+        let snapshot = emit_query_world_snapshot(
+            snapshot_path.as_deref(),
+            seed_ref,
+            as_at.as_deref(),
+            &world,
+            &baseline,
+            &context_slice,
+            &probe,
+        )?;
         let (stop, closure_reason, current_frontier_closed) =
             if !probe.blockers.is_empty() {
                 (
@@ -172,6 +277,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "revision_reopen_count": 0,
                 "reviewed_context_revisions_paid": 0,
                 "reviewed_identity_deltas_applied": 0,
+                "query_world_snapshot_path": snapshot.path,
+                "query_world_snapshot_world_ref": snapshot.world_ref,
+                "query_world_projection_digest": snapshot.projection_digest,
+                "query_world_snapshot_blocker": snapshot.blocker,
                 "candidate_only": true,
                 "creates_semantic_authority": false,
                 "applicability_promoted": false,
@@ -331,6 +440,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let reviewed_deltas_applied =
         apply_reviewed_mabo_sequence(&mut campaign, &identity_reviews)?;
     let receipt = mabo_generic_campaign_receipt(&campaign);
+    let mut effective_baseline = baseline.clone();
+    for (representation_ref, identity_class_ref) in
+        &campaign.state().world.reviewed_identity_classes
+    {
+        effective_baseline
+            .representation_identity_class_refs
+            .insert(representation_ref.clone(), identity_class_ref.clone());
+        effective_baseline
+            .identity_class_refs
+            .insert(identity_class_ref.clone());
+    }
+    let snapshot = emit_query_world_snapshot(
+        snapshot_path.as_deref(),
+        seed_ref,
+        as_at.as_deref(),
+        &world,
+        &effective_baseline,
+        &context_slice,
+        &probe,
+    )?;
     println!("reviewed_identity_deltas_applied={reviewed_deltas_applied}");
     println!("residuals_remaining={}", receipt.residuals_remaining);
     println!("reviewed_identity_count={}", receipt.reviewed_identity_count);
@@ -411,6 +540,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "next_representation_ref": next_representation_ref,
             "next_residual_ref": next_residual_ref,
             "pending_identity_review": pending_identity_review,
+            "query_world_snapshot_path": snapshot.path,
+            "query_world_snapshot_world_ref": snapshot.world_ref,
+            "query_world_projection_digest": snapshot.projection_digest,
+            "query_world_snapshot_blocker": snapshot.blocker,
             "probe_truncated": probe.probe_truncated,
             "probe_complete": probe.probe_complete,
             "unprobed_source_refs": probe.unprobed_source_refs,
