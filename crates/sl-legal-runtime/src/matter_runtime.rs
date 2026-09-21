@@ -168,7 +168,7 @@ impl WorldBoundMatterRuntime {
         command: MatterCommand,
     ) -> Result<MatterRuntimeReceipt, String> {
         if matches!(
-            command,
+            &command,
             MatterCommand::SetRange { .. } | MatterCommand::SetJurisdiction { .. }
         ) {
             return Err(
