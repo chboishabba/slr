@@ -635,6 +635,36 @@ pub fn compile_query_world_impact(
     })
 }
 
+
+pub fn invalidate_consumer_coverage_for_world_impact(
+    coverage: &ConsumerCoverage,
+    impact: &QueryWorldImpact,
+) -> ConsumerCoverage {
+    let mut next = coverage.clone();
+
+    if !impact
+        .revision_impact
+        .query_relevant_changed_source_refs
+        .is_empty()
+        || !impact
+            .revision_impact
+            .query_relevant_changed_revision_refs
+            .is_empty()
+    {
+        next.paid_axes.remove(&ConsumerAxis::SourceRevision);
+        next.paid_axes.remove(&ConsumerAxis::SourceSpan);
+        next.paid_axes.remove(&ConsumerAxis::Provenance);
+    }
+    if impact.temporal_relevant {
+        next.paid_axes.remove(&ConsumerAxis::Temporal);
+    }
+    if impact.jurisdiction_relevant {
+        next.paid_axes.remove(&ConsumerAxis::Jurisdiction);
+    }
+
+    next
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum QueryWorldResearchOutcome {
     NoWorldCoordinateChange {
@@ -668,10 +698,12 @@ pub fn compile_query_world_research(
     }
     let impact =
         compile_query_world_impact(old_world, new_world, dependencies, slice, graph)?;
+    let current_coverage =
+        invalidate_consumer_coverage_for_world_impact(coverage, &impact);
     let adequacy = compile_consumer_adequacy(
         demand,
         &impact.new_projection.graph,
-        coverage,
+        &current_coverage,
         operational_state,
         formal_adequacy,
         nonfactorability_witnesses,
@@ -1247,6 +1279,111 @@ mod tests {
         );
         assert!(relevant.jurisdiction_relevant);
         assert!(relevant.query_projection_digest_changed);
+    }
+
+
+    #[test]
+    fn paid_temporal_coordinate_becomes_stale_after_required_as_at_change() {
+        let old = world("world:old", "rev:a:1", "rev:b:1");
+        let mut new = old.clone();
+        new.world_ref = "world:new".into();
+        new.as_at = "2027-09-21".into();
+
+        let mut temporal_slice = slice();
+        temporal_slice.required_axes.insert(ConsumerAxis::Temporal);
+        let demand = ConsumerQueryDemand {
+            query_ref: "query:q".into(),
+            required_axes: temporal_slice.required_axes.clone(),
+            required_semantic_refs: BTreeSet::from(["prop:q".into()]),
+            candidate_only: true,
+            creates_semantic_authority: false,
+        };
+        let coverage = ConsumerCoverage {
+            paid_axes: BTreeSet::from([ConsumerAxis::Temporal]),
+            ..ConsumerCoverage::default()
+        };
+
+        let outcome = compile_query_world_research(
+            &old,
+            &new,
+            &dependencies(),
+            &temporal_slice,
+            &demand,
+            &graph(),
+            &coverage,
+            OperationalResearchState::CurrentFrontierClosed,
+            None,
+            &[],
+        )
+        .unwrap();
+        let QueryWorldResearchOutcome::WorldChangedConsumerResidual {
+            impact,
+            adequacy,
+        } = outcome
+        else {
+            panic!("required as-at change must reopen consumer research");
+        };
+        assert!(impact.temporal_relevant);
+        let ConsumerAdequacyCompilation::NeedsResearch(research) = adequacy else {
+            panic!("stale temporal payment must no longer satisfy the new world");
+        };
+        assert!(research
+            .runtime_receipt
+            .missing_axes
+            .contains(&ConsumerAxis::Temporal));
+        assert!(!research
+            .runtime_receipt
+            .paid_axes
+            .contains(&ConsumerAxis::Temporal));
+    }
+
+    #[test]
+    fn paid_source_coordinates_become_stale_after_relevant_revision_change() {
+        let old = world("world:old", "rev:a:1", "rev:b:1");
+        let new = world("world:new", "rev:a:2", "rev:b:1");
+        let impact =
+            compile_query_world_impact(&old, &new, &dependencies(), &slice(), &graph())
+                .unwrap();
+        let coverage = ConsumerCoverage {
+            paid_axes: BTreeSet::from([
+                ConsumerAxis::SourceRevision,
+                ConsumerAxis::SourceSpan,
+                ConsumerAxis::Provenance,
+            ]),
+            ..ConsumerCoverage::default()
+        };
+        let invalidated =
+            invalidate_consumer_coverage_for_world_impact(&coverage, &impact);
+        assert!(!invalidated
+            .paid_axes
+            .contains(&ConsumerAxis::SourceRevision));
+        assert!(!invalidated
+            .paid_axes
+            .contains(&ConsumerAxis::SourceSpan));
+        assert!(!invalidated
+            .paid_axes
+            .contains(&ConsumerAxis::Provenance));
+    }
+
+    #[test]
+    fn consumer_invariant_world_change_preserves_paid_coverage() {
+        let old = world("world:old", "rev:a:1", "rev:b:1");
+        let mut new = old.clone();
+        new.world_ref = "world:new".into();
+        new.as_at = "2027-09-21".into();
+        let impact =
+            compile_query_world_impact(&old, &new, &dependencies(), &slice(), &graph())
+                .unwrap();
+        let coverage = ConsumerCoverage {
+            paid_axes: BTreeSet::from([
+                ConsumerAxis::SourceRevision,
+                ConsumerAxis::Temporal,
+            ]),
+            ..ConsumerCoverage::default()
+        };
+        let preserved =
+            invalidate_consumer_coverage_for_world_impact(&coverage, &impact);
+        assert_eq!(preserved, coverage);
     }
 
 }
