@@ -14,7 +14,7 @@ use crate::{
     affected_proof_cone, compile_consumer_adequacy, diff_world_revisions,
     revision_rereview_plan, ConsumerAdequacyCompilation, ConsumerCoverage,
     ConsumerQueryDemand, KernelCheckedFactorsThroughWitness, LegalWorldCoordinate,
-    NonFactorabilityWitnessReceipt, OperationalResearchState, ProjectionGraph,
+    KernelCheckedNonFactorabilityWitness, OperationalResearchState, ProjectionGraph,
     RevisionDependencyIndex, RevisionInvalidationReceipt, RevisionReReviewPlan,
     AffectedProofCone,
 };
@@ -127,7 +127,7 @@ pub fn compile_revision_reopened_consumer_research(
     coverage: &ConsumerCoverage,
     operational_state: OperationalResearchState,
     formal_adequacy: Option<&KernelCheckedFactorsThroughWitness>,
-    nonfactorability_witnesses: &[NonFactorabilityWitnessReceipt],
+    nonfactorability_witnesses: &[KernelCheckedNonFactorabilityWitness],
 ) -> Result<RevisionReopenedConsumerResearch, String> {
     let invalidation = diff_world_revisions(old_world, new_world)?;
     let affected_proof_cone = affected_proof_cone(&invalidation, dependencies)?;
@@ -162,6 +162,7 @@ pub fn compile_revision_reopened_consumer_research(
 mod tests {
     use super::*;
     use crate::{
+        kernel_checked_nonfactorability_witness, AgdaNonFactorabilityTypecheckReceipt,
         ConsumerAdequacyCompilation, ConsumerAxis, ConsumerResearchDemandKind,
         NonFactorabilityWitnessReceipt, ProjectionKind, ProjectionNode,
     };
@@ -291,8 +292,8 @@ mod tests {
             shared_projection_ref: "projection:stale-source-erased".into(),
             left_answer_ref: "answer:old-source".into(),
             right_answer_ref: "answer:new-source".into(),
-            theorem_module_ref: "DASHI.Law.ClosedIsNotAdequateExact".into(),
-            theorem_ref: "revisionSourceDefect".into(),
+            theorem_module_ref: "DASHI.Law.RevisionInvalidatedProjectionAdequacyExact".into(),
+            theorem_ref: "staleProjectionDefect".into(),
             theorem_artifact_digest:
                 "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
                     .into(),
@@ -301,6 +302,18 @@ mod tests {
             creates_semantic_authority: false,
             creates_claim_truth: false,
         };
+        let checked_defect = kernel_checked_nonfactorability_witness(
+            &AgdaNonFactorabilityTypecheckReceipt {
+                schema_version: "sl.formal.agda_nonfactorability_typecheck.v0_1".into(),
+                verifier: "agda".into(),
+                command_ref:
+                    "agda -i . DASHI/Law/RevisionInvalidatedProjectionAdequacyExact.agda".into(),
+                exit_code: 0,
+                witness: defect,
+                query_adequacy_defect_claim: true,
+            },
+        )
+        .unwrap();
 
         let result = compile_revision_reopened_consumer_research(
             &old,
@@ -311,7 +324,7 @@ mod tests {
             &ConsumerCoverage::default(),
             OperationalResearchState::CurrentFrontierClosed,
             None,
-            &[defect],
+            &[checked_defect],
         )
         .unwrap();
         let ConsumerAdequacyCompilation::NeedsResearch(research) = result.adequacy else {
