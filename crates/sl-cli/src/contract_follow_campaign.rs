@@ -506,6 +506,47 @@ fn fresh_work(
         .collect()
 }
 
+fn work_item_paid_by_delta(
+    item: &ContractLandscapeWorkItem,
+    delta: &ContractLandscapeExpansionDelta,
+) -> bool {
+    match item.kind {
+        ContractLandscapeWorkKind::AcquirePrimarySource
+        | ContractLandscapeWorkKind::ExpandResearchContext
+        | ContractLandscapeWorkKind::RetainTemporalAlternative => delta
+            .discovered_nodes
+            .iter()
+            .any(|node| node.semantic_ref == item.semantic_ref),
+        ContractLandscapeWorkKind::ReviewAuthorityTreatment => {
+            let Some(related_ref) = item.related_ref.as_deref() else {
+                return false;
+            };
+            let Some(treatment) = item.treatment else {
+                return false;
+            };
+            delta.discovered_edges.iter().any(|edge| {
+                edge.from_ref == item.semantic_ref
+                    && edge.to_ref == related_ref
+                    && edge.treatment == treatment
+            })
+        }
+    }
+}
+
+fn work_refs_paid_by_delta(
+    work: &AustralianContractLandscapeWorklist,
+    delta: &ContractLandscapeExpansionDelta,
+) -> BTreeSet<String> {
+    work.source_items
+        .iter()
+        .chain(work.treatment_items.iter())
+        .chain(work.context_items.iter())
+        .chain(work.temporal_alternatives.iter())
+        .filter(|item| work_item_paid_by_delta(item, delta))
+        .map(|item| item.work_ref.clone())
+        .collect()
+}
+
 pub struct ContractFollowCampaign {
     config: CampaignConfig,
     trace: AustralianContractTrace,
@@ -592,7 +633,15 @@ impl ContractFollowCampaign {
         let (next, receipt) = apply_contract_landscape_expansion(&self.trace, &delta)?;
         self.trace = next;
         let work = self.recomputed_worklist()?;
-        let fresh = fresh_work(&work, &self.observed_work_refs);
+
+        // The delta being accepted is already reviewed work.  Do not feed the
+        // node/edge it just paid straight back into the fresh frontier as if it
+        // were a new acquisition/review demand.  Only consequences not paid by
+        // this delta may become fresh work.
+        let paid_by_delta = work_refs_paid_by_delta(&work, &delta);
+        let mut observed_for_fresh = self.observed_work_refs.clone();
+        observed_for_fresh.extend(paid_by_delta);
+        let fresh = fresh_work(&work, &observed_for_fresh);
         self.observed_work_refs.extend(work_refs(&work));
         self.hops.push(campaign_hop_receipt(
             self.accepted_hop_count() + 1,
@@ -709,12 +758,25 @@ impl ContractFollowCampaign {
             "trajectory": self.hops,
             "next_fresh_step": self.next_fresh_step(),
             "final_trace": snapshot_trace(&self.trace),
+            // Legacy field retained as total worklist inventory for schema
+            // compatibility.  Actionable frontier state is reported separately.
             "final_frontier_counts": {
                 "primary_source_acquisition": work.source_items.len(),
                 "authority_treatment_review": work.treatment_items.len(),
                 "context_expansion": work.context_items.len(),
                 "temporal_alternatives": work.temporal_alternatives.len(),
             },
+            "final_worklist_inventory_counts": {
+                "primary_source_acquisition": work.source_items.len(),
+                "authority_treatment_review": work.treatment_items.len(),
+                "context_expansion": work.context_items.len(),
+                "temporal_alternatives": work.temporal_alternatives.len(),
+            },
+            "final_fresh_frontier_count": self
+                .hops
+                .last()
+                .map(|hop| hop.fresh_frontier.len())
+                .unwrap_or(0),
             "candidate_only": true,
             "creates_legal_authority": false,
             "creates_current_law_conclusion": false,
@@ -1889,6 +1951,135 @@ mod tests {
             assert!(!routed.creates_legal_authority);
             assert!(!routed.creates_current_law_conclusion);
         }
+    }
+
+
+    #[test]
+    fn accepted_reviewed_treatment_edge_does_not_resurrect_as_fresh_review_work() {
+        let mut trace = waltons_estoppel_trace();
+        trace.nodes.insert(
+            "case:nsw:fixture".into(),
+            ContractTraceNode {
+                semantic_ref: "case:nsw:fixture".into(),
+                label: "Fixture appellate authority".into(),
+                kind: TraceNodeKind::CaseAuthority,
+                doctrine: Some(ContractDoctrine::Estoppel),
+                jurisdiction_ref: "AU-NSW".into(),
+                court_ref: Some("court:NSWCA".into()),
+                decision_or_effective_date: Some("2016-01-01".into()),
+                valid_from: None,
+                valid_to: None,
+                source_role: SourceRole::PrimaryCaseLaw,
+                authority_level: AuthorityLevel::Official,
+                source_citation: "[2016] NSWCA 999".into(),
+                candidate_only: true,
+                creates_legal_authority: false,
+            },
+        );
+        trace.nodes.insert(
+            "case:au:hca:fixture".into(),
+            ContractTraceNode {
+                semantic_ref: "case:au:hca:fixture".into(),
+                label: "Fixture HCA authority".into(),
+                kind: TraceNodeKind::CaseAuthority,
+                doctrine: Some(ContractDoctrine::Estoppel),
+                jurisdiction_ref: "AU".into(),
+                court_ref: Some("court:HCA".into()),
+                decision_or_effective_date: Some("1999-01-01".into()),
+                valid_from: None,
+                valid_to: None,
+                source_role: SourceRole::PrimaryCaseLaw,
+                authority_level: AuthorityLevel::Official,
+                source_citation: "[1999] HCA 999".into(),
+                candidate_only: true,
+                creates_legal_authority: false,
+            },
+        );
+
+        let mut campaign = ContractFollowCampaign::new(
+            CampaignConfig {
+                campaign_ref: "campaign:self-paid-treatment".into(),
+                as_at: "2026-09-20".into(),
+                jurisdiction_filter: None,
+                budget: CampaignBudget::default(),
+            },
+            trace,
+        )
+        .unwrap();
+
+        let delta = ContractLandscapeExpansionDelta {
+            discovered_nodes: Vec::new(),
+            discovered_edges: vec![ContractTraceEdge {
+                from_ref: "case:nsw:fixture".into(),
+                to_ref: "case:au:hca:fixture".into(),
+                treatment: TreatmentKind::Supports,
+                candidate_only: true,
+                creates_legal_authority: false,
+            }],
+            provenance_ref: "reviewed-treatment-bundle:fixture".into(),
+            candidate_only: true,
+            creates_legal_authority: false,
+        };
+
+        let hop = campaign
+            .accept_delta("reviewed-treatment-decisions:fixture", delta)
+            .unwrap();
+
+        assert_eq!(hop.added_edge_count, 1);
+        assert!(hop.fresh_frontier.iter().all(|item| {
+            !(item.class == CampaignFrontierClass::TreatmentReview
+                && item.semantic_ref == "case:nsw:fixture"
+                && item.related_ref.as_deref() == Some("case:au:hca:fixture"))
+        }));
+        assert_eq!(campaign.next_fresh_step().gate, CampaignOperatorGate::None);
+    }
+
+    #[test]
+    fn accepted_reviewed_identity_node_does_not_resurrect_as_source_acquisition() {
+        let trace = waltons_estoppel_trace();
+        let mut campaign = ContractFollowCampaign::new(
+            CampaignConfig {
+                campaign_ref: "campaign:self-paid-identity".into(),
+                as_at: "2026-09-20".into(),
+                jurisdiction_filter: None,
+                budget: CampaignBudget::default(),
+            },
+            trace,
+        )
+        .unwrap();
+
+        let delta = ContractLandscapeExpansionDelta {
+            discovered_nodes: vec![ContractTraceNode {
+                semantic_ref: "case:au:hca:2099:1".into(),
+                label: "Reviewed identity fixture".into(),
+                kind: TraceNodeKind::CaseAuthority,
+                doctrine: Some(ContractDoctrine::Estoppel),
+                jurisdiction_ref: "AU".into(),
+                court_ref: Some("court:HCA".into()),
+                decision_or_effective_date: Some("2099-01-01".into()),
+                valid_from: None,
+                valid_to: None,
+                source_role: SourceRole::PrimaryCaseLaw,
+                authority_level: AuthorityLevel::Official,
+                source_citation: "[2099] HCA 1".into(),
+                candidate_only: true,
+                creates_legal_authority: false,
+            }],
+            discovered_edges: Vec::new(),
+            provenance_ref: "reviewed-source-identity:fixture".into(),
+            candidate_only: true,
+            creates_legal_authority: false,
+        };
+
+        let hop = campaign
+            .accept_delta("reviewed-identity-decisions:fixture", delta)
+            .unwrap();
+
+        assert_eq!(hop.added_node_count, 1);
+        assert!(hop.fresh_frontier.iter().all(|item| {
+            !(item.class == CampaignFrontierClass::PrimarySource
+                && item.semantic_ref == "case:au:hca:2099:1")
+        }));
     }
 
 }
