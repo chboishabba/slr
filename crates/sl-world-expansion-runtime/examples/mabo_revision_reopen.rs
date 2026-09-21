@@ -3,12 +3,12 @@
 //! -> recompute identity frontier -> generic LegalFollow reviewed deltas.
 //!
 //! Usage:
-//!   cargo run -p sensiblaw-world-expansion-runtime --example mabo_revision_reopen -- //!     <seed_ref> <context_review.tsv> <identity_review.tsv> [max_sources] [pending_dir]
+//!   cargo run -p sensiblaw-world-expansion-runtime --example mabo_revision_reopen -- //!     <seed_ref> <context_review.tsv> <identity_review.tsv> [max_sources] [pending_dir] [receipt.json]
 //!
 //! Both review manifests may be empty files.  Missing review is an explicit
 //! stop and a pending review bundle is written; no decision is fabricated.
 
-use std::{env, fs, path::PathBuf};
+use std::{env, fs, path::{Path, PathBuf}};
 
 use sensiblaw_pg_source_store::{
     load_database_config, load_discovery_identity_baseline,
@@ -17,6 +17,7 @@ use sensiblaw_pg_source_store::{
     materialize_reviewed_context_expansion, LatentWorldBudget,
 };
 use sensiblaw_wikimedia_candidate_provider::fetch_entity_rdf_revision_receipt;
+use serde_json::{json, Value};
 use sensiblaw_world_expansion_runtime::{
     adaptive_campaign::parse_bounded_target_context,
     adaptive_context_review::{
@@ -38,11 +39,29 @@ fn parse_or<T: std::str::FromStr>(arg: Option<&String>, default: T) -> T {
     arg.and_then(|value| value.parse::<T>().ok()).unwrap_or(default)
 }
 
+fn emit_terminal_receipt(
+    output: Option<&Path>,
+    receipt: &Value,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let compact = serde_json::to_string(receipt)?;
+    println!("terminal_receipt_json={compact}");
+    if let Some(path) = output {
+        if let Some(parent) = path.parent() {
+            if !parent.as_os_str().is_empty() {
+                fs::create_dir_all(parent)?;
+            }
+        }
+        fs::write(path, serde_json::to_vec_pretty(receipt)?)?;
+        println!("terminal_receipt_path={}", path.display());
+    }
+    Ok(())
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = env::args().skip(1).collect::<Vec<_>>();
     if args.len() < 3 {
         return Err(
-            "usage: mabo_revision_reopen <seed_ref> <context_review.tsv> <identity_review.tsv> [max_sources] [pending_dir]"
+            "usage: mabo_revision_reopen <seed_ref> <context_review.tsv> <identity_review.tsv> [max_sources] [pending_dir] [receipt.json]"
                 .into(),
         );
     }
@@ -55,6 +74,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .get(4)
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("artifacts/mabo/revision-reviews/pending"));
+    let receipt_path = args.get(5).map(PathBuf::from);
 
     let config = load_database_config(None)?;
     let reviewed_rows = load_reviewed_context_source_revision_coordinates(&config)?;
@@ -75,8 +95,40 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("claim_truth_promoted={}", probe.claim_truth_promoted);
 
     let Some(reopened) = select_next_mabo_revision_reopen(&probe).cloned() else {
-        println!("stop=NoRevisionPerturbation");
+        let (stop, closure_reason, current_frontier_closed) = if probe.probe_truncated {
+            ("RevisionProbeBudgetExhausted", "UnprobedReviewedSourcesRemain", false)
+        } else {
+            (
+                "CurrentFrontierClosedWithoutAdequacy",
+                "NoRevisionPerturbation",
+                true,
+            )
+        };
+        println!("stop={stop}");
+        println!("closure_reason={closure_reason}");
         println!("consumer_adequate_inferred=false");
+        emit_terminal_receipt(
+            receipt_path.as_deref(),
+            &json!({
+                "schema_version": "sl.mabo_revision_reopen.v0_1",
+                "seed_ref": seed_ref,
+                "stop": stop,
+                "closure_reason": closure_reason,
+                "current_frontier_closed": current_frontier_closed,
+                "consumer_adequate_formally_proved": false,
+                "reviewed_source_count": probe.reviewed_source_count,
+                "probed_source_count": probe.probed_source_count,
+                "probe_truncated": probe.probe_truncated,
+                "unprobed_source_refs": probe.unprobed_source_refs,
+                "revision_reopen_count": 0,
+                "reviewed_context_delta_applied": false,
+                "reviewed_identity_deltas_applied": 0,
+                "candidate_only": true,
+                "creates_semantic_authority": false,
+                "applicability_promoted": false,
+                "claim_truth_promoted": false
+            }),
+        )?;
         return Ok(());
     };
 
@@ -125,6 +177,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("stop=ContextReviewRequired");
         println!("pending_context_review={}", pending_path.display());
         println!("consumer_adequate_inferred=false");
+        emit_terminal_receipt(
+            receipt_path.as_deref(),
+            &json!({
+                "schema_version": "sl.mabo_revision_reopen.v0_1",
+                "seed_ref": seed_ref,
+                "stop": "ContextReviewRequired",
+                "current_frontier_closed": false,
+                "consumer_adequate_formally_proved": false,
+                "selected_revision_residual": reopened.residual_ref,
+                "source_ref": reopened.source_ref,
+                "reviewed_revision_ref": reopened.reviewed_revision_ref,
+                "latest_revision_ref": reopened.latest_revision_ref,
+                "candidate_set_sha256": digest,
+                "pending_context_review": pending_path,
+                "reviewed_context_delta_applied": false,
+                "reviewed_identity_deltas_applied": 0,
+                "candidate_only": true,
+                "creates_semantic_authority": false,
+                "applicability_promoted": false,
+                "claim_truth_promoted": false
+            }),
+        )?;
         return Ok(());
     };
 
@@ -167,21 +241,62 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("applicability_promoted={}", receipt.applicability_promoted);
     println!("claim_truth_promoted={}", receipt.claim_truth_promoted);
 
-    match campaign.next_demand() {
-        Ok(next) => {
-            println!("stop=IdentityReviewRequired");
-            println!("next_representation_ref={}", next.representation_ref);
-            println!("next_residual_ref={}", next.residual_ref);
-            println!(
-                "identity_review_manifest_template={}	world-object:<reviewed-id>	review:<operator-ref>",
-                next.representation_ref
-            );
-        }
-        Err(stop) => {
-            println!("stop={stop:?}");
-        }
-    }
+    let (stop, current_frontier_closed, next_representation_ref, next_residual_ref) =
+        match campaign.next_demand() {
+            Ok(next) => {
+                println!("stop=IdentityReviewRequired");
+                println!("next_representation_ref={}", next.representation_ref);
+                println!("next_residual_ref={}", next.residual_ref);
+                println!(
+                    "identity_review_manifest_template={}\tworld-object:<reviewed-id>\treview:<operator-ref>",
+                    next.representation_ref
+                );
+                (
+                    "IdentityReviewRequired",
+                    false,
+                    Some(next.representation_ref),
+                    Some(next.residual_ref),
+                )
+            }
+            Err(sensiblaw_legal_runtime::GenericCampaignStop::NoFreshDemand) => {
+                println!("stop=CurrentFrontierClosedWithoutAdequacy");
+                (
+                    "CurrentFrontierClosedWithoutAdequacy",
+                    true,
+                    None,
+                    None,
+                )
+            }
+            Err(sensiblaw_legal_runtime::GenericCampaignStop::BudgetExhausted) => {
+                println!("stop=BudgetExhaustedWithoutAdequacy");
+                ("BudgetExhaustedWithoutAdequacy", false, None, None)
+            }
+        };
     println!("consumer_adequate_inferred=false");
+    emit_terminal_receipt(
+        receipt_path.as_deref(),
+        &json!({
+            "schema_version": "sl.mabo_revision_reopen.v0_1",
+            "seed_ref": seed_ref,
+            "stop": stop,
+            "current_frontier_closed": current_frontier_closed,
+            "consumer_adequate_formally_proved": false,
+            "selected_revision_residual": reopened.residual_ref,
+            "source_ref": reopened.source_ref,
+            "reviewed_revision_ref": reopened.reviewed_revision_ref,
+            "latest_revision_ref": reopened.latest_revision_ref,
+            "reviewed_context_delta_applied": true,
+            "context_review_ref": context_review.review_ref,
+            "reviewed_identity_deltas_applied": reviewed_deltas_applied,
+            "residuals_remaining": receipt.residuals_remaining,
+            "next_representation_ref": next_representation_ref,
+            "next_residual_ref": next_residual_ref,
+            "candidate_only": true,
+            "creates_semantic_authority": false,
+            "applicability_promoted": false,
+            "claim_truth_promoted": false
+        }),
+    )?;
 
     Ok(())
 }
