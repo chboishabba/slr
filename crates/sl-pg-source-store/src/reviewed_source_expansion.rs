@@ -361,6 +361,7 @@ pub fn load_reviewed_context_source_revision_coordinates(
              AND receipt.creates_semantic_authority = FALSE \
              AND receipt.applicability_promoted = FALSE \
              AND receipt.claim_truth_promoted = FALSE \
+             AND receipt.source_family_ref = 'wikidata' \
              AND relation.relation_type_ref LIKE 'context:wikidata:%' \
          ) AS reviewed_coordinates \
          ORDER BY source_ref, source_revision_ref, coordinate_ref",
