@@ -1817,6 +1817,7 @@ pub struct LegalRuntimeCapabilityReceipt {
     pub s15_admissible_research_frontier: bool,
     pub s15_stop_semantics: bool,
     pub s15_adequacy_witness_compiler: bool,
+    pub s16_source_realised_generic_legal_follow: bool,
     pub s18_first_class_legal_world: bool,
     pub s18_authority_validity: bool,
     pub s18_jurisdiction_scoped_coverage: bool,
@@ -2059,6 +2060,9 @@ pub fn compile_capability_receipt() -> Result<LegalRuntimeCapabilityReceipt, Leg
     generic_campaign_kernel_self_check()
         .map_err(LegalRuntimeError::Projection)?;
 
+    source_realised_legal_campaign_self_check()
+        .map_err(LegalRuntimeError::Projection)?;
+
     let research_flow = research_flow_sankey(&[
         ResearchFlowEvent {
             event_ref: "capability:frontier-to-demand".into(),
@@ -2103,6 +2107,7 @@ pub fn compile_capability_receipt() -> Result<LegalRuntimeCapabilityReceipt, Leg
             .chain(std::iter::once("S15:admissible-research-frontier"))
             .chain(std::iter::once("S15:stop-semantics"))
             .chain(std::iter::once("S15:adequacy-witness-compiler"))
+            .chain(std::iter::once("S16:source-realised-generic-legal-follow"))
             .chain(std::iter::once("S18:first-class-legal-world"))
             .chain(std::iter::once("S18:authority-validity"))
             .chain(std::iter::once("S18:jurisdiction-scoped-coverage"))
@@ -2136,6 +2141,7 @@ pub fn compile_capability_receipt() -> Result<LegalRuntimeCapabilityReceipt, Leg
         s15_admissible_research_frontier: true,
         s15_stop_semantics: true,
         s15_adequacy_witness_compiler: true,
+        s16_source_realised_generic_legal_follow: true,
         s18_first_class_legal_world: true,
         s18_authority_validity: true,
         s18_jurisdiction_scoped_coverage: true,
@@ -2719,6 +2725,7 @@ mod tests {
         assert!(receipt.s8_reader_command_weld);
         assert!(receipt.s8_unseen_contract_matter);
         assert!(receipt.s8_contract_follow_trace);
+        assert!(receipt.s16_source_realised_generic_legal_follow);
         assert!(receipt.candidate_only);
         assert!(!receipt.creates_semantic_authority);
         assert!(receipt.receipt_digest.starts_with("sha256:"));
