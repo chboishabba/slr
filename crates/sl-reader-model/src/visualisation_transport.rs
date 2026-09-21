@@ -4,6 +4,7 @@
 //! and rendering inputs only; their firewall flags make accidental authority
 //! promotion visible at every frontend boundary.
 
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 use crate::ReaderIntent;
 
@@ -34,7 +35,8 @@ impl ReaderPickIntent {
 }
 
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct VisualNodeIr {
     pub semantic_ref: String,
     pub semantic_kind: String,
@@ -43,38 +45,44 @@ pub struct VisualNodeIr {
     pub span_refs: Vec<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct VisualEdgeIr {
     pub from_ref: String,
     pub to_ref: String,
     pub relation: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct GraphIr {
     pub nodes: Vec<VisualNodeIr>,
     pub edges: Vec<VisualEdgeIr>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct TimelineEntryIr {
     pub semantic_ref: String,
     pub label: String,
     pub source_revision_refs: Vec<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct TimelineIr {
     pub entries: Vec<TimelineEntryIr>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct SankeyNodeIr {
     pub node_ref: String,
     pub label: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct SankeyLinkIr {
     pub from_ref: String,
     pub to_ref: String,
@@ -82,14 +90,16 @@ pub struct SankeyLinkIr {
     pub weight_semantics: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct SankeyIr {
     pub nodes: Vec<SankeyNodeIr>,
     pub links: Vec<SankeyLinkIr>,
     pub weights_are_legal_importance: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum ResearchFlowStage {
     FrontierResidual,
     SelectedDemand,
@@ -100,7 +110,8 @@ pub enum ResearchFlowStage {
     PreservedResidual,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct ResearchFlowEvent {
     pub event_ref: String,
     pub from_stage: ResearchFlowStage,
@@ -109,26 +120,30 @@ pub struct ResearchFlowEvent {
     pub candidate_only: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct ResearchFrontierIr {
     pub events: Vec<ResearchFlowEvent>,
     pub sankey: SankeyIr,
     pub creates_semantic_authority: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct ProofTopologyIr {
     pub nodes: Vec<VisualNodeIr>,
     pub dependency_edges: Vec<VisualEdgeIr>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct ComparativeIr {
     pub nodes: Vec<VisualNodeIr>,
     pub edges: Vec<VisualEdgeIr>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum VisualisationIr {
     Timeline(TimelineIr),
     Graph(GraphIr),
@@ -138,7 +153,8 @@ pub enum VisualisationIr {
     Comparative(ComparativeIr),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct VisualisationEnvelope {
     pub source_projection_digest: String,
     pub ir: VisualisationIr,
