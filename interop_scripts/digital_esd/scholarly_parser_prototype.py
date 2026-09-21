@@ -37,8 +37,12 @@ from typing import Any
 
 from interop_scripts.document_text import (
     DocumentTextMaterialisation,
+    DocumentTextMaterialisationError,
     materialise_document_text,
 )
+
+ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_PROTOTYPE = ROOT / "interop_scripts" / "digital_esd" / "scholarly_fulltext.prototype.json"
 
 
 STRUCTURE_PATTERNS = {
@@ -291,7 +295,23 @@ class ScholarlyParserPrototype:
                 })
                 continue
 
-            result = self.parse_file(artifact, req)
+            try:
+                result = self.parse_file(artifact, req)
+            except DocumentTextMaterialisationError as exc:
+                results.append({
+                    "request_reference": req.get("request_reference", ""),
+                    "source_identity_reference": req.get("source_identity_reference", ""),
+                    "source_revision_reference": req.get("source_revision_reference", ""),
+                    "content_sha256": req.get("content_sha256", ""),
+                    "artifact_path": str(artifact),
+                    "parser_success": False,
+                    "reason": "document-text-materialisation-failed",
+                    "failure_reference": str(exc),
+                    "candidate_only": True,
+                    "creates_study_truth": False,
+                    "creates_source_audit_admission": False,
+                })
+                continue
             results.append(result)
 
         output_path.parent.mkdir(parents=True, exist_ok=True)
