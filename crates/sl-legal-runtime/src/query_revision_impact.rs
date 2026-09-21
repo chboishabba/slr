@@ -666,18 +666,33 @@ pub fn invalidate_consumer_coverage_for_world_impact(
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct QueryWorldFormalWitnessDisposition {
+    pub new_projection_digest: String,
+    pub positive_witness_usable: bool,
+    pub positive_witness_stale: bool,
+    pub usable_nonfactorability_witness_count: usize,
+    pub stale_nonfactorability_witness_count: usize,
+    pub candidate_only: bool,
+    pub creates_semantic_authority: bool,
+    pub creates_claim_truth: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum QueryWorldResearchOutcome {
     NoWorldCoordinateChange {
         impact: QueryWorldImpact,
         adequacy: ConsumerAdequacyCompilation,
+        formal_witnesses: QueryWorldFormalWitnessDisposition,
     },
     WorldChangedConsumerInvariant {
         impact: QueryWorldImpact,
         adequacy: ConsumerAdequacyCompilation,
+        formal_witnesses: QueryWorldFormalWitnessDisposition,
     },
     WorldChangedConsumerResidual {
         impact: QueryWorldImpact,
         adequacy: ConsumerAdequacyCompilation,
+        formal_witnesses: QueryWorldFormalWitnessDisposition,
     },
 }
 
@@ -700,32 +715,70 @@ pub fn compile_query_world_research(
         compile_query_world_impact(old_world, new_world, dependencies, slice, graph)?;
     let current_coverage =
         invalidate_consumer_coverage_for_world_impact(coverage, &impact);
+
+    // Formal receipts are scoped to the exact query projection digest.  A
+    // world transition may make a previously valid receipt stale; staleness is
+    // an ordinary revision outcome, not a controller error.
+    let new_digest = impact.new_projection.graph.deterministic_digest.as_str();
+    let usable_positive = formal_adequacy.filter(|witness| {
+        let metadata = witness.metadata();
+        metadata.query_ref == demand.query_ref
+            && metadata.projection_digest == new_digest
+    });
+    let positive_witness_stale = formal_adequacy.is_some() && usable_positive.is_none();
+
+    let mut usable_negative = Vec::new();
+    let mut stale_negative_count = 0usize;
+    for witness in nonfactorability_witnesses {
+        let metadata = witness.metadata();
+        if metadata.query_ref == demand.query_ref
+            && metadata.projection_digest == new_digest
+        {
+            usable_negative.push(witness.clone());
+        } else {
+            stale_negative_count += 1;
+        }
+    }
+
     let adequacy = compile_consumer_adequacy(
         demand,
         &impact.new_projection.graph,
         &current_coverage,
         operational_state,
-        formal_adequacy,
-        nonfactorability_witnesses,
+        usable_positive,
+        &usable_negative,
     )?;
+    let formal_witnesses = QueryWorldFormalWitnessDisposition {
+        new_projection_digest: new_digest.to_owned(),
+        positive_witness_usable: usable_positive.is_some(),
+        positive_witness_stale,
+        usable_nonfactorability_witness_count: usable_negative.len(),
+        stale_nonfactorability_witness_count: stale_negative_count,
+        candidate_only: true,
+        creates_semantic_authority: false,
+        creates_claim_truth: false,
+    };
 
     match impact.kind {
         QueryWorldImpactKind::NoWorldCoordinateChange => {
             Ok(QueryWorldResearchOutcome::NoWorldCoordinateChange {
                 impact,
                 adequacy,
+                formal_witnesses,
             })
         }
         QueryWorldImpactKind::WorldChangedConsumerInvariant => {
             Ok(QueryWorldResearchOutcome::WorldChangedConsumerInvariant {
                 impact,
                 adequacy,
+                formal_witnesses,
             })
         }
         QueryWorldImpactKind::WorldChangedConsumerRelevant => {
             Ok(QueryWorldResearchOutcome::WorldChangedConsumerResidual {
                 impact,
                 adequacy,
+                formal_witnesses,
             })
         }
     }
@@ -1435,6 +1488,73 @@ mod tests {
         let preserved =
             invalidate_consumer_coverage_for_world_impact(&coverage, &impact);
         assert_eq!(preserved, coverage);
+    }
+
+
+    #[test]
+    fn old_positive_adequacy_witness_becomes_stale_not_fatal_after_world_change() {
+        use crate::{
+            kernel_checked_factors_through_witness,
+            AgdaFactorsThroughTypecheckReceipt,
+        };
+
+        let old = world("world:old", "rev:a:1", "rev:b:1");
+        let new = world("world:new", "rev:a:2", "rev:b:1");
+        let demand = ConsumerQueryDemand {
+            query_ref: "query:q".into(),
+            required_axes: slice().required_axes.clone(),
+            required_semantic_refs: BTreeSet::from(["prop:q".into()]),
+            candidate_only: true,
+            creates_semantic_authority: false,
+        };
+
+        let old_projection =
+            compile_query_scoped_projection(&graph(), &slice()).unwrap();
+        let old_checked = kernel_checked_factors_through_witness(
+            &AgdaFactorsThroughTypecheckReceipt {
+                schema_version: "sl.formal.agda_factors_through_typecheck.v0_1".into(),
+                verifier: "agda".into(),
+                command_ref: "agda -i . DASHI/Law/Fixture.agda".into(),
+                exit_code: 0,
+                query_ref: "query:q".into(),
+                projection_digest: old_projection.graph.deterministic_digest.clone(),
+                theorem_module_ref: "DASHI.Law.Fixture".into(),
+                theorem_ref: "queryAdequate".into(),
+                theorem_artifact_digest:
+                    "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+                        .into(),
+                exact_query_indexed: true,
+                factors_through_claim: true,
+                candidate_only: true,
+                creates_semantic_authority: false,
+                creates_claim_truth: false,
+            },
+        )
+        .unwrap();
+
+        let outcome = compile_query_world_research(
+            &old,
+            &new,
+            &dependencies(),
+            &slice(),
+            &demand,
+            &graph(),
+            &ConsumerCoverage::default(),
+            OperationalResearchState::CurrentFrontierClosed,
+            Some(&old_checked),
+            &[],
+        )
+        .unwrap();
+
+        let QueryWorldResearchOutcome::WorldChangedConsumerResidual {
+            formal_witnesses,
+            ..
+        } = outcome
+        else {
+            panic!("relevant revision change must reopen");
+        };
+        assert!(formal_witnesses.positive_witness_stale);
+        assert!(!formal_witnesses.positive_witness_usable);
     }
 
 }
