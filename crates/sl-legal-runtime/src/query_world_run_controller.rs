@@ -255,6 +255,186 @@ pub fn decide_query_world_run(
 }
 
 
+
+pub fn query_world_run_controller_self_check() -> Result<(), String> {
+    use crate::{
+        kernel_checked_factors_through_witness, AgdaFactorsThroughTypecheckReceipt,
+        ConsumerAxis, ProjectionKind, ProjectionNode,
+    };
+    use std::collections::{BTreeMap, BTreeSet};
+
+    let world = |world_ref: &str, a_revision: &str, b_revision: &str| {
+        LegalWorldCoordinate {
+            world_ref: world_ref.into(),
+            matter_ref: "matter:query-world-controller-self-check".into(),
+            jurisdiction_ref: "AU".into(),
+            as_at: "2026-09-21".into(),
+            source_revisions: BTreeMap::from([
+                ("source:a".into(), a_revision.into()),
+                ("source:b".into(), b_revision.into()),
+            ]),
+            candidate_only: true,
+            creates_semantic_authority: false,
+            creates_claim_truth: false,
+        }
+    };
+    let graph = ProjectionGraph {
+        kind: ProjectionKind::IssueProof,
+        nodes: vec![
+            ProjectionNode {
+                semantic_ref: "prop:q".into(),
+                semantic_kind: "Proposition".into(),
+                manifestation_refs: vec!["manifestation:q".into()],
+                source_revision_refs: vec!["rev:a:1".into()],
+                span_refs: vec!["span:q".into()],
+                projection_role: "IssueProof".into(),
+            },
+            ProjectionNode {
+                semantic_ref: "prop:other".into(),
+                semantic_kind: "Proposition".into(),
+                manifestation_refs: vec!["manifestation:other".into()],
+                source_revision_refs: vec!["rev:b:1".into()],
+                span_refs: vec!["span:other".into()],
+                projection_role: "IssueProof".into(),
+            },
+        ],
+        edges: Vec::new(),
+        deterministic_digest: "sha256:query-world-controller-self-check".into(),
+        projection_only: true,
+        creates_semantic_authority: false,
+    };
+    let dependencies = RevisionDependencyIndex {
+        source_to_propositions: BTreeMap::from([
+            ("source:a".into(), BTreeSet::from(["prop:q".into()])),
+            ("source:b".into(), BTreeSet::from(["prop:other".into()])),
+        ]),
+        proposition_dependents: BTreeMap::new(),
+    };
+    let axes = BTreeSet::from([
+        ConsumerAxis::SemanticIdentity,
+        ConsumerAxis::SourceRevision,
+        ConsumerAxis::SourceSpan,
+        ConsumerAxis::Provenance,
+    ]);
+    let slice = QueryDependencySlice {
+        query_ref: "query:q".into(),
+        required_axes: axes.clone(),
+        semantic_refs: BTreeSet::from(["prop:q".into()]),
+        proof_refs: BTreeSet::new(),
+        source_refs: BTreeSet::from(["source:a".into()]),
+        source_revision_refs: BTreeSet::from(["rev:a:1".into()]),
+        candidate_only: true,
+        creates_semantic_authority: false,
+        creates_claim_truth: false,
+    };
+    let demand = ConsumerQueryDemand {
+        query_ref: "query:q".into(),
+        required_axes: axes.clone(),
+        required_semantic_refs: BTreeSet::from(["prop:q".into()]),
+        candidate_only: true,
+        creates_semantic_authority: false,
+    };
+    let coverage = ConsumerCoverage {
+        paid_axes: axes,
+        ..ConsumerCoverage::default()
+    };
+
+    let old = world("world:old", "rev:a:1", "rev:b:1");
+
+    let irrelevant = world("world:irrelevant", "rev:a:1", "rev:b:2");
+    let invariant = decide_query_world_run(
+        &old,
+        &irrelevant,
+        &dependencies,
+        &slice,
+        &demand,
+        &graph,
+        &coverage,
+        OperationalResearchState::CurrentFrontierClosed,
+        None,
+        &[],
+    )?;
+    if invariant.kind
+        != QueryWorldRunDecisionKind::PreserveOperationalClosureByInvariance
+        || !invariant.operational_frontier_closed
+        || !invariant.run_may_stop
+        || invariant.consumer_adequate_formally_proved
+    {
+        return Err("query-world controller self-check failed invariant closure path".into());
+    }
+
+    let relevant = world("world:relevant", "rev:a:2", "rev:b:1");
+    let reopened = decide_query_world_run(
+        &old,
+        &relevant,
+        &dependencies,
+        &slice,
+        &demand,
+        &graph,
+        &coverage,
+        OperationalResearchState::CurrentFrontierClosed,
+        None,
+        &[],
+    )?;
+    if reopened.kind != QueryWorldRunDecisionKind::ReopenExactResearch
+        || reopened.operational_frontier_closed
+        || reopened.run_may_stop
+        || reopened.consumer_adequate_formally_proved
+    {
+        return Err("query-world controller self-check failed relevant reopening path".into());
+    }
+
+    let same_impact = crate::compile_query_world_impact(
+        &old,
+        &old,
+        &dependencies,
+        &slice,
+        &graph,
+    )?;
+    let digest = same_impact.new_projection.graph.deterministic_digest.clone();
+    let witness = kernel_checked_factors_through_witness(
+        &AgdaFactorsThroughTypecheckReceipt {
+            schema_version: "sl.formal.agda_factors_through_typecheck.v0_1".into(),
+            verifier: "agda".into(),
+            command_ref:
+                "agda -i . DASHI/Law/QueryWorldAutonomousRunControllerExact.agda".into(),
+            exit_code: 0,
+            query_ref: "query:q".into(),
+            projection_digest: digest,
+            theorem_module_ref: "DASHI.Law.QueryWorldAutonomousRunControllerExact".into(),
+            theorem_ref: "freshFactorsThroughMayCertifyCurrentWorld".into(),
+            theorem_artifact_digest:
+                "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+                    .into(),
+            exact_query_indexed: true,
+            factors_through_claim: true,
+            candidate_only: true,
+            creates_semantic_authority: false,
+            creates_claim_truth: false,
+        },
+    )?;
+    let adequate = decide_query_world_run(
+        &old,
+        &old,
+        &dependencies,
+        &slice,
+        &demand,
+        &graph,
+        &coverage,
+        OperationalResearchState::CurrentFrontierClosed,
+        Some(&witness),
+        &[],
+    )?;
+    if adequate.kind != QueryWorldRunDecisionKind::ConsumerAdequate
+        || !adequate.run_may_stop
+        || !adequate.consumer_adequate_formally_proved
+    {
+        return Err("query-world controller self-check failed theorem adequacy path".into());
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
