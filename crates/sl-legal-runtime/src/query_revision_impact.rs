@@ -478,6 +478,227 @@ pub fn compile_query_revision_research(
     }
 }
 
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct QueryScopedWorldProjection {
+    pub query_ref: String,
+    pub graph: ProjectionGraph,
+    pub includes_temporal_coordinate: bool,
+    pub includes_jurisdiction_coordinate: bool,
+    pub as_at: Option<String>,
+    pub jurisdiction_ref: Option<String>,
+    pub candidate_only: bool,
+    pub creates_semantic_authority: bool,
+    pub creates_claim_truth: bool,
+}
+
+pub fn bind_query_projection_to_world(
+    projection: &QueryScopedProjection,
+    slice: &QueryDependencySlice,
+    world: &LegalWorldCoordinate,
+) -> Result<QueryScopedWorldProjection, String> {
+    slice.validate()?;
+    world.validate()?;
+    if projection.query_ref != slice.query_ref {
+        return Err("query-scoped projection does not match dependency slice".into());
+    }
+
+    let includes_temporal_coordinate =
+        slice.required_axes.contains(&ConsumerAxis::Temporal);
+    let includes_jurisdiction_coordinate =
+        slice.required_axes.contains(&ConsumerAxis::Jurisdiction);
+
+    let mut parts = vec![
+        "query-scoped-world-projection:v1".to_owned(),
+        projection.graph.deterministic_digest.clone(),
+        slice.query_ref.clone(),
+    ];
+    if includes_temporal_coordinate {
+        parts.push(format!("as-at:{}", world.as_at));
+    }
+    if includes_jurisdiction_coordinate {
+        parts.push(format!("jurisdiction:{}", world.jurisdiction_ref));
+    }
+
+    let mut graph = projection.graph.clone();
+    graph.deterministic_digest = digest_parts(&parts);
+
+    Ok(QueryScopedWorldProjection {
+        query_ref: slice.query_ref.clone(),
+        graph,
+        includes_temporal_coordinate,
+        includes_jurisdiction_coordinate,
+        as_at: includes_temporal_coordinate.then(|| world.as_at.clone()),
+        jurisdiction_ref: includes_jurisdiction_coordinate
+            .then(|| world.jurisdiction_ref.clone()),
+        candidate_only: true,
+        creates_semantic_authority: false,
+        creates_claim_truth: false,
+    })
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum QueryWorldImpactKind {
+    NoWorldCoordinateChange,
+    WorldChangedConsumerInvariant,
+    WorldChangedConsumerRelevant,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct QueryWorldImpact {
+    pub query_ref: String,
+    pub kind: QueryWorldImpactKind,
+    pub revision_impact: QueryRevisionImpact,
+    pub old_projection: QueryScopedWorldProjection,
+    pub new_projection: QueryScopedWorldProjection,
+    pub temporal_changed: bool,
+    pub temporal_relevant: bool,
+    pub jurisdiction_changed: bool,
+    pub jurisdiction_relevant: bool,
+    pub query_projection_digest_changed: bool,
+    pub reopens_consumer_research: bool,
+    pub candidate_only: bool,
+    pub creates_semantic_authority: bool,
+    pub creates_claim_truth: bool,
+}
+
+pub fn compile_query_world_impact(
+    old_world: &LegalWorldCoordinate,
+    new_world: &LegalWorldCoordinate,
+    dependencies: &RevisionDependencyIndex,
+    slice: &QueryDependencySlice,
+    graph: &ProjectionGraph,
+) -> Result<QueryWorldImpact, String> {
+    if old_world.matter_ref != new_world.matter_ref {
+        return Err("query world impact requires the same matter_ref".into());
+    }
+    let revision_impact =
+        compile_query_revision_impact(old_world, new_world, dependencies, slice, graph)?;
+
+    let old_projection =
+        bind_query_projection_to_world(&revision_impact.old_projection, slice, old_world)?;
+    let new_projection =
+        bind_query_projection_to_world(&revision_impact.new_projection, slice, new_world)?;
+
+    let temporal_changed = old_world.as_at != new_world.as_at;
+    let temporal_relevant =
+        temporal_changed && slice.required_axes.contains(&ConsumerAxis::Temporal);
+    let jurisdiction_changed =
+        old_world.jurisdiction_ref != new_world.jurisdiction_ref;
+    let jurisdiction_relevant = jurisdiction_changed
+        && slice.required_axes.contains(&ConsumerAxis::Jurisdiction);
+
+    let any_world_change = !revision_impact.invalidation.changes.is_empty()
+        || temporal_changed
+        || jurisdiction_changed;
+    let consumer_relevant = revision_impact.reopens_consumer_research
+        || temporal_relevant
+        || jurisdiction_relevant;
+    let digest_changed =
+        old_projection.graph.deterministic_digest != new_projection.graph.deterministic_digest;
+
+    let kind = if !any_world_change {
+        QueryWorldImpactKind::NoWorldCoordinateChange
+    } else if consumer_relevant {
+        QueryWorldImpactKind::WorldChangedConsumerRelevant
+    } else {
+        QueryWorldImpactKind::WorldChangedConsumerInvariant
+    };
+
+    if kind == QueryWorldImpactKind::WorldChangedConsumerInvariant && digest_changed {
+        return Err(
+            "consumer-invariant world coordinate change unexpectedly changed query digest"
+                .into(),
+        );
+    }
+    if (temporal_relevant || jurisdiction_relevant) && !digest_changed {
+        return Err(
+            "consumer-required world coordinate changed without changing query digest".into(),
+        );
+    }
+
+    Ok(QueryWorldImpact {
+        query_ref: slice.query_ref.clone(),
+        kind,
+        revision_impact,
+        old_projection,
+        new_projection,
+        temporal_changed,
+        temporal_relevant,
+        jurisdiction_changed,
+        jurisdiction_relevant,
+        query_projection_digest_changed: digest_changed,
+        reopens_consumer_research: consumer_relevant,
+        candidate_only: true,
+        creates_semantic_authority: false,
+        creates_claim_truth: false,
+    })
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum QueryWorldResearchOutcome {
+    NoWorldCoordinateChange {
+        impact: QueryWorldImpact,
+        adequacy: ConsumerAdequacyCompilation,
+    },
+    WorldChangedConsumerInvariant {
+        impact: QueryWorldImpact,
+        adequacy: ConsumerAdequacyCompilation,
+    },
+    WorldChangedConsumerResidual {
+        impact: QueryWorldImpact,
+        adequacy: ConsumerAdequacyCompilation,
+    },
+}
+
+pub fn compile_query_world_research(
+    old_world: &LegalWorldCoordinate,
+    new_world: &LegalWorldCoordinate,
+    dependencies: &RevisionDependencyIndex,
+    slice: &QueryDependencySlice,
+    demand: &ConsumerQueryDemand,
+    graph: &ProjectionGraph,
+    coverage: &ConsumerCoverage,
+    operational_state: OperationalResearchState,
+    formal_adequacy: Option<&KernelCheckedFactorsThroughWitness>,
+    nonfactorability_witnesses: &[KernelCheckedNonFactorabilityWitness],
+) -> Result<QueryWorldResearchOutcome, String> {
+    if slice.query_ref != demand.query_ref {
+        return Err("query dependency slice does not match consumer demand query_ref".into());
+    }
+    let impact =
+        compile_query_world_impact(old_world, new_world, dependencies, slice, graph)?;
+    let adequacy = compile_consumer_adequacy(
+        demand,
+        &impact.new_projection.graph,
+        coverage,
+        operational_state,
+        formal_adequacy,
+        nonfactorability_witnesses,
+    )?;
+
+    match impact.kind {
+        QueryWorldImpactKind::NoWorldCoordinateChange => {
+            Ok(QueryWorldResearchOutcome::NoWorldCoordinateChange {
+                impact,
+                adequacy,
+            })
+        }
+        QueryWorldImpactKind::WorldChangedConsumerInvariant => {
+            Ok(QueryWorldResearchOutcome::WorldChangedConsumerInvariant {
+                impact,
+                adequacy,
+            })
+        }
+        QueryWorldImpactKind::WorldChangedConsumerRelevant => {
+            Ok(QueryWorldResearchOutcome::WorldChangedConsumerResidual {
+                impact,
+                adequacy,
+            })
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -794,6 +1015,90 @@ mod tests {
         );
         assert!(compiled.source_refs.is_empty());
         assert!(!compiled.creates_semantic_authority);
+    }
+
+
+    #[test]
+    fn as_at_change_is_invariant_when_query_does_not_require_temporal_axis() {
+        let old = world("world:old", "rev:a:1", "rev:b:1");
+        let mut new = old.clone();
+        new.world_ref = "world:new".into();
+        new.as_at = "2027-09-21".into();
+
+        let impact =
+            compile_query_world_impact(&old, &new, &dependencies(), &slice(), &graph())
+                .unwrap();
+        assert_eq!(
+            impact.kind,
+            QueryWorldImpactKind::WorldChangedConsumerInvariant
+        );
+        assert!(impact.temporal_changed);
+        assert!(!impact.temporal_relevant);
+        assert!(!impact.query_projection_digest_changed);
+        assert!(!impact.reopens_consumer_research);
+    }
+
+    #[test]
+    fn as_at_change_changes_digest_when_temporal_axis_is_required() {
+        let old = world("world:old", "rev:a:1", "rev:b:1");
+        let mut new = old.clone();
+        new.world_ref = "world:new".into();
+        new.as_at = "2027-09-21".into();
+        let mut temporal_slice = slice();
+        temporal_slice.required_axes.insert(ConsumerAxis::Temporal);
+
+        let impact = compile_query_world_impact(
+            &old,
+            &new,
+            &dependencies(),
+            &temporal_slice,
+            &graph(),
+        )
+        .unwrap();
+        assert_eq!(
+            impact.kind,
+            QueryWorldImpactKind::WorldChangedConsumerRelevant
+        );
+        assert!(impact.temporal_changed);
+        assert!(impact.temporal_relevant);
+        assert!(impact.query_projection_digest_changed);
+        assert!(impact.reopens_consumer_research);
+    }
+
+    #[test]
+    fn jurisdiction_change_is_invariant_unless_query_requires_jurisdiction() {
+        let old = world("world:old", "rev:a:1", "rev:b:1");
+        let mut new = old.clone();
+        new.world_ref = "world:new".into();
+        new.jurisdiction_ref = "AU-NSW".into();
+
+        let invariant =
+            compile_query_world_impact(&old, &new, &dependencies(), &slice(), &graph())
+                .unwrap();
+        assert_eq!(
+            invariant.kind,
+            QueryWorldImpactKind::WorldChangedConsumerInvariant
+        );
+        assert!(!invariant.query_projection_digest_changed);
+
+        let mut jurisdiction_slice = slice();
+        jurisdiction_slice
+            .required_axes
+            .insert(ConsumerAxis::Jurisdiction);
+        let relevant = compile_query_world_impact(
+            &old,
+            &new,
+            &dependencies(),
+            &jurisdiction_slice,
+            &graph(),
+        )
+        .unwrap();
+        assert_eq!(
+            relevant.kind,
+            QueryWorldImpactKind::WorldChangedConsumerRelevant
+        );
+        assert!(relevant.jurisdiction_relevant);
+        assert!(relevant.query_projection_digest_changed);
     }
 
 }
