@@ -18,6 +18,8 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
+use crate::{TypedRerunGap, TypedRerunGapKind};
+
 pub const MUNKARA_CONSUMER: &str = "consumer:munkara-tipakalippa";
 pub const SEA_COUNTRY_CONTEXT_COORDINATE: &str =
     "coordinate:context:tiwi-sea-country-traditional-connection";
@@ -143,6 +145,21 @@ pub fn munkara_wrong_type_receipt() -> NonCollapseDecision {
     )
 }
 
+pub fn munkara_wrong_type_gap() -> TypedRerunGap {
+    let decision = munkara_wrong_type_receipt();
+    TypedRerunGap {
+        gap_ref: "gap:munkara:sea-country-context-wrongtype-for-reg17-6".into(),
+        kind: TypedRerunGapKind::WrongType,
+        coordinate_ref: decision.offered_coordinate_ref,
+        proposition_ref:
+            "proposition:munkara:reg17-6-requires-exact-new-significant-impact-or-risk-payment"
+                .into(),
+        source_refs: decision.source_refs,
+        candidate_only: true,
+        creates_claim_truth: false,
+    }
+}
+
 pub fn tipakalippa_rule_wrong_type_for_munkara_reg17_6() -> NonCollapseDecision {
     decide_noncollapse(
         TIPAKALIPPA_RELEVANT_PERSON_COORDINATE,
@@ -176,6 +193,10 @@ mod tests {
         assert_eq!(receipt.disposition, NonCollapseDisposition::WrongType);
         assert_eq!(receipt.required_coordinate_ref, MUNKARA_REG17_6_COORDINATE);
         assert!(!receipt.creates_claim_truth);
+        let gap = munkara_wrong_type_gap();
+        assert_eq!(gap.kind, TypedRerunGapKind::WrongType);
+        assert_eq!(gap.coordinate_ref, SEA_COUNTRY_CONTEXT_COORDINATE);
+        assert!(!gap.creates_claim_truth);
     }
 
     #[test]
