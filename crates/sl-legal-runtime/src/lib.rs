@@ -2807,6 +2807,8 @@ pub mod shared_world;
 pub use shared_world::*;
 pub mod adversarial_proof_search;
 pub use adversarial_proof_search::*;
+pub mod reviewed_treatment_compiler;
+pub use reviewed_treatment_compiler::*;
 pub mod legal_case_battery;
 pub use legal_case_battery::*;
 pub mod legal_case_battery_plan;
