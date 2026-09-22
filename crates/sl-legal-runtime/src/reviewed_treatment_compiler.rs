@@ -87,6 +87,23 @@ pub struct TypedRerunGap {
     pub creates_claim_truth: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RerunStateSummary {
+    pub paid_atom_refs: BTreeSet<String>,
+    pub defeated_route_refs: BTreeSet<String>,
+    pub contested_coordinate_refs: BTreeSet<String>,
+    pub wrong_type_gap_refs: BTreeSet<String>,
+    pub authority_gap_refs: BTreeSet<String>,
+    pub fact_gap_refs: BTreeSet<String>,
+    pub applicability_gap_refs: BTreeSet<String>,
+    /// Exact live blocker set that must all be neutralised before this route
+    /// can reopen under the current graph.  This is not advertised as the
+    /// separate finite-graph inclusion-minimal-cut theorem.
+    pub remaining_reopening_cut_refs: BTreeSet<String>,
+    pub candidate_only: bool,
+    pub creates_claim_truth: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AdversarialRerunReceipt {
     pub consumer_ref: String,
@@ -96,6 +113,7 @@ pub struct AdversarialRerunReceipt {
     pub active_defeater_refs: BTreeSet<String>,
     pub counter_defeater_refs: BTreeSet<String>,
     pub typed_gaps: Vec<TypedRerunGap>,
+    pub summary: RerunStateSummary,
     pub next_demands: Vec<AdversarialSearchDemand>,
     pub route_status: CandidateRouteStatus,
     pub candidate_only: bool,
@@ -323,6 +341,32 @@ pub fn compile_reviewed_treatment_rerun(
     let active_defeater_refs = route.active_defeater_refs.clone();
     let counter_defeater_refs = route.counter_defeater_refs.clone();
     let route_status = route.status;
+    let defeated_route_refs = if route_status == CandidateRouteStatus::Defeated {
+        BTreeSet::from([route_ref.to_owned()])
+    } else {
+        BTreeSet::new()
+    };
+    let contested_coordinate_refs = active
+        .iter()
+        .map(|(treatment, _)| treatment.coordinate_ref.clone())
+        .collect::<BTreeSet<_>>();
+    let applicability_gap_refs = typed_gaps
+        .iter()
+        .filter(|gap| gap.kind == TypedRerunGapKind::Applicability)
+        .map(|gap| gap.gap_ref.clone())
+        .collect::<BTreeSet<_>>();
+    let summary = RerunStateSummary {
+        paid_atom_refs: support_atom_refs.clone(),
+        defeated_route_refs,
+        contested_coordinate_refs,
+        wrong_type_gap_refs: BTreeSet::new(),
+        authority_gap_refs: BTreeSet::new(),
+        fact_gap_refs: BTreeSet::new(),
+        applicability_gap_refs,
+        remaining_reopening_cut_refs: active_defeater_refs.clone(),
+        candidate_only: true,
+        creates_claim_truth: false,
+    };
 
     Ok(AdversarialRerunReceipt {
         consumer_ref: consumer_ref.into(),
@@ -332,6 +376,7 @@ pub fn compile_reviewed_treatment_rerun(
         active_defeater_refs,
         counter_defeater_refs,
         typed_gaps,
+        summary,
         next_demands,
         route_status,
         candidate_only: true,
