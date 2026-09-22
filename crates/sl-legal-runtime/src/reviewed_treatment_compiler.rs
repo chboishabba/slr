@@ -320,17 +320,20 @@ pub fn compile_reviewed_treatment_rerun(
 
     let frontier = gap_frontier(consumer_ref, route_ref, &active);
     let next_demands = compile_frontier_adversarial_search(&frontier, &graph);
+    let active_defeater_refs = route.active_defeater_refs.clone();
+    let counter_defeater_refs = route.counter_defeater_refs.clone();
+    let route_status = route.status;
 
     Ok(AdversarialRerunReceipt {
         consumer_ref: consumer_ref.into(),
         route_ref: route_ref.into(),
         graph,
         paid_atom_refs: support_atom_refs,
-        active_defeater_refs: route.active_defeater_refs.clone(),
-        counter_defeater_refs: route.counter_defeater_refs.clone(),
+        active_defeater_refs,
+        counter_defeater_refs,
         typed_gaps,
         next_demands,
-        route_status: route.status,
+        route_status,
         candidate_only: true,
         creates_semantic_authority: false,
         creates_claim_truth: false,
