@@ -312,23 +312,17 @@ pub fn quotient_frontier_against_shared_world(
     let mut remaining = BTreeSet::new();
 
     for residual in frontier.open_residuals() {
-        let matching_coordinates = residual
-            .dependency_refs
-            .iter()
-            .filter(|coordinate_ref| slice.mentions(coordinate_ref))
-            .collect::<Vec<_>>();
-
-        let paid = !matching_coordinates.is_empty()
-            && matching_coordinates.iter().all(|coordinate_ref| {
-                world.coordinate_paid_for_consumer(&frontier.consumer_ref, coordinate_ref)
+        let paid = !residual.dependency_refs.is_empty()
+            && residual.dependency_refs.iter().all(|coordinate_ref| {
+                slice.requires(coordinate_ref)
+                    && world.coordinate_paid_for_consumer(
+                        &frontier.consumer_ref,
+                        coordinate_ref,
+                    )
             });
 
         if paid {
-            reused.extend(
-                matching_coordinates
-                    .into_iter()
-                    .cloned(),
-            );
+            reused.extend(residual.dependency_refs.iter().cloned());
         } else {
             remaining.insert(residual.residual_ref.clone());
         }
