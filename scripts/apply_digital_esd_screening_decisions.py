@@ -66,6 +66,19 @@ def write_tsv(path: Path, rows: list[dict[str, Any]]) -> None:
         writer.writerows(rows)
 
 
+def overlay_reason_code(decision: dict[str, Any], ref: str) -> str:
+    """Accept the established singular or one-code plural review surface."""
+    reason = str(decision.get("reason_code") or "").strip()
+    if reason:
+        return reason
+    codes = decision.get("reason_codes")
+    if isinstance(codes, list):
+        normalized = [str(code).strip() for code in codes if str(code).strip()]
+        if len(normalized) == 1:
+            return normalized[0]
+    raise ValueError(f"{ref}: reason_code required")
+
+
 def apply_decisions(
     ledger_rows: list[dict[str, str]],
     decision_rows: list[dict[str, Any]],
@@ -101,14 +114,13 @@ def apply_decisions(
         reviewer = str(
             decision.get("reviewer_or_process_reference")
             or decision.get("reviewer_reference")
+            or decision.get("reviewer_or_model_reference")
             or ""
         ).strip()
         if not reviewer:
             raise ValueError(f"{ref}: explicit reviewer/process reference required")
 
-        reason = str(decision.get("reason_code") or "").strip()
-        if not reason:
-            raise ValueError(f"{ref}: reason_code required")
+        reason = overlay_reason_code(decision, ref)
 
         row = by_ref[ref]
         prior_ref = row.get("decision_reference", "")

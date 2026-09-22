@@ -100,6 +100,24 @@ def test_review_overlay_rejects_unreviewed_candidate_promotion():
         apply_decisions(ledger, decisions)
 
 
+def test_review_overlay_accepts_recorded_plural_reason_and_reviewer_surface():
+    ledger = [_ledger_row("ERIC:EJ1")]
+    decisions = [{
+        "source_identity_reference": "ERIC:EJ1",
+        "reviewed": True,
+        "decision": "probable",
+        "reason_codes": ["requiresFullText"],
+        "reviewer_or_model_reference": "reviewer:round-1",
+        "decision_timestamp": "2026-09-20T00:00:00Z",
+    }]
+
+    output, counts = apply_decisions(ledger, decisions)
+
+    assert output[0]["reason_code"] == "requiresFullText"
+    assert output[0]["reviewer_or_model_reference"] == "reviewer:round-1"
+    assert counts["probable"] == 1
+
+
 def test_calibration_estimate_uses_reviewed_subset_only():
     ledger = [_ledger_row("ERIC:EJ1"), _ledger_row("ERIC:EJ2"), _ledger_row("ERIC:EJ3")]
     ledger[0]["decision"] = "include"
