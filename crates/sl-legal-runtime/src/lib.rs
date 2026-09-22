@@ -2785,6 +2785,8 @@ pub mod source_realised_legal_follow;
 pub use source_realised_legal_follow::*;
 pub mod legal_world;
 pub use legal_world::*;
+pub mod shared_world;
+pub use shared_world::*;
 pub mod revision_consumer_bridge;
 pub use revision_consumer_bridge::*;
 pub mod query_revision_impact;
