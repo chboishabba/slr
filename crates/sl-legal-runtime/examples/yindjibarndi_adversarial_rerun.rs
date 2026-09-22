@@ -3,10 +3,11 @@
 //! Prints a candidate-only machine-readable-ish summary.  It does not predict
 //! or state a judicial outcome.
 
-use sensiblaw_legal_runtime::run_yindjibarndi_live_case;
+use sensiblaw_legal_runtime::{compile_yindjibarndi_machine_receipt, run_yindjibarndi_live_case};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let run = run_yindjibarndi_live_case()?;
+    let receipt = compile_yindjibarndi_machine_receipt(&run)?;
 
     println!("consumer_ref=consumer:yindjibarndi-compensation");
     println!("route_ref={}", run.adversarial.route_ref);
@@ -109,6 +110,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             demand.demand_ref, demand.role, demand.target_atom_or_residual_ref
         );
     }
+    println!("current_finite_cut={:?}", receipt.current_finite_cut);
+    println!("support_finite_cut={:?}", receipt.support_finite_cut);
+    println!(
+        "mabo_only_repair_finite_cut={:?}",
+        receipt.mabo_only_repair_finite_cut
+    );
+    println!(
+        "fully_repaired_candidate_finite_cut={:?}",
+        receipt.fully_repaired_candidate_finite_cut
+    );
+    println!(
+        "finite_cut_recompute_changed={}",
+        receipt.finite_cut_recompute_changed
+    );
+    println!("stop_reason={:?}", receipt.stop_reason);
     println!(
         "generic_mabo_join_rejected={}",
         run.generic_mabo_join_rejected
