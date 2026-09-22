@@ -3,6 +3,15 @@
 Date: 2026-09-22
 Status: production convergence addendum
 
+## Repository identity
+
+`slr` is the Rust/production implementation of **SensibLaw**, not a separate
+product. The older `SensibLaw` repository remains the broader Python,
+prototype, documentation and user-story surface. Product semantics, user
+stories and roadmap claims therefore belong to one SensibLaw architecture;
+`slr` carries the production Rust runtime for that architecture.
+
+
 ## Why this addendum exists
 
 The production runtime has advanced beyond the older evidence -> legal reasoning
