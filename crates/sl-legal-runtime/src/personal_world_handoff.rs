@@ -282,21 +282,27 @@ pub fn project_personal_world_for_consumer(
             continue;
         }
 
-        if !slice.mentions(coordinate_ref) {
-            excluded.insert(coordinate_ref.clone());
-            reasons.insert(coordinate_ref.clone(), "outside-consumer-dependency-slice".into());
-            continue;
-        }
-
         if item.explicitly_not_ready {
             excluded.insert(coordinate_ref.clone());
             reasons.insert(coordinate_ref.clone(), "explicitly-not-ready".into());
             continue;
         }
 
+        if item.share_classes.contains(&ShareClass::PersonalOnly) {
+            excluded.insert(coordinate_ref.clone());
+            reasons.insert(coordinate_ref.clone(), "personal-only-scope".into());
+            continue;
+        }
+
         if !item.reviewed {
             excluded.insert(coordinate_ref.clone());
             reasons.insert(coordinate_ref.clone(), "unreviewed-personal-material".into());
+            continue;
+        }
+
+        if !slice.mentions(coordinate_ref) {
+            excluded.insert(coordinate_ref.clone());
+            reasons.insert(coordinate_ref.clone(), "outside-consumer-dependency-slice".into());
             continue;
         }
 
@@ -406,6 +412,20 @@ mod tests {
             assert!(projection
                 .excluded_coordinate_refs
                 .contains(NOT_READY_COORDINATE));
+            assert_eq!(
+                projection
+                    .excluded_reason_refs
+                    .get(PRIVATE_HYPOTHESIS_COORDINATE)
+                    .map(String::as_str),
+                Some("personal-only-scope")
+            );
+            assert_eq!(
+                projection
+                    .excluded_reason_refs
+                    .get(NOT_READY_COORDINATE)
+                    .map(String::as_str),
+                Some("explicitly-not-ready")
+            );
         }
     }
 
