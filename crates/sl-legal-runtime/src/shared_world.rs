@@ -537,6 +537,51 @@ mod tests {
     }
 
     #[test]
+    fn optional_dependency_does_not_discharge_residual() {
+        let coordinate_ref = "coordinate:optional-context";
+        let mut world = SharedWorld::new();
+        world.admit_coordinate(coordinate(coordinate_ref)).unwrap();
+        world
+            .set_dependency_slice(ConsumerDependencySlice {
+                consumer_ref: "consumer:test".into(),
+                required_coordinate_refs: BTreeSet::new(),
+                optional_coordinate_refs: BTreeSet::from([coordinate_ref.into()]),
+                dependency_slice_ref: "slice:test".into(),
+                candidate_only: true,
+                creates_semantic_authority: false,
+                creates_claim_truth: false,
+            })
+            .unwrap();
+
+        let proposal = SharedJoinProposal {
+            proposal_ref: "proposal:test:optional".into(),
+            source_consumer_ref: "consumer:source".into(),
+            target_consumer_ref: "consumer:test".into(),
+            coordinate_ref: coordinate_ref.into(),
+            basis: JoinProposalBasis::ConceptAdjacency,
+            evidence_refs: BTreeSet::from(["candidate:context".into()]),
+            candidate_only: true,
+            creates_semantic_authority: false,
+            creates_claim_truth: false,
+        };
+        let target = world.dependency_slices["consumer:test"].clone();
+        let witness = review_shared_join(&proposal, &target, "review:optional").unwrap();
+        world.admit_reviewed_join(witness).unwrap();
+
+        let quotient =
+            quotient_frontier_against_shared_world(
+                &world,
+                &frontier("consumer:test", coordinate_ref),
+            )
+            .unwrap();
+        assert_eq!(
+            quotient.remaining_residual_refs,
+            BTreeSet::from(["residual:consumer:test:authority".into()])
+        );
+        assert!(quotient.reused_coordinate_refs.is_empty());
+    }
+
+    #[test]
     fn reviewed_delta_recomputes_every_dependent_consumer_only() {
         let coordinate_ref = "coordinate:yunupingu-compensation";
         let mut world = SharedWorld::new();
