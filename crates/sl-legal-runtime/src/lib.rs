@@ -1827,6 +1827,12 @@ pub struct LegalRuntimeCapabilityReceipt {
     pub s18_revision_consumer_reopening: bool,
     pub s18_query_scoped_world_impact: bool,
     pub s15_s18_query_world_run_controller: bool,
+    pub s19_shared_world_consumer_join: bool,
+    pub s19_shared_world_quotient_reuse: bool,
+    pub s19_affected_consumer_recompute: bool,
+    pub s20_adversarial_proof_search: bool,
+    pub s20_defeat_counterdefeat_rerun: bool,
+    pub s21_source_driven_case_battery: bool,
     pub candidate_only: bool,
     pub creates_semantic_authority: bool,
     pub receipt_digest: String,
@@ -2163,6 +2169,12 @@ pub fn compile_capability_receipt() -> Result<LegalRuntimeCapabilityReceipt, Leg
         s18_revision_consumer_reopening: true,
         s18_query_scoped_world_impact: true,
         s15_s18_query_world_run_controller: true,
+        s19_shared_world_consumer_join: true,
+        s19_shared_world_quotient_reuse: true,
+        s19_affected_consumer_recompute: true,
+        s20_adversarial_proof_search: true,
+        s20_defeat_counterdefeat_rerun: true,
+        s21_source_driven_case_battery: true,
         candidate_only: true,
         creates_semantic_authority: false,
         receipt_digest,
@@ -2744,6 +2756,12 @@ mod tests {
         assert!(receipt.s16_source_realised_generic_legal_follow);
         assert!(receipt.s18_query_scoped_world_impact);
         assert!(receipt.s15_s18_query_world_run_controller);
+        assert!(receipt.s19_shared_world_consumer_join);
+        assert!(receipt.s19_shared_world_quotient_reuse);
+        assert!(receipt.s19_affected_consumer_recompute);
+        assert!(receipt.s20_adversarial_proof_search);
+        assert!(receipt.s20_defeat_counterdefeat_rerun);
+        assert!(receipt.s21_source_driven_case_battery);
         assert!(receipt.candidate_only);
         assert!(!receipt.creates_semantic_authority);
         assert!(receipt.receipt_digest.starts_with("sha256:"));
@@ -2785,6 +2803,14 @@ pub mod source_realised_legal_follow;
 pub use source_realised_legal_follow::*;
 pub mod legal_world;
 pub use legal_world::*;
+pub mod shared_world;
+pub use shared_world::*;
+pub mod adversarial_proof_search;
+pub use adversarial_proof_search::*;
+pub mod legal_case_battery;
+pub use legal_case_battery::*;
+pub mod legal_case_battery_plan;
+pub use legal_case_battery_plan::*;
 pub mod revision_consumer_bridge;
 pub use revision_consumer_bridge::*;
 pub mod query_revision_impact;
