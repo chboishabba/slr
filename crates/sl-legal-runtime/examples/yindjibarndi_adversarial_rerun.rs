@@ -38,6 +38,65 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .collect::<Vec<_>>()
             .join(",")
     );
+    println!(
+        "paid_atoms={}",
+        run.adversarial
+            .summary
+            .paid_atom_refs
+            .iter()
+            .cloned()
+            .collect::<Vec<_>>()
+            .join(",")
+    );
+    println!(
+        "defeated_routes={}",
+        run.adversarial
+            .summary
+            .defeated_route_refs
+            .iter()
+            .cloned()
+            .collect::<Vec<_>>()
+            .join(",")
+    );
+    println!(
+        "contested_coordinates={}",
+        run.adversarial
+            .summary
+            .contested_coordinate_refs
+            .iter()
+            .cloned()
+            .collect::<Vec<_>>()
+            .join(",")
+    );
+    println!(
+        "wrong_type_gaps={}",
+        run.adversarial.summary.wrong_type_gap_refs.len()
+    );
+    println!(
+        "authority_gaps={}",
+        run.adversarial.summary.authority_gap_refs.len()
+    );
+    println!("fact_gaps={}", run.adversarial.summary.fact_gap_refs.len());
+    println!(
+        "applicability_gaps={}",
+        run.adversarial
+            .summary
+            .applicability_gap_refs
+            .iter()
+            .cloned()
+            .collect::<Vec<_>>()
+            .join(",")
+    );
+    println!(
+        "remaining_reopening_cut={}",
+        run.adversarial
+            .summary
+            .remaining_reopening_cut_refs
+            .iter()
+            .cloned()
+            .collect::<Vec<_>>()
+            .join(",")
+    );
     for gap in &run.adversarial.typed_gaps {
         println!(
             "gap={}|kind={:?}|coordinate={}|proposition={}",
