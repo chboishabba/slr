@@ -17,7 +17,8 @@ use std::collections::BTreeSet;
 use crate::{
     compile_reviewed_treatment_rerun, generic_mabo_join_is_rejected,
     reviewed_yindjibarndi_authority_joins, yindjibarndi_primary_source_packet,
-    yindjibarndi_reviewed_dependency_slice, AdversarialRerunReceipt,
+    yindjibarndi_reviewed_dependency_slice, run_yindjibarndi_finite_cut_experiment,
+    AdversarialRerunReceipt, ReachableCutResult,
     EmpiricalArgumentRole, ReviewedTreatmentCoordinate, ReviewedTreatmentRole,
     SharedCoordinateKind, SharedWorld, SharedWorldCoordinate,
     MABO_ACQUISITION_DISTINCTION_COORDINATE, YINDJIBARNDI_CONSUMER,
@@ -57,6 +58,11 @@ pub struct YindjibarndiMachineReceipt {
     pub fact_gap_refs: BTreeSet<String>,
     pub applicability_gap_refs: BTreeSet<String>,
     pub remaining_reopening_cut_refs: BTreeSet<String>,
+    pub current_finite_cut: ReachableCutResult,
+    pub support_finite_cut: ReachableCutResult,
+    pub mabo_only_repair_finite_cut: ReachableCutResult,
+    pub fully_repaired_candidate_finite_cut: ReachableCutResult,
+    pub finite_cut_recompute_changed: bool,
     pub research_demand_refs: BTreeSet<String>,
     pub stop_reason: CaseRunStopReason,
     pub candidate_only: bool,
@@ -215,8 +221,9 @@ pub fn run_yindjibarndi_live_case() -> Result<YindjibarndiLiveCaseRun, String> {
 
 pub fn compile_yindjibarndi_machine_receipt(
     run: &YindjibarndiLiveCaseRun,
-) -> YindjibarndiMachineReceipt {
+) -> Result<YindjibarndiMachineReceipt, String> {
     let treatments = yindjibarndi_primary_source_packet();
+    let finite = run_yindjibarndi_finite_cut_experiment()?;
     let stop_reason = if !run
         .adversarial
         .summary
@@ -239,7 +246,7 @@ pub fn compile_yindjibarndi_machine_receipt(
         }
     };
 
-    YindjibarndiMachineReceipt {
+    Ok(YindjibarndiMachineReceipt {
         consumer_ref: YINDJIBARNDI_CONSUMER.into(),
         route_ref: run.adversarial.route_ref.clone(),
         source_refs: treatments.iter().map(|item| item.source_ref.clone()).collect(),
@@ -275,6 +282,11 @@ pub fn compile_yindjibarndi_machine_receipt(
             .summary
             .remaining_reopening_cut_refs
             .clone(),
+        current_finite_cut: finite.mabo_repair_cut.clone(),
+        support_finite_cut: finite.support_cut.clone(),
+        mabo_only_repair_finite_cut: finite.mabo_repair_cut.clone(),
+        fully_repaired_candidate_finite_cut: finite.fully_repaired_candidate_cut.clone(),
+        finite_cut_recompute_changed: finite.recompute_receipt.cut_changed,
         research_demand_refs: run
             .adversarial
             .next_demands
@@ -285,7 +297,7 @@ pub fn compile_yindjibarndi_machine_receipt(
         candidate_only: true,
         creates_semantic_authority: false,
         creates_claim_truth: false,
-    }
+    })
 }
 
 #[cfg(test)]
@@ -316,11 +328,22 @@ mod tests {
             .any(|gap| gap.kind == TypedRerunGapKind::Applicability));
         assert!(!run.adversarial.next_demands.is_empty());
         assert!(!run.creates_claim_truth);
-        let receipt = compile_yindjibarndi_machine_receipt(&run);
+        let receipt = compile_yindjibarndi_machine_receipt(&run).unwrap();
         assert_eq!(receipt.stop_reason, CaseRunStopReason::NeedsApplicability);
         assert_eq!(receipt.shared_world_coordinate_refs.len(), 2);
         assert_eq!(receipt.reviewed_join_refs.len(), 2);
         assert!(!receipt.research_demand_refs.is_empty());
+        assert_eq!(receipt.current_finite_cut, ReachableCutResult::NoMeaningfulCut);
+        assert!(matches!(receipt.support_finite_cut, ReachableCutResult::Found(_)));
+        assert_eq!(
+            receipt.mabo_only_repair_finite_cut,
+            ReachableCutResult::NoMeaningfulCut
+        );
+        assert!(matches!(
+            receipt.fully_repaired_candidate_finite_cut,
+            ReachableCutResult::Found(_)
+        ));
+        assert!(receipt.finite_cut_recompute_changed);
         assert!(!receipt.creates_claim_truth);
     }
 
