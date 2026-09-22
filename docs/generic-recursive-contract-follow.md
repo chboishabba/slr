@@ -1,0 +1,509 @@
+# S14.5 Generic Recursive LegalFollow Campaign Runtime
+
+Phase IV removes the case-specific orchestration shell from recursive Australian-contract reconstruction.
+
+The completed Waltons -> Doueihi campaign remains a valid bootstrap/live receipt. After that hop, recursive continuation is owned by:
+
+```text
+ContractFollowCampaign
+  -> persisted typed final trace
+  -> fresh frontier
+  -> outbound citation residuals
+  -> bounded selector
+  -> governed OALC acquisition
+  -> generic authority identity review
+  -> generic exact-citation treatment review
+  -> reviewed-hop compiler
+  -> typed delta
+  -> recompute
+```
+
+No Sidhu/Giumelli/Verwayen-specific runtime module is required.
+
+## Important semantic boundaries
+
+- Research priority is not legal truth or authority ranking.
+- A citation occurrence is a discovery residual, not citation treatment.
+- OALC acquisition is candidate-only.
+- Raw OALC identity does not create a canonical authority alias.
+- Identity and treatment remain explicit review gates.
+- Missing source is not negative legal evidence.
+- JSON remains persistence/review output, not semantic command transport.
+- Every accepted delta recomputes the frontier and preserves prior source history.
+- Campaign budgets bound accepted hops, source acquisitions and network requests.
+
+## Existing completed Waltons archive
+
+The original completed Waltons archive predates persisted `final_trace`. On the updated branch, rerun only the deterministic typed sync once:
+
+```bash
+cargo run -p sensiblaw-cli --features live-network --bin sensiblaw -- \
+  legal-follow waltons --base /tmp/waltons-live s14-sync
+```
+
+This upgrades `waltons-s14-adaptive-trajectory.json` with a resumable `final_trace`.
+It does not perform a new legal review or acquire a new authority. Future campaigns produced by S14.5 already persist the trace and need no migration.
+
+After this one compatibility migration, do not invoke Waltons-specific orchestration for recursive continuation.
+
+## Recursive discovery from Doueihi
+
+```bash
+cargo run -p sensiblaw-cli --features live-network --bin sensiblaw -- \
+  legal-follow contracts campaign discover \
+  --trajectory /tmp/waltons-live/waltons-s14-adaptive-trajectory.json \
+  --source-receipt /tmp/waltons-live/later-authorities/2016-nswca-105/oalc-source-receipt.json \
+  --source-semantic-ref case:nsw:nswca:2016:105 \
+  --output /tmp/waltons-live/recursive/outbound-frontier.json
+```
+
+The selector filters authorities already represented by the typed trace. In the retained Doueihi source, Sidhu `[2014] HCA 19` is already represented by the old Waltons trace. The S14.5 regression therefore uses the genuinely fresh HCA authority:
+
+```text
+Giumelli v Giumelli [1999] HCA 10
+```
+
+as the recursive capstone candidate.
+
+The selector is deterministic research scheduling only:
+
+```text
+Australian MNC
+  -> court-class research priority
+  -> first observed source ordinal
+  -> citation lexical tie-break
+
+priority_is_legal_truth_rank = false
+```
+
+## Bounded governed acquisition
+
+```bash
+cargo run -p sensiblaw-cli --features live-network --bin sensiblaw -- \
+  legal-follow contracts campaign acquire-next \
+  --trajectory /tmp/waltons-live/waltons-s14-adaptive-trajectory.json \
+  --frontier /tmp/waltons-live/recursive/outbound-frontier.json \
+  --output-dir /tmp/waltons-live/recursive/giumelli
+```
+
+The selected source is independently reacquired through the governed OALC case path.
+
+The recursive acquisition mode is now `IndexedThenPinnedRangeIndex`.
+The earlier one-shot `IndexedThenPinnedStream` mode remains available for
+regression/compatibility, but the recursive campaign no longer depends on a
+single long-lived corpus response.  Hugging
+Face Dataset Server search is an accelerator rather than the source boundary:
+
+```text
+dataset metadata / pinned revision
+        ↓
+bounded datasets-server /search
+        ├─ exact MNC found → retain
+        └─ incomplete / absent / HTTP 5xx
+                        ↓
+             revision-pinned corpus.jsonl stream
+                        ↓
+             first exact terminal-MNC row
+                        ↓
+                     retain
+```
+
+The pinned stream is still candidate-only.  It records
+`stream_rows_examined`, `stream_bytes_read`,
+`stream_terminated_after_match=true`, and
+`stream_uniqueness_exhaustively_verified=false`.  The latter is deliberate:
+stopping at the first exact terminal-MNC match does not pretend to prove that
+no duplicate row exists later in the corpus.  Authority identity review remains
+the admission gate.
+
+A transport interruption while streaming is not source absence and is not
+negative legal evidence.  Only a clean EOF with no exact row is represented as
+a source residual for that pinned corpus revision.
+Before the network call the controller reserves OALC's three-request worst-case
+budget.  The actual request count is then charged to the cumulative campaign
+budget.  A successful acquisition writes:
+
+```text
+giumelli/oalc-source-receipt.json
+giumelli/authority-identity-review-worksheet.json
+giumelli/campaign-after-source-acquisition.json
+```
+
+The last file is the next resumable campaign receipt.  Acquisition does not add
+a legal graph hop; it advances source/network counters and sets the explicit
+`AuthorityIdentityReview` operator gate.
+
+## Generic identity gate
+
+```bash
+cargo run -p sensiblaw-cli --features live-network --bin sensiblaw -- \
+  legal-follow contracts campaign identity-prepare \
+  --receipt /tmp/waltons-live/recursive/giumelli/oalc-source-receipt.json \
+  --output /tmp/waltons-live/recursive/giumelli-identity-review.json
+```
+
+Review the worksheet and mark `review_complete=true`. Then:
+
+```bash
+cargo run -p sensiblaw-cli --features live-network --bin sensiblaw -- \
+  legal-follow contracts campaign identity-reviewed \
+  --trajectory /tmp/waltons-live/recursive/giumelli/campaign-after-source-acquisition.json \
+  --worksheet /tmp/waltons-live/recursive/giumelli/authority-identity-review-worksheet.json \
+  --decisions /tmp/waltons-live/recursive/giumelli-identity-decisions.json \
+  --output /tmp/waltons-live/recursive/after-giumelli-identity.json
+```
+
+The output is another resumable typed campaign receipt containing its own
+`final_trace`.  The controller also uses the pending recursive coordinate to
+prepare, automatically:
+
+```text
+recursive-treatment-queue.json
+recursive-treatment-review-worksheet.json
+```
+
+and sets the explicit `AuthorityTreatmentReview` operator gate.
+
+## Generic Doueihi -> Giumelli treatment gate
+
+The manual `treatment-prepare` command remains available as a compatibility
+surface, but the normal recursive path no longer needs it.  The identity stage
+has already prepared exact citation review units from the retained Doueihi
+primary source.
+
+```bash
+cargo run -p sensiblaw-cli --features live-network --bin sensiblaw -- \
+  legal-follow contracts campaign treatment-prepare \
+  --source-receipt /tmp/waltons-live/later-authorities/2016-nswca-105/oalc-source-receipt.json \
+  --source-semantic-ref case:nsw:nswca:2016:105 \
+  --target-mnc '[1999] HCA 10' \
+  --target-semantic-ref case:au:hca:1999:10 \
+  --queue /tmp/waltons-live/recursive/doueihi-giumelli-treatment-queue.json \
+  --worksheet /tmp/waltons-live/recursive/doueihi-giumelli-treatment-review.json
+```
+
+After explicit review:
+
+```bash
+cargo run -p sensiblaw-cli --features live-network --bin sensiblaw -- \
+  legal-follow contracts campaign treatment-reviewed \
+  --trajectory /tmp/waltons-live/recursive/after-giumelli-identity.json \
+  --decisions /tmp/waltons-live/recursive/doueihi-giumelli-treatment-decisions.json \
+  --output /tmp/waltons-live/recursive/after-doueihi-giumelli-treatment.json
+```
+
+The compiled treatment is whatever the reviewed citation-use receipt supports.
+It is not predetermined by the controller.  After the reviewed treatment delta
+is accepted, the controller materialises the newly acquired target source,
+recomputes its outbound citation residuals against the updated typed trace, and
+writes `next-outbound-frontier.json`.  If a fresh candidate exists, the next
+operator gate is `OutboundCitationAcquisition`; otherwise it is `None`.
+This is the recursive loop rather than a one-shot Giumelli path.
+
+Campaign counters and the configured budget are inherited from the parent
+receipt at every continuation.  Writing a new receipt cannot reset the accepted
+hop, source acquisition, or network-request budgets.
+
+## Phase-IV acceptance criterion
+
+Source implementation is complete when:
+
+```text
+completed typed campaign
+ -> persisted final trace
+ -> fresh outbound residual
+ -> generic selector
+ -> governed source acquisition
+ -> identity review
+ -> candidate authority delta
+ -> fresh recompute
+ -> exact source->target treatment review
+ -> candidate treatment delta
+ -> fresh recompute
+```
+
+and every step remains candidate-only, typed Rust in-process, bounded, and case-module independent.
+
+The first live recursive capstone is complete only after the Giumelli source and treatment review have actually been run. The Agda capstone contract intentionally records that this live receipt is not fabricated by the source formalisation.
+
+### Revision-pinned local byte index
+
+When Dataset Server search is unavailable or incomplete, the provider maintains
+a discovery-only byte-range index keyed by the immutable OALC revision SHA:
+
+```text
+(terminal MNC, type, jurisdiction)
+    -> byte_start, byte_len, row_sha256
+```
+
+The default persistent root is, in order:
+
+```text
+$SENSIBLAW_OALC_INDEX_DIR
+$XDG_CACHE_HOME/sensiblaw/oalc-range-index
+$HOME/.cache/sensiblaw/oalc-range-index
+$tmp/sensiblaw-oalc-range-index
+```
+
+Each revision directory contains a JSONL citation/range index plus an atomic
+checkpoint. Range construction advances only through complete JSONL rows; a
+partial trailing row is re-fetched from its beginning. A crash after index
+append but before checkpoint advance is idempotent because entries are
+de-duplicated by immutable row byte offset.
+
+The index stores metadata and byte coordinates, not judgment text. An index hit
+still performs an exact byte-range GET, validates the recorded row digest,
+re-runs the exact citation/type/jurisdiction matcher, retains the source, and
+then stops at the ordinary human identity-review gate.
+
+## Live Giumelli recursive-source capstone
+
+The generic recursive controller has now crossed the source-acquisition portion
+of the Phase-IV capstone without a Giumelli-specific runtime.
+
+Observed retained authority:
+
+```text
+source frontier       case:nsw:nswca:2016:105
+selected citation     [1999] HCA 10
+retained title        Giumelli v Giumelli
+semantic suggestion   case:au:hca:1999:10
+OALC revision         ef45e3fec41a960919a31149eee6dab9aa39f725
+judgment sha256       e0e3620527821c84206cec85d6d698320bba04ce3c575fe90e443d52404cf03e
+```
+
+The first range-index build observed:
+
+```text
+resolution_path =
+  revision_pinned_range_index_build_after_index_provider_failure
+
+byte_start               3,332,218,339
+byte_len                  52,046
+range_index_requests      13
+network_requests          15
+rows_indexed              77,230
+bytes_indexed             3,332,270,385
+range_index_hit           false
+```
+
+An identical reacquisition against the same immutable revision then observed:
+
+```text
+resolution_path =
+  revision_pinned_range_index_hit_after_index_provider_failure
+
+network_requests          3
+range_index_requests      1
+range_index_hit           true
+rows_indexed_this_run     0
+bytes_indexed_this_run    0
+```
+
+Both retained judgment artifacts had the same canonical SHA-256 above.  The
+source remained candidate-only and created neither legal authority nor a
+current-law conclusion.
+
+The empirical capstone is therefore presently:
+
+```text
+generic fresh Giumelli selection                  observed
+governed revision-pinned acquisition              observed
+resumable range-index build                       observed
+direct exact-byte-range replay                    observed
+authority identity review artifact                prepared
+reviewed identity compiled into trajectory        open
+Doueihi -> Giumelli treatment review              open
+reviewed treatment delta + next frontier          open
+```
+
+This distinction is deliberate.  Successful transport does not satisfy the
+identity or treatment review gates.
+
+## Max-cut continuation: reviewed-delta kernel, consumer adequacy and workbench IR
+
+The recursive programme now deliberately advances several reusable layers in
+parallel rather than treating each current review gate as the whole roadmap.
+
+### Corroborating treatment units are one semantic hop
+
+Distinct reviewed paragraphs can corroborate the same semantic treatment edge.
+The reviewed-hop compiler therefore groups accepted treatment receipts by:
+
+```text
+(citing authority, cited authority, treatment kind)
+```
+
+and emits one graph delta while retaining every review-unit reference in the
+bundled provenance.  Evidence-unit multiplicity is not campaign-hop
+multiplicity.  Unsupported/contested review units remain explicit residuals.
+
+For the live Doueihi → Giumelli shape, paragraphs 357 and 435 can therefore
+both support one candidate-only:
+
+```text
+case:nsw:nswca:2016:105
+    -- Supports / ReliedOn -->
+case:au:hca:1999:10
+```
+
+without manufacturing two graph hops.
+
+### Deterministic campaign drive
+
+The generic contracts CLI now also exposes:
+
+```text
+sensiblaw legal-follow contracts campaign drive ...
+```
+
+The driver reads the persisted `next_operator_gate`.  For an
+`OutboundCitationAcquisition` gate it calls the existing governed
+`acquire-next` path rather than duplicating acquisition logic.  It then stops
+at the identity-review gate generated by that path.
+
+Identity and treatment review gates are hard stops:
+
+```text
+outbound acquisition      -> driver may execute
+authority identity review -> driver stops
+authority treatment review-> driver stops
+budget exhausted          -> driver stops
+complete                  -> driver stops
+```
+
+The driver has no review-bypass or authority-promotion path.
+
+### Domain-generic reviewed-delta campaign kernel
+
+`sl-legal-runtime::legal_follow_campaign` extracts only the pure recursive
+mechanics shared by the existing legal campaign styles:
+
+```text
+World
+  -> recompute Residuals
+  -> select fresh Demand
+  -> externally pay review gate
+  -> accept Reviewed Delta
+  -> apply
+  -> recompute
+```
+
+The generic kernel has no raw-source-to-delta operation.  Acquisition, review,
+doctrine semantics and persistence remain domain adapters.  A non-contract
+coordinate fixture regression checks that the kernel itself contains no
+Australian-contract identity or doctrine dependency.
+
+### Consumer-directed research
+
+`sl-legal-runtime::consumer_adequacy` introduces typed consumer axes:
+
+```text
+semantic identity
+source revision
+source span
+provenance
+treatment
+temporal
+jurisdiction
+factual predicate
+burden / exception
+```
+
+Projection-visible source/revision/span coordinates can pay the corresponding
+runtime coverage.  Missing coordinates become typed research demands.  Those
+demands route back into existing campaign classes/gates rather than creating a
+second scheduler.
+
+Runtime coverage is deliberately weaker than the formal claim
+`FactorsThrough`; `factors_through_formally_proved` remains false unless a
+formal witness exists.  A missing axis may instead terminate as explicitly
+unresolved when its residual has been deliberately closed.
+
+### VisualisationIR
+
+The legal runtime now lowers read-only `ProjectionGraph` objects into typed
+visualisation carriers:
+
+```text
+TimelineIr
+GraphIr
+SankeyIr
+ResearchFrontierIr
+ProofTopologyIr
+ComparativeIr
+```
+
+The current Sankey lane has only count semantics:
+
+```text
+topology-edge-count
+observed-event-count
+```
+
+and explicitly records that those weights are not legal importance or
+authority strength.
+
+The research-flow carrier can render:
+
+```text
+frontier residual
+  -> selected demand
+  -> source acquired
+  -> identity review
+  -> treatment review
+  -> accepted hop / preserved residual
+```
+
+while remaining a downstream projection consumer.
+
+### Paid work cannot resurrect itself
+
+A reviewed delta is itself payment of the work coordinate it represents.  The
+campaign therefore marks matching worklist items as observed before computing
+the next fresh frontier:
+
+```text
+reviewed identity delta
+    -> identity/source work for that exact node is paid
+
+reviewed treatment delta
+    -> treatment-review work for that exact edge is paid
+```
+
+Secondary consequences may still become fresh work.  What is forbidden is the
+self-loop:
+
+```text
+review treatment
+    -> add reviewed Supports edge
+    -> rediscover the exact same edge as "needs treatment review"
+```
+
+The total worklist inventory is intentionally different from the actionable
+fresh frontier.  Receipts therefore expose:
+
+```text
+final_worklist_inventory_counts
+final_fresh_frontier_count
+```
+
+while retaining the legacy `final_frontier_counts` field for compatibility.
+
+### Frontier closure is operational, not semantic omniscience
+
+`CampaignOperatorGate::None` now lowers to an explicit closure receipt:
+
+```text
+kind = NoSelectableResidual
+current_frontier_closed = true
+consumer_adequacy_formally_proved = false
+creates_legal_authority = false
+creates_current_law_conclusion = false
+```
+
+The driver disposition is named `CurrentFrontierClosed`, not `Complete`.
+This records exactly what the controller has established: there is no selectable
+residual in the current declared frontier.  It does not assert that every
+possible legal question is answered or that a formal query-indexed
+`FactorsThrough` witness exists.

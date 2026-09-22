@@ -7,6 +7,14 @@
 //! The scheduler owns no HTTP. Search returns references, fetch returns bytes,
 //! and semantic/legal interpretation begins only after local ingestion/review.
 
+pub mod live_oalc_case_follow;
+pub use live_oalc_case_follow::*;
+pub mod oalc_range_index;
+pub use oalc_range_index::*;
+pub mod oalc_source_contract;
+pub use oalc_source_contract::*;
+pub mod oalc_legislation_contract;
+
 use std::collections::BTreeMap;
 use std::thread;
 use std::time::{Duration, Instant};

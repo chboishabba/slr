@@ -3,6 +3,7 @@ use std::path::PathBuf;
 
 use sensiblaw_legal_runtime::{
     build_australian_calibration_capstone, build_m2_5_mixed_family_campaign,
+    build_mann_unseen_matter_runtime, waltons_estoppel_materialisation_specimen,
     compile_capability_receipt, compile_explanation_index, compile_matter_runtime,
     compile_projection, lower_reader_intent, project_matter_issue_workspace,
     project_matter_issue_workbench, AustralianCalibrationKind, MatterCommand, MatterEntityKind,
@@ -198,10 +199,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ));
     }
 
+    let unseen_contract = build_mann_unseen_matter_runtime()
+        .map_err(|error| runtime_error("Mann unseen matter failed", error))?;
+    fs::write(
+        output.join("mann.m8-unseen-contract-runtime.txt"),
+        format!("{unseen_contract:#?}"),
+    )?;
+    fs::write(
+        output.join("waltons.estoppel-follow-trace.txt"),
+        format!("{:#?}", waltons_estoppel_materialisation_specimen()),
+    )?;
+
     let receipt = compile_capability_receipt()
         .map_err(|error| runtime_error("capability receipt failed", error))?;
     report.push(format!(
-        "capability\tm2_5={}\tm3_a={}\tm3_b={}\tm3_c={}\tm3_c_replay={}\tm4_a={}\tm6={}\tm6_reverse={}\tm7={}\tm7_identity={}\ts8={}\ts8_reducer={}\ts8_reader={}\tcandidate_only={}\tsemantic_authority={}\tdigest={}",
+        "capability\tm2_5={}\tm3_a={}\tm3_b={}\tm3_c={}\tm3_c_replay={}\tm4_a={}\tm6={}\tm6_reverse={}\tm7={}\tm7_identity={}\ts8={}\ts8_reducer={}\ts8_reader={}\ts8_unseen_contract={}\ts8_contract_follow={}\tcandidate_only={}\tsemantic_authority={}\tdigest={}",
         receipt.m2_5_mixed_family_replay,
         receipt.m3_a_reviewed_world_to_wrong_type,
         receipt.m3_b_source_realised_evaluator,
@@ -215,6 +227,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         receipt.s8_matter_runtime,
         receipt.s8_shared_command_reducer,
         receipt.s8_reader_command_weld,
+        receipt.s8_unseen_contract_matter,
+        receipt.s8_contract_follow_trace,
         receipt.candidate_only,
         receipt.creates_semantic_authority,
         receipt.receipt_digest,

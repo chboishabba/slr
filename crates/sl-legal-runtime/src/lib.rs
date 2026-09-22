@@ -25,6 +25,7 @@ use sensiblaw_reviewed_evidence_payment::{
 };
 use sha2::{Digest, Sha256};
 
+
 pub const LEGAL_RUNTIME_VERSION: &str = "sl-legal-runtime:v1";
 
 fn digest(parts: impl IntoIterator<Item = impl AsRef<str>>) -> String {
@@ -1805,6 +1806,33 @@ pub struct LegalRuntimeCapabilityReceipt {
     pub s8_matter_runtime: bool,
     pub s8_shared_command_reducer: bool,
     pub s8_reader_command_weld: bool,
+    pub s8_unseen_contract_matter: bool,
+    pub s8_contract_follow_trace: bool,
+    pub s11_visualisation_ir: bool,
+    pub s11_research_flow_sankey: bool,
+    pub s14_6_generic_campaign_kernel: bool,
+    pub s14_7_consumer_adequacy_runtime: bool,
+    pub s15_theorem_adequacy_bridge: bool,
+    pub s15_exact_residual_compiler: bool,
+    pub s15_admissible_research_frontier: bool,
+    pub s15_stop_semantics: bool,
+    pub s15_adequacy_witness_compiler: bool,
+    pub s15_query_dependency_slice: bool,
+    pub s16_source_realised_generic_legal_follow: bool,
+    pub s18_first_class_legal_world: bool,
+    pub s18_authority_validity: bool,
+    pub s18_jurisdiction_scoped_coverage: bool,
+    pub s18_revision_invalidation: bool,
+    pub s18_affected_proof_cone: bool,
+    pub s18_revision_consumer_reopening: bool,
+    pub s18_query_scoped_world_impact: bool,
+    pub s15_s18_query_world_run_controller: bool,
+    pub s19_shared_world_consumer_join: bool,
+    pub s19_shared_world_quotient_reuse: bool,
+    pub s19_affected_consumer_recompute: bool,
+    pub s20_adversarial_proof_search: bool,
+    pub s20_defeat_counterdefeat_rerun: bool,
+    pub s21_source_driven_case_battery: bool,
     pub candidate_only: bool,
     pub creates_semantic_authority: bool,
     pub receipt_digest: String,
@@ -1924,6 +1952,72 @@ pub fn compile_capability_receipt() -> Result<LegalRuntimeCapabilityReceipt, Leg
                     "Sprint 7 projection {projection_kind:?} rewrote canonical provenance"
                 )));
             }
+
+            let visual = visualisation_from_projection(&graph)
+                .map_err(LegalRuntimeError::Projection)?;
+            if !visual.projection_only
+                || visual.creates_semantic_authority
+                || visual.creates_legal_authority
+            {
+                return Err(LegalRuntimeError::Projection(
+                    "Sprint 11 VisualisationIR crossed authority boundary".into(),
+                ));
+            }
+            if projection_kind == ProjectionKind::Flow {
+                let VisualisationIr::Sankey(sankey) = visual.ir else {
+                    return Err(LegalRuntimeError::Projection(
+                        "Sprint 11 flow projection did not lower to SankeyIR".into(),
+                    ));
+                };
+                if sankey.weights_are_legal_importance {
+                    return Err(LegalRuntimeError::Projection(
+                        "Sprint 11 Sankey weight was promoted to legal importance".into(),
+                    ));
+                }
+            }
+        }
+
+        // Runtime adequacy is intentionally weaker than the formal Agda
+        // FactorsThrough witness.  Here source identity/provenance are paid by
+        // the projection, while treatment remains a typed research demand.
+        let mut adequacy_query = ProjectionQuery::new(ProjectionKind::IssueProof);
+        adequacy_query.semantic_selection.insert(anchor.clone());
+        let adequacy_graph = compile_projection(
+            &workbench,
+            &explanation,
+            &adequacy_query,
+            &projection_context,
+        )
+        .map_err(LegalRuntimeError::Projection)?;
+        let adequacy = assess_consumer_adequacy(
+            &ConsumerQueryDemand {
+                query_ref: format!("query:{:?}:source-plus-treatment", capstone.kind),
+                required_axes: BTreeSet::from([
+                    ConsumerAxis::SemanticIdentity,
+                    ConsumerAxis::SourceRevision,
+                    ConsumerAxis::SourceSpan,
+                    ConsumerAxis::Provenance,
+                    ConsumerAxis::Treatment,
+                ]),
+                required_semantic_refs: BTreeSet::from([anchor.clone()]),
+                candidate_only: true,
+                creates_semantic_authority: false,
+            },
+            &adequacy_graph,
+            &ConsumerCoverage::default(),
+        )
+        .map_err(LegalRuntimeError::Projection)?;
+        if adequacy.disposition != ConsumerAdequacyDisposition::NeedsResearch
+            || adequacy.research_demands.len() != 1
+            || adequacy.research_demands[0].kind
+                != ConsumerResearchDemandKind::ReviewTreatment
+            || adequacy.factors_through_formally_proved
+            || adequacy.creates_semantic_authority
+            || adequacy.creates_claim_truth
+        {
+            return Err(LegalRuntimeError::Projection(
+                "Sprint 14.7 consumer-adequacy routing invariant failed".into(),
+            ));
         }
 
         let mut runtime = compile_matter_runtime(
@@ -1961,6 +2055,54 @@ pub fn compile_capability_receipt() -> Result<LegalRuntimeCapabilityReceipt, Leg
         }
     }
 
+    let unseen_contract = build_mann_unseen_matter_runtime()?;
+    if unseen_contract.used_calibration_enum
+        || unseen_contract.contract_specific_reducer_added
+        || unseen_contract.creates_semantic_authority
+        || !unseen_contract.trace.nodes.contains_key("matter:au:hca:2019:32")
+    {
+        return Err(LegalRuntimeError::Projection(
+            "Sprint 8 unseen contract matter crossed generic-runtime boundary".into(),
+        ));
+    }
+
+    generic_campaign_kernel_self_check()
+        .map_err(LegalRuntimeError::Projection)?;
+
+    source_realised_legal_campaign_self_check()
+        .map_err(LegalRuntimeError::Projection)?;
+
+    query_scoped_world_impact_self_check()
+        .map_err(LegalRuntimeError::Projection)?;
+
+    query_world_run_controller_self_check()
+        .map_err(LegalRuntimeError::Projection)?;
+
+    let research_flow = research_flow_sankey(&[
+        ResearchFlowEvent {
+            event_ref: "capability:frontier-to-demand".into(),
+            from_stage: ResearchFlowStage::FrontierResidual,
+            to_stage: ResearchFlowStage::SelectedDemand,
+            count: 1,
+            candidate_only: true,
+        },
+        ResearchFlowEvent {
+            event_ref: "capability:demand-to-source".into(),
+            from_stage: ResearchFlowStage::SelectedDemand,
+            to_stage: ResearchFlowStage::SourceAcquired,
+            count: 1,
+            candidate_only: true,
+        },
+    ])
+    .map_err(LegalRuntimeError::Projection)?;
+    if research_flow.sankey.weights_are_legal_importance
+        || research_flow.creates_semantic_authority
+    {
+        return Err(LegalRuntimeError::Projection(
+            "Sprint 11 research-flow Sankey crossed semantic boundary".into(),
+        ));
+    }
+
     let receipt_digest = digest(
         std::iter::once(LEGAL_RUNTIME_VERSION)
             .chain(std::iter::once(mixed.receipt_head.as_str()))
@@ -1968,7 +2110,28 @@ pub fn compile_capability_receipt() -> Result<LegalRuntimeCapabilityReceipt, Leg
             .chain(std::iter::once("M6:universal-explanation"))
             .chain(std::iter::once("M7:projection-fabric"))
             .chain(std::iter::once("S8:matter-runtime"))
-            .chain(std::iter::once("S8:shared-command-reducer")),
+            .chain(std::iter::once("S8:shared-command-reducer"))
+            .chain(std::iter::once("S8:unseen-contract-matter"))
+            .chain(std::iter::once("S8:contract-follow-trace"))
+            .chain(std::iter::once("S11:visualisation-ir"))
+            .chain(std::iter::once("S11:research-flow-sankey"))
+            .chain(std::iter::once("S14.6:generic-campaign-kernel"))
+            .chain(std::iter::once("S14.7:consumer-adequacy-runtime"))
+            .chain(std::iter::once("S15:theorem-adequacy-bridge"))
+            .chain(std::iter::once("S15:exact-residual-compiler"))
+            .chain(std::iter::once("S15:admissible-research-frontier"))
+            .chain(std::iter::once("S15:stop-semantics"))
+            .chain(std::iter::once("S15:adequacy-witness-compiler"))
+            .chain(std::iter::once("S15:query-dependency-slice"))
+            .chain(std::iter::once("S16:source-realised-generic-legal-follow"))
+            .chain(std::iter::once("S18:first-class-legal-world"))
+            .chain(std::iter::once("S18:authority-validity"))
+            .chain(std::iter::once("S18:jurisdiction-scoped-coverage"))
+            .chain(std::iter::once("S18:revision-invalidation"))
+            .chain(std::iter::once("S18:affected-proof-cone"))
+            .chain(std::iter::once("S18:revision-consumer-reopening"))
+            .chain(std::iter::once("S18:query-scoped-world-impact"))
+            .chain(std::iter::once("S15/S18:query-world-run-controller")),
     );
 
     Ok(LegalRuntimeCapabilityReceipt {
@@ -1985,6 +2148,33 @@ pub fn compile_capability_receipt() -> Result<LegalRuntimeCapabilityReceipt, Leg
         s8_matter_runtime: true,
         s8_shared_command_reducer: true,
         s8_reader_command_weld: true,
+        s8_unseen_contract_matter: true,
+        s8_contract_follow_trace: true,
+        s11_visualisation_ir: true,
+        s11_research_flow_sankey: true,
+        s14_6_generic_campaign_kernel: true,
+        s14_7_consumer_adequacy_runtime: true,
+        s15_theorem_adequacy_bridge: true,
+        s15_exact_residual_compiler: true,
+        s15_admissible_research_frontier: true,
+        s15_stop_semantics: true,
+        s15_adequacy_witness_compiler: true,
+        s15_query_dependency_slice: true,
+        s16_source_realised_generic_legal_follow: true,
+        s18_first_class_legal_world: true,
+        s18_authority_validity: true,
+        s18_jurisdiction_scoped_coverage: true,
+        s18_revision_invalidation: true,
+        s18_affected_proof_cone: true,
+        s18_revision_consumer_reopening: true,
+        s18_query_scoped_world_impact: true,
+        s15_s18_query_world_run_controller: true,
+        s19_shared_world_consumer_join: true,
+        s19_shared_world_quotient_reuse: true,
+        s19_affected_consumer_recompute: true,
+        s20_adversarial_proof_search: true,
+        s20_defeat_counterdefeat_rerun: true,
+        s21_source_driven_case_battery: true,
         candidate_only: true,
         creates_semantic_authority: false,
         receipt_digest,
@@ -2024,10 +2214,27 @@ pub struct MatterWorkspaceProjection {
     pub creates_semantic_authority: bool,
 }
 
-pub fn project_matter_issue_workspace(
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LegalProjectionState {
+    pub evaluation: SourceRealisedLegalEvaluation,
+    pub residuals: Vec<LegalResidual>,
+    pub selected_action: Option<InformationAction>,
+}
+
+impl From<&LegalCampaignState> for LegalProjectionState {
+    fn from(campaign: &LegalCampaignState) -> Self {
+        Self {
+            evaluation: campaign.evaluation.clone(),
+            residuals: campaign.residuals.clone(),
+            selected_action: campaign.selected_action.clone(),
+        }
+    }
+}
+
+pub fn project_matter_issue_workspace_from_state(
     matter_ref: impl Into<String>,
     issue: &WrongTypeIssueState,
-    campaign: &LegalCampaignState,
+    state: &LegalProjectionState,
 ) -> MatterWorkspaceProjection {
     let issue_ref = format!("issue:{}", issue.wrong_type_ref);
     let mut nodes = Vec::new();
@@ -2036,15 +2243,15 @@ pub fn project_matter_issue_workspace(
         node_ref: issue_ref.clone(),
         label: issue.wrong_type_ref.clone(),
         semantic_kind: "legal-issue".into(),
-        source_revision_refs: vec![campaign.evaluation.source_revision_ref.clone()],
-        span_refs: campaign.evaluation.source_span_refs.clone(),
+        source_revision_refs: vec![state.evaluation.source_revision_ref.clone()],
+        span_refs: state.evaluation.source_span_refs.clone(),
         dependency_refs: issue
             .elements
             .iter()
             .map(|element| element.element.element_ref.clone())
             .collect(),
-        downstream_refs: vec![campaign.evaluation.rule_ref.clone()],
-        residual_refs: campaign
+        downstream_refs: vec![state.evaluation.rule_ref.clone()],
+        residual_refs: state
             .residuals
             .iter()
             .map(|residual| residual.residual_ref.clone())
@@ -2074,7 +2281,7 @@ pub fn project_matter_issue_workspace(
                 .map(|evidence| evidence.reviewed_evidence_ref.clone())
                 .collect(),
             downstream_refs: vec![issue_ref.clone()],
-            residual_refs: campaign
+            residual_refs: state
                 .residuals
                 .iter()
                 .filter(|residual| residual.target_ref == element.element.element_ref)
@@ -2090,14 +2297,23 @@ pub fn project_matter_issue_workspace(
         nodes,
         issue_ref,
         wrong_type_ref: issue.wrong_type_ref.clone(),
-        applicability: campaign.evaluation.applicability,
-        violation: campaign.evaluation.violation,
-        liability: campaign.evaluation.liability,
-        remedy: campaign.evaluation.remedy,
-        next_action: campaign.selected_action.clone(),
+        applicability: state.evaluation.applicability,
+        violation: state.evaluation.violation,
+        liability: state.evaluation.liability,
+        remedy: state.evaluation.remedy,
+        next_action: state.selected_action.clone(),
         projection_only: true,
         creates_semantic_authority: false,
     }
+}
+
+pub fn project_matter_issue_workspace(
+    matter_ref: impl Into<String>,
+    issue: &WrongTypeIssueState,
+    campaign: &LegalCampaignState,
+) -> MatterWorkspaceProjection {
+    let state = LegalProjectionState::from(campaign);
+    project_matter_issue_workspace_from_state(matter_ref, issue, &state)
 }
 
 #[cfg(test)]
@@ -2534,6 +2750,18 @@ mod tests {
         assert!(receipt.s8_matter_runtime);
         assert!(receipt.s8_shared_command_reducer);
         assert!(receipt.s8_reader_command_weld);
+        assert!(receipt.s8_unseen_contract_matter);
+        assert!(receipt.s8_contract_follow_trace);
+        assert!(receipt.s15_query_dependency_slice);
+        assert!(receipt.s16_source_realised_generic_legal_follow);
+        assert!(receipt.s18_query_scoped_world_impact);
+        assert!(receipt.s15_s18_query_world_run_controller);
+        assert!(receipt.s19_shared_world_consumer_join);
+        assert!(receipt.s19_shared_world_quotient_reuse);
+        assert!(receipt.s19_affected_consumer_recompute);
+        assert!(receipt.s20_adversarial_proof_search);
+        assert!(receipt.s20_defeat_counterdefeat_rerun);
+        assert!(receipt.s21_source_driven_case_battery);
         assert!(receipt.candidate_only);
         assert!(!receipt.creates_semantic_authority);
         assert!(receipt.receipt_digest.starts_with("sha256:"));
@@ -2542,6 +2770,12 @@ mod tests {
 
 
 pub mod workbench;
+
+pub mod contract_specimens;
+pub use contract_specimens::{
+    build_mann_unseen_matter_runtime, project_waltons_reviewed_receipts_to_issue,
+    waltons_estoppel_materialisation_specimen,
+};
 pub use workbench::*;
 
 
@@ -2553,3 +2787,33 @@ pub use projection_fabric::*;
 
 pub mod matter_runtime;
 pub use matter_runtime::*;
+pub mod consumer_adequacy;
+pub use consumer_adequacy::*;
+pub mod consumer_theorem_bridge;
+pub use consumer_theorem_bridge::*;
+pub mod consumer_research_planner;
+pub use consumer_research_planner::*;
+pub mod consumer_adequacy_compiler;
+pub use consumer_adequacy_compiler::*;
+pub mod visualisation_ir;
+pub use visualisation_ir::*;
+pub mod legal_follow_campaign;
+pub use legal_follow_campaign::*;
+pub mod source_realised_legal_follow;
+pub use source_realised_legal_follow::*;
+pub mod legal_world;
+pub use legal_world::*;
+pub mod shared_world;
+pub use shared_world::*;
+pub mod adversarial_proof_search;
+pub use adversarial_proof_search::*;
+pub mod legal_case_battery;
+pub use legal_case_battery::*;
+pub mod legal_case_battery_plan;
+pub use legal_case_battery_plan::*;
+pub mod revision_consumer_bridge;
+pub use revision_consumer_bridge::*;
+pub mod query_revision_impact;
+pub use query_revision_impact::*;
+pub mod query_world_run_controller;
+pub use query_world_run_controller::*;

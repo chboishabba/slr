@@ -1,6 +1,7 @@
 use std::collections::BTreeSet;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum CitationUse {
     Mentioned,
     Quoted,
@@ -17,7 +18,7 @@ pub enum CitationUse {
     Unresolved,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum ReasoningRole {
     Rule,
     Premise,
@@ -31,7 +32,7 @@ pub enum ReasoningRole {
     Unresolved,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum ConditionKind {
     Factual,
     Legal,
@@ -42,13 +43,13 @@ pub enum ConditionKind {
     Exception,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct ConditionCoordinate {
     pub kind: ConditionKind,
     pub condition_ref: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PropositionReasoningEdge {
     pub citing_document_ref: String,
     pub citing_proposition_ref: String,

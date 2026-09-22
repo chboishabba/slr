@@ -3,7 +3,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::{InformationActionKind, LegalCampaignState, MatterIssueWorkbench, WrongTypeIssueState};
+use crate::{InformationActionKind, LegalCampaignState, LegalProjectionState, MatterIssueWorkbench, WrongTypeIssueState};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ExplainableKind {
@@ -16,6 +16,7 @@ pub enum ExplanationClass { SourceBacked, ProjectionMetadata, SystemMetadata }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ProvenanceAddress {
+    pub manifestation_ref: Option<String>,
     pub source_revision_ref: String,
     pub span_ref: Option<String>,
 }
@@ -71,7 +72,23 @@ fn push_unique(values: &mut Vec<String>, value: impl Into<String>) {
 }
 
 fn address(revision: &str, span: Option<&str>) -> ProvenanceAddress {
-    ProvenanceAddress { source_revision_ref: revision.to_owned(), span_ref: span.map(ToOwned::to_owned) }
+    ProvenanceAddress {
+        manifestation_ref: None,
+        source_revision_ref: revision.to_owned(),
+        span_ref: span.map(ToOwned::to_owned),
+    }
+}
+
+fn manifested_address(
+    manifestation: Option<&str>,
+    revision: &str,
+    span: Option<&str>,
+) -> ProvenanceAddress {
+    ProvenanceAddress {
+        manifestation_ref: manifestation.map(ToOwned::to_owned),
+        source_revision_ref: revision.to_owned(),
+        span_ref: span.map(ToOwned::to_owned),
+    }
 }
 
 fn bare(reference: impl Into<String>, kind: ExplainableKind, class: ExplanationClass) -> ExplainableRef {
@@ -106,40 +123,68 @@ fn evidence_type(kind: crate::LegalResidualKind) -> &'static str {
     }
 }
 
-pub fn compile_explanation_index(
+pub fn compile_explanation_index_from_state(
     workbench: &MatterIssueWorkbench,
     issue: &WrongTypeIssueState,
-    campaign: &LegalCampaignState,
+    state: &LegalProjectionState,
 ) -> Result<ExplanationIndex, String> {
     workbench.validate_projection_boundary()?;
     let mut records = BTreeMap::new();
 
     for observation in &workbench.observations {
         let mut r = bare(&observation.observation_ref, ExplainableKind::Observation, ExplanationClass::SourceBacked);
-        r.provenance.push(address(&observation.source_revision_ref, Some(&observation.span_ref)));
+        r.provenance.push(manifested_address(
+            observation.manifestation_ref.as_deref(),
+            &observation.source_revision_ref,
+            Some(&observation.span_ref),
+        ));
         r.dependencies.push(observation.span_ref.clone());
         r.legal_uses.extend(observation.element_refs.clone());
         insert(&mut records, r);
 
         let mut revision = bare(&observation.source_revision_ref, ExplainableKind::SourceRevision, ExplanationClass::SourceBacked);
-        revision.provenance.push(address(&observation.source_revision_ref, None));
+        revision.provenance.push(manifested_address(
+            observation.manifestation_ref.as_deref(),
+            &observation.source_revision_ref,
+            None,
+        ));
         insert(&mut records, revision);
 
         let mut span = bare(&observation.span_ref, ExplainableKind::Span, ExplanationClass::SourceBacked);
-        span.provenance.push(address(&observation.source_revision_ref, Some(&observation.span_ref)));
+        span.provenance.push(manifested_address(
+            observation.manifestation_ref.as_deref(),
+            &observation.source_revision_ref,
+            Some(&observation.span_ref),
+        ));
         span.dependencies.push(observation.source_revision_ref.clone());
         insert(&mut records, span);
     }
 
     for element in &issue.elements {
-        let mut er = bare(&element.element.element_ref, ExplainableKind::LegalElement, ExplanationClass::SourceBacked);
+        // An unpaid element remains a projection/residual coordinate.  It
+        // must not be labelled source-backed merely because the surrounding
+        // issue has other reviewed evidence.
+        let class = if element.evidence.is_empty() {
+            ExplanationClass::ProjectionMetadata
+        } else {
+            ExplanationClass::SourceBacked
+        };
+        let mut er = bare(&element.element.element_ref, ExplainableKind::LegalElement, class);
         for evidence in &element.evidence {
-            er.provenance.push(address(&evidence.source_revision_ref, Some(&evidence.span_ref)));
+            er.provenance.push(manifested_address(
+                evidence.manifestation_ref.as_deref(),
+                &evidence.source_revision_ref,
+                Some(&evidence.span_ref),
+            ));
             push_unique(&mut er.dependencies, evidence.reviewed_evidence_ref.clone());
             push_unique(&mut er.evidence_uses, evidence.observation_ref.clone());
 
             let mut reviewed = bare(&evidence.reviewed_evidence_ref, ExplainableKind::ReviewedEvidence, ExplanationClass::SourceBacked);
-            reviewed.provenance.push(address(&evidence.source_revision_ref, Some(&evidence.span_ref)));
+            reviewed.provenance.push(manifested_address(
+                evidence.manifestation_ref.as_deref(),
+                &evidence.source_revision_ref,
+                Some(&evidence.span_ref),
+            ));
             reviewed.dependencies.push(evidence.observation_ref.clone());
             reviewed.legal_uses.push(element.element.element_ref.clone());
             insert(&mut records, reviewed);
@@ -194,7 +239,7 @@ pub fn compile_explanation_index(
     }
 
     let mut residual_explanations = BTreeMap::new();
-    for residual in &campaign.residuals {
+    for residual in &state.residuals {
         if !records.contains_key(&residual.target_ref) {
             insert(&mut records, bare(
                 &residual.target_ref,
@@ -202,7 +247,7 @@ pub fn compile_explanation_index(
                 ExplanationClass::SystemMetadata,
             ));
         }
-        let route = campaign.selected_action.as_ref()
+        let route = state.selected_action.as_ref()
             .filter(|a| a.residual_ref == residual.residual_ref).map(|a| a.kind);
         residual_explanations.insert(residual.residual_ref.clone(), ResidualExplanation {
             residual_ref: residual.residual_ref.clone(),
@@ -216,7 +261,7 @@ pub fn compile_explanation_index(
         insert(&mut records, r);
     }
 
-    if let Some(action) = &campaign.selected_action {
+    if let Some(action) = &state.selected_action {
         let mut r = bare(&action.action_ref, ExplainableKind::Action, ExplanationClass::SystemMetadata);
         r.dependencies.push(action.residual_ref.clone());
         insert(&mut records, r);
@@ -255,6 +300,15 @@ pub fn compile_explanation_index(
     let index = ExplanationIndex { records, residual_explanations, candidate_only: true, creates_semantic_authority: false };
     index.validate()?;
     Ok(index)
+}
+
+pub fn compile_explanation_index(
+    workbench: &MatterIssueWorkbench,
+    issue: &WrongTypeIssueState,
+    campaign: &LegalCampaignState,
+) -> Result<ExplanationIndex, String> {
+    let state = LegalProjectionState::from(campaign);
+    compile_explanation_index_from_state(workbench, issue, &state)
 }
 
 impl ExplanationIndex {
