@@ -2809,6 +2809,8 @@ pub mod personal_world_handoff;
 pub use personal_world_handoff::*;
 pub mod personal_world_fact_review_adapter;
 pub use personal_world_fact_review_adapter::*;
+pub mod personal_world_scope_receipt;
+pub use personal_world_scope_receipt::*;
 pub mod adversarial_proof_search;
 pub use adversarial_proof_search::*;
 pub mod finite_legal_cut;
