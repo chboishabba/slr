@@ -2787,6 +2787,8 @@ pub mod legal_world;
 pub use legal_world::*;
 pub mod shared_world;
 pub use shared_world::*;
+pub mod adversarial_proof_search;
+pub use adversarial_proof_search::*;
 pub mod revision_consumer_bridge;
 pub use revision_consumer_bridge::*;
 pub mod query_revision_impact;
