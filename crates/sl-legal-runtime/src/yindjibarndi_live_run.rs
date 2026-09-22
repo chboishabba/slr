@@ -12,12 +12,13 @@
 //! identity.  Treatment compilation and counter-defeat matching are generic.
 
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
     compile_reviewed_treatment_rerun, generic_mabo_join_is_rejected,
     reviewed_yindjibarndi_authority_joins, yindjibarndi_primary_source_packet,
     yindjibarndi_reviewed_dependency_slice, run_yindjibarndi_finite_cut_experiment,
+    run_yindjibarndi_affected_consumer_experiment, exact_recompute_causes,
     AdversarialRerunReceipt, ReachableCutResult,
     EmpiricalArgumentRole, ReviewedTreatmentCoordinate, ReviewedTreatmentRole,
     SharedCoordinateKind, SharedWorld, SharedWorldCoordinate,
@@ -63,6 +64,8 @@ pub struct YindjibarndiMachineReceipt {
     pub mabo_only_repair_finite_cut: ReachableCutResult,
     pub fully_repaired_candidate_finite_cut: ReachableCutResult,
     pub finite_cut_recompute_changed: bool,
+    pub affected_consumers_by_coordinate: BTreeMap<String, BTreeSet<String>>,
+    pub recompute_causes_by_consumer: BTreeMap<String, BTreeSet<String>>,
     pub research_demand_refs: BTreeSet<String>,
     pub stop_reason: CaseRunStopReason,
     pub candidate_only: bool,
@@ -224,6 +227,18 @@ pub fn compile_yindjibarndi_machine_receipt(
 ) -> Result<YindjibarndiMachineReceipt, String> {
     let treatments = yindjibarndi_primary_source_packet();
     let finite = run_yindjibarndi_finite_cut_experiment()?;
+    let fanout = run_yindjibarndi_affected_consumer_experiment()?;
+    let affected_consumers_by_coordinate = BTreeMap::from([
+        (
+            YUNUPINGU_ACQUISITION_COORDINATE.to_owned(),
+            fanout.yunupingu_plan.consumer_refs.clone(),
+        ),
+        (
+            MABO_ACQUISITION_DISTINCTION_COORDINATE.to_owned(),
+            fanout.mabo_plan.consumer_refs.clone(),
+        ),
+    ]);
+    let recompute_causes_by_consumer = exact_recompute_causes(&fanout);
     let stop_reason = if !run
         .adversarial
         .summary
@@ -287,6 +302,8 @@ pub fn compile_yindjibarndi_machine_receipt(
         mabo_only_repair_finite_cut: finite.mabo_repair_cut.clone(),
         fully_repaired_candidate_finite_cut: finite.fully_repaired_candidate_cut.clone(),
         finite_cut_recompute_changed: finite.recompute_receipt.cut_changed,
+        affected_consumers_by_coordinate,
+        recompute_causes_by_consumer,
         research_demand_refs: run
             .adversarial
             .next_demands
@@ -344,6 +361,24 @@ mod tests {
             ReachableCutResult::Found(_)
         ));
         assert!(receipt.finite_cut_recompute_changed);
+        assert!(receipt
+            .affected_consumers_by_coordinate
+            .get(YUNUPINGU_ACQUISITION_COORDINATE)
+            .unwrap()
+            .contains(YINDJIBARNDI_CONSUMER));
+        assert!(receipt
+            .affected_consumers_by_coordinate
+            .get(MABO_ACQUISITION_DISTINCTION_COORDINATE)
+            .unwrap()
+            .contains(YINDJIBARNDI_CONSUMER));
+        assert_eq!(
+            receipt
+                .recompute_causes_by_consumer
+                .get(YINDJIBARNDI_CONSUMER)
+                .unwrap()
+                .len(),
+            2
+        );
         assert!(!receipt.creates_claim_truth);
     }
 
