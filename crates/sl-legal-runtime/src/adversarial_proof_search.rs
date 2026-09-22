@@ -415,7 +415,7 @@ pub fn candidate_route_from_atoms(
             graph
                 .atoms
                 .get(*atom_ref)
-                .is_none_or(|atom| !atom.reviewed)
+                .map_or(true, |atom| !atom.reviewed)
         })
         .count();
 
