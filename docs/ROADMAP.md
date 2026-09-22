@@ -231,3 +231,41 @@ P0-G is paid only by real retrieved artifacts whose digests match their
 retrieval receipts.
 
 Operational details: `docs/digital-esd-real-eric-screening.md`.
+
+# Shared User/World convergence (2026-09-22)
+
+Canonical production addendum: `docs/shared_user_world_runtime_20260922.md`.
+
+The next critical path is no longer revision-driven Mabo reopening.  Revision
+and replay remain supporting infrastructure.  The production recurrence is:
+
+```text
+consumer/question
+  -> exact dependency/residual
+  -> shared-world lookup
+  -> quotient reviewed in-scope coordinates
+  -> residual-sensitive producer for missing coordinates
+  -> explicit review/payment
+  -> reviewed world delta
+  -> affected-consumer recomputation
+```
+
+Current capability priority:
+
+1. shared user/world lookup + affected-consumer propagation;
+2. adversarial legal proof-runner weld over the existing dialectical,
+   WrongType, minimal-cut and LegalFollow machinery;
+3. heterogeneous empirical battery (Pabai; Yindjibarndi/Yunupingu/Mabo;
+   Munkara/Tipakalippa; Murujuga; colonisation; personal handoff; mission);
+4. unified workbench projections;
+5. revision/replay maintenance as a cross-cutting invariant.
+
+Permanent distinction:
+
+```text
+world availability != consumer dependency
+consumer dependency != scope permission
+scope permission != review/payment
+review/payment != legal applicability
+reachable legal route != predicted judicial outcome
+```
