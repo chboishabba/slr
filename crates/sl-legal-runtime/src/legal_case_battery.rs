@@ -233,6 +233,10 @@ pub fn legal_case_battery() -> Vec<LegalCaseBatterySpecimen> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{
+        munkara_wrong_type_gap, murujuga_open_discovery_control,
+        run_pabai_golden_regression, CandidateRouteStatus, TypedRerunGapKind,
+    };
 
     #[test]
     fn every_case_battery_specimen_is_source_driven_and_adversarial() {
@@ -275,6 +279,37 @@ mod tests {
         assert!(!pabai
             .allowed_join_proposal_bases
             .contains(&JoinProposalBasis::Citation));
+    }
+
+    #[test]
+    fn munkara_emits_machine_visible_wrong_type_for_related_but_nonpaying_context() {
+        let gap = munkara_wrong_type_gap();
+        assert_eq!(gap.kind, TypedRerunGapKind::WrongType);
+        assert!(gap.coordinate_ref.contains("sea-country"));
+        assert!(!gap.creates_claim_truth);
+    }
+
+    #[test]
+    fn pabai_is_the_golden_reopen_then_attack_again_regression() {
+        let receipt = run_pabai_golden_regression().unwrap();
+        assert_eq!(
+            receipt.route_status,
+            CandidateRouteStatus::ReachableCandidate
+        );
+        assert!(receipt.active_defeater_refs.is_empty());
+        assert_eq!(receipt.counter_defeater_refs.len(), 1);
+        assert!(receipt
+            .next_demands
+            .iter()
+            .any(|demand| demand.role == AdversarialSearchRole::Defeater));
+    }
+
+    #[test]
+    fn murujuga_open_discovery_control_has_no_mabo_preseed() {
+        let receipt = murujuga_open_discovery_control().unwrap();
+        assert!(receipt.citation_seed_refs.is_empty());
+        assert!(!receipt.mabo_dependency_preseeded);
+        assert!(receipt.source_follow_may_discover_new_authority);
     }
 
     #[test]
