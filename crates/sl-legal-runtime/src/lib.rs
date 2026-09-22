@@ -1832,6 +1832,7 @@ pub struct LegalRuntimeCapabilityReceipt {
     pub s19_affected_consumer_recompute: bool,
     pub s20_adversarial_proof_search: bool,
     pub s20_defeat_counterdefeat_rerun: bool,
+    pub s21_source_driven_case_battery: bool,
     pub candidate_only: bool,
     pub creates_semantic_authority: bool,
     pub receipt_digest: String,
@@ -2173,6 +2174,7 @@ pub fn compile_capability_receipt() -> Result<LegalRuntimeCapabilityReceipt, Leg
         s19_affected_consumer_recompute: true,
         s20_adversarial_proof_search: true,
         s20_defeat_counterdefeat_rerun: true,
+        s21_source_driven_case_battery: true,
         candidate_only: true,
         creates_semantic_authority: false,
         receipt_digest,
@@ -2759,6 +2761,7 @@ mod tests {
         assert!(receipt.s19_affected_consumer_recompute);
         assert!(receipt.s20_adversarial_proof_search);
         assert!(receipt.s20_defeat_counterdefeat_rerun);
+        assert!(receipt.s21_source_driven_case_battery);
         assert!(receipt.candidate_only);
         assert!(!receipt.creates_semantic_authority);
         assert!(receipt.receipt_digest.starts_with("sha256:"));
@@ -2804,6 +2807,8 @@ pub mod shared_world;
 pub use shared_world::*;
 pub mod adversarial_proof_search;
 pub use adversarial_proof_search::*;
+pub mod legal_case_battery;
+pub use legal_case_battery::*;
 pub mod revision_consumer_bridge;
 pub use revision_consumer_bridge::*;
 pub mod query_revision_impact;
