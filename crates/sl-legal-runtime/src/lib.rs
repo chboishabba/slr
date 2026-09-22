@@ -2819,6 +2819,8 @@ pub mod yindjibarndi_live_run;
 pub use yindjibarndi_live_run::*;
 pub mod munkara_tipakalippa_noncollapse;
 pub use munkara_tipakalippa_noncollapse::*;
+pub mod murujuga_open_discovery;
+pub use murujuga_open_discovery::*;
 pub mod revision_consumer_bridge;
 pub use revision_consumer_bridge::*;
 pub mod query_revision_impact;
