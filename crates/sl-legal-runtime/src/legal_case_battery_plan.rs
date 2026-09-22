@@ -8,7 +8,6 @@ use std::collections::BTreeSet;
 
 use sensiblaw_proof_search_loop::{
     frontier::{ProofFrontier, ProofResidual, ResidualStatus},
-    hypothesis::SearchHypothesis,
 };
 
 use crate::{

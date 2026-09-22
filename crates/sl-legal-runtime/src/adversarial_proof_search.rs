@@ -68,7 +68,7 @@ pub struct CandidateProofRoute {
     pub creates_claim_truth: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum AdversarialSearchRole {
     Support,
     Defeater,
