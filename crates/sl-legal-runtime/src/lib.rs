@@ -2870,3 +2870,6 @@ pub use effective_theory_comparison::*;
 
 pub mod typed_answer_explanation;
 pub use typed_answer_explanation::*;
+
+pub mod comparative_empirical_battery;
+pub use comparative_empirical_battery::*;
