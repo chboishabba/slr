@@ -21,7 +21,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "consumer_projection_change_world_invariant={}",
         battery.consumer_projection_change_world_invariant
     );
+    println!(
+        "consumer_projection_change_typed={}",
+        battery.consumer_projection_change_typed
+    );
     println!("legal_defeater_changes_route={}", battery.legal_defeater_changes_route);
+    println!(
+        "legal_defeater_change_typed={}",
+        battery.legal_defeater_change_typed
+    );
+    println!(
+        "irrelevant_revision_change_typed_world_evidence={}",
+        battery.irrelevant_revision_change_typed_world_evidence
+    );
     println!(
         "irrelevant_revision_changes_query_projection={}",
         battery.irrelevant_revision_changes_query_projection
