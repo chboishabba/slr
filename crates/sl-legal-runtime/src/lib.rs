@@ -2876,3 +2876,6 @@ pub use comparative_empirical_battery::*;
 
 pub mod typed_comparative_receipt;
 pub use typed_comparative_receipt::*;
+
+pub mod comparative_change_adapters;
+pub use comparative_change_adapters::*;
