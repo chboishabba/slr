@@ -5,11 +5,13 @@
 //! bounded comparative adapters, not a trading engine.
 
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
-    compile_typed_change_set, typed_locus, ChangeLayer, ComparativeDelta,
-    ComparativeDeltaKind, ComparativeDeltaRole, TypedChangeSet,
+    compile_typed_change_set, explain_answer_changing_distinction, typed_locus,
+    AnswerChangingDistinction, ChangeLayer, ChangeLocus, ComparativeDelta,
+    ComparativeDeltaKind, ComparativeDeltaRole, TypedAnswerChangingExplanation,
+    TypedChangeSet,
 };
 
 fn input_delta(
@@ -389,6 +391,84 @@ pub fn dashi_trade_phase9_justification_boundary(
     }
 }
 
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DashiTradePhase9ExplanationReceipt {
+    pub locus: ChangeLocus,
+    pub explanation: TypedAnswerChangingExplanation,
+    pub candidate_only: bool,
+    pub creates_semantic_authority: bool,
+    pub creates_claim_truth: bool,
+}
+
+pub fn dashi_trade_phase9_answer_changing_explanation(
+    query_ref: &str,
+    baseline_answer_ref: &str,
+    target_answer_ref: &str,
+    semantic_coordinate_ref: &str,
+    before_ref: &str,
+    after_ref: &str,
+    chain: &DashiTradePhase9Justification,
+) -> Result<DashiTradePhase9ExplanationReceipt, String> {
+    if query_ref.trim().is_empty()
+        || semantic_coordinate_ref.trim().is_empty()
+        || before_ref.trim().is_empty()
+        || after_ref.trim().is_empty()
+    {
+        return Err("dashiTRADE Phase-9 explanation requires identity refs".into());
+    }
+
+    let delta_ref = "delta:dashitrade:phase9-applicability".to_string();
+    let delta = ComparativeDelta {
+        delta_ref: delta_ref.clone(),
+        kind: ComparativeDeltaKind::ApplicabilityChanged,
+        role: ComparativeDeltaRole::WorldInput,
+        coordinate_ref: Some(semantic_coordinate_ref.into()),
+        route_ref: Some("route:dashitrade:phase9-action".into()),
+        residual_ref: None,
+        before_ref: Some(before_ref.into()),
+        after_ref: Some(after_ref.into()),
+        cause_refs: chain.justification_refs(),
+        candidate_only: true,
+        creates_semantic_authority: false,
+        creates_claim_truth: false,
+    };
+    let locus = typed_locus(
+        "locus:dashitrade:phase9-applicability",
+        delta,
+        ChangeLayer::Applicability,
+        Some("phase9-gate-refusal".into()),
+        BTreeSet::from(["layer:world".into(), "layer:observation".into()]),
+        chain.justification_refs(),
+    )?;
+
+    let distinction = AnswerChangingDistinction {
+        query_ref: query_ref.into(),
+        baseline_answer_ref: baseline_answer_ref.into(),
+        target_answer_ref: target_answer_ref.into(),
+        delta_refs: BTreeSet::from([delta_ref.clone()]),
+        candidate_only: true,
+        creates_semantic_authority: false,
+        creates_claim_truth: false,
+    };
+    let explanation = explain_answer_changing_distinction(
+        &distinction,
+        &[locus.clone()],
+        &BTreeMap::from([(
+            delta_ref,
+            "Phase-9 regime/posture/gate/cost chain changes action applicability; it does not prove the realised market outcome".into(),
+        )]),
+    )?;
+
+    Ok(DashiTradePhase9ExplanationReceipt {
+        locus,
+        explanation,
+        candidate_only: true,
+        creates_semantic_authority: false,
+        creates_claim_truth: false,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -498,6 +578,41 @@ mod tests {
             .change_set
             .changed_layers
             .contains(&ChangeLayer::ProofOutcome));
+    }
+
+
+    #[test]
+    fn phase9_justification_enters_shared_typed_explanation_abi() {
+        let chain = DashiTradePhase9Justification {
+            regime_ref: "regime:hazard-observe".into(),
+            posture_ref: "posture:observe".into(),
+            actuator_ref: "actuator:bar-exec".into(),
+            cost_model_ref: "cost:phase9-v2".into(),
+            expected_surplus_ref: "expected:nonpositive".into(),
+            realised_surplus_ref: "realised:later-observed".into(),
+        };
+        let receipt = dashi_trade_phase9_answer_changing_explanation(
+            "query:dashitrade:may-act",
+            "answer:actionable",
+            "answer:held",
+            "coordinate:dashitrade:phase9-gate",
+            "applicability:open",
+            "applicability:hold",
+            &chain,
+        )
+        .unwrap();
+
+        assert_eq!(receipt.locus.layer, ChangeLayer::Applicability);
+        assert!(receipt.explanation.all_minimal_deltas_typed);
+        assert_eq!(receipt.explanation.steps.len(), 1);
+        assert_eq!(
+            receipt.explanation.steps[0].layer,
+            ChangeLayer::Applicability
+        );
+        assert_eq!(receipt.explanation.steps[0].cause_refs.len(), 6);
+        assert!(!receipt.explanation.claims_causation_beyond_receipts);
+        assert!(!receipt.explanation.predicts_outcome);
+        assert!(!receipt.creates_claim_truth);
     }
 
     #[test]
