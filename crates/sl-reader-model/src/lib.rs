@@ -10,3 +10,5 @@ pub use mabo_context::*;
 pub use semantic_runtime::*;
 mod visualisation_transport;
 pub use visualisation_transport::*;
+mod persisted_workbench;
+pub use persisted_workbench::*;
