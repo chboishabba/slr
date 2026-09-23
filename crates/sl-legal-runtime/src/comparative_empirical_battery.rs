@@ -14,7 +14,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use crate::{
     compile_query_world_impact, run_observation_refinement,
     run_pabai_comparative_regression, run_personal_professional_comparison,
-    run_same_world_theory_change, run_state_change_regularilty_invariant,
+    run_same_world_theory_change, run_state_change_regularity_invariant,
     temporal_comparison_from_query_world_impact, ChangeLayer, ConsumerAxis,
     LegalWorldCoordinate, ProjectionGraph, ProjectionKind, ProjectionNode,
     QueryDependencySlice, RevisionDependencyIndex,
@@ -117,7 +117,7 @@ fn temporal_slice() -> QueryDependencySlice {
 
 pub fn run_comparative_empirical_battery(
 ) -> Result<ComparativeEmpiricalBatteryReceipt, String> {
-    let state = run_state_change_regularilty_invariant()?;
+    let state = run_state_change_regularity_invariant()?;
     let theory = run_same_world_theory_change()?;
     let observation = run_observation_refinement()?;
     let fibres = run_personal_professional_comparison()?;
