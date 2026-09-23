@@ -18,6 +18,50 @@ pub enum ComparativeObjectClass {
     RightOnly,
 }
 
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum ComparativeChangeLayer {
+    World,
+    WorldEvidence,
+    Observation,
+    Representation,
+    Theory,
+    Belief,
+    ConsumerProjection,
+    Review,
+    Scope,
+    Applicability,
+    ProofOutcome,
+    ResidualOutcome,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct ComparativeChangeAnnotation {
+    pub semantic_ref: String,
+    pub layer: ComparativeChangeLayer,
+    pub justification_refs: Vec<String>,
+    pub explanation_ref: Option<String>,
+    pub answer_changing: bool,
+    pub candidate_only: bool,
+    pub creates_semantic_authority: bool,
+    pub creates_claim_truth: bool,
+}
+
+impl ComparativeChangeAnnotation {
+    pub fn validate_read_only(&self) -> Result<(), String> {
+        if self.semantic_ref.trim().is_empty()
+            || !self.candidate_only
+            || self.creates_semantic_authority
+            || self.creates_claim_truth
+        {
+            return Err("comparative change annotation crossed read-only boundary".into());
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct ComparativeWorkbenchProjection {
@@ -30,6 +74,9 @@ pub struct ComparativeWorkbenchProjection {
     pub changed_semantic_refs: Vec<String>,
     pub left_only_semantic_refs: Vec<String>,
     pub right_only_semantic_refs: Vec<String>,
+    /// Typed production metadata. Frontends consume this directly.
+    pub change_annotations: Vec<ComparativeChangeAnnotation>,
+    /// Compatibility/export projections retained for older replay fixtures.
     pub change_layer_by_semantic_ref: std::collections::BTreeMap<String, String>,
     pub explanation_by_semantic_ref: std::collections::BTreeMap<String, String>,
     pub answer_changing_semantic_refs: Vec<String>,
@@ -64,6 +111,16 @@ impl ComparativeWorkbenchProjection {
             .chain(self.right_graph.nodes.iter().map(|node| node.semantic_ref.as_str()))
             .chain(self.right_graph.edges.iter().map(|edge| edge.semantic_ref.as_str()))
             .collect::<std::collections::BTreeSet<_>>();
+
+        for annotation in &self.change_annotations {
+            annotation.validate_read_only()?;
+            if !available.contains(annotation.semantic_ref.as_str()) {
+                return Err(format!(
+                    "typed comparative annotation references unknown semantic object {}",
+                    annotation.semantic_ref
+                ));
+            }
+        }
 
         for reference in self
             .change_layer_by_semantic_ref
@@ -149,6 +206,7 @@ mod tests {
             changed_semantic_refs: vec![],
             left_only_semantic_refs: vec![],
             right_only_semantic_refs: vec![],
+            change_annotations: vec![],
             change_layer_by_semantic_ref: std::collections::BTreeMap::from([(
                 "missing".into(),
                 "Applicability".into(),
