@@ -38,6 +38,7 @@ pub struct ComparativeEmpiricalBatteryReceipt {
     pub dashitrade_shadow_same_world_policy_delta: bool,
     pub dashitrade_belief_separate_from_world_and_action: bool,
     pub dashitrade_justification_not_causal_proof: bool,
+    pub dashitrade_phase9_uses_shared_typed_explanation_abi: bool,
     pub all_modes_candidate_only: bool,
     pub any_mode_creates_semantic_authority: bool,
     pub any_mode_creates_claim_truth: bool,
@@ -237,6 +238,23 @@ pub fn run_comparative_empirical_battery(
         },
     );
 
+    let trade_explanation = dashi_trade_phase9_answer_changing_explanation(
+        "query:battery:dashitrade-actionability",
+        "answer:actionable",
+        "answer:held",
+        "coordinate:dashitrade:phase9-gate",
+        "applicability:open",
+        "applicability:hold",
+        &DashiTradePhase9Justification {
+            regime_ref: "regime:hazard-observe".into(),
+            posture_ref: "posture:observe".into(),
+            actuator_ref: "actuator:bar-exec".into(),
+            cost_model_ref: "cost:phase9".into(),
+            expected_surplus_ref: "expected:nonpositive".into(),
+            realised_surplus_ref: "realised:later-observed".into(),
+        },
+    )?;
+
     let consumer_projection_change_world_invariant =
         fibres.personal_to_lawyer.world_ref == fibres.personal_to_regulator.world_ref
             && (fibres.personal_to_lawyer.shared_visible_coordinate_refs
@@ -337,6 +355,11 @@ pub fn run_comparative_empirical_battery(
             !trade_justification.proves_market_causation
             && !trade_justification.proves_global_theory_correctness
             && !trade_justification.creates_claim_truth,
+        dashitrade_phase9_uses_shared_typed_explanation_abi:
+            trade_explanation.locus.layer == ChangeLayer::Applicability
+            && trade_explanation.explanation.all_minimal_deltas_typed
+            && !trade_explanation.explanation.claims_causation_beyond_receipts
+            && !trade_explanation.explanation.predicts_outcome,
         all_modes_candidate_only: state.candidate_only
             && theory.candidate_only
             && observation.candidate_only
@@ -382,6 +405,7 @@ mod tests {
         assert!(receipt.dashitrade_shadow_same_world_policy_delta);
         assert!(receipt.dashitrade_belief_separate_from_world_and_action);
         assert!(receipt.dashitrade_justification_not_causal_proof);
+        assert!(receipt.dashitrade_phase9_uses_shared_typed_explanation_abi);
         assert!(receipt.all_modes_candidate_only);
         assert!(!receipt.any_mode_creates_semantic_authority);
         assert!(!receipt.any_mode_creates_claim_truth);
