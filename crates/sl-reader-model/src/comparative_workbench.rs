@@ -75,6 +75,7 @@ pub struct ComparativeWorkbenchProjection {
     pub left_only_semantic_refs: Vec<String>,
     pub right_only_semantic_refs: Vec<String>,
     /// Typed production metadata. Frontends consume this directly.
+    #[cfg_attr(feature = "serde", serde(default))]
     pub change_annotations: Vec<ComparativeChangeAnnotation>,
     /// Compatibility/export projections retained for older replay fixtures.
     pub change_layer_by_semantic_ref: std::collections::BTreeMap<String, String>,
