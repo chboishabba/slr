@@ -6,6 +6,9 @@
 //! promoting derived forecast/risk changes into world truth.
 
 use serde::{Deserialize, Serialize};
+
+pub const WORLDMONITOR_COMPARATIVE_SOURCE_COMMIT: &str =
+    "7142fb8d806fbfe238b2918f4e22ba8ceeac06af";
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
