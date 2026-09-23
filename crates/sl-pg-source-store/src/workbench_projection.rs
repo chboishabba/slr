@@ -317,6 +317,7 @@ pub fn load_persisted_workbench_projection<C: GenericClient>(
 
 #[cfg(test)]
 mod tests {
+    use super::*;
 
     #[test]
     fn discovery_windows_only_follow_consecutive_revisions_of_same_document() {
