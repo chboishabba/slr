@@ -67,6 +67,12 @@ pub fn load_persisted_workbench_projection<C: GenericClient>(
         &[&projection_ref],
     )?;
 
+    if node_rows.is_empty() {
+        return Err(WorkbenchProjectionError::InvalidProjection(
+            "persisted legal-follow projection has no typed nodes".into(),
+        ));
+    }
+
     let mut nodes = Vec::with_capacity(node_rows.len());
     let mut source_refs = BTreeSet::new();
     for row in node_rows {
