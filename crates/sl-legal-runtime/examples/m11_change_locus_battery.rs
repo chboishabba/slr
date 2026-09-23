@@ -1,7 +1,9 @@
 use sensiblaw_legal_runtime::{
+    compile_typed_change_set, legal_route_comparative_receipt,
     newton_gr_effective_lineage, run_comparative_empirical_battery,
     run_observation_refinement, run_pabai_comparative_regression,
     run_same_world_theory_change, run_state_change_regularity_invariant,
+    typed_comparative_receipt_extension,
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -78,6 +80,37 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .cloned()
             .collect::<Vec<_>>()
             .join(",")
+    );
+
+    let pabai_base = legal_route_comparative_receipt(
+        "comparison:pabai:w0-w1",
+        &pabai.w0_to_w1,
+        "query:pabai:duty-route",
+        "consumer:pabai-climate-duty",
+        Some(&pabai.w0_to_w1_distinction),
+    )?;
+    let pabai_change_set = compile_typed_change_set(
+        "comparison:pabai:w0-w1",
+        [pabai.w0_to_w1_locus.clone()],
+        [],
+    )?;
+    let pabai_typed = typed_comparative_receipt_extension(
+        &pabai_base,
+        &pabai_change_set,
+        Some(&pabai.w0_to_w1_explanation),
+    )?;
+
+    println!(
+        "typed_receipt_schema={}",
+        pabai_typed.schema_version
+    );
+    println!(
+        "typed_receipt_base_schema={}",
+        pabai_typed.base_schema_version
+    );
+    println!(
+        "typed_receipt_all_answer_changing_deltas_typed={}",
+        pabai_typed.all_answer_changing_deltas_typed
     );
 
     println!(
