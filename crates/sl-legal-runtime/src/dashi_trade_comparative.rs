@@ -5,6 +5,9 @@
 //! bounded comparative adapters, not a trading engine.
 
 use serde::{Deserialize, Serialize};
+
+pub const DASHITRADE_COMPARATIVE_SOURCE_COMMIT: &str =
+    "04ba378bd38df61a223af8c27e3ae4d18d2b0c3f";
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
