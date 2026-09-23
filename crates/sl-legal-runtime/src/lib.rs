@@ -2885,3 +2885,9 @@ pub use comparative_workbench_overlay::*;
 
 pub mod typed_workbench_comparison;
 pub use typed_workbench_comparison::*;
+
+pub mod worldmonitor_comparative;
+pub use worldmonitor_comparative::*;
+
+pub mod dashi_trade_comparative;
+pub use dashi_trade_comparative::*;
