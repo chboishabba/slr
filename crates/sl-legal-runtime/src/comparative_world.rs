@@ -292,6 +292,23 @@ pub fn compare_worlds(
     right.validate()?;
     query.validate()?;
 
+    let explicit_input_deltas = additional_input_deltas
+        .into_iter()
+        .map(|delta| {
+            delta.validate()?;
+            if delta.role != ComparativeDeltaRole::WorldInput
+                && delta.role != ComparativeDeltaRole::Context
+            {
+                return Err("additional deltas must be world-input/context deltas".into());
+            }
+            Ok(delta)
+        })
+        .collect::<Result<Vec<_>, String>>()?;
+    let explicitly_typed_coordinate_refs = explicit_input_deltas
+        .iter()
+        .filter_map(|delta| delta.coordinate_ref.clone())
+        .collect::<BTreeSet<_>>();
+
     let left_coords = left.coordinates.keys().cloned().collect::<BTreeSet<_>>();
     let right_coords = right.coordinates.keys().cloned().collect::<BTreeSet<_>>();
     let shared_coordinate_refs = left_coords
@@ -303,6 +320,9 @@ pub fn compare_worlds(
 
     for coordinate_ref in left_coords.difference(&right_coords) {
         changed_coordinate_refs.insert(coordinate_ref.clone());
+        if explicitly_typed_coordinate_refs.contains(coordinate_ref) {
+            continue;
+        }
         deltas.push(ComparativeDelta {
             delta_ref: format!("delta:coordinate-removed:{coordinate_ref}"),
             kind: ComparativeDeltaKind::FactRemoved,
@@ -326,6 +346,9 @@ pub fn compare_worlds(
     }
     for coordinate_ref in right_coords.difference(&left_coords) {
         changed_coordinate_refs.insert(coordinate_ref.clone());
+        if explicitly_typed_coordinate_refs.contains(coordinate_ref) {
+            continue;
+        }
         deltas.push(ComparativeDelta {
             delta_ref: format!("delta:coordinate-added:{coordinate_ref}"),
             kind: ComparativeDeltaKind::FactAdded,
@@ -358,13 +381,7 @@ pub fn compare_worlds(
         }
     }
 
-    for delta in additional_input_deltas {
-        delta.validate()?;
-        if delta.role != ComparativeDeltaRole::WorldInput
-            && delta.role != ComparativeDeltaRole::Context
-        {
-            return Err("additional deltas must be world-input/context deltas".into());
-        }
+    for delta in explicit_input_deltas {
         if let Some(coordinate_ref) = &delta.coordinate_ref {
             changed_coordinate_refs.insert(coordinate_ref.clone());
         }
@@ -658,6 +675,55 @@ mod tests {
         let comparison = compare_worlds(&left, &right, &query, []).unwrap();
         assert!(comparison.query_relevant_delta_refs.is_empty());
         assert!(!comparison.query_irrelevant_delta_refs.is_empty());
+    }
+
+    #[test]
+    fn domain_typed_coordinate_delta_replaces_generic_addition_delta() {
+        let left = world("world:left", &[]);
+        let right = world("world:right", &[("coordinate:d", "defeater")]);
+        let query = ComparativeQuerySlice {
+            query_ref: "query:d".into(),
+            consumer_ref: "consumer:d".into(),
+            coordinate_refs: BTreeSet::from(["coordinate:d".into()]),
+            route_refs: BTreeSet::new(),
+            residual_refs: BTreeSet::new(),
+            candidate_only: true,
+            creates_semantic_authority: false,
+            creates_claim_truth: false,
+        };
+        let typed = ComparativeDelta {
+            delta_ref: "delta:d:defeater".into(),
+            kind: ComparativeDeltaKind::DefeaterAdded,
+            role: ComparativeDeltaRole::WorldInput,
+            coordinate_ref: Some("coordinate:d".into()),
+            route_ref: None,
+            residual_ref: None,
+            before_ref: None,
+            after_ref: Some("defeater".into()),
+            cause_refs: BTreeSet::new(),
+            candidate_only: true,
+            creates_semantic_authority: false,
+            creates_claim_truth: false,
+        };
+
+        let comparison = compare_worlds(&left, &right, &query, [typed]).unwrap();
+        assert_eq!(
+            comparison
+                .deltas
+                .iter()
+                .filter(|delta| delta.coordinate_ref.as_deref() == Some("coordinate:d"))
+                .count(),
+            1
+        );
+        assert_eq!(
+            comparison
+                .deltas
+                .iter()
+                .find(|delta| delta.coordinate_ref.as_deref() == Some("coordinate:d"))
+                .unwrap()
+                .kind,
+            ComparativeDeltaKind::DefeaterAdded
+        );
     }
 
     #[test]
