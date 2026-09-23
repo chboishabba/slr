@@ -32,6 +32,12 @@ pub struct ComparativeEmpiricalBatteryReceipt {
     pub irrelevant_revision_changes_query_projection: bool,
     pub irrelevant_revision_change_typed_world_evidence: bool,
     pub irrelevant_revision_reopens_research: bool,
+    pub worldmonitor_forecast_change_not_world_change: bool,
+    pub worldmonitor_model_and_dashboard_axes_typed: bool,
+    pub dashitrade_quotient_query_relative_nonfactorability: bool,
+    pub dashitrade_shadow_same_world_policy_delta: bool,
+    pub dashitrade_belief_separate_from_world_and_action: bool,
+    pub dashitrade_justification_not_causal_proof: bool,
     pub all_modes_candidate_only: bool,
     pub any_mode_creates_semantic_authority: bool,
     pub any_mode_creates_claim_truth: bool,
@@ -144,6 +150,93 @@ pub fn run_comparative_empirical_battery(
         &fibres.personal_to_regulator,
     )?;
 
+    let wm0 = WorldMonitorForecastRun {
+        run_ref: "wm:0".into(),
+        forecast_depth: "standard".into(),
+        deep_forecast_status: "complete".into(),
+        state_labels: BTreeSet::from(["stable".into()]),
+        top_forecast_titles: BTreeSet::from(["baseline".into()]),
+        traced_forecast_count: 2,
+        impact_expansion_candidate_count: 1,
+        impact_expansion_mapped_signal_count: 1,
+        simulation_interaction_count: 3,
+        reportable_interaction_count: 2,
+        published_domain_counts: BTreeMap::from([("geopolitics".into(), 1)]),
+        source_measurement_refs: BTreeSet::from(["signal:1".into()]),
+        forecast_model_ref: Some("model:v1".into()),
+        dashboard_projection_ref: Some("risk:v1".into()),
+    };
+    let mut wm1 = wm0.clone();
+    wm1.run_ref = "wm:1".into();
+    wm1.state_labels.insert("escalating".into());
+    wm1.forecast_model_ref = Some("model:v2".into());
+    wm1.dashboard_projection_ref = Some("risk:v2".into());
+    let worldmonitor =
+        compare_worldmonitor_forecast_runs("comparison:battery:worldmonitor", &wm0, &wm1)?;
+
+    let quotient = compare_dashi_trade_quotient_states(
+        "comparison:battery:quotient",
+        &DashiTradeQuotientState {
+            raw_world_ref: "raw:A".into(),
+            representative_ref: "q:same".into(),
+            contradiction_ref: "contradiction:same".into(),
+            nuisance_symmetry_ref: "perm:trades".into(),
+        },
+        &DashiTradeQuotientState {
+            raw_world_ref: "raw:B".into(),
+            representative_ref: "q:same".into(),
+            contradiction_ref: "contradiction:same".into(),
+            nuisance_symmetry_ref: "perm:trades".into(),
+        },
+    )?;
+
+    let shadow = compare_dashi_trade_live_shadow(
+        "comparison:battery:shadow",
+        &DashiTradeShadowPolicyStep {
+            world_ref: "world:same".into(),
+            observation_ref: "observation:same".into(),
+            live_policy_ref: "policy:live".into(),
+            shadow_policy_ref: "policy:shadow".into(),
+            live_action_ref: "action:hold".into(),
+            shadow_action_ref: "action:long".into(),
+        },
+    )?;
+
+    let thesis = compare_dashi_trade_thesis(
+        "comparison:battery:thesis",
+        &DashiTradeThesisSnapshot {
+            world_ref: "world:same".into(),
+            observation_ref: "obs:0".into(),
+            thesis_direction: 1,
+            thesis_strength: 1,
+            thesis_age: 3,
+            cooldown: 0,
+            invalidation: 0,
+            action_ref: "action:long".into(),
+        },
+        &DashiTradeThesisSnapshot {
+            world_ref: "world:same".into(),
+            observation_ref: "obs:1".into(),
+            thesis_direction: 1,
+            thesis_strength: 2,
+            thesis_age: 4,
+            cooldown: 0,
+            invalidation: 0,
+            action_ref: "action:long".into(),
+        },
+    )?;
+
+    let trade_justification = dashi_trade_phase9_justification_boundary(
+        &DashiTradePhase9Justification {
+            regime_ref: "regime:positive-edge".into(),
+            posture_ref: "posture:trade-normal".into(),
+            actuator_ref: "actuator:bar-exec".into(),
+            cost_model_ref: "cost:phase9".into(),
+            expected_surplus_ref: "expected:positive".into(),
+            realised_surplus_ref: "realised:positive".into(),
+        },
+    );
+
     let consumer_projection_change_world_invariant =
         fibres.personal_to_lawyer.world_ref == fibres.personal_to_regulator.world_ref
             && (fibres.personal_to_lawyer.shared_visible_coordinate_refs
@@ -202,6 +295,48 @@ pub fn run_comparative_empirical_battery(
             .contains(&ChangeLayer::WorldEvidence)
             && !temporal_changes.changed_layers.contains(&ChangeLayer::World),
         irrelevant_revision_reopens_research: temporal.reopens_consumer_research,
+        worldmonitor_forecast_change_not_world_change:
+            worldmonitor
+                .change_set
+                .changed_layers
+                .contains(&ChangeLayer::Representation)
+            && worldmonitor
+                .change_set
+                .invariant_layers
+                .contains(&ChangeLayer::World)
+            && !worldmonitor.world_changed_inferred,
+        worldmonitor_model_and_dashboard_axes_typed:
+            worldmonitor.change_set.changed_layers.contains(&ChangeLayer::Theory)
+            && worldmonitor
+                .change_set
+                .changed_layers
+                .contains(&ChangeLayer::ConsumerProjection),
+        dashitrade_quotient_query_relative_nonfactorability:
+            quotient.raw_worlds_differ
+            && quotient.quotient_representations_equal
+            && quotient.declared_query_factors_through
+            && !quotient.richer_query_factors_through
+            && !quotient.erased_detail_recovered_by_recharting,
+        dashitrade_shadow_same_world_policy_delta:
+            shadow.world_invariant
+            && shadow.observation_invariant
+            && shadow.policy_changed
+            && shadow
+                .change_set
+                .changed_layers
+                .contains(&ChangeLayer::Representation),
+        dashitrade_belief_separate_from_world_and_action:
+            !thesis.world_changed
+            && thesis.belief_changed
+            && !thesis.action_changed
+            && thesis
+                .change_set
+                .changed_layers
+                .contains(&ChangeLayer::Belief),
+        dashitrade_justification_not_causal_proof:
+            !trade_justification.proves_market_causation
+            && !trade_justification.proves_global_theory_correctness
+            && !trade_justification.creates_claim_truth,
         all_modes_candidate_only: state.candidate_only
             && theory.candidate_only
             && observation.candidate_only
@@ -241,6 +376,12 @@ mod tests {
         assert!(!receipt.irrelevant_revision_changes_query_projection);
         assert!(receipt.irrelevant_revision_change_typed_world_evidence);
         assert!(!receipt.irrelevant_revision_reopens_research);
+        assert!(receipt.worldmonitor_forecast_change_not_world_change);
+        assert!(receipt.worldmonitor_model_and_dashboard_axes_typed);
+        assert!(receipt.dashitrade_quotient_query_relative_nonfactorability);
+        assert!(receipt.dashitrade_shadow_same_world_policy_delta);
+        assert!(receipt.dashitrade_belief_separate_from_world_and_action);
+        assert!(receipt.dashitrade_justification_not_causal_proof);
         assert!(receipt.all_modes_candidate_only);
         assert!(!receipt.any_mode_creates_semantic_authority);
         assert!(!receipt.any_mode_creates_claim_truth);
