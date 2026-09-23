@@ -398,10 +398,10 @@ pub fn compare_worlds(
                     creates_claim_truth: false,
                 });
             }
-            (Some(before), None) | (None, Some(before)) => {
+            (Some(before), None) => {
                 changed_route_refs.insert(route_ref.clone());
                 deltas.push(ComparativeDelta {
-                    delta_ref: format!("delta:route-presence:{route_ref}"),
+                    delta_ref: format!("delta:route-removed:{route_ref}"),
                     kind: ComparativeDeltaKind::RouteStatusChanged,
                     role: ComparativeDeltaRole::ProofOutcome,
                     coordinate_ref: None,
@@ -409,6 +409,23 @@ pub fn compare_worlds(
                     residual_ref: None,
                     before_ref: Some(before.status_ref.clone()),
                     after_ref: None,
+                    cause_refs: BTreeSet::new(),
+                    candidate_only: true,
+                    creates_semantic_authority: false,
+                    creates_claim_truth: false,
+                });
+            }
+            (None, Some(after)) => {
+                changed_route_refs.insert(route_ref.clone());
+                deltas.push(ComparativeDelta {
+                    delta_ref: format!("delta:route-added:{route_ref}"),
+                    kind: ComparativeDeltaKind::RouteStatusChanged,
+                    role: ComparativeDeltaRole::ProofOutcome,
+                    coordinate_ref: None,
+                    route_ref: Some(route_ref.clone()),
+                    residual_ref: None,
+                    before_ref: None,
+                    after_ref: Some(after.status_ref.clone()),
                     cause_refs: BTreeSet::new(),
                     candidate_only: true,
                     creates_semantic_authority: false,
