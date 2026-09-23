@@ -16,7 +16,9 @@ use crate::{
     CandidateRouteStatus, ComparativeCoordinateState, ComparativeDelta,
     ComparativeDeltaKind, ComparativeDeltaRole, ComparativeQuerySlice,
     ComparativeRouteState, ComparativeWorldIr, ComparativeWorldState,
-    ReviewedTreatmentCoordinate, ReviewedTreatmentRole,
+    ReviewedTreatmentCoordinate, ReviewedTreatmentRole, ChangeLayer,
+    ChangeLocus, TypedAnswerChangingExplanation, typed_locus,
+    explain_answer_changing_distinction,
 };
 
 pub const PABAI_COMPARATIVE_CONSUMER: &str = "consumer:pabai-climate-duty";
@@ -240,8 +242,12 @@ fn explicit_counter_delta() -> ComparativeDelta {
 pub struct PabaiComparativeReceipt {
     pub w0_to_w1: ComparativeWorldIr,
     pub w0_to_w1_distinction: AnswerChangingDistinction,
+    pub w0_to_w1_locus: ChangeLocus,
+    pub w0_to_w1_explanation: TypedAnswerChangingExplanation,
     pub w1_to_w2: ComparativeWorldIr,
     pub w1_to_w2_distinction: AnswerChangingDistinction,
+    pub w1_to_w2_locus: ChangeLocus,
+    pub w1_to_w2_explanation: TypedAnswerChangingExplanation,
     pub candidate_only: bool,
     pub creates_semantic_authority: bool,
     pub creates_claim_truth: bool,
@@ -290,11 +296,49 @@ pub fn run_pabai_comparative_regression() -> Result<PabaiComparativeReceipt, Str
     )?
     .ok_or_else(|| "Pabai W1→W2 has no answer-changing distinction".to_string())?;
 
+    let w0_to_w1_locus = typed_locus(
+        "locus:pabai:w0-w1:defeater",
+        explicit_defeater_delta(),
+        ChangeLayer::Applicability,
+        Some("legal-defeater".into()),
+        BTreeSet::new(),
+        BTreeSet::from(["review:pabai:defeater".into()]),
+    )?;
+    let w0_to_w1_explanation = explain_answer_changing_distinction(
+        &w0_to_w1_distinction,
+        &[w0_to_w1_locus.clone()],
+        &BTreeMap::from([(
+            "delta:pabai:w0-w1:defeater".into(),
+            "reviewed core-policy defeater enters the applicability layer and blocks the candidate duty route".into(),
+        )]),
+    )?;
+
+    let w1_to_w2_locus = typed_locus(
+        "locus:pabai:w1-w2:counter-defeater",
+        explicit_counter_delta(),
+        ChangeLayer::Applicability,
+        Some("legal-counter-defeater".into()),
+        BTreeSet::new(),
+        BTreeSet::from(["review:pabai:counter-defeater".into()]),
+    )?;
+    let w1_to_w2_explanation = explain_answer_changing_distinction(
+        &w1_to_w2_distinction,
+        &[w1_to_w2_locus.clone()],
+        &BTreeMap::from([(
+            "delta:pabai:w1-w2:counter-defeater".into(),
+            "reviewed counter-distinction enters the applicability layer and reopens the candidate route for fresh defeater search".into(),
+        )]),
+    )?;
+
     Ok(PabaiComparativeReceipt {
         w0_to_w1,
         w0_to_w1_distinction,
+        w0_to_w1_locus,
+        w0_to_w1_explanation,
         w1_to_w2,
         w1_to_w2_distinction,
+        w1_to_w2_locus,
+        w1_to_w2_explanation,
         candidate_only: true,
         creates_semantic_authority: false,
         creates_claim_truth: false,
@@ -342,6 +386,18 @@ mod tests {
             .w1_to_w2
             .changed_route_refs
             .contains(PABAI_COMPARATIVE_ROUTE));
+        assert!(receipt.w0_to_w1_explanation.all_minimal_deltas_typed);
+        assert_eq!(
+            receipt.w0_to_w1_explanation.steps[0].layer,
+            ChangeLayer::Applicability
+        );
+        assert!(receipt.w1_to_w2_explanation.all_minimal_deltas_typed);
+        assert_eq!(
+            receipt.w1_to_w2_explanation.steps[0].layer,
+            ChangeLayer::Applicability
+        );
+        assert!(!receipt.w0_to_w1_explanation.predicts_outcome);
+        assert!(!receipt.w1_to_w2_explanation.predicts_outcome);
         assert!(!receipt.creates_claim_truth);
     }
 }
