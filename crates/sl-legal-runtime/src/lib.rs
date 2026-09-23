@@ -2879,3 +2879,6 @@ pub use typed_comparative_receipt::*;
 
 pub mod comparative_change_adapters;
 pub use comparative_change_adapters::*;
+
+pub mod comparative_workbench_overlay;
+pub use comparative_workbench_overlay::*;
