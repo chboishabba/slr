@@ -6,6 +6,122 @@ use sensiblaw_reader_model::{
     PersistedWorkbenchProjection,
 };
 
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LegalFollowProjectionSummary {
+    pub projection_ref: String,
+    pub document_ref: String,
+    pub created_at: String,
+    pub node_count: i64,
+    pub edge_count: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConsecutiveProjectionPair {
+    pub document_ref: String,
+    pub before_projection_ref: String,
+    pub after_projection_ref: String,
+    pub before_created_at: String,
+    pub after_created_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConsecutiveProjectionTriple {
+    pub document_ref: String,
+    pub w0_projection_ref: String,
+    pub w1_projection_ref: String,
+    pub w2_projection_ref: String,
+    pub w0_created_at: String,
+    pub w1_created_at: String,
+    pub w2_created_at: String,
+}
+
+pub fn list_legal_follow_projection_summaries<C: GenericClient>(
+    client: &mut C,
+    limit: i64,
+) -> Result<Vec<LegalFollowProjectionSummary>, WorkbenchProjectionError> {
+    if limit <= 0 {
+        return Err(WorkbenchProjectionError::InvalidProjection(
+            "projection discovery limit must be positive".into(),
+        ));
+    }
+    let rows = client.query(
+        "
+        SELECT p.projection_ref,
+               p.document_ref,
+               p.created_at::text AS created_at,
+               COUNT(DISTINCT n.node_ref)::bigint AS node_count,
+               COUNT(DISTINCT e.edge_ref)::bigint AS edge_count
+        FROM pnf_follow_projection p
+        JOIN pnf_follow_node n ON n.projection_ref = p.projection_ref
+        LEFT JOIN pnf_follow_edge e ON e.projection_ref = p.projection_ref
+        WHERE p.projection_kind = 'legal_follow'
+          AND p.authority_ceiling = 'derived_only_challengeable'
+          AND p.promotion_allowed = FALSE
+          AND p.execution_allowed = FALSE
+        GROUP BY p.projection_ref, p.document_ref, p.created_at
+        ORDER BY p.document_ref, p.created_at, p.projection_ref
+        LIMIT $1
+        ",
+        &[&limit],
+    )?;
+    Ok(rows
+        .into_iter()
+        .map(|row| LegalFollowProjectionSummary {
+            projection_ref: row.get("projection_ref"),
+            document_ref: row.get("document_ref"),
+            created_at: row.get("created_at"),
+            node_count: row.get("node_count"),
+            edge_count: row.get("edge_count"),
+        })
+        .collect())
+}
+
+pub fn consecutive_projection_pairs(
+    summaries: &[LegalFollowProjectionSummary],
+) -> Vec<ConsecutiveProjectionPair> {
+    let mut pairs = Vec::new();
+    for window in summaries.windows(2) {
+        let before = &window[0];
+        let after = &window[1];
+        if before.document_ref != after.document_ref {
+            continue;
+        }
+        pairs.push(ConsecutiveProjectionPair {
+            document_ref: before.document_ref.clone(),
+            before_projection_ref: before.projection_ref.clone(),
+            after_projection_ref: after.projection_ref.clone(),
+            before_created_at: before.created_at.clone(),
+            after_created_at: after.created_at.clone(),
+        });
+    }
+    pairs
+}
+
+pub fn consecutive_projection_triples(
+    summaries: &[LegalFollowProjectionSummary],
+) -> Vec<ConsecutiveProjectionTriple> {
+    let mut triples = Vec::new();
+    for window in summaries.windows(3) {
+        let w0 = &window[0];
+        let w1 = &window[1];
+        let w2 = &window[2];
+        if w0.document_ref != w1.document_ref || w1.document_ref != w2.document_ref {
+            continue;
+        }
+        triples.push(ConsecutiveProjectionTriple {
+            document_ref: w0.document_ref.clone(),
+            w0_projection_ref: w0.projection_ref.clone(),
+            w1_projection_ref: w1.projection_ref.clone(),
+            w2_projection_ref: w2.projection_ref.clone(),
+            w0_created_at: w0.created_at.clone(),
+            w1_created_at: w1.created_at.clone(),
+            w2_created_at: w2.created_at.clone(),
+        });
+    }
+    triples
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum WorkbenchProjectionError {
     #[error("projection_ref and world_ref must be non-empty")]
@@ -201,6 +317,55 @@ pub fn load_persisted_workbench_projection<C: GenericClient>(
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn discovery_windows_only_follow_consecutive_revisions_of_same_document() {
+        let summaries = vec![
+            LegalFollowProjectionSummary {
+                projection_ref: "p0".into(),
+                document_ref: "doc:a".into(),
+                created_at: "2026-09-23 10:00:00+10".into(),
+                node_count: 1,
+                edge_count: 0,
+            },
+            LegalFollowProjectionSummary {
+                projection_ref: "p1".into(),
+                document_ref: "doc:a".into(),
+                created_at: "2026-09-23 11:00:00+10".into(),
+                node_count: 2,
+                edge_count: 1,
+            },
+            LegalFollowProjectionSummary {
+                projection_ref: "p2".into(),
+                document_ref: "doc:a".into(),
+                created_at: "2026-09-23 12:00:00+10".into(),
+                node_count: 3,
+                edge_count: 2,
+            },
+            LegalFollowProjectionSummary {
+                projection_ref: "q0".into(),
+                document_ref: "doc:b".into(),
+                created_at: "2026-09-23 13:00:00+10".into(),
+                node_count: 1,
+                edge_count: 0,
+            },
+        ];
+
+        let pairs = consecutive_projection_pairs(&summaries);
+        let triples = consecutive_projection_triples(&summaries);
+
+        assert_eq!(pairs.len(), 2);
+        assert_eq!(pairs[0].before_projection_ref, "p0");
+        assert_eq!(pairs[0].after_projection_ref, "p1");
+        assert_eq!(pairs[1].before_projection_ref, "p1");
+        assert_eq!(pairs[1].after_projection_ref, "p2");
+
+        assert_eq!(triples.len(), 1);
+        assert_eq!(triples[0].w0_projection_ref, "p0");
+        assert_eq!(triples[0].w1_projection_ref, "p1");
+        assert_eq!(triples[0].w2_projection_ref, "p2");
+    }
+
     #[test]
     fn production_loader_module_contains_no_json_payload_dependency() {
         let source = include_str!("workbench_projection.rs");
