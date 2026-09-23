@@ -2873,3 +2873,6 @@ pub use typed_answer_explanation::*;
 
 pub mod comparative_empirical_battery;
 pub use comparative_empirical_battery::*;
+
+pub mod typed_comparative_receipt;
+pub use typed_comparative_receipt::*;
