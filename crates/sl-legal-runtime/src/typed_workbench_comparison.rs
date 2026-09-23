@@ -81,8 +81,10 @@ fn validate_overlay(
     right: &PersistedWorkbenchGraph,
 ) -> Result<(), String> {
     overlay.validate()?;
-    let available = semantic_refs(left)
-        .union(&semantic_refs(right))
+    let left_refs = semantic_refs(left);
+    let right_refs = semantic_refs(right);
+    let available = left_refs
+        .union(&right_refs)
         .cloned()
         .collect::<BTreeSet<_>>();
     let referenced = overlay
