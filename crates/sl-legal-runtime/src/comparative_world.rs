@@ -377,7 +377,9 @@ pub fn compare_worlds(
         let field_deltas = coordinate_field_deltas(left_coordinate, right_coordinate);
         if !field_deltas.is_empty() {
             changed_coordinate_refs.insert(coordinate_ref.clone());
-            deltas.extend(field_deltas);
+            if !explicitly_typed_coordinate_refs.contains(coordinate_ref) {
+                deltas.extend(field_deltas);
+            }
         }
     }
 
@@ -675,6 +677,50 @@ mod tests {
         let comparison = compare_worlds(&left, &right, &query, []).unwrap();
         assert!(comparison.query_relevant_delta_refs.is_empty());
         assert!(!comparison.query_irrelevant_delta_refs.is_empty());
+    }
+
+    #[test]
+    fn domain_typed_shared_coordinate_delta_replaces_generic_field_delta() {
+        let left = world("world:same", &[("coordinate:theory", "newton")]);
+        let right = world("world:same", &[("coordinate:theory", "relativity")]);
+        let query = ComparativeQuerySlice {
+            query_ref: "query:theory".into(),
+            consumer_ref: "consumer:physics".into(),
+            coordinate_refs: BTreeSet::from(["coordinate:theory".into()]),
+            route_refs: BTreeSet::new(),
+            residual_refs: BTreeSet::new(),
+            candidate_only: true,
+            creates_semantic_authority: false,
+            creates_claim_truth: false,
+        };
+        let typed = ComparativeDelta {
+            delta_ref: "delta:theory:newton-gr".into(),
+            kind: ComparativeDeltaKind::FactChanged,
+            role: ComparativeDeltaRole::WorldInput,
+            coordinate_ref: Some("coordinate:theory".into()),
+            route_ref: None,
+            residual_ref: None,
+            before_ref: Some("newton".into()),
+            after_ref: Some("relativity".into()),
+            cause_refs: BTreeSet::new(),
+            candidate_only: true,
+            creates_semantic_authority: false,
+            creates_claim_truth: false,
+        };
+
+        let comparison = compare_worlds(&left, &right, &query, [typed]).unwrap();
+        assert_eq!(
+            comparison
+                .deltas
+                .iter()
+                .filter(|delta| delta.coordinate_ref.as_deref() == Some("coordinate:theory"))
+                .count(),
+            1
+        );
+        assert!(comparison
+            .deltas
+            .iter()
+            .any(|delta| delta.delta_ref == "delta:theory:newton-gr"));
     }
 
     #[test]
