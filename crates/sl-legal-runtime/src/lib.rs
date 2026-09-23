@@ -2858,3 +2858,15 @@ pub use adversarial_party_comparison::*;
 
 pub mod comparative_receipt;
 pub use comparative_receipt::*;
+
+pub mod change_locus;
+pub use change_locus::*;
+
+pub mod gravity_comparative_regressions;
+pub use gravity_comparative_regressions::*;
+
+pub mod effective_theory_comparison;
+pub use effective_theory_comparison::*;
+
+pub mod typed_answer_explanation;
+pub use typed_answer_explanation::*;
