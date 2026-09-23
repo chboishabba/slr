@@ -12,3 +12,6 @@ mod visualisation_transport;
 pub use visualisation_transport::*;
 mod persisted_workbench;
 pub use persisted_workbench::*;
+
+mod comparative_workbench;
+pub use comparative_workbench::*;
