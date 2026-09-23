@@ -42,6 +42,34 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "irrelevant_revision_reopens_research={}",
         battery.irrelevant_revision_reopens_research
     );
+    println!(
+        "worldmonitor_forecast_change_not_world_change={}",
+        battery.worldmonitor_forecast_change_not_world_change
+    );
+    println!(
+        "worldmonitor_model_and_dashboard_axes_typed={}",
+        battery.worldmonitor_model_and_dashboard_axes_typed
+    );
+    println!(
+        "dashitrade_quotient_query_relative_nonfactorability={}",
+        battery.dashitrade_quotient_query_relative_nonfactorability
+    );
+    println!(
+        "dashitrade_shadow_same_world_policy_delta={}",
+        battery.dashitrade_shadow_same_world_policy_delta
+    );
+    println!(
+        "dashitrade_belief_separate_from_world_and_action={}",
+        battery.dashitrade_belief_separate_from_world_and_action
+    );
+    println!(
+        "dashitrade_justification_not_causal_proof={}",
+        battery.dashitrade_justification_not_causal_proof
+    );
+    println!(
+        "dashitrade_phase9_uses_shared_typed_explanation_abi={}",
+        battery.dashitrade_phase9_uses_shared_typed_explanation_abi
+    );
 
     println!(
         "coarse_theory_query_answer_changed={}",
