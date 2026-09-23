@@ -2855,3 +2855,6 @@ pub use temporal_comparative_world::*;
 
 pub mod adversarial_party_comparison;
 pub use adversarial_party_comparison::*;
+
+pub mod comparative_receipt;
+pub use comparative_receipt::*;
