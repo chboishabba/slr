@@ -336,6 +336,49 @@ mod tests {
         assert!(!projection.creates_claim_truth);
     }
 
+
+    #[test]
+    fn typed_explanation_survives_into_reader_annotation_with_justification_refs() {
+        let receipt = crate::run_pabai_comparative_regression().unwrap();
+        let left = workbench(
+            "w0",
+            &[(
+                "coordinate:pabai:comparative:defeater",
+                "receipt:reviewed-defeater",
+            )],
+        );
+        let right = workbench(
+            "w1",
+            &[(
+                "coordinate:pabai:comparative:defeater",
+                "receipt:reviewed-defeater",
+            )],
+        );
+
+        let projection = project_typed_workbench_comparison_from_explanation(
+            "comparison:pabai:typed-annotation",
+            &left,
+            &right,
+            &receipt.w0_to_w1_explanation,
+        )
+        .unwrap();
+
+        let annotation = projection
+            .change_annotations
+            .iter()
+            .find(|annotation| {
+                annotation.semantic_ref == "coordinate:pabai:comparative:defeater"
+            })
+            .unwrap();
+
+        assert_eq!(annotation.layer, ComparativeChangeLayer::Applicability);
+        assert!(annotation.answer_changing);
+        assert!(!annotation.justification_refs.is_empty());
+        assert!(annotation.explanation_ref.is_some());
+        assert!(!annotation.creates_semantic_authority);
+        assert!(!annotation.creates_claim_truth);
+    }
+
     #[test]
     fn answer_changing_overlay_must_weld_to_typed_graph_and_provenance() {
         let left = workbench("w0", &[("semantic:D", "receipt:D")]);
