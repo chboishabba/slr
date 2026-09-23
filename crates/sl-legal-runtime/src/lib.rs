@@ -2882,3 +2882,6 @@ pub use comparative_change_adapters::*;
 
 pub mod comparative_workbench_overlay;
 pub use comparative_workbench_overlay::*;
+
+pub mod typed_workbench_comparison;
+pub use typed_workbench_comparison::*;
