@@ -13,6 +13,7 @@ sha2 = "0.10"
 thiserror = "1"
 
 [dev-dependencies]
+sensiblaw-legal-runtime = { path = "../sl-legal-runtime" }
 sensiblaw-evidence-payment = { path = "../sl-evidence-payment" }
 sensiblaw-reader-model = { path = "../sl-reader-model" }
 tempfile = "3"
