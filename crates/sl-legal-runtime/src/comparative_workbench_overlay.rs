@@ -8,8 +8,35 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{ChangeLayer, TypedAnswerChangingExplanation};
 
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ComparativeWorkbenchChangeAnnotation {
+    pub semantic_ref: String,
+    pub layer: ChangeLayer,
+    pub justification_refs: BTreeSet<String>,
+    pub explanation_ref: Option<String>,
+    pub answer_changing: bool,
+    pub candidate_only: bool,
+    pub creates_semantic_authority: bool,
+    pub creates_claim_truth: bool,
+}
+
+impl ComparativeWorkbenchChangeAnnotation {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.semantic_ref.trim().is_empty()
+            || !self.candidate_only
+            || self.creates_semantic_authority
+            || self.creates_claim_truth
+        {
+            return Err("comparative workbench annotation crossed non-promotion boundary".into());
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct ComparativeWorkbenchOverlay {
+    pub change_annotations: BTreeMap<String, ComparativeWorkbenchChangeAnnotation>,
     pub change_layer_by_semantic_ref: BTreeMap<String, String>,
     pub explanation_by_semantic_ref: BTreeMap<String, String>,
     pub answer_changing_semantic_refs: BTreeSet<String>,
@@ -22,6 +49,9 @@ impl ComparativeWorkbenchOverlay {
     pub fn validate(&self) -> Result<(), String> {
         if self.creates_semantic_authority || self.creates_claim_truth {
             return Err("comparative workbench overlay crossed non-promotion boundary".into());
+        }
+        for annotation in self.change_annotations.values() {
+            annotation.validate()?;
         }
         Ok(())
     }
@@ -67,13 +97,27 @@ pub fn workbench_overlay_from_explanation(
                     step.delta_ref
                 )
             })?;
+        let answer_changing = explanation.minimal_delta_refs.contains(&step.delta_ref);
+        overlay.change_annotations.insert(
+            semantic_ref.clone(),
+            ComparativeWorkbenchChangeAnnotation {
+                semantic_ref: semantic_ref.clone(),
+                layer: step.layer,
+                justification_refs: step.cause_refs.clone(),
+                explanation_ref: Some(step.explanation_ref.clone()),
+                answer_changing,
+                candidate_only: true,
+                creates_semantic_authority: false,
+                creates_claim_truth: false,
+            },
+        );
         overlay
             .change_layer_by_semantic_ref
             .insert(semantic_ref.clone(), layer_label(step.layer).into());
         overlay
             .explanation_by_semantic_ref
             .insert(semantic_ref.clone(), step.explanation_ref.clone());
-        if explanation.minimal_delta_refs.contains(&step.delta_ref) {
+        if answer_changing {
             overlay.answer_changing_semantic_refs.insert(semantic_ref);
         }
     }
