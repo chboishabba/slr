@@ -1,3 +1,5 @@
+mod workbench_projection;
+pub use workbench_projection::*;
 mod cache_first;
 mod candidate_pnf;
 mod context_federation;
