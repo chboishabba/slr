@@ -151,7 +151,7 @@ mod tests {
     use super::*;
     use crate::{
         compile_typed_change_set, legal_route_comparative_receipt,
-        run_pabai_comparative_regression, typed_locus, ChangeLayer,
+        run_pabai_comparative_regression, typed_locus,
     };
 
     #[test]
