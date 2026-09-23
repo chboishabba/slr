@@ -2847,3 +2847,5 @@ pub mod query_revision_impact;
 pub use query_revision_impact::*;
 pub mod query_world_run_controller;
 pub use query_world_run_controller::*;
+pub mod personal_professional_comparison;
+pub use personal_professional_comparison::*;
