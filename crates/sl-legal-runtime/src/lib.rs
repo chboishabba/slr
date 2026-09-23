@@ -2852,3 +2852,6 @@ pub use personal_professional_comparison::*;
 
 pub mod temporal_comparative_world;
 pub use temporal_comparative_world::*;
+
+pub mod adversarial_party_comparison;
+pub use adversarial_party_comparison::*;
