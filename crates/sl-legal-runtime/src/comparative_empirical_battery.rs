@@ -12,10 +12,10 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
-    compile_query_world_impact, run_observation_refinement,
+    compile_query_world_impact, consumer_fibre_change_set, run_observation_refinement,
     run_pabai_comparative_regression, run_personal_professional_comparison,
     run_same_world_theory_change, run_state_change_regularity_invariant,
-    temporal_comparison_from_query_world_impact, ChangeLayer, ConsumerAxis,
+    temporal_change_set, temporal_comparison_from_query_world_impact, ChangeLayer, ConsumerAxis,
     LegalWorldCoordinate, ProjectionGraph, ProjectionKind, ProjectionNode,
     QueryDependencySlice, RevisionDependencyIndex,
 };
@@ -26,8 +26,11 @@ pub struct ComparativeEmpiricalBatteryReceipt {
     pub theory_change_world_invariant: bool,
     pub observation_change_world_invariant: bool,
     pub consumer_projection_change_world_invariant: bool,
+    pub consumer_projection_change_typed: bool,
     pub legal_defeater_changes_route: bool,
+    pub legal_defeater_change_typed: bool,
     pub irrelevant_revision_changes_query_projection: bool,
+    pub irrelevant_revision_change_typed_world_evidence: bool,
     pub irrelevant_revision_reopens_research: bool,
     pub all_modes_candidate_only: bool,
     pub any_mode_creates_semantic_authority: bool,
@@ -134,6 +137,12 @@ pub fn run_comparative_empirical_battery(
         &temporal_graph(),
     )?;
     let temporal = temporal_comparison_from_query_world_impact(&temporal_impact)?;
+    let temporal_changes =
+        temporal_change_set("comparison:battery:temporal", &temporal)?;
+    let regulator_changes = consumer_fibre_change_set(
+        "comparison:battery:personal-regulator",
+        &fibres.personal_to_regulator,
+    )?;
 
     let consumer_projection_change_world_invariant =
         fibres.personal_to_lawyer.world_ref == fibres.personal_to_regulator.world_ref
@@ -172,6 +181,11 @@ pub fn run_comparative_empirical_battery(
                 .invariant_layers
                 .contains(&ChangeLayer::World),
         consumer_projection_change_world_invariant,
+        consumer_projection_change_typed: regulator_changes
+            .changed_layers
+            .contains(&ChangeLayer::ConsumerProjection)
+            && regulator_changes.changed_layers.contains(&ChangeLayer::Scope)
+            && regulator_changes.invariant_layers.contains(&ChangeLayer::World),
         legal_defeater_changes_route: pabai
             .w0_to_w1
             .changed_route_refs
@@ -180,7 +194,13 @@ pub fn run_comparative_empirical_battery(
                 .w0_to_w1_distinction
                 .delta_refs
                 .contains("delta:pabai:w0-w1:defeater"),
+        legal_defeater_change_typed:
+            pabai.w0_to_w1_locus.layer == ChangeLayer::Applicability,
         irrelevant_revision_changes_query_projection: temporal.query_projection_changed,
+        irrelevant_revision_change_typed_world_evidence: temporal_changes
+            .changed_layers
+            .contains(&ChangeLayer::WorldEvidence)
+            && !temporal_changes.changed_layers.contains(&ChangeLayer::World),
         irrelevant_revision_reopens_research: temporal.reopens_consumer_research,
         all_modes_candidate_only: state.candidate_only
             && theory.candidate_only
@@ -215,8 +235,11 @@ mod tests {
         assert!(receipt.theory_change_world_invariant);
         assert!(receipt.observation_change_world_invariant);
         assert!(receipt.consumer_projection_change_world_invariant);
+        assert!(receipt.consumer_projection_change_typed);
         assert!(receipt.legal_defeater_changes_route);
+        assert!(receipt.legal_defeater_change_typed);
         assert!(!receipt.irrelevant_revision_changes_query_projection);
+        assert!(receipt.irrelevant_revision_change_typed_world_evidence);
         assert!(!receipt.irrelevant_revision_reopens_research);
         assert!(receipt.all_modes_candidate_only);
         assert!(!receipt.any_mode_creates_semantic_authority);
