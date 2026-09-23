@@ -6,14 +6,33 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use sensiblaw_reader_model::{
-    ComparativeWorkbenchProjection, PersistedWorkbenchEdge, PersistedWorkbenchGraph,
-    PersistedWorkbenchNode, PersistedWorkbenchProjection, ThreeWayComparativeWorkbenchProjection,
+    ComparativeChangeAnnotation, ComparativeChangeLayer, ComparativeWorkbenchProjection,
+    PersistedWorkbenchEdge, PersistedWorkbenchGraph, PersistedWorkbenchNode,
+    PersistedWorkbenchProjection, ThreeWayComparativeWorkbenchProjection,
 };
 
 use crate::{
-    ComparativeWorkbenchOverlay, TypedAnswerChangingExplanation,
+    ChangeLayer, ComparativeWorkbenchOverlay, TypedAnswerChangingExplanation,
     workbench_overlay_from_explanation,
 };
+
+
+fn portable_change_layer(layer: ChangeLayer) -> ComparativeChangeLayer {
+    match layer {
+        ChangeLayer::World => ComparativeChangeLayer::World,
+        ChangeLayer::WorldEvidence => ComparativeChangeLayer::WorldEvidence,
+        ChangeLayer::Observation => ComparativeChangeLayer::Observation,
+        ChangeLayer::Representation => ComparativeChangeLayer::Representation,
+        ChangeLayer::Theory => ComparativeChangeLayer::Theory,
+        ChangeLayer::Belief => ComparativeChangeLayer::Belief,
+        ChangeLayer::ConsumerProjection => ComparativeChangeLayer::ConsumerProjection,
+        ChangeLayer::Review => ComparativeChangeLayer::Review,
+        ChangeLayer::Scope => ComparativeChangeLayer::Scope,
+        ChangeLayer::Applicability => ComparativeChangeLayer::Applicability,
+        ChangeLayer::ProofOutcome => ComparativeChangeLayer::ProofOutcome,
+        ChangeLayer::ResidualOutcome => ComparativeChangeLayer::ResidualOutcome,
+    }
+}
 
 fn node_map(graph: &PersistedWorkbenchGraph) -> BTreeMap<String, &PersistedWorkbenchNode> {
     graph
@@ -165,6 +184,21 @@ pub fn project_typed_workbench_comparison(
     let overlay = overlay.cloned().unwrap_or_default();
     validate_overlay(&overlay, &left.legal_follow_graph, &right.legal_follow_graph)?;
 
+    let change_annotations = overlay
+        .change_annotations
+        .values()
+        .map(|annotation| ComparativeChangeAnnotation {
+            semantic_ref: annotation.semantic_ref.clone(),
+            layer: portable_change_layer(annotation.layer),
+            justification_refs: annotation.justification_refs.iter().cloned().collect(),
+            explanation_ref: annotation.explanation_ref.clone(),
+            answer_changing: annotation.answer_changing,
+            candidate_only: true,
+            creates_semantic_authority: false,
+            creates_claim_truth: false,
+        })
+        .collect::<Vec<_>>();
+
     let projection = ComparativeWorkbenchProjection {
         comparison_ref: comparison_ref.into(),
         left_world_ref: left.world_ref.clone(),
@@ -175,6 +209,7 @@ pub fn project_typed_workbench_comparison(
         changed_semantic_refs: changed.into_iter().collect(),
         left_only_semantic_refs: left_only.into_iter().collect(),
         right_only_semantic_refs: right_only.into_iter().collect(),
+        change_annotations,
         change_layer_by_semantic_ref: overlay.change_layer_by_semantic_ref,
         explanation_by_semantic_ref: overlay.explanation_by_semantic_ref,
         answer_changing_semantic_refs: overlay.answer_changing_semantic_refs.into_iter().collect(),
@@ -306,6 +341,7 @@ mod tests {
         let left = workbench("w0", &[("semantic:D", "receipt:D")]);
         let right = workbench("w1", &[("semantic:D", "receipt:D")]);
         let overlay = ComparativeWorkbenchOverlay {
+            change_annotations: BTreeMap::new(),
             change_layer_by_semantic_ref: BTreeMap::from([(
                 "semantic:missing".into(),
                 "Applicability".into(),
