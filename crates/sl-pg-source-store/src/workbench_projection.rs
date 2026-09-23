@@ -27,8 +27,8 @@ pub fn load_persisted_workbench_projection<C: GenericClient>(
         return Err(WorkbenchProjectionError::InvalidIdentity);
     }
 
-    // Deliberately select only typed row columns. The JSONB payload is not part
-    // of the production semantic carrier.
+    // Deliberately select only typed row columns. The serialized projection
+    // blob is not part of the production semantic carrier.
     let projection = client
         .query_opt(
             "
@@ -204,7 +204,11 @@ mod tests {
     #[test]
     fn production_loader_module_contains_no_json_payload_dependency() {
         let source = include_str!("workbench_projection.rs");
-        assert!(!source.contains("payload JSONB"));
-        assert!(!source.contains("serde_json"));
+        let production_source = source
+            .split("#[cfg(test)]")
+            .next()
+            .expect("production source before test module");
+        assert!(!production_source.contains("serde_json::"));
+        assert!(!production_source.contains("SELECT payload"));
     }
 }

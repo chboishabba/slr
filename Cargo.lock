@@ -1252,6 +1252,7 @@ dependencies = [
  "postgres",
  "sensiblaw-core",
  "sensiblaw-evidence-payment",
+ "sensiblaw-legal-runtime",
  "sensiblaw-reader-model",
  "sha2 0.10.9",
  "tempfile",
@@ -1293,6 +1294,7 @@ name = "sensiblaw-reader-model"
 version = "0.1.0"
 dependencies = [
  "serde",
+ "serde_json",
 ]
 
 [[package]]
