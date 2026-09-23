@@ -36,6 +36,7 @@ impl ComparativeWorkbenchChangeAnnotation {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct ComparativeWorkbenchOverlay {
+    #[serde(default)]
     pub change_annotations: BTreeMap<String, ComparativeWorkbenchChangeAnnotation>,
     pub change_layer_by_semantic_ref: BTreeMap<String, String>,
     pub explanation_by_semantic_ref: BTreeMap<String, String>,
