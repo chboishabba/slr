@@ -97,15 +97,24 @@ fn fibre(
     }
 }
 
+fn role_key(role: EmpiricalArgumentRole) -> &'static str {
+    match role {
+        EmpiricalArgumentRole::Support => "support",
+        EmpiricalArgumentRole::Defeater => "defeater",
+        EmpiricalArgumentRole::CounterDefeater => "counter-defeater",
+        EmpiricalArgumentRole::AuthorityScope => "authority-scope",
+    }
+}
+
 fn treatment_by_coordinate(
     party: EmpiricalParty,
     rows: &[SourceGroundedArgumentCoordinate],
-) -> BTreeMap<String, BTreeSet<EmpiricalArgumentRole>> {
-    let mut map = BTreeMap::<String, BTreeSet<EmpiricalArgumentRole>>::new();
+) -> BTreeMap<String, BTreeSet<String>> {
+    let mut map = BTreeMap::<String, BTreeSet<String>>::new();
     for row in rows.iter().filter(|row| row.party == party) {
         map.entry(row.coordinate_ref.clone())
             .or_default()
-            .insert(row.role);
+            .insert(role_key(row.role).to_owned());
     }
     map
 }
