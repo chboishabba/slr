@@ -363,7 +363,7 @@ pub struct StateRegularityComparisonReceipt {
     pub creates_claim_truth: bool,
 }
 
-pub fn run_state_change_regularilty_invariant(
+pub fn run_state_change_regularity_invariant(
 ) -> Result<StateRegularityComparisonReceipt, String> {
     let left = gravity_world(
         "world:gravity:state-low",
@@ -468,8 +468,8 @@ mod tests {
     }
 
     #[test]
-    fn state_change_does_not_imply_regularilty_or_theory_change() {
-        let receipt = run_state_change_regularilty_invariant().unwrap();
+    fn state_change_does_not_imply_regularity_or_theory_change() {
+        let receipt = run_state_change_regularity_invariant().unwrap();
         assert!(receipt.state_changed);
         assert!(!receipt.regularity_changed);
         assert!(!receipt.theory_changed);
