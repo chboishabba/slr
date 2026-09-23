@@ -261,7 +261,29 @@ retained ERIC Q1-Q7 JSON
   -> include|probable only
   -> real retrieved full-text artifact + SHA-256
   -> P0-G verified full-text gate
+  -> derived-text materialisation + generic SLR candidate parse
+  -> explicit coordinate review/payment
+  -> reviewed canonical evidence
+  -> independent SourceAuditAdmission
 ```
+
+Latest recorded operational state:
+
+```text
+metadata denominator                         43,996
+explicitly reviewed                             200
+exclude / include / probable / unresolved   164 / 13 / 15 / 8
+retained include|probable                        28
+verified + materialised + parsed                 10
+retained full-text residuals                     18
+reviewed canonical evidence / admission        0 / 0
+```
+
+The current sprint is **ESD-Execution-1**: obtain the narrow exact-head Agda
+2.9 receipt for PR #1030, review/pay the ten parsed study packets into
+canonical evidence where warranted, and keep bounded screening/retrieval/parse
+cycles advancing. A parser receipt is candidate-only; it neither pays an
+extraction coordinate nor creates `SourceAuditAdmission`.
 
 Current stage semantics:
 
@@ -279,6 +301,11 @@ Current stage semantics:
 - **P0-G** full-text verification — fail-closed. A record is eligible only after
   an authoritative `include|probable` decision and verifies only when a real
   retrieved artifact exists and its SHA-256 matches the retrieval manifest.
+
+The next scientific gate after P0-G is not automatic synthesis. It is explicit
+review of candidate spans into paid study-extraction coordinates, followed by
+reviewed canonical evidence and a separate admission decision. Only admitted
+evidence may challenge the seven principles.
 
 The previous `43,996 verified full-text` status was not a valid full-text
 receipt: the old indexer could fall back to hashing a record identifier when

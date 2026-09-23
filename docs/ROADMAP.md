@@ -206,28 +206,70 @@ M2.1 and M2.2 have exact Rust and Agda receipts. M2.3 is source-written only on 
 
 ## Digital-ESD application workload
 
-Digital-ESD is an application consumer of the canonical evidence machine, not a
-new core substrate.
+Digital-ESD is an application consumer of the canonical evidence machine, not
+a new core substrate. Framework/formal infrastructure is now a maintenance
+lane: extend it only when an admitted study exposes a distinction the current
+carriers cannot represent.
 
-Its current production frontier is the real ERIC review loop:
+The active production path is the real ERIC review and evidence-admission
+loop:
 
 ```text
 retained Q1-Q7 ERIC API exports
 -> 46,597 query occurrences
 -> 43,996 accession-deduplicated metadata studies
--> 43,996-row authoritative screening denominator
--> candidate-only title/abstract assessments
--> candidate duplicate/report-family fibres
--> reviewed calibration tranche
--> non-scalar Pareto reviewer queue
--> explicit include/probable/exclude/unresolved decisions
--> real full-text retrieval for include/probable
--> SHA-verified P0-G gate
--> canonical SLR evidence / source audit
+-> explicit screening review
+-> include|probable retained studies
+-> retrieval + artifact SHA-256 verification
+-> derived-text materialisation + generic SLR parse
+-> candidate extraction packet
+-> explicit coordinate review/payment
+-> reviewed canonical EvidenceObservation
+-> independent SourceAuditAdmission
+-> FrameworkChallengeReceipt
 ```
 
-The 43,996 metadata studies do **not** count as 43,996 verified full texts.
+The latest recorded execution snapshot is deliberately sparse:
+
+| Stage | Observed count |
+| --- | ---: |
+| ERIC metadata denominator | 43,996 |
+| Explicitly reviewed | 200 |
+| Exclude / include / probable / unresolved | 164 / 13 / 15 / 8 |
+| Retained (`include|probable`) | 28 |
+| Verified, materialised, and successfully parsed | 10 |
+| Retained full-text retrieval residuals | 18 |
+| Reviewed canonical evidence / SourceAuditAdmission | 0 / 0 |
+
+The 43,996 metadata studies do **not** count as 43,996 verified full texts;
+the ten parsed studies do **not** count as canonical evidence or admissions.
 P0-G is paid only by real retrieved artifacts whose digests match their
-retrieval receipts.
+retrieval receipts. Parsing produces candidate spans and facets, not a paid
+extraction coordinate or a study claim.
+
+### Digital-ESD execution milestones
+
+- **M0 — Framework/formal infrastructure:** essentially complete; maintain
+  and extend only from corpus residuals.
+- **M1 — Kernel/integration certification:** obtain the exact-head Agda 2.9
+  receipt for draft PR #1030's four new modules and
+  `EverythingDigitalESDReciprocalBraid.agda`; repair only compile blockers.
+- **M2 — ERIC screening execution:** continue bounded review, decision,
+  retrieval, parsing, and alternate-source residual resolution. Do not wait for
+  one residual to resolve before advancing the next review packet.
+- **M3 — Evidence admission:** review the ten parsed candidate packets, pay
+  their extraction coordinates explicitly, and only then create reviewed
+  canonical evidence and independently consider `SourceAuditAdmission`.
+- **M4 — First corpus challenge:** create `FrameworkChallengeReceipt`s
+  (`support`, `narrow`, `split`, `merge`, `defeat`, `extend`, or `unresolved`)
+  only from admitted evidence.
+- **M5 — Blind-spot matrix:** measure which populations, authorities, burden
+  bearers, lifecycle workers/communities, and later harms are systematically
+  unobserved in admitted literature.
+- **M6 — Search-scope closure:** execute/export/deduplicate Scopus, Web of
+  Science, ACM DL, and IEEE Xplore, or revise the manuscript protocol to state
+  an ERIC-only evidence base. ERIC does not silently pay a five-database design.
+- **M7 — Synthesis/manuscript:** promote the final principle set and findings
+  only after screening, admission, and corpus challenge are evidenced.
 
 Operational details: `docs/digital-esd-real-eric-screening.md`.
