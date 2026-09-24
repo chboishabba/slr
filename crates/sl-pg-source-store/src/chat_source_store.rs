@@ -61,6 +61,11 @@ pub struct ChatArchiveExportRow {
 pub struct PersistedChatMessageSource {
     pub message_ref: String,
     pub conversation_ref: String,
+    pub node_ref: String,
+    pub parent_node_ref: Option<String>,
+    pub message_time_ref: String,
+    pub thread_title: String,
+    pub literal_text: String,
     pub document_ref: String,
     pub source_revision_ref: String,
     pub full_message_span_ref: String,
@@ -427,11 +432,16 @@ pub fn load_chat_message_source(
     client
         .query_opt(
             r#"
-            SELECT message_ref, conversation_ref, document_ref,
-                   source_revision_ref, full_message_span_ref,
-                   branch_membership_ref, role_ref, content_kind_ref
-            FROM corpus.chat_archive_message
-            WHERE message_ref=$1
+            SELECT m.message_ref, m.conversation_ref, m.node_ref,
+                   m.parent_node_ref, m.message_time_ref, m.thread_title,
+                   convert_from(c.payload, 'UTF8') AS literal_text,
+                   m.document_ref, m.source_revision_ref,
+                   m.full_message_span_ref, m.branch_membership_ref,
+                   m.role_ref, m.content_kind_ref
+            FROM corpus.chat_archive_message m
+            JOIN corpus.document d ON d.document_ref=m.document_ref
+            JOIN corpus.canonical_content c ON c.canonical_ref=d.canonical_ref
+            WHERE m.message_ref=$1
             "#,
             &[&message_ref],
         )?
@@ -439,14 +449,19 @@ pub fn load_chat_message_source(
             Ok(PersistedChatMessageSource {
                 message_ref: row.get(0),
                 conversation_ref: row.get(1),
-                document_ref: row.get(2),
-                source_revision_ref: row.get(3),
-                full_message_span_ref: row.get(4),
+                node_ref: row.get(2),
+                parent_node_ref: row.get(3),
+                message_time_ref: row.get(4),
+                thread_title: row.get(5),
+                literal_text: row.get(6),
+                document_ref: row.get(7),
+                source_revision_ref: row.get(8),
+                full_message_span_ref: row.get(9),
                 branch_membership: branch_from_db(
-                    row.get::<_, String>(5).as_str(),
+                    row.get::<_, String>(10).as_str(),
                 )?,
-                role: role_from_db(row.get::<_, String>(6).as_str())?,
-                content_kind: kind_from_db(row.get::<_, String>(7).as_str())?,
+                role: role_from_db(row.get::<_, String>(11).as_str())?,
+                content_kind: kind_from_db(row.get::<_, String>(12).as_str())?,
             })
         })
         .transpose()
