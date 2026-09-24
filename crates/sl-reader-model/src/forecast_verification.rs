@@ -392,6 +392,78 @@ pub struct ForecastResearchDemand {
     pub creates_claim_truth: bool,
 }
 
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct ForecastCalibrationBucketProjection {
+    pub bucket_ref: String,
+    pub forecast_count: u64,
+    pub average_predicted: Rational,
+    pub observed_frequency: Rational,
+    pub bucket_brier: Rational,
+    pub evidence_ref: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum ForecastCalibrationBucketObservation {
+    Empty { bucket_ref: String, reason_ref: String },
+    Populated(ForecastCalibrationBucketProjection),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct ForecastAggregateScorecard {
+    pub scorecard_ref: String,
+    pub source_snapshot_ref: String,
+    pub headline_count: u64,
+    pub ledger_count: u64,
+    pub resolved_count: u64,
+    pub scored_count: u64,
+    pub voided_count: u64,
+    pub awaiting_judge_count: u64,
+    pub still_open_count: u64,
+    pub excluded_scored_count: u64,
+    pub headline_brier: Rational,
+    pub all_scored_brier: Rational,
+    pub market_overlap_count: Option<u64>,
+    pub market_overlap_forecast_brier: Option<Rational>,
+    pub market_overlap_reference_brier: Option<Rational>,
+    pub calibration: Vec<ForecastCalibrationBucketObservation>,
+    pub individual_forecast_lineage_available: bool,
+    pub resolution_evidence_available: bool,
+    pub judge_input_lineage_available: bool,
+    pub candidate_only: bool,
+    pub creates_semantic_authority: bool,
+    pub creates_claim_truth: bool,
+}
+
+impl ForecastAggregateScorecard {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.scorecard_ref.trim().is_empty() || self.source_snapshot_ref.trim().is_empty() {
+            return Err("aggregate scorecard requires identity and source refs".into());
+        }
+        if self.resolved_count + self.awaiting_judge_count + self.still_open_count
+            != self.ledger_count
+        {
+            return Err("aggregate scorecard ledger partition does not reconcile".into());
+        }
+        if self.scored_count + self.voided_count != self.resolved_count {
+            return Err("aggregate scorecard resolved partition does not reconcile".into());
+        }
+        if self.headline_count + self.excluded_scored_count != self.scored_count {
+            return Err("aggregate scorecard headline selection does not reconcile".into());
+        }
+        if !self.candidate_only
+            || self.creates_semantic_authority
+            || self.creates_claim_truth
+        {
+            return Err("aggregate scorecard crossed non-promotion boundary".into());
+        }
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
