@@ -61,7 +61,7 @@ pub struct PersistedSourceStatement {
     pub source_revision_ref: String,
     pub exact_span_ref: String,
     pub literal_text: String,
-    pub origin: StatementOrigin,
+    pub origins: Vec<StatementOrigin>,
     pub statement_sha256: [u8; 32],
     pub candidate_only: bool,
     pub creates_semantic_authority: bool,
@@ -75,6 +75,7 @@ pub struct StatementObservationLink {
     pub statement_ref: String,
     pub candidate_pnf_ref: String,
     pub observation_ref: String,
+    pub parser_receipt_ref: Option<String>,
     pub parse_review_ref: Option<String>,
     pub admission_receipt_ref: Option<String>,
     pub disposition: StatementObservationDisposition,
@@ -159,18 +160,6 @@ impl ObservationEventLink {
     }
 }
 
-pub fn canonical_observation_event_link_ref(
-    observation_ref: &str,
-    event_ref: &str,
-) -> String {
-    let digest = digest_parts(&[
-        "observation-event-link:v1",
-        observation_ref,
-        event_ref,
-    ]);
-    format!("observation-event-link:sha256:{}", hex(&digest))
-}
-
 #[derive(Debug, Error)]
 pub enum StatementTraceStoreError {
     #[error("required statement trace coordinate is empty: {0}")]
@@ -179,8 +168,6 @@ pub enum StatementTraceStoreError {
     PromotionNotAllowed,
     #[error("statement span does not belong to the declared document")]
     SpanDocumentMismatch,
-    #[error("source revision does not belong to the declared document")]
-    RevisionDocumentMismatch,
     #[error("statement literal text does not match the exact persisted source span")]
     LiteralTextMismatch,
     #[error("semantically admitted link requires an admission receipt")]
@@ -191,7 +178,7 @@ pub enum StatementTraceStoreError {
     MissingStatement,
     #[error("existing statement identity conflicts with requested immutable content")]
     ExistingStatementConflict,
-    #[error("existing statement-observation link conflicts with requested coordinates")]
+    #[error("existing trace link conflicts with requested coordinates")]
     ExistingLinkConflict,
     #[error("unknown statement origin: {0}")]
     UnknownOrigin(String),
@@ -220,10 +207,23 @@ pub fn canonical_statement_observation_link_ref(
     format!("statement-observation-link:sha256:{}", hex(&digest))
 }
 
-/// Additive normalized schema owned by M12.2.
+pub fn canonical_observation_event_link_ref(
+    observation_ref: &str,
+    event_ref: &str,
+) -> String {
+    let digest = digest_parts(&[
+        "observation-event-link:v1",
+        observation_ref,
+        event_ref,
+    ]);
+    format!("observation-event-link:sha256:{}", hex(&digest))
+}
+
+/// Additive normalized M12.2 schema.
 ///
-/// This is deliberately explicit rather than auto-running during ordinary
-/// persistence. Deployments can run it under their normal migration control.
+/// Statement identity is structural. Initial-intake/research-reentry are
+/// separate origin rows, so seeing the same statement through a second route
+/// does not manufacture a second statement identity.
 pub fn install_statement_trace_schema(
     config: &DatabaseConfig,
 ) -> Result<(), StatementTraceStoreError> {
@@ -236,13 +236,18 @@ pub fn install_statement_trace_schema(
           source_revision_ref TEXT NOT NULL,
           exact_span_ref TEXT NOT NULL,
           literal_text TEXT NOT NULL,
-          origin_ref TEXT NOT NULL,
           statement_sha256 BYTEA NOT NULL,
           candidate_only BOOLEAN NOT NULL CHECK (candidate_only),
           creates_semantic_authority BOOLEAN NOT NULL CHECK (NOT creates_semantic_authority),
           applicability_promoted BOOLEAN NOT NULL CHECK (NOT applicability_promoted),
           claim_truth_promoted BOOLEAN NOT NULL CHECK (NOT claim_truth_promoted),
           UNIQUE (source_revision_ref, exact_span_ref, statement_sha256)
+        );
+
+        CREATE TABLE IF NOT EXISTS corpus.source_statement_origin (
+          statement_ref TEXT NOT NULL REFERENCES corpus.source_statement(statement_ref),
+          origin_ref TEXT NOT NULL,
+          PRIMARY KEY (statement_ref, origin_ref)
         );
 
         CREATE INDEX IF NOT EXISTS source_statement_document_idx
@@ -255,6 +260,7 @@ pub fn install_statement_trace_schema(
           statement_ref TEXT NOT NULL REFERENCES corpus.source_statement(statement_ref),
           candidate_pnf_ref TEXT NOT NULL,
           observation_ref TEXT NOT NULL,
+          parser_receipt_ref TEXT NULL,
           parse_review_ref TEXT NULL,
           admission_receipt_ref TEXT NULL,
           disposition_ref TEXT NOT NULL,
@@ -313,10 +319,10 @@ pub fn persist_source_statement(
         r#"
         INSERT INTO corpus.source_statement
           (statement_ref, document_ref, source_revision_ref, exact_span_ref,
-           literal_text, origin_ref, statement_sha256,
+           literal_text, statement_sha256,
            candidate_only, creates_semantic_authority,
            applicability_promoted, claim_truth_promoted)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,true,false,false,false)
+        VALUES ($1,$2,$3,$4,$5,$6,true,false,false,false)
         ON CONFLICT (statement_ref) DO NOTHING
         "#,
         &[
@@ -325,9 +331,16 @@ pub fn persist_source_statement(
             &statement.source_revision_ref,
             &statement.span.span_ref,
             &statement.literal_text,
-            &origin_as_db(statement.origin),
             &&digest[..],
         ],
+    )?;
+    client.execute(
+        r#"
+        INSERT INTO corpus.source_statement_origin (statement_ref, origin_ref)
+        VALUES ($1,$2)
+        ON CONFLICT DO NOTHING
+        "#,
+        &[&statement.statement_ref, &origin_as_db(statement.origin)],
     )?;
 
     let persisted = load_source_statement_with_client(&mut client, &statement.statement_ref)?
@@ -337,8 +350,8 @@ pub fn persist_source_statement(
         || persisted.source_revision_ref != statement.source_revision_ref
         || persisted.exact_span_ref != statement.span.span_ref
         || persisted.literal_text != statement.literal_text
-        || persisted.origin != statement.origin
         || persisted.statement_sha256 != digest
+        || !persisted.origins.contains(&statement.origin)
     {
         return Err(StatementTraceStoreError::ExistingStatementConflict);
     }
@@ -374,10 +387,10 @@ pub fn persist_statement_observation_link(
         r#"
         INSERT INTO pnf.statement_observation_link
           (link_ref, statement_ref, candidate_pnf_ref, observation_ref,
-           parse_review_ref, admission_receipt_ref, disposition_ref,
-           qualification_ref, candidate_only, creates_semantic_authority,
-           applicability_promoted, claim_truth_promoted)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,true,false,false,false)
+           parser_receipt_ref, parse_review_ref, admission_receipt_ref,
+           disposition_ref, qualification_ref, candidate_only,
+           creates_semantic_authority, applicability_promoted, claim_truth_promoted)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,true,false,false,false)
         ON CONFLICT (link_ref) DO NOTHING
         "#,
         &[
@@ -385,6 +398,7 @@ pub fn persist_statement_observation_link(
             &link.statement_ref,
             &link.candidate_pnf_ref,
             &link.observation_ref,
+            &link.parser_receipt_ref,
             &link.parse_review_ref,
             &link.admission_receipt_ref,
             &link.disposition.as_db(),
@@ -436,6 +450,28 @@ pub fn persist_observation_event_link(
     Ok(persisted)
 }
 
+pub fn load_source_statement(
+    config: &DatabaseConfig,
+    statement_ref: &str,
+) -> Result<Option<PersistedSourceStatement>, StatementTraceStoreError> {
+    let mut client = Client::connect(config.database_url(), NoTls)?;
+    load_source_statement_with_client(&mut client, statement_ref)
+}
+
+pub fn load_statement_observation_links_for_statement(
+    config: &DatabaseConfig,
+    statement_ref: &str,
+) -> Result<Vec<StatementObservationLink>, StatementTraceStoreError> {
+    load_statement_observation_links(config, "statement_ref", statement_ref)
+}
+
+pub fn load_statement_observation_links_for_observation(
+    config: &DatabaseConfig,
+    observation_ref: &str,
+) -> Result<Vec<StatementObservationLink>, StatementTraceStoreError> {
+    load_statement_observation_links(config, "observation_ref", observation_ref)
+}
+
 pub fn load_observation_event_links_for_observation(
     config: &DatabaseConfig,
     observation_ref: &str,
@@ -450,70 +486,52 @@ pub fn load_observation_event_links_for_event(
     load_observation_event_links(config, "event_ref", event_ref)
 }
 
+fn load_statement_observation_links(
+    config: &DatabaseConfig,
+    coordinate: &str,
+    value: &str,
+) -> Result<Vec<StatementObservationLink>, StatementTraceStoreError> {
+    let sql = match coordinate {
+        "statement_ref" => statement_observation_select("statement_ref"),
+        "observation_ref" => statement_observation_select("observation_ref"),
+        _ => unreachable!("internal fixed statement trace query"),
+    };
+    let mut client = Client::connect(config.database_url(), NoTls)?;
+    client
+        .query(&sql, &[&value])?
+        .into_iter()
+        .map(row_to_statement_observation_link)
+        .collect()
+}
+
+fn statement_observation_select(coordinate: &str) -> String {
+    format!(
+        "SELECT link_ref, statement_ref, candidate_pnf_ref, observation_ref,          parser_receipt_ref, parse_review_ref, admission_receipt_ref,          disposition_ref, qualification_ref, candidate_only,          creates_semantic_authority, applicability_promoted, claim_truth_promoted          FROM pnf.statement_observation_link WHERE {coordinate}=$1 ORDER BY link_ref"
+    )
+}
+
 fn load_observation_event_links(
     config: &DatabaseConfig,
     coordinate: &str,
     value: &str,
 ) -> Result<Vec<ObservationEventLink>, StatementTraceStoreError> {
     let sql = match coordinate {
-        "observation_ref" => {
-            "SELECT link_ref, observation_ref, event_ref, assembly_receipt_ref,              candidate_only, creates_semantic_authority, applicability_promoted, claim_truth_promoted              FROM pnf.observation_event_link WHERE observation_ref=$1 ORDER BY link_ref"
-        }
-        "event_ref" => {
-            "SELECT link_ref, observation_ref, event_ref, assembly_receipt_ref,              candidate_only, creates_semantic_authority, applicability_promoted, claim_truth_promoted              FROM pnf.observation_event_link WHERE event_ref=$1 ORDER BY link_ref"
-        }
+        "observation_ref" => observation_event_select("observation_ref"),
+        "event_ref" => observation_event_select("event_ref"),
         _ => unreachable!("internal fixed observation-event query"),
     };
     let mut client = Client::connect(config.database_url(), NoTls)?;
     client
-        .query(sql, &[&value])?
+        .query(&sql, &[&value])?
         .into_iter()
         .map(row_to_observation_event_link)
         .collect()
 }
 
-pub fn load_source_statement(
-    config: &DatabaseConfig,
-    statement_ref: &str,
-) -> Result<Option<PersistedSourceStatement>, StatementTraceStoreError> {
-    let mut client = Client::connect(config.database_url(), NoTls)?;
-    load_source_statement_with_client(&mut client, statement_ref)
-}
-
-pub fn load_statement_observation_links_for_statement(
-    config: &DatabaseConfig,
-    statement_ref: &str,
-) -> Result<Vec<StatementObservationLink>, StatementTraceStoreError> {
-    load_links(config, "statement_ref", statement_ref)
-}
-
-pub fn load_statement_observation_links_for_observation(
-    config: &DatabaseConfig,
-    observation_ref: &str,
-) -> Result<Vec<StatementObservationLink>, StatementTraceStoreError> {
-    load_links(config, "observation_ref", observation_ref)
-}
-
-fn load_links(
-    config: &DatabaseConfig,
-    coordinate: &str,
-    value: &str,
-) -> Result<Vec<StatementObservationLink>, StatementTraceStoreError> {
-    let sql = match coordinate {
-        "statement_ref" => {
-            "SELECT link_ref, statement_ref, candidate_pnf_ref, observation_ref,              parse_review_ref, admission_receipt_ref, disposition_ref, qualification_ref,              candidate_only, creates_semantic_authority, applicability_promoted, claim_truth_promoted              FROM pnf.statement_observation_link WHERE statement_ref=$1 ORDER BY link_ref"
-        }
-        "observation_ref" => {
-            "SELECT link_ref, statement_ref, candidate_pnf_ref, observation_ref,              parse_review_ref, admission_receipt_ref, disposition_ref, qualification_ref,              candidate_only, creates_semantic_authority, applicability_promoted, claim_truth_promoted              FROM pnf.statement_observation_link WHERE observation_ref=$1 ORDER BY link_ref"
-        }
-        _ => unreachable!("internal fixed statement trace query"),
-    };
-    let mut client = Client::connect(config.database_url(), NoTls)?;
-    client
-        .query(sql, &[&value])?
-        .into_iter()
-        .map(row_to_link)
-        .collect()
+fn observation_event_select(coordinate: &str) -> String {
+    format!(
+        "SELECT link_ref, observation_ref, event_ref, assembly_receipt_ref,          candidate_only, creates_semantic_authority, applicability_promoted,          claim_truth_promoted FROM pnf.observation_event_link          WHERE {coordinate}=$1 ORDER BY link_ref"
+    )
 }
 
 fn load_source_statement_with_client(
@@ -523,34 +541,43 @@ fn load_source_statement_with_client(
     let row = client.query_opt(
         r#"
         SELECT statement_ref, document_ref, source_revision_ref, exact_span_ref,
-               literal_text, origin_ref, statement_sha256,
-               candidate_only, creates_semantic_authority,
-               applicability_promoted, claim_truth_promoted
+               literal_text, statement_sha256, candidate_only,
+               creates_semantic_authority, applicability_promoted, claim_truth_promoted
         FROM corpus.source_statement
         WHERE statement_ref=$1
         "#,
         &[&statement_ref],
     )?;
-    row.map(|row| {
-        let digest: Vec<u8> = row.get(6);
-        let digest: [u8; 32] = digest
-            .try_into()
-            .map_err(|_| StatementTraceStoreError::ExistingStatementConflict)?;
-        Ok(PersistedSourceStatement {
-            statement_ref: row.get(0),
-            document_ref: row.get(1),
-            source_revision_ref: row.get(2),
-            exact_span_ref: row.get(3),
-            literal_text: row.get(4),
-            origin: origin_from_db(row.get::<_, String>(5).as_str())?,
-            statement_sha256: digest,
-            candidate_only: row.get(7),
-            creates_semantic_authority: row.get(8),
-            applicability_promoted: row.get(9),
-            claim_truth_promoted: row.get(10),
-        })
-    })
-    .transpose()
+    let Some(row) = row else {
+        return Ok(None);
+    };
+
+    let digest: Vec<u8> = row.get(5);
+    let digest: [u8; 32] = digest
+        .try_into()
+        .map_err(|_| StatementTraceStoreError::ExistingStatementConflict)?;
+    let origins = client
+        .query(
+            "SELECT origin_ref FROM corpus.source_statement_origin              WHERE statement_ref=$1 ORDER BY origin_ref",
+            &[&statement_ref],
+        )?
+        .into_iter()
+        .map(|row| origin_from_db(row.get::<_, String>(0).as_str()))
+        .collect::<Result<Vec<_>, _>>()?;
+
+    Ok(Some(PersistedSourceStatement {
+        statement_ref: row.get(0),
+        document_ref: row.get(1),
+        source_revision_ref: row.get(2),
+        exact_span_ref: row.get(3),
+        literal_text: row.get(4),
+        origins,
+        statement_sha256: digest,
+        candidate_only: row.get(6),
+        creates_semantic_authority: row.get(7),
+        applicability_promoted: row.get(8),
+        claim_truth_promoted: row.get(9),
+    }))
 }
 
 fn load_statement_observation_link_with_client(
@@ -561,16 +588,38 @@ fn load_statement_observation_link_with_client(
         .query_opt(
             r#"
             SELECT link_ref, statement_ref, candidate_pnf_ref, observation_ref,
-                   parse_review_ref, admission_receipt_ref, disposition_ref, qualification_ref,
-                   candidate_only, creates_semantic_authority,
-                   applicability_promoted, claim_truth_promoted
+                   parser_receipt_ref, parse_review_ref, admission_receipt_ref,
+                   disposition_ref, qualification_ref, candidate_only,
+                   creates_semantic_authority, applicability_promoted, claim_truth_promoted
             FROM pnf.statement_observation_link
             WHERE link_ref=$1
             "#,
             &[&link_ref],
         )?
-        .map(row_to_link)
+        .map(row_to_statement_observation_link)
         .transpose()
+}
+
+fn row_to_statement_observation_link(
+    row: postgres::Row,
+) -> Result<StatementObservationLink, StatementTraceStoreError> {
+    let link = StatementObservationLink {
+        link_ref: row.get(0),
+        statement_ref: row.get(1),
+        candidate_pnf_ref: row.get(2),
+        observation_ref: row.get(3),
+        parser_receipt_ref: row.get(4),
+        parse_review_ref: row.get(5),
+        admission_receipt_ref: row.get(6),
+        disposition: StatementObservationDisposition::from_db(row.get::<_, String>(7).as_str())?,
+        qualification_ref: row.get(8),
+        candidate_only: row.get(9),
+        creates_semantic_authority: row.get(10),
+        applicability_promoted: row.get(11),
+        claim_truth_promoted: row.get(12),
+    };
+    link.validate()?;
+    Ok(link)
 }
 
 fn load_observation_event_link_with_client(
@@ -609,44 +658,10 @@ fn row_to_observation_event_link(
     Ok(link)
 }
 
-fn row_to_link(row: postgres::Row) -> Result<StatementObservationLink, StatementTraceStoreError> {
-    let link = StatementObservationLink {
-        link_ref: row.get(0),
-        statement_ref: row.get(1),
-        candidate_pnf_ref: row.get(2),
-        observation_ref: row.get(3),
-        parse_review_ref: row.get(4),
-        admission_receipt_ref: row.get(5),
-        disposition: StatementObservationDisposition::from_db(row.get::<_, String>(6).as_str())?,
-        qualification_ref: row.get(7),
-        candidate_only: row.get(8),
-        creates_semantic_authority: row.get(9),
-        applicability_promoted: row.get(10),
-        claim_truth_promoted: row.get(11),
-    };
-    link.validate()?;
-    Ok(link)
-}
-
 fn require_source_ancestry(
     client: &mut Client,
     statement: &SourceStatementEnvelope,
 ) -> Result<(), StatementTraceStoreError> {
-    let revision_matches: bool = client
-        .query_one(
-            r#"
-            SELECT EXISTS (
-              SELECT 1 FROM corpus.external_source_revision
-              WHERE external_source_revision_ref=$1 AND document_ref=$2
-            )
-            "#,
-            &[&statement.source_revision_ref, &statement.document_ref],
-        )?
-        .get(0);
-    if !revision_matches {
-        return Err(StatementTraceStoreError::RevisionDocumentMismatch);
-    }
-
     let span = client.query_opt(
         r#"
         SELECT start_char, end_char
@@ -668,10 +683,13 @@ fn require_source_ancestry(
         return Err(StatementTraceStoreError::SpanDocumentMismatch);
     }
 
-    let source_text: Option<String> = client
+    let source_text: String = client
         .query_one(
             r#"
-            SELECT convert_from(substring(c.payload FROM (s.start_char + 1) FOR (s.end_char - s.start_char)), 'UTF8')
+            SELECT convert_from(
+              substring(c.payload FROM (s.start_char + 1) FOR (s.end_char - s.start_char)),
+              'UTF8'
+            )
             FROM corpus.span s
             JOIN corpus.document d ON d.document_ref=s.document_ref
             JOIN corpus.canonical_content c ON c.canonical_ref=d.canonical_ref
@@ -680,9 +698,13 @@ fn require_source_ancestry(
             &[&statement.span.span_ref, &statement.document_ref],
         )?
         .get(0);
-    if source_text.as_deref() != Some(statement.literal_text.as_str()) {
+    if source_text != statement.literal_text {
         return Err(StatementTraceStoreError::LiteralTextMismatch);
     }
+
+    // source_revision_ref is retained as an upstream-owned opaque revision
+    // coordinate. The generic statement membrane must not hard-code one source
+    // family such as corpus.external_source_revision.
     Ok(())
 }
 
@@ -746,24 +768,24 @@ mod tests {
     #[test]
     fn statement_identity_ignores_parser_run_and_origin() {
         let intake = statement(StatementOrigin::InitialIntake);
-        let mut reentry = statement(StatementOrigin::ResearchReentry);
-        reentry.statement_ref = canonical_statement_ref(&reentry);
+        let reentry = statement(StatementOrigin::ResearchReentry);
         assert_eq!(intake.statement_ref, reentry.statement_ref);
     }
 
     #[test]
     fn observation_link_identity_is_structural() {
-        let a = canonical_statement_observation_link_ref(
-            "statement:x",
-            "candidate:y",
-            "observation:z",
+        assert_eq!(
+            canonical_statement_observation_link_ref(
+                "statement:x",
+                "candidate:y",
+                "observation:z"
+            ),
+            canonical_statement_observation_link_ref(
+                "statement:x",
+                "candidate:y",
+                "observation:z"
+            )
         );
-        let b = canonical_statement_observation_link_ref(
-            "statement:x",
-            "candidate:y",
-            "observation:z",
-        );
-        assert_eq!(a, b);
     }
 
     #[test]
@@ -779,10 +801,6 @@ mod tests {
             claim_truth_promoted: false,
         };
         link.validate().unwrap();
-        assert_eq!(
-            link.link_ref,
-            canonical_observation_event_link_ref("observation:1", "event:1")
-        );
     }
 
     #[test]
@@ -796,6 +814,7 @@ mod tests {
             statement_ref: "statement:x".into(),
             candidate_pnf_ref: "candidate:y".into(),
             observation_ref: "observation:z".into(),
+            parser_receipt_ref: Some("parser:run:1".into()),
             parse_review_ref: Some("review:p".into()),
             admission_receipt_ref: None,
             disposition: StatementObservationDisposition::SemanticallyAdmitted,
