@@ -205,6 +205,45 @@ impl CandidateEventJoinProposal {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AcceptedEventAssemblyReceipt {
+    pub assembly_ref: String,
+    pub proposal_ref: String,
+    pub event_ref: String,
+    pub review_item_ref: String,
+    pub accepted_review_command_ref: String,
+    pub observation_refs: Vec<String>,
+    pub statement_refs: Vec<String>,
+    pub reviewed_event_identity: bool,
+    pub creates_semantic_authority: bool,
+    pub claim_truth_promoted: bool,
+}
+
+impl AcceptedEventAssemblyReceipt {
+    pub fn validate(&self) -> Result<(), EventDiscoveryError> {
+        require("assembly_ref", &self.assembly_ref)?;
+        require("proposal_ref", &self.proposal_ref)?;
+        require("event_ref", &self.event_ref)?;
+        require("review_item_ref", &self.review_item_ref)?;
+        require(
+            "accepted_review_command_ref",
+            &self.accepted_review_command_ref,
+        )?;
+        if self.observation_refs.len() < 2 {
+            return Err(EventDiscoveryError::InsufficientObservations);
+        }
+        validate_refs("observation_refs", &self.observation_refs)?;
+        validate_refs("statement_refs", &self.statement_refs)?;
+        if !self.reviewed_event_identity
+            || self.creates_semantic_authority
+            || self.claim_truth_promoted
+        {
+            return Err(EventDiscoveryError::PromotionNotAllowed);
+        }
+        Ok(())
+    }
+}
+
 pub fn discover_event_join_proposals(
     observations: &[EventJoinObservation],
     policy: &EventDiscoveryPolicy,
@@ -387,6 +426,26 @@ mod tests {
             explicit_cross_reference_refs: vec![],
             user_declared_same_incident_refs: vec![],
         }
+    }
+
+    #[test]
+    fn accepted_event_identity_receipt_does_not_create_claim_truth() {
+        let receipt = AcceptedEventAssemblyReceipt {
+            assembly_ref: "event-assembly:1".into(),
+            proposal_ref: "proposal:1".into(),
+            event_ref: "event:1".into(),
+            review_item_ref: "review-item:proposal:1".into(),
+            accepted_review_command_ref: "review-command:accept:1".into(),
+            observation_refs: vec!["observation:a".into(), "observation:b".into()],
+            statement_refs: vec!["statement:a".into(), "statement:b".into()],
+            reviewed_event_identity: true,
+            creates_semantic_authority: false,
+            claim_truth_promoted: false,
+        };
+        receipt.validate().unwrap();
+        assert!(receipt.reviewed_event_identity);
+        assert!(!receipt.creates_semantic_authority);
+        assert!(!receipt.claim_truth_promoted);
     }
 
     #[test]
