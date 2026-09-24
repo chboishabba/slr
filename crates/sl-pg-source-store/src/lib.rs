@@ -107,10 +107,13 @@ pub use non_novel_identity_alias::{
 };
 pub use operational_state_store::{
     install_operational_state_schema, load_operational_event,
-    load_operational_events_for_date, load_operational_semantic_links_for_event,
+    load_operational_events_for_date, load_operational_outstanding_for_date,
+    load_operational_outstanding_state,
+    load_operational_semantic_links_for_event,
     load_operational_semantic_links_for_target, load_statibaker_activity_ledger,
     materialize_statibaker_activity_ledger, persist_operational_event,
-    persist_operational_semantic_link, validate_statibaker_ledger,
+    persist_operational_outstanding_state, persist_operational_semantic_link,
+    validate_statibaker_ledger,
     OperationalStateStoreError, StatiBakerActivityEvent, StatiBakerActivityLedger,
     StatiBakerLedgerProvenance, StatiBakerOperationalImportReceipt,
 };

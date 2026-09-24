@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 
 use sensiblaw_core::operational_state::{
-    OperationalEvent, OperationalSemanticLink,
+    OperationalEvent, OperationalOutstandingState, OperationalSemanticLink,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -25,11 +25,49 @@ pub struct OperationalTimelineProjection {
     pub claim_truth_promoted: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct OperationalOutstandingProjection {
+    pub states: Vec<OperationalOutstandingState>,
+    pub creates_review_pending: bool,
+    pub creates_semantic_unresolved: bool,
+    pub creates_user_priority: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum OperationalTimelineError {
     InvalidEvent(String),
     InvalidLink(String),
     LinkEventMissing(String),
+    InvalidOutstandingState(String),
+}
+
+pub fn project_operational_outstanding(
+    states: &[OperationalOutstandingState],
+) -> Result<OperationalOutstandingProjection, OperationalTimelineError> {
+    let mut projected = Vec::with_capacity(states.len());
+    for state in states {
+        state.validate().map_err(|_| {
+            OperationalTimelineError::InvalidOutstandingState(
+                state.operational_state_ref.clone(),
+            )
+        })?;
+        projected.push(state.clone());
+    }
+    projected.sort_by(|left, right| {
+        left.state_date
+            .cmp(&right.state_date)
+            .then_with(|| left.operational_state_ref.cmp(&right.operational_state_ref))
+    });
+    projected.dedup_by(|left, right| {
+        left.operational_state_ref == right.operational_state_ref
+    });
+
+    Ok(OperationalOutstandingProjection {
+        states: projected,
+        creates_review_pending: false,
+        creates_semantic_unresolved: false,
+        creates_user_priority: false,
+    })
 }
 
 pub fn project_operational_timeline(
@@ -133,6 +171,34 @@ mod tests {
             claim_truth_promoted: false,
             kind: OperationalEventKind::Session,
         }
+    }
+
+    #[test]
+    fn outstanding_projection_does_not_become_review_semantic_or_priority() {
+        use sensiblaw_core::operational_state::{
+            OperationalOutstandingKind, OperationalOutstandingState,
+        };
+
+        let projection = project_operational_outstanding(&[
+            OperationalOutstandingState {
+                operational_state_ref: "outstanding:1".into(),
+                state_date: "2026-09-24".into(),
+                subject_ref: "authority-follow:1".into(),
+                label: "authority follow remained unresolved".into(),
+                provenance_refs: vec!["statibaker:carryover:1".into()],
+                kind: OperationalOutstandingKind::Unresolved,
+                producer_observed: true,
+                creates_review_pending: false,
+                creates_semantic_unresolved: false,
+                creates_user_priority: false,
+            },
+        ])
+        .unwrap();
+
+        assert_eq!(projection.states.len(), 1);
+        assert!(!projection.creates_review_pending);
+        assert!(!projection.creates_semantic_unresolved);
+        assert!(!projection.creates_user_priority);
     }
 
     #[test]

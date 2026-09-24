@@ -5,7 +5,8 @@ use serde::Deserialize;
 use thiserror::Error;
 
 use sensiblaw_core::operational_state::{
-    OperationalEvent, OperationalEventKind, OperationalSemanticLink,
+    OperationalEvent, OperationalEventKind, OperationalOutstandingKind,
+    OperationalOutstandingState, OperationalSemanticLink,
     OperationalSemanticRelationKind, OperationalTargetKind,
 };
 
@@ -70,10 +71,14 @@ pub enum OperationalStateStoreError {
     InvalidOperationalEvent,
     #[error("invalid operational-semantic link")]
     InvalidOperationalLink,
+    #[error("invalid operational outstanding state")]
+    InvalidOperationalOutstanding,
     #[error("invalid StatiBaker activity ledger")]
     InvalidStatiBakerLedger,
     #[error("existing operational event conflicts with producer event")]
     ExistingOperationalEventConflict,
+    #[error("existing operational outstanding state conflicts with producer state")]
+    ExistingOperationalOutstandingConflict,
     #[error("missing operational event for semantic link")]
     MissingOperationalEvent,
 }
@@ -110,6 +115,25 @@ fn operational_kind_from_db(value: &str) -> Result<OperationalEventKind, Operati
         "communication_activity" => Ok(OperationalEventKind::CommunicationActivity),
         "other" => Ok(OperationalEventKind::Other),
         _ => Err(OperationalStateStoreError::InvalidOperationalEvent),
+    }
+}
+
+fn outstanding_kind_as_db(kind: OperationalOutstandingKind) -> &'static str {
+    match kind {
+        OperationalOutstandingKind::Carryover => "carryover",
+        OperationalOutstandingKind::InterruptedThread => "interrupted_thread",
+        OperationalOutstandingKind::Unresolved => "unresolved",
+    }
+}
+
+fn outstanding_kind_from_db(
+    value: &str,
+) -> Result<OperationalOutstandingKind, OperationalStateStoreError> {
+    match value {
+        "carryover" => Ok(OperationalOutstandingKind::Carryover),
+        "interrupted_thread" => Ok(OperationalOutstandingKind::InterruptedThread),
+        "unresolved" => Ok(OperationalOutstandingKind::Unresolved),
+        _ => Err(OperationalStateStoreError::InvalidOperationalOutstanding),
     }
 }
 
@@ -282,6 +306,32 @@ pub fn install_operational_state_schema(
           policy_flag TEXT NOT NULL,
           PRIMARY KEY (operational_event_ref, policy_flag)
         );
+
+        CREATE TABLE IF NOT EXISTS operational.outstanding_state (
+          operational_state_ref TEXT PRIMARY KEY,
+          state_date TEXT NOT NULL,
+          subject_ref TEXT NOT NULL,
+          label TEXT NOT NULL,
+          kind_ref TEXT NOT NULL,
+          producer_observed BOOLEAN NOT NULL CHECK (producer_observed),
+          creates_review_pending BOOLEAN NOT NULL CHECK (NOT creates_review_pending),
+          creates_semantic_unresolved BOOLEAN NOT NULL CHECK (NOT creates_semantic_unresolved),
+          creates_user_priority BOOLEAN NOT NULL CHECK (NOT creates_user_priority)
+        );
+
+        CREATE TABLE IF NOT EXISTS operational.outstanding_state_provenance (
+          operational_state_ref TEXT NOT NULL
+            REFERENCES operational.outstanding_state(operational_state_ref)
+            ON DELETE CASCADE,
+          ordinal INTEGER NOT NULL,
+          provenance_ref TEXT NOT NULL,
+          PRIMARY KEY (operational_state_ref, provenance_ref)
+        );
+
+        CREATE INDEX IF NOT EXISTS operational_outstanding_state_date_idx
+          ON operational.outstanding_state (state_date, operational_state_ref);
+        CREATE INDEX IF NOT EXISTS operational_outstanding_subject_idx
+          ON operational.outstanding_state (subject_ref);
 
         CREATE TABLE IF NOT EXISTS operational.semantic_link (
           link_ref TEXT PRIMARY KEY,
@@ -602,6 +652,143 @@ pub fn load_operational_events_for_date(
         .collect()
 }
 
+pub fn persist_operational_outstanding_state(
+    config: &DatabaseConfig,
+    state: &OperationalOutstandingState,
+) -> Result<OperationalOutstandingState, OperationalStateStoreError> {
+    state
+        .validate()
+        .map_err(|_| OperationalStateStoreError::InvalidOperationalOutstanding)?;
+    install_operational_state_schema(config)?;
+
+    let mut client = Client::connect(config.database_url(), NoTls)?;
+    let mut tx = client.transaction()?;
+    tx.execute(
+        r#"
+        INSERT INTO operational.outstanding_state
+          (operational_state_ref, state_date, subject_ref, label, kind_ref,
+           producer_observed, creates_review_pending,
+           creates_semantic_unresolved, creates_user_priority)
+        VALUES ($1,$2,$3,$4,$5,true,false,false,false)
+        ON CONFLICT (operational_state_ref) DO NOTHING
+        "#,
+        &[
+            &state.operational_state_ref,
+            &state.state_date,
+            &state.subject_ref,
+            &state.label,
+            &outstanding_kind_as_db(state.kind),
+        ],
+    )?;
+    for (ordinal, provenance) in state.provenance_refs.iter().enumerate() {
+        tx.execute(
+            r#"
+            INSERT INTO operational.outstanding_state_provenance
+              (operational_state_ref, ordinal, provenance_ref)
+            VALUES ($1,$2,$3)
+            ON CONFLICT DO NOTHING
+            "#,
+            &[
+                &state.operational_state_ref,
+                &(ordinal as i32),
+                provenance,
+            ],
+        )?;
+    }
+    tx.commit()?;
+
+    let persisted = load_operational_outstanding_state(
+        config,
+        &state.operational_state_ref,
+    )?
+    .ok_or(OperationalStateStoreError::ExistingOperationalOutstandingConflict)?;
+    if &persisted != state {
+        return Err(OperationalStateStoreError::ExistingOperationalOutstandingConflict);
+    }
+    Ok(persisted)
+}
+
+pub fn load_operational_outstanding_state(
+    config: &DatabaseConfig,
+    operational_state_ref: &str,
+) -> Result<Option<OperationalOutstandingState>, OperationalStateStoreError> {
+    install_operational_state_schema(config)?;
+    let mut client = Client::connect(config.database_url(), NoTls)?;
+    let Some(row) = client.query_opt(
+        r#"
+        SELECT operational_state_ref, state_date, subject_ref, label, kind_ref,
+               producer_observed, creates_review_pending,
+               creates_semantic_unresolved, creates_user_priority
+        FROM operational.outstanding_state
+        WHERE operational_state_ref=$1
+        "#,
+        &[&operational_state_ref],
+    )? else {
+        return Ok(None);
+    };
+
+    let provenance_refs = client
+        .query(
+            r#"
+            SELECT provenance_ref
+            FROM operational.outstanding_state_provenance
+            WHERE operational_state_ref=$1
+            ORDER BY ordinal, provenance_ref
+            "#,
+            &[&operational_state_ref],
+        )?
+        .into_iter()
+        .map(|row| row.get::<_, String>(0))
+        .collect::<Vec<_>>();
+
+    let state = OperationalOutstandingState {
+        operational_state_ref: row.get(0),
+        state_date: row.get(1),
+        subject_ref: row.get(2),
+        label: row.get(3),
+        kind: outstanding_kind_from_db(row.get::<_, String>(4).as_str())?,
+        producer_observed: row.get(5),
+        creates_review_pending: row.get(6),
+        creates_semantic_unresolved: row.get(7),
+        creates_user_priority: row.get(8),
+        provenance_refs,
+    };
+    state
+        .validate()
+        .map_err(|_| OperationalStateStoreError::InvalidOperationalOutstanding)?;
+    Ok(Some(state))
+}
+
+pub fn load_operational_outstanding_for_date(
+    config: &DatabaseConfig,
+    state_date: &str,
+) -> Result<Vec<OperationalOutstandingState>, OperationalStateStoreError> {
+    install_operational_state_schema(config)?;
+    let mut client = Client::connect(config.database_url(), NoTls)?;
+    let refs = client
+        .query(
+            r#"
+            SELECT operational_state_ref
+            FROM operational.outstanding_state
+            WHERE state_date=$1
+            ORDER BY operational_state_ref
+            "#,
+            &[&state_date],
+        )?
+        .into_iter()
+        .map(|row| row.get::<_, String>(0))
+        .collect::<Vec<_>>();
+
+    refs.into_iter()
+        .map(|reference| {
+            load_operational_outstanding_state(config, &reference)?
+                .ok_or(
+                    OperationalStateStoreError::ExistingOperationalOutstandingConflict,
+                )
+        })
+        .collect()
+}
+
 pub fn load_operational_semantic_links_for_event(
     config: &DatabaseConfig,
     operational_event_ref: &str,
@@ -683,6 +870,26 @@ mod tests {
         };
         validate_statibaker_ledger(&ledger).unwrap();
         assert_eq!(ledger.activity_events.len(), 1);
+    }
+
+    #[test]
+    fn operational_outstanding_state_shape_remains_non_promoting() {
+        let state = OperationalOutstandingState {
+            operational_state_ref: "operational-outstanding:1".into(),
+            state_date: "2026-09-24".into(),
+            subject_ref: "authority-follow:1".into(),
+            label: "authority follow remained unresolved".into(),
+            provenance_refs: vec!["statibaker:carryover:1".into()],
+            kind: OperationalOutstandingKind::Unresolved,
+            producer_observed: true,
+            creates_review_pending: false,
+            creates_semantic_unresolved: false,
+            creates_user_priority: false,
+        };
+        state.validate().unwrap();
+        assert!(!state.creates_review_pending);
+        assert!(!state.creates_semantic_unresolved);
+        assert!(!state.creates_user_priority);
     }
 
     #[test]

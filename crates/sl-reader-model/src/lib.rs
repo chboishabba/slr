@@ -35,3 +35,6 @@ pub use event_discovery_projection::*;
 
 mod matter_workspace;
 pub use matter_workspace::*;
+
+mod matter_acceptance;
+pub use matter_acceptance::*;
