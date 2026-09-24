@@ -15,6 +15,7 @@ mod proposition_rows;
 mod reviewed_pnf;
 mod reviewed_source_expansion;
 mod statement_pnf_spine;
+mod statement_trace_store;
 
 pub use cache_first::{
     resolve_cache_first, AcquiredSourceBundle, CacheFirstAcquirer, CacheFirstError,
@@ -95,6 +96,15 @@ pub use statement_pnf_spine::{
     compile_statement_pnf, review_statement_parse, ParseReviewDisposition,
     ReviewedStatementPnf, SourceStatementEnvelope, StatementCandidatePnf,
     StatementOrigin, StatementParseReview, StatementPnfSpineError,
+};
+pub use statement_trace_store::{
+    canonical_statement_observation_link_ref, canonical_statement_ref,
+    install_statement_trace_schema, load_source_statement,
+    load_statement_observation_links_for_observation,
+    load_statement_observation_links_for_statement, persist_source_statement,
+    persist_statement_observation_link, PersistedSourceStatement,
+    StatementObservationDisposition, StatementObservationLink,
+    StatementTraceStoreError,
 };
 
 // Keep the established PostgreSQL source-store implementation byte-for-byte
