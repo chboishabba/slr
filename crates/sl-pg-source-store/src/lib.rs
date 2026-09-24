@@ -1,10 +1,12 @@
 mod workbench_projection;
 pub use workbench_projection::*;
 mod cache_first;
+mod chat_source_store;
 mod chronology_contestation_store;
 mod candidate_pnf;
 mod context_federation;
 mod discovery_identity_baseline;
+mod event_discovery_store;
 mod gwb_ambiguity_state;
 mod gwb_campaign_commit;
 mod gwb_chronology_capstone;
@@ -13,6 +15,7 @@ mod discovery_lineage;
 mod latent_world;
 mod legal_ir_materialization;
 mod non_novel_identity_alias;
+mod operational_state_store;
 mod proposition_rows;
 mod reviewed_pnf;
 mod reviewed_source_expansion;
@@ -27,6 +30,13 @@ pub use chronology_contestation_store::{
     persist_claim_leaf, persist_contestation_relation, persist_event_claim_link,
     persist_event_temporal_link, persist_proposition_root, persist_temporal_assertion,
     ChronologyContestationStoreError, EventClaimLink, EventTemporalLink,
+};
+pub use chat_source_store::{
+    install_chat_source_schema, load_chat_archive_export_jsonl,
+    load_chat_message_source, load_chat_messages_for_conversation,
+    materialize_chat_statement, persist_chat_archive_message,
+    ChatArchiveExportRow, ChatSourceStoreError, PersistedChatMessageSource,
+    CHAT_ARCHIVE_EXPORT_SCHEMA,
 };
 pub use cache_first::{
     resolve_cache_first, AcquiredSourceBundle, CacheFirstAcquirer, CacheFirstError,
@@ -72,6 +82,11 @@ pub use discovery_identity_baseline::{
     DiscoveryCampaignIdentityRow, DiscoveryIdentityBaseline, DiscoveryIdentityBaselineError,
     DiscoveryIdentityBaselineRow,
 };
+pub use event_discovery_store::{
+    install_event_discovery_schema, load_event_join_proposal,
+    load_pending_event_join_proposals, persist_event_join_proposal,
+    persist_event_join_proposal_with_review, EventDiscoveryStoreError,
+};
 pub use discovery_lineage::{
     discovery_lineage_row, materialize_discovery_lineage, DiscoveryLineageError,
     DiscoveryLineageInput, DiscoveryLineageMaterializationReceipt, DiscoveryLineageRow,
@@ -90,6 +105,15 @@ pub use non_novel_identity_alias::{
     NonNovelIdentityAliasInput, NonNovelIdentityAliasMaterializationReceipt,
     NonNovelIdentityAliasRow,
 };
+pub use operational_state_store::{
+    install_operational_state_schema, load_operational_event,
+    load_operational_events_for_date, load_operational_semantic_links_for_event,
+    load_operational_semantic_links_for_target, load_statibaker_activity_ledger,
+    materialize_statibaker_activity_ledger, persist_operational_event,
+    persist_operational_semantic_link, validate_statibaker_ledger,
+    OperationalStateStoreError, StatiBakerActivityEvent, StatiBakerActivityLedger,
+    StatiBakerLedgerProvenance, StatiBakerOperationalImportReceipt,
+};
 pub use proposition_rows::{
     load_mabo_proposition_rows, load_proposition_rows, PropositionObservationRow, PropositionRows,
 };
@@ -99,8 +123,12 @@ pub use reviewed_pnf::{
     ReviewedPnfValidationError,
 };
 pub use review_workstation_store::{
-    install_review_workstation_schema, load_review_queue, persist_review_item,
-    persist_review_receipt, ReviewWorkstationStoreError,
+    apply_persisted_review_command, install_review_workstation_schema,
+    load_review_queue, persist_review_item, persist_review_receipt,
+    ReviewWorkstationStoreError,
+};
+pub use sensiblaw_core::review_workstation::{
+    ReviewAction, ReviewCommand, ReviewEffect, ReviewItem, ReviewReceipt, ReviewStatus,
 };
 pub use reviewed_source_expansion::{
     load_reviewed_context_expansion_sources,
@@ -123,6 +151,7 @@ pub use statement_trace_store::{
     canonical_statement_ref, install_statement_trace_schema,
     load_observation_event_links_for_event,
     load_observation_event_links_for_observation, load_source_statement,
+    load_source_statements_for_document,
     load_statement_observation_links_for_observation,
     load_statement_observation_links_for_statement,
     persist_observation_event_link, persist_source_statement,
@@ -136,3 +165,8 @@ pub use statement_trace_store::{
 include!("storage_core.rs");
 mod forecast_verification;
 pub use forecast_verification::*;
+
+pub use sensiblaw_core::chat_source::{
+    ArchivedChatMessage, ChatBranchMembership, ChatContentKind,
+    ChatMessageRole, ChatSourceError, ChatStatementCandidateSpan,
+};

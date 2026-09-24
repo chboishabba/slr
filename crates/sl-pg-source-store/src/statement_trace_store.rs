@@ -458,6 +458,27 @@ pub fn load_source_statement(
     load_source_statement_with_client(&mut client, statement_ref)
 }
 
+pub fn load_source_statements_for_document(
+    config: &DatabaseConfig,
+    document_ref: &str,
+) -> Result<Vec<PersistedSourceStatement>, StatementTraceStoreError> {
+    let mut client = Client::connect(config.database_url(), NoTls)?;
+    let refs = client
+        .query(
+            "SELECT statement_ref FROM corpus.source_statement WHERE document_ref=$1 ORDER BY exact_span_ref, statement_ref",
+            &[&document_ref],
+        )?
+        .into_iter()
+        .map(|row| row.get::<_, String>(0))
+        .collect::<Vec<_>>();
+    refs.into_iter()
+        .map(|statement_ref| {
+            load_source_statement_with_client(&mut client, &statement_ref)?
+                .ok_or(StatementTraceStoreError::ExistingStatementConflict)
+        })
+        .collect()
+}
+
 pub fn load_statement_observation_links_for_statement(
     config: &DatabaseConfig,
     statement_ref: &str,

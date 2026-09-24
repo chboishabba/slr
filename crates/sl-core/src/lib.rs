@@ -3,6 +3,9 @@
 
 pub mod canonical_evidence;
 pub mod chronology_contestation;
+pub mod chat_source;
+pub mod event_discovery;
+pub mod operational_state;
 pub mod review_workstation;
 
 use std::collections::HashMap;
@@ -634,3 +637,6 @@ mod tests {
         assert_eq!(publisher.publish(generation), Err(PublicationError::AlreadyTerminal));
     }
 }
+
+pub mod matter_context;
+pub mod matter_handoff;

@@ -26,3 +26,12 @@ pub use chronology_projection::*;
 
 mod review_queue;
 pub use review_queue::*;
+
+mod operational_timeline;
+pub use operational_timeline::*;
+
+mod event_discovery_projection;
+pub use event_discovery_projection::*;
+
+mod matter_workspace;
+pub use matter_workspace::*;
