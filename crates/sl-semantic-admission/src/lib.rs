@@ -108,6 +108,60 @@ pub fn admit_candidate(
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SourceBoundAdmissionReceipt {
+    pub statement_ref: String,
+    pub document_ref: String,
+    pub source_revision_ref: String,
+    pub exact_span_ref: String,
+    pub admission: AdmissionReceipt,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SourceBoundAdmittedNormativeDelta {
+    pub statement_ref: String,
+    pub document_ref: String,
+    pub source_revision_ref: String,
+    pub exact_span_ref: String,
+    pub admitted: AdmittedNormativeDelta,
+    pub proposition_support_paid: bool,
+    pub applicability_paid: bool,
+    pub claim_truth_paid: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SourceBoundAdmissionError {
+    EmptySourceCoordinate,
+    Semantic(AdmissionError),
+}
+
+pub fn admit_source_bound_candidate(
+    candidate: &StableCandidateObservation,
+    receipt: &SourceBoundAdmissionReceipt,
+) -> Result<SourceBoundAdmittedNormativeDelta, SourceBoundAdmissionError> {
+    if receipt.statement_ref.trim().is_empty()
+        || receipt.document_ref.trim().is_empty()
+        || receipt.source_revision_ref.trim().is_empty()
+        || receipt.exact_span_ref.trim().is_empty()
+    {
+        return Err(SourceBoundAdmissionError::EmptySourceCoordinate);
+    }
+
+    let admitted =
+        admit_candidate(candidate, &receipt.admission).map_err(SourceBoundAdmissionError::Semantic)?;
+
+    Ok(SourceBoundAdmittedNormativeDelta {
+        statement_ref: receipt.statement_ref.clone(),
+        document_ref: receipt.document_ref.clone(),
+        source_revision_ref: receipt.source_revision_ref.clone(),
+        exact_span_ref: receipt.exact_span_ref.clone(),
+        admitted,
+        proposition_support_paid: false,
+        applicability_paid: false,
+        claim_truth_paid: false,
+    })
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AdmissionFailure {
     pub candidate: StableCandidateObservation,
     pub error: AdmissionError,
