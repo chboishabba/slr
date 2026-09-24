@@ -3,6 +3,8 @@
 
 pub mod canonical_evidence;
 pub mod chronology_contestation;
+pub mod event_discovery;
+pub mod operational_state;
 pub mod review_workstation;
 
 use std::collections::HashMap;
