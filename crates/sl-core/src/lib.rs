@@ -2,6 +2,7 @@
 //! Parser output is observation evidence; it is never semantic authority.
 
 pub mod canonical_evidence;
+pub mod chronology_contestation;
 
 use std::collections::HashMap;
 use std::time::{Duration, Instant};

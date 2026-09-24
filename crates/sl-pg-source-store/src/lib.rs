@@ -1,6 +1,7 @@
 mod workbench_projection;
 pub use workbench_projection::*;
 mod cache_first;
+mod chronology_contestation_store;
 mod candidate_pnf;
 mod context_federation;
 mod discovery_identity_baseline;
@@ -17,6 +18,14 @@ mod reviewed_source_expansion;
 mod statement_pnf_spine;
 mod statement_trace_store;
 
+pub use chronology_contestation_store::{
+    install_chronology_contestation_schema, load_claims_for_event,
+    load_contestation_relations_for_claims, load_proposition_roots_for_claims,
+    load_temporal_assertions_for_event,
+    persist_claim_leaf, persist_contestation_relation, persist_event_claim_link,
+    persist_event_temporal_link, persist_proposition_root, persist_temporal_assertion,
+    ChronologyContestationStoreError, EventClaimLink, EventTemporalLink,
+};
 pub use cache_first::{
     resolve_cache_first, AcquiredSourceBundle, CacheFirstAcquirer, CacheFirstError,
     CacheFirstResolution, CacheLookupDemand, CachedResolvedDocument,
