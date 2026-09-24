@@ -16,7 +16,7 @@ fn gcd(mut a: u64, mut b: u64) -> u64 {
     a.max(1)
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Rational {
     pub numerator: u64,
