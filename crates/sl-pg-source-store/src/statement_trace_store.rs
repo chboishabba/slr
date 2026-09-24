@@ -124,6 +124,53 @@ impl StatementObservationLink {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ObservationEventLink {
+    pub link_ref: String,
+    pub observation_ref: String,
+    pub event_ref: String,
+    pub assembly_receipt_ref: String,
+    pub candidate_only: bool,
+    pub creates_semantic_authority: bool,
+    pub applicability_promoted: bool,
+    pub claim_truth_promoted: bool,
+}
+
+impl ObservationEventLink {
+    pub fn validate(&self) -> Result<(), StatementTraceStoreError> {
+        for (name, value) in [
+            ("link_ref", self.link_ref.as_str()),
+            ("observation_ref", self.observation_ref.as_str()),
+            ("event_ref", self.event_ref.as_str()),
+            ("assembly_receipt_ref", self.assembly_receipt_ref.as_str()),
+        ] {
+            if value.trim().is_empty() {
+                return Err(StatementTraceStoreError::EmptyCoordinate(name));
+            }
+        }
+        if !self.candidate_only
+            || self.creates_semantic_authority
+            || self.applicability_promoted
+            || self.claim_truth_promoted
+        {
+            return Err(StatementTraceStoreError::PromotionNotAllowed);
+        }
+        Ok(())
+    }
+}
+
+pub fn canonical_observation_event_link_ref(
+    observation_ref: &str,
+    event_ref: &str,
+) -> String {
+    let digest = digest_parts(&[
+        "observation-event-link:v1",
+        observation_ref,
+        event_ref,
+    ]);
+    format!("observation-event-link:sha256:{}", hex(&digest))
+}
+
 #[derive(Debug, Error)]
 pub enum StatementTraceStoreError {
     #[error("required statement trace coordinate is empty: {0}")]
@@ -223,6 +270,23 @@ pub fn install_statement_trace_schema(
           ON pnf.statement_observation_link (statement_ref);
         CREATE INDEX IF NOT EXISTS statement_observation_observation_idx
           ON pnf.statement_observation_link (observation_ref);
+
+        CREATE TABLE IF NOT EXISTS pnf.observation_event_link (
+          link_ref TEXT PRIMARY KEY,
+          observation_ref TEXT NOT NULL,
+          event_ref TEXT NOT NULL,
+          assembly_receipt_ref TEXT NOT NULL,
+          candidate_only BOOLEAN NOT NULL CHECK (candidate_only),
+          creates_semantic_authority BOOLEAN NOT NULL CHECK (NOT creates_semantic_authority),
+          applicability_promoted BOOLEAN NOT NULL CHECK (NOT applicability_promoted),
+          claim_truth_promoted BOOLEAN NOT NULL CHECK (NOT claim_truth_promoted),
+          UNIQUE (observation_ref, event_ref)
+        );
+
+        CREATE INDEX IF NOT EXISTS observation_event_observation_idx
+          ON pnf.observation_event_link (observation_ref);
+        CREATE INDEX IF NOT EXISTS observation_event_event_idx
+          ON pnf.observation_event_link (event_ref);
         "#,
     )?;
     Ok(())
@@ -336,6 +400,78 @@ pub fn persist_statement_observation_link(
     Ok(persisted)
 }
 
+pub fn persist_observation_event_link(
+    config: &DatabaseConfig,
+    link: &ObservationEventLink,
+) -> Result<ObservationEventLink, StatementTraceStoreError> {
+    link.validate()?;
+    let expected = canonical_observation_event_link_ref(&link.observation_ref, &link.event_ref);
+    if link.link_ref != expected {
+        return Err(StatementTraceStoreError::ExistingLinkConflict);
+    }
+
+    let mut client = Client::connect(config.database_url(), NoTls)?;
+    client.execute(
+        r#"
+        INSERT INTO pnf.observation_event_link
+          (link_ref, observation_ref, event_ref, assembly_receipt_ref,
+           candidate_only, creates_semantic_authority,
+           applicability_promoted, claim_truth_promoted)
+        VALUES ($1,$2,$3,$4,true,false,false,false)
+        ON CONFLICT (link_ref) DO NOTHING
+        "#,
+        &[
+            &link.link_ref,
+            &link.observation_ref,
+            &link.event_ref,
+            &link.assembly_receipt_ref,
+        ],
+    )?;
+
+    let persisted = load_observation_event_link_with_client(&mut client, &link.link_ref)?
+        .ok_or(StatementTraceStoreError::ExistingLinkConflict)?;
+    if &persisted != link {
+        return Err(StatementTraceStoreError::ExistingLinkConflict);
+    }
+    Ok(persisted)
+}
+
+pub fn load_observation_event_links_for_observation(
+    config: &DatabaseConfig,
+    observation_ref: &str,
+) -> Result<Vec<ObservationEventLink>, StatementTraceStoreError> {
+    load_observation_event_links(config, "observation_ref", observation_ref)
+}
+
+pub fn load_observation_event_links_for_event(
+    config: &DatabaseConfig,
+    event_ref: &str,
+) -> Result<Vec<ObservationEventLink>, StatementTraceStoreError> {
+    load_observation_event_links(config, "event_ref", event_ref)
+}
+
+fn load_observation_event_links(
+    config: &DatabaseConfig,
+    coordinate: &str,
+    value: &str,
+) -> Result<Vec<ObservationEventLink>, StatementTraceStoreError> {
+    let sql = match coordinate {
+        "observation_ref" => {
+            "SELECT link_ref, observation_ref, event_ref, assembly_receipt_ref,              candidate_only, creates_semantic_authority, applicability_promoted, claim_truth_promoted              FROM pnf.observation_event_link WHERE observation_ref=$1 ORDER BY link_ref"
+        }
+        "event_ref" => {
+            "SELECT link_ref, observation_ref, event_ref, assembly_receipt_ref,              candidate_only, creates_semantic_authority, applicability_promoted, claim_truth_promoted              FROM pnf.observation_event_link WHERE event_ref=$1 ORDER BY link_ref"
+        }
+        _ => unreachable!("internal fixed observation-event query"),
+    };
+    let mut client = Client::connect(config.database_url(), NoTls)?;
+    client
+        .query(sql, &[&value])?
+        .into_iter()
+        .map(row_to_observation_event_link)
+        .collect()
+}
+
 pub fn load_source_statement(
     config: &DatabaseConfig,
     statement_ref: &str,
@@ -435,6 +571,42 @@ fn load_statement_observation_link_with_client(
         )?
         .map(row_to_link)
         .transpose()
+}
+
+fn load_observation_event_link_with_client(
+    client: &mut Client,
+    link_ref: &str,
+) -> Result<Option<ObservationEventLink>, StatementTraceStoreError> {
+    client
+        .query_opt(
+            r#"
+            SELECT link_ref, observation_ref, event_ref, assembly_receipt_ref,
+                   candidate_only, creates_semantic_authority,
+                   applicability_promoted, claim_truth_promoted
+            FROM pnf.observation_event_link
+            WHERE link_ref=$1
+            "#,
+            &[&link_ref],
+        )?
+        .map(row_to_observation_event_link)
+        .transpose()
+}
+
+fn row_to_observation_event_link(
+    row: postgres::Row,
+) -> Result<ObservationEventLink, StatementTraceStoreError> {
+    let link = ObservationEventLink {
+        link_ref: row.get(0),
+        observation_ref: row.get(1),
+        event_ref: row.get(2),
+        assembly_receipt_ref: row.get(3),
+        candidate_only: row.get(4),
+        creates_semantic_authority: row.get(5),
+        applicability_promoted: row.get(6),
+        claim_truth_promoted: row.get(7),
+    };
+    link.validate()?;
+    Ok(link)
 }
 
 fn row_to_link(row: postgres::Row) -> Result<StatementObservationLink, StatementTraceStoreError> {
@@ -592,6 +764,25 @@ mod tests {
             "observation:z",
         );
         assert_eq!(a, b);
+    }
+
+    #[test]
+    fn observation_event_link_identity_is_stable_and_non_promoting() {
+        let link = ObservationEventLink {
+            link_ref: canonical_observation_event_link_ref("observation:1", "event:1"),
+            observation_ref: "observation:1".into(),
+            event_ref: "event:1".into(),
+            assembly_receipt_ref: "event-assembly:1".into(),
+            candidate_only: true,
+            creates_semantic_authority: false,
+            applicability_promoted: false,
+            claim_truth_promoted: false,
+        };
+        link.validate().unwrap();
+        assert_eq!(
+            link.link_ref,
+            canonical_observation_event_link_ref("observation:1", "event:1")
+        );
     }
 
     #[test]
