@@ -1,6 +1,7 @@
 use postgres::{Client, GenericClient, NoTls};
 use sensiblaw_core::review_workstation::{
-    ReviewAction, ReviewEffect, ReviewItem, ReviewItemKind, ReviewReceipt, ReviewStatus,
+    apply_review_command, ReviewAction, ReviewCommand, ReviewEffect, ReviewItem,
+    ReviewItemKind, ReviewReceipt, ReviewStatus,
 };
 use thiserror::Error;
 
@@ -226,6 +227,54 @@ pub fn persist_review_receipt(
     config: &DatabaseConfig,
     receipt: &ReviewReceipt,
 ) -> Result<(), ReviewWorkstationStoreError> {
+    validate_review_receipt(receipt)?;
+    let mut client = Client::connect(config.database_url(), NoTls)?;
+    let mut tx = client.transaction()?;
+    persist_review_receipt_with_client(&mut tx, receipt)?;
+    tx.commit()?;
+    Ok(())
+}
+
+pub fn apply_persisted_review_command(
+    config: &DatabaseConfig,
+    command: &ReviewCommand,
+) -> Result<(ReviewReceipt, ReviewItem), ReviewWorkstationStoreError> {
+    command
+        .validate()
+        .map_err(|_| ReviewWorkstationStoreError::InvalidDomainObject)?;
+    install_review_workstation_schema(config)?;
+
+    let mut client = Client::connect(config.database_url(), NoTls)?;
+    let mut tx = client.transaction()?;
+
+    let locked = tx.query_opt(
+        "SELECT review_item_ref FROM semantic.review_item WHERE review_item_ref=$1 FOR UPDATE",
+        &[&command.review_item_ref],
+    )?;
+    if locked.is_none() {
+        return Err(ReviewWorkstationStoreError::ExistingRowConflict);
+    }
+
+    let mut item = load_review_item_with_client(&mut tx, &command.review_item_ref)?
+        .ok_or(ReviewWorkstationStoreError::ExistingRowConflict)?;
+    let receipt = apply_review_command(&mut item, command)
+        .map_err(|_| ReviewWorkstationStoreError::InvalidDomainObject)?;
+
+    persist_review_receipt_with_client(&mut tx, &receipt)?;
+
+    let persisted = load_review_item_with_client(&mut tx, &command.review_item_ref)?
+        .ok_or(ReviewWorkstationStoreError::ExistingRowConflict)?;
+    if persisted.current_status != item.current_status {
+        return Err(ReviewWorkstationStoreError::ExistingRowConflict);
+    }
+
+    tx.commit()?;
+    Ok((receipt, persisted))
+}
+
+fn validate_review_receipt(
+    receipt: &ReviewReceipt,
+) -> Result<(), ReviewWorkstationStoreError> {
     if !receipt.candidate_only
         || receipt.creates_semantic_authority
         || receipt.applicability_promoted
@@ -237,10 +286,16 @@ pub fn persist_review_receipt(
     {
         return Err(ReviewWorkstationStoreError::InvalidDomainObject);
     }
+    Ok(())
+}
+
+fn persist_review_receipt_with_client(
+    client: &mut impl GenericClient,
+    receipt: &ReviewReceipt,
+) -> Result<(), ReviewWorkstationStoreError> {
+    validate_review_receipt(receipt)?;
     let (effect_ref, effect_value_ref) = effect_row(&receipt.effect);
-    let mut client = Client::connect(config.database_url(), NoTls)?;
-    let mut tx = client.transaction()?;
-    tx.execute(
+    client.execute(
         r#"
         INSERT INTO semantic.review_receipt
           (command_ref, review_item_ref, semantic_ref, reviewer_ref, action_ref,
@@ -260,12 +315,11 @@ pub fn persist_review_receipt(
         ],
     )?;
     if let Some(status) = receipt_status_after_effect(&receipt.effect) {
-        tx.execute(
+        client.execute(
             "UPDATE semantic.review_item SET current_status_ref=$2 WHERE review_item_ref=$1",
             &[&receipt.review_item_ref, &status],
         )?;
     }
-    tx.commit()?;
     Ok(())
 }
 
@@ -303,7 +357,7 @@ fn persist_refs(
 }
 
 fn load_refs(
-    client: &mut Client,
+    client: &mut impl GenericClient,
     table: &str,
     value_column: &str,
     item_ref: &str,
@@ -319,7 +373,7 @@ fn load_refs(
 }
 
 fn load_review_item_with_client(
-    client: &mut Client,
+    client: &mut impl GenericClient,
     item_ref: &str,
 ) -> Result<Option<ReviewItem>, ReviewWorkstationStoreError> {
     let row = client.query_opt(
