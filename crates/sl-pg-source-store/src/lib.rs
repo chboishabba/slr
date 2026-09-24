@@ -14,6 +14,7 @@ mod gwb_hop_ledger;
 mod discovery_lineage;
 mod latent_world;
 mod legal_ir_materialization;
+mod m13_empirical_schema;
 mod non_novel_identity_alias;
 mod operational_state_store;
 mod proposition_rows;
@@ -96,6 +97,7 @@ pub use latent_world::{
     load_latent_world_rows_with_context_revision_slice, ContextRevisionWorldSlice,
     LatentWorldBudget, LatentWorldEdgeRow, LatentWorldError, LatentWorldRows,
 };
+pub use m13_empirical_schema::*;
 pub use legal_ir_materialization::{
     materialize_reviewed_proposition_support, LegalIrMaterializationError, MaterializedLegalIrRefs,
     ReviewedPropositionSupport,
