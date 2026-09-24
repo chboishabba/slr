@@ -1254,6 +1254,8 @@ dependencies = [
  "sensiblaw-evidence-payment",
  "sensiblaw-legal-runtime",
  "sensiblaw-reader-model",
+ "serde",
+ "serde_json",
  "sha2 0.10.9",
  "tempfile",
  "thiserror 1.0.69",
@@ -1293,6 +1295,7 @@ dependencies = [
 name = "sensiblaw-reader-model"
 version = "0.1.0"
 dependencies = [
+ "sensiblaw-core",
  "serde",
  "serde_json",
 ]

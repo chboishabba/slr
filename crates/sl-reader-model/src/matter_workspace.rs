@@ -117,7 +117,7 @@ pub fn project_matter_workspace(
     let visible = context_projection
         .included_refs
         .iter()
-        .map(String::as_str)
+        .cloned()
         .collect::<BTreeSet<_>>();
 
     if input.event_timeline.creates_semantic_authority
@@ -257,7 +257,7 @@ pub fn project_matter_workspace(
     })
 }
 
-fn filter_refs(values: &[String], visible: &BTreeSet<&str>) -> Vec<String> {
+fn filter_refs(values: &[String], visible: &BTreeSet<String>) -> Vec<String> {
     let mut out = values
         .iter()
         .filter(|value| visible.contains(value.as_str()))

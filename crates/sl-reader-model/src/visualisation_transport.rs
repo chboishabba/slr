@@ -205,7 +205,6 @@ mod tests {
     }
 
     #[test]
-    #[test]
     fn visual_pick_wraps_existing_reader_intent_without_payment() {
         let pick = ReaderPickIntent::new("case:fixture", ReaderIntent::ExpandProofCone).unwrap();
         assert_eq!(pick.target_ref, "case:fixture");
@@ -214,6 +213,7 @@ mod tests {
         assert!(!pick.creates_evidence_payment());
     }
 
+    #[test]
     fn visualisation_transport_is_read_only() {
         let envelope = VisualisationEnvelope {
             source_projection_digest: "sha256:fixture".into(),
