@@ -15,6 +15,7 @@ mod non_novel_identity_alias;
 mod proposition_rows;
 mod reviewed_pnf;
 mod reviewed_source_expansion;
+mod review_workstation_store;
 mod statement_pnf_spine;
 mod statement_trace_store;
 
@@ -89,6 +90,10 @@ pub use reviewed_pnf::{
     materialize_reviewed_pnf_revision, validate_reviewed_pnf_revision,
     ReviewedPnfMaterializationError, ReviewedPnfMaterializationReceipt, ReviewedPnfRevision,
     ReviewedPnfValidationError,
+};
+pub use review_workstation_store::{
+    install_review_workstation_schema, load_review_queue, persist_review_item,
+    persist_review_receipt, ReviewWorkstationStoreError,
 };
 pub use reviewed_source_expansion::{
     load_reviewed_context_expansion_sources,
