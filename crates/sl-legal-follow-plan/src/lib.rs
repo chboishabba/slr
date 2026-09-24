@@ -395,3 +395,7 @@ mod tests {
         assert_eq!(exact.authority, "acquisition_plan_only");
     }
 }
+
+
+pub mod australian_contracts;
+pub use australian_contracts::*;

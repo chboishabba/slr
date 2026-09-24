@@ -2,7 +2,8 @@ mod latest_revision;
 
 pub use latest_revision::{
     fetch_latest_entity_rdf_revision_receipt, fetch_latest_revision_id,
-    latest_revision_api_url, parse_latest_revision_id,
+    fetch_previous_revision_id, latest_revision_api_url, parse_latest_revision_id,
+    parse_previous_revision_id, previous_revision_api_url,
 };
 
 use quick_xml::events::{BytesStart, Event};

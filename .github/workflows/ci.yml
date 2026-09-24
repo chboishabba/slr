@@ -12,19 +12,136 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: dtolnay/rust-toolchain@1.78.0
         with:
           components: clippy
+
       - name: Unit tests
         run: cargo test --workspace
+
       - name: Offline proof-search fixture
         run: cargo run -p sensiblaw-proof-search-scheduler --example offline_pabai
+
       - name: Offline proof-search frontier loop
         run: cargo run -p sensiblaw-proof-search-loop --example offline_pabai_loop
+
       - name: Offline research engine v0.1
         run: cargo run -p sensiblaw-proof-search-loop --example offline_research_engine_v01
+
+      - name: Legal runtime capstone M2.5 through Sprint 8
+        run: |
+          rm -rf /tmp/legal-runtime-capstone
+          cargo test -p sensiblaw-legal-runtime
+          cargo run -p sensiblaw-legal-runtime --example legal_runtime_capstone -- /tmp/legal-runtime-capstone
+          test -s /tmp/legal-runtime-capstone/m2_5_mixed_family_replay.tsv
+          for matter in mabo pabai cullennswcla glj; do
+            test -s "/tmp/legal-runtime-capstone/$matter.legal-campaign.tsv"
+            test -s "/tmp/legal-runtime-capstone/$matter.m4a-workbench.txt"
+            test -s "/tmp/legal-runtime-capstone/$matter.m6-explanation.txt"
+            for projection in sourceview timeline issueproof entityrelationship citationauthority flow comparative; do
+              test -s "/tmp/legal-runtime-capstone/$matter.m7-$projection.txt"
+            done
+            test -s "/tmp/legal-runtime-capstone/$matter.m8-runtime.txt"
+          done
+          test -s /tmp/legal-runtime-capstone/mann.m8-unseen-contract-runtime.txt
+          test -s /tmp/legal-runtime-capstone/waltons.estoppel-follow-trace.txt
+          grep -q 'capability.*m2_5=true.*m3_a=true.*m3_b=true.*m3_c=true.*m3_c_replay=true.*m4_a=true.*m6=true.*m6_reverse=true.*m7=true.*m7_identity=true.*s8=true.*s8_reducer=true.*s8_reader=true.*s8_unseen_contract=true.*s8_contract_follow=true.*candidate_only=true.*semantic_authority=false' /tmp/legal-runtime-capstone/capability-report.tsv
+
+      - name: Native LegalFollow CLI smoke
+        run: |
+          rm -rf /tmp/waltons-native-cli
+          cargo run -p sensiblaw-cli --bin sensiblaw -- legal-follow waltons --base /tmp/waltons-native-cli status
+          cargo run -p sensiblaw-cli --bin sensiblaw -- legal-follow waltons --base /tmp/waltons-native-cli live status
+          cargo test -p sensiblaw-governed-legal-provider
+          cargo test -p sensiblaw-cli
+          rm -rf /tmp/waltons-s14-sync
+          cargo run -p sensiblaw-cli --bin sensiblaw -- legal-follow waltons --base /tmp/waltons-s14-sync s14-sync
+          test -s /tmp/waltons-s14-sync/waltons-s14-adaptive-trajectory.json
+          grep -q '"schema_version": "sl.waltons_s14_reviewed_sync.v0_1"' /tmp/waltons-s14-sync/waltons-s14-adaptive-trajectory.json
+          grep -q '"transport": "typed_rust_in_process"' /tmp/waltons-s14-sync/waltons-s14-adaptive-trajectory.json
+          grep -q '"json_is_semantic_command_transport": false' /tmp/waltons-s14-sync/waltons-s14-adaptive-trajectory.json
+          grep -q '"reviewed_residuals_preserved": true' /tmp/waltons-s14-sync/waltons-s14-adaptive-trajectory.json
+          grep -q '"waltons_bootstrap"' /tmp/waltons-s14-sync/waltons-s14-adaptive-trajectory.json
+          grep -q '"reviewed_identity"' /tmp/waltons-s14-sync/waltons-s14-adaptive-trajectory.json
+          grep -q '"reviewed_proposition"' /tmp/waltons-s14-sync/waltons-s14-adaptive-trajectory.json
+          grep -q '"reviewed_treatment"' /tmp/waltons-s14-sync/waltons-s14-adaptive-trajectory.json
+          grep -q '"creates_legal_authority": false' /tmp/waltons-s14-sync/waltons-s14-adaptive-trajectory.json
+          grep -q '"creates_current_law_conclusion": false' /tmp/waltons-s14-sync/waltons-s14-adaptive-trajectory.json
+          rm -f /tmp/contracts-three-hop-adaptive-fixture.json
+          cargo run -p sensiblaw-cli --bin sensiblaw -- legal-follow contracts landscape adaptive-fixture --output /tmp/contracts-three-hop-adaptive-fixture.json
+          test -s /tmp/contracts-three-hop-adaptive-fixture.json
+          grep -q '"schema_version": "sl.australian_contracts.three_hop_adaptive_fixture.v0_1"' /tmp/contracts-three-hop-adaptive-fixture.json
+          grep -q '"hop_count": 3' /tmp/contracts-three-hop-adaptive-fixture.json
+          grep -q '"fresh_frontier_after_every_hop": true' /tmp/contracts-three-hop-adaptive-fixture.json
+          grep -q '"fixed_upfront_queue_consumed": false' /tmp/contracts-three-hop-adaptive-fixture.json
+          grep -q '"calibration_fixture_only": true' /tmp/contracts-three-hop-adaptive-fixture.json
+          grep -q '"claims_live_human_reviewed_campaign": false' /tmp/contracts-three-hop-adaptive-fixture.json
+          grep -q '"creates_legal_authority": false' /tmp/contracts-three-hop-adaptive-fixture.json
+          grep -q '"creates_current_law_conclusion": false' /tmp/contracts-three-hop-adaptive-fixture.json
+          cargo run -p sensiblaw-cli --bin sensiblaw -- legal-follow contracts landscape status --as-at 2026-09-20 --jurisdiction AU-QLD
+          cargo run -p sensiblaw-cli --bin sensiblaw -- legal-follow contracts landscape plan --as-at 2026-09-20 --jurisdiction AU-QLD --output /tmp/contracts-landscape-qld.json
+          test -s /tmp/contracts-landscape-qld.json
+          grep -q '"bounded_seed_only": true' /tmp/contracts-landscape-qld.json
+          grep -q '"creates_current_law_conclusion": false' /tmp/contracts-landscape-qld.json
+          grep -q 'legislation:qld:property-law-act-1974:s55' /tmp/contracts-landscape-qld.json
+          grep -q 'legislation:qld:property-law-act-2023:s68' /tmp/contracts-landscape-qld.json
+          grep -q '"legal_frontier": false' /tmp/contracts-landscape-qld.json
+          grep -q '"optional": true' /tmp/contracts-landscape-qld.json
+          grep -q '"qid_creates_legal_authority": false' /tmp/contracts-landscape-qld.json
+          grep -q '"qid_creates_applicability": false' /tmp/contracts-landscape-qld.json
+          grep -q '"primary_source_precedes_identity_by_default": true' /tmp/contracts-landscape-qld.json
+          grep -q '"wikidata_qid_likelihood": "High"' /tmp/contracts-landscape-qld.json
+          cat > /tmp/contracts-expansion.json <<'JSON'
+          {
+            "schema_version": "sl.australian_contracts.reviewed_hops.v0_1",
+            "delta_count": 1,
+            "residual_count": 0,
+            "candidate_only": true,
+            "creates_legal_authority": false,
+            "creates_current_law_conclusion": false,
+            "deltas": [{
+              "provenance_ref": "reviewed-hop:fixture:construction",
+              "candidate_only": true,
+              "creates_legal_authority": false,
+              "nodes": [{
+                "semantic_ref": "case:fixture:construction",
+                "label": "fixture construction authority candidate",
+                "kind": "case-authority",
+                "doctrine": "construction",
+                "jurisdiction_ref": "AU",
+                "court_ref": "court:fixture",
+                "decision_or_effective_date": "2000-01-01",
+                "valid_from": null,
+                "valid_to": null,
+                "source_role": "primary-case-law",
+                "authority_level": "official",
+                "source_citation": "fixture:construction-primary-case"
+              }],
+              "edges": [{
+                "from_ref": "landscape:au:contract-law",
+                "to_ref": "case:fixture:construction",
+                "treatment": "seeds",
+                "candidate_only": true,
+                "creates_legal_authority": false
+              }]
+            }],
+            "residuals": []
+          }
+          JSON
+          cargo run -p sensiblaw-cli --bin sensiblaw -- legal-follow contracts landscape expand --delta /tmp/contracts-expansion.json --as-at 2026-09-20 --output /tmp/contracts-expanded.json
+          grep -q '"added_node_count": 1' /tmp/contracts-expanded.json
+          grep -q '"added_edge_count": 1' /tmp/contracts-expanded.json
+          grep -q '"recompute_frontier_required": true' /tmp/contracts-expanded.json
+          grep -q '"old_source_history_preserved": true' /tmp/contracts-expanded.json
+          grep -q '"old_conclusions_frozen": false' /tmp/contracts-expanded.json
+          grep -q 'case:fixture:construction' /tmp/contracts-expanded.json
+          cargo check -p sensiblaw-cli --features live-network
+          cargo check -p sensiblaw-governed-legal-provider --features live-network --examples
+
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
+
       - name: Source-contract checks
         run: |
           python3 scripts/verify_source_contract.py
@@ -33,5 +150,30 @@ jobs:
           python3 scripts/verify_proof_search_scheduler_contract.py
           python3 scripts/verify_proof_search_loop_contract.py
           python3 scripts/verify_offline_research_engine_contract.py
+
       - name: Python syntax checks
-        run: python3 -m py_compile python/spacy_stream.py python/gwb_tranche.py python/gwb_prepare.py python/gwb_full_run.py python/gwb_certify.py python/gwb_expanded_certify.py scripts/bench_stream.py scripts/verify_source_contract.py scripts/verify_semantic_status_contract.py scripts/verify_legal_counterfactual_contract.py scripts/verify_proof_search_scheduler_contract.py scripts/verify_proof_search_loop_contract.py scripts/verify_offline_research_engine_contract.py
+        run: >-
+          python3 -m py_compile
+          python/spacy_stream.py
+          python/gwb_tranche.py
+          python/gwb_prepare.py
+          python/gwb_full_run.py
+          python/gwb_certify.py
+          python/gwb_expanded_certify.py
+          scripts/bench_stream.py
+          scripts/verify_source_contract.py
+          scripts/verify_semantic_status_contract.py
+          scripts/verify_legal_counterfactual_contract.py
+          scripts/verify_proof_search_scheduler_contract.py
+          scripts/verify_proof_search_loop_contract.py
+          scripts/verify_offline_research_engine_contract.py
+          scripts/waltons_pipeline.py
+          scripts/waltons_review_decision_template.py
+          scripts/waltons_review_decision_finalize.py
+          scripts/waltons_cited_by_import.py
+          scripts/waltons_cited_by_oalc_worklist.py
+          scripts/merge_treatment_review_queues.py
+          scripts/citation_treatment_review_template.py
+          scripts/citation_treatment_review_finalize.py
+          script/stream_oalc_exact_record.py
+          script/run_cullen_oalc_pnf.py

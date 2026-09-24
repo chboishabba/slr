@@ -1,3 +1,5 @@
+mod workbench_projection;
+pub use workbench_projection::*;
 mod cache_first;
 mod candidate_pnf;
 mod context_federation;
@@ -56,8 +58,9 @@ pub use discovery_lineage::{
     DiscoveryLineageInput, DiscoveryLineageMaterializationReceipt, DiscoveryLineageRow,
 };
 pub use latent_world::{
-    load_latent_world_rows, load_latent_world_rows_with_budget, LatentWorldBudget,
-    LatentWorldEdgeRow, LatentWorldError, LatentWorldRows,
+    load_latent_world_rows, load_latent_world_rows_with_budget,
+    load_latent_world_rows_with_context_revision_slice, ContextRevisionWorldSlice,
+    LatentWorldBudget, LatentWorldEdgeRow, LatentWorldError, LatentWorldRows,
 };
 pub use legal_ir_materialization::{
     materialize_reviewed_proposition_support, LegalIrMaterializationError, MaterializedLegalIrRefs,
@@ -77,12 +80,18 @@ pub use reviewed_pnf::{
     ReviewedPnfValidationError,
 };
 pub use reviewed_source_expansion::{
-    load_reviewed_context_expansion_sources, materialize_reviewed_context_expansion,
-    materialize_reviewed_source_expansions, reviewed_source_expansion_row,
-    ReviewedSourceExpansionError, ReviewedSourceExpansionInput,
-    ReviewedSourceExpansionMaterializationReceipt, ReviewedSourceExpansionRow,
+    load_reviewed_context_expansion_sources,
+    load_reviewed_context_source_revision_coordinates,
+    load_reviewed_source_expansion_rows,
+    materialize_reviewed_context_expansion, materialize_reviewed_source_expansions,
+    reviewed_source_expansion_row,
+    ReviewedContextSourceRevisionCoordinate, ReviewedSourceExpansionError,
+    ReviewedSourceExpansionInput, ReviewedSourceExpansionMaterializationReceipt,
+    ReviewedSourceExpansionRow,
 };
 
 // Keep the established PostgreSQL source-store implementation byte-for-byte
 // while focused reader/materialisation projections remain separate concerns.
 include!("storage_core.rs");
+mod forecast_verification;
+pub use forecast_verification::*;

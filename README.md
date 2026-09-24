@@ -12,6 +12,7 @@ From-scratch Rust foundation for SensibLaw, built against the current DASHI/Sens
 - `sensiblaw-evidential-reopen`: evidential PNF handoff plus sparse consumer/query/policy reopening over explicit reverse dependencies.
 - `sensiblaw-proof-search-scheduler`: **experimental candidate-only** offline-first scheduler: proof gap → minimum proof-reduction threshold → multi-axis Pareto frontier → selected local/persisted/live strategy receipt. Live AustLII/JADE is represented only as a governed strategy requirement; this crate performs no network I/O.
 - `sensiblaw-proof-search-loop`: **experimental candidate-only** offline return loop: selected persisted/local move → local artefact receipt → evidential/PNF bridge → reviewed proposition correspondence → frontier delta → sparse wake → reschedule. It fails closed if any claimed-offline artefact reports network work and still cannot promote correspondence to truth, holding, admission, or publication.
+- `sensiblaw-legal-runtime`: consolidated production-capstone surface for M2.5 through M4.A: mixed-family canonical-evidence persist/replay, reviewed-world→WrongType element evaluation, source-realised rule evaluation with exceptions/defeaters/burdens, adaptive Australian calibration campaigns, restart/replay and projection-only matter/issue workspaces.
 - `sensiblaw-expanded-cert`: expanded semantic parity/performance runner plus typed residual-frontier accounting.
 - `sensiblaw-stream`: streaming parser-observation consumer that compiles each closed sentence immediately and stages candidate generations without granting publication authority.
 - `fixtures/legal_semantic_conformance_v0_1.tsv`: exact gold consumer-object fixtures plus explicit producer gaps.
@@ -31,7 +32,9 @@ SLR is the production SensibLaw runtime; DASHI/Agda is the golden semantic/refer
 - [Production roadmap](docs/ROADMAP.md)
 - [Capability-sized sprint board](docs/SPRINTS.md)
 
-The current critical path is: finish the recurrent acquisition machine -> canonical evidence convergence -> full legal issue reasoning -> product. A compile-only, one-file, or one-adapter tranche is progress inside a milestone, not a completed sprint.
+The current critical path is: verify/close the Sprint-2 mixed-family persisted replay gate -> compose the already-rich formal legal machinery into the production Rust evaluator -> run a persisted adaptive Australian legal capstone -> product projections. Digital-ESD is now a regression/capstone workload, not a core-development lane. A compile-only, one-file, or one-adapter tranche is progress inside a milestone, not a completed sprint.
+
+SLR is the production **legal consumer/admission runtime** over the wider ITIR world fabric. It does not own every notion of state: WorldMonitor-style evidence health, StatiBaker temporal observer memory, Casey possibility/workspace state, and Agda/Lean formal/reference work remain distinct authorities. Source-addressable observations enter SLR through canonical evidence/review boundaries; legal interpretation must preserve exact source revision/span/structured-coordinate provenance and never infer applicability or truth from acquisition alone.
 
 ## Build
 
@@ -39,6 +42,8 @@ The current critical path is: finish the recurrent acquisition machine -> canoni
 cargo test --workspace
 cargo run -p sensiblaw-proof-search-scheduler --example offline_pabai
 cargo run -p sensiblaw-proof-search-loop --example offline_pabai_loop
+cargo test -p sensiblaw-legal-runtime
+cargo run -p sensiblaw-legal-runtime --example legal_runtime_capstone -- artifacts/legal-runtime-capstone
 cargo build --workspace
 python3 scripts/verify_source_contract.py
 python3 scripts/verify_proof_search_scheduler_contract.py
