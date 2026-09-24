@@ -3,14 +3,16 @@ use thiserror::Error;
 
 use sensiblaw_core::{
     event_discovery::{
-        CandidateEventJoinProposal, EventJoinSignal, EventJoinSignalKind,
+        AcceptedEventAssemblyReceipt, CandidateEventJoinProposal,
+        EventJoinSignal, EventJoinSignalKind,
     },
     review_workstation::ReviewItem,
 };
 
 use crate::{
-    install_review_workstation_schema, persist_review_item, DatabaseConfig,
-    ReviewWorkstationStoreError,
+    canonical_observation_event_link_ref, install_review_workstation_schema,
+    install_statement_trace_schema, persist_review_item, DatabaseConfig,
+    ObservationEventLink, ReviewWorkstationStoreError, StatementTraceStoreError,
 };
 
 #[derive(Debug, Error)]
@@ -23,6 +25,16 @@ pub enum EventDiscoveryStoreError {
     ExistingProposalConflict,
     #[error(transparent)]
     Review(#[from] ReviewWorkstationStoreError),
+    #[error(transparent)]
+    StatementTrace(#[from] StatementTraceStoreError),
+    #[error("event assembly review has not been accepted")]
+    ReviewNotAccepted,
+    #[error("accepted EventAssembly review receipt is missing or mismatched")]
+    AcceptedReviewReceiptMissing,
+    #[error("proposal observation lacks persisted M12 observation ancestry: {0}")]
+    MissingObservationAncestry(String),
+    #[error("existing reviewed event assembly conflicts with requested identity")]
+    ExistingAssemblyConflict,
 }
 
 fn signal_kind_as_db(kind: EventJoinSignalKind) -> &'static str {
@@ -96,6 +108,23 @@ pub fn install_event_discovery_schema(
           ordinal INTEGER NOT NULL,
           PRIMARY KEY (proposal_ref, signal_kind, evidence_ref, detector_ref)
         );
+
+        CREATE TABLE IF NOT EXISTS semantic.event_assembly_materialization (
+          assembly_ref TEXT PRIMARY KEY,
+          proposal_ref TEXT NOT NULL UNIQUE
+            REFERENCES semantic.event_join_proposal(proposal_ref),
+          event_ref TEXT NOT NULL,
+          review_item_ref TEXT NOT NULL
+            REFERENCES semantic.review_item(review_item_ref),
+          accepted_review_command_ref TEXT NOT NULL
+            REFERENCES semantic.review_receipt(command_ref),
+          reviewed_event_identity BOOLEAN NOT NULL CHECK (reviewed_event_identity),
+          creates_semantic_authority BOOLEAN NOT NULL CHECK (NOT creates_semantic_authority),
+          claim_truth_promoted BOOLEAN NOT NULL CHECK (NOT claim_truth_promoted)
+        );
+
+        CREATE INDEX IF NOT EXISTS event_assembly_event_idx
+          ON semantic.event_assembly_materialization (event_ref);
         "#,
     )?;
     Ok(())
@@ -286,6 +315,268 @@ pub fn load_event_join_proposal(
     Ok(Some(value))
 }
 
+pub fn canonical_event_assembly_ref(
+    proposal_ref: &str,
+    event_ref: &str,
+) -> String {
+    format!("event-assembly:{proposal_ref}:{event_ref}")
+}
+
+pub fn materialize_accepted_event_join(
+    config: &DatabaseConfig,
+    proposal_ref: &str,
+    event_ref: &str,
+    accepted_review_command_ref: &str,
+) -> Result<AcceptedEventAssemblyReceipt, EventDiscoveryStoreError> {
+    if proposal_ref.trim().is_empty()
+        || event_ref.trim().is_empty()
+        || accepted_review_command_ref.trim().is_empty()
+    {
+        return Err(EventDiscoveryStoreError::InvalidProposal);
+    }
+
+    install_review_workstation_schema(config)?;
+    install_statement_trace_schema(config)?;
+    install_event_discovery_schema(config)?;
+
+    let proposal = load_event_join_proposal(config, proposal_ref)?
+        .ok_or(EventDiscoveryStoreError::ExistingProposalConflict)?;
+    let review_item_ref = format!("review-item:{proposal_ref}");
+    let assembly_ref = canonical_event_assembly_ref(proposal_ref, event_ref);
+
+    let mut client = Client::connect(config.database_url(), NoTls)?;
+    let mut tx = client.transaction()?;
+
+    let review = tx.query_opt(
+        r#"
+        SELECT semantic_ref, item_kind_ref, current_status_ref
+        FROM semantic.review_item
+        WHERE review_item_ref=$1
+        FOR UPDATE
+        "#,
+        &[&review_item_ref],
+    )?;
+    let Some(review) = review else {
+        return Err(EventDiscoveryStoreError::ReviewNotAccepted);
+    };
+    let semantic_ref: String = review.get(0);
+    let item_kind_ref: String = review.get(1);
+    let current_status_ref: String = review.get(2);
+    if semantic_ref != proposal_ref
+        || item_kind_ref != "event_assembly"
+        || current_status_ref != "accepted"
+    {
+        return Err(EventDiscoveryStoreError::ReviewNotAccepted);
+    }
+
+    let accepted_receipt: bool = tx
+        .query_one(
+            r#"
+            SELECT EXISTS (
+              SELECT 1
+              FROM semantic.review_receipt
+              WHERE command_ref=$1
+                AND review_item_ref=$2
+                AND semantic_ref=$3
+                AND action_ref='accept'
+                AND effect_ref='status_changed'
+                AND effect_value_ref='accepted'
+                AND candidate_only
+                AND NOT creates_semantic_authority
+                AND NOT applicability_promoted
+                AND NOT claim_truth_promoted
+            )
+            "#,
+            &[
+                &accepted_review_command_ref,
+                &review_item_ref,
+                &proposal_ref,
+            ],
+        )?
+        .get(0);
+    if !accepted_receipt {
+        return Err(EventDiscoveryStoreError::AcceptedReviewReceiptMissing);
+    }
+
+    for observation_ref in &proposal.observation_refs {
+        let has_ancestry: bool = tx
+            .query_one(
+                r#"
+                SELECT EXISTS (
+                  SELECT 1
+                  FROM pnf.statement_observation_link
+                  WHERE observation_ref=$1
+                )
+                "#,
+                &[observation_ref],
+            )?
+            .get(0);
+        if !has_ancestry {
+            return Err(EventDiscoveryStoreError::MissingObservationAncestry(
+                observation_ref.clone(),
+            ));
+        }
+    }
+
+    tx.execute(
+        r#"
+        INSERT INTO semantic.event_assembly_materialization
+          (assembly_ref, proposal_ref, event_ref, review_item_ref,
+           accepted_review_command_ref, reviewed_event_identity,
+           creates_semantic_authority, claim_truth_promoted)
+        VALUES ($1,$2,$3,$4,$5,true,false,false)
+        ON CONFLICT (assembly_ref) DO NOTHING
+        "#,
+        &[
+            &assembly_ref,
+            &proposal_ref,
+            &event_ref,
+            &review_item_ref,
+            &accepted_review_command_ref,
+        ],
+    )?;
+
+    let persisted_assembly = tx.query_opt(
+        r#"
+        SELECT proposal_ref, event_ref, review_item_ref,
+               accepted_review_command_ref, reviewed_event_identity,
+               creates_semantic_authority, claim_truth_promoted
+        FROM semantic.event_assembly_materialization
+        WHERE assembly_ref=$1
+        "#,
+        &[&assembly_ref],
+    )?;
+    let Some(persisted_assembly) = persisted_assembly else {
+        return Err(EventDiscoveryStoreError::ExistingAssemblyConflict);
+    };
+    if persisted_assembly.get::<_, String>(0) != proposal_ref
+        || persisted_assembly.get::<_, String>(1) != event_ref
+        || persisted_assembly.get::<_, String>(2) != review_item_ref
+        || persisted_assembly.get::<_, String>(3) != accepted_review_command_ref
+        || !persisted_assembly.get::<_, bool>(4)
+        || persisted_assembly.get::<_, bool>(5)
+        || persisted_assembly.get::<_, bool>(6)
+    {
+        return Err(EventDiscoveryStoreError::ExistingAssemblyConflict);
+    }
+
+    for observation_ref in &proposal.observation_refs {
+        let link = ObservationEventLink {
+            link_ref: canonical_observation_event_link_ref(
+                observation_ref,
+                event_ref,
+            ),
+            observation_ref: observation_ref.clone(),
+            event_ref: event_ref.to_owned(),
+            assembly_receipt_ref: accepted_review_command_ref.to_owned(),
+            candidate_only: true,
+            creates_semantic_authority: false,
+            applicability_promoted: false,
+            claim_truth_promoted: false,
+        };
+        link.validate()?;
+
+        tx.execute(
+            r#"
+            INSERT INTO pnf.observation_event_link
+              (link_ref, observation_ref, event_ref, assembly_receipt_ref,
+               candidate_only, creates_semantic_authority,
+               applicability_promoted, claim_truth_promoted)
+            VALUES ($1,$2,$3,$4,true,false,false,false)
+            ON CONFLICT (link_ref) DO NOTHING
+            "#,
+            &[
+                &link.link_ref,
+                &link.observation_ref,
+                &link.event_ref,
+                &link.assembly_receipt_ref,
+            ],
+        )?;
+
+        let persisted = tx.query_opt(
+            r#"
+            SELECT observation_ref, event_ref, assembly_receipt_ref,
+                   candidate_only, creates_semantic_authority,
+                   applicability_promoted, claim_truth_promoted
+            FROM pnf.observation_event_link
+            WHERE link_ref=$1
+            "#,
+            &[&link.link_ref],
+        )?;
+        let Some(persisted) = persisted else {
+            return Err(EventDiscoveryStoreError::ExistingAssemblyConflict);
+        };
+        if persisted.get::<_, String>(0) != link.observation_ref
+            || persisted.get::<_, String>(1) != link.event_ref
+            || persisted.get::<_, String>(2) != link.assembly_receipt_ref
+            || !persisted.get::<_, bool>(3)
+            || persisted.get::<_, bool>(4)
+            || persisted.get::<_, bool>(5)
+            || persisted.get::<_, bool>(6)
+        {
+            return Err(EventDiscoveryStoreError::ExistingAssemblyConflict);
+        }
+    }
+
+    tx.commit()?;
+
+    let receipt = AcceptedEventAssemblyReceipt {
+        assembly_ref,
+        proposal_ref: proposal.proposal_ref,
+        event_ref: event_ref.to_owned(),
+        review_item_ref,
+        accepted_review_command_ref: accepted_review_command_ref.to_owned(),
+        observation_refs: proposal.observation_refs,
+        statement_refs: proposal.statement_refs,
+        reviewed_event_identity: true,
+        creates_semantic_authority: false,
+        claim_truth_promoted: false,
+    };
+    receipt
+        .validate()
+        .map_err(|_| EventDiscoveryStoreError::InvalidProposal)?;
+    Ok(receipt)
+}
+
+pub fn load_event_assembly_receipt(
+    config: &DatabaseConfig,
+    proposal_ref: &str,
+) -> Result<Option<AcceptedEventAssemblyReceipt>, EventDiscoveryStoreError> {
+    install_event_discovery_schema(config)?;
+    let mut client = Client::connect(config.database_url(), NoTls)?;
+    let row = client.query_opt(
+        r#"
+        SELECT assembly_ref, event_ref, review_item_ref,
+               accepted_review_command_ref, reviewed_event_identity,
+               creates_semantic_authority, claim_truth_promoted
+        FROM semantic.event_assembly_materialization
+        WHERE proposal_ref=$1
+        "#,
+        &[&proposal_ref],
+    )?;
+    let Some(row) = row else {
+        return Ok(None);
+    };
+    let proposal = load_event_join_proposal(config, proposal_ref)?
+        .ok_or(EventDiscoveryStoreError::ExistingProposalConflict)?;
+    let receipt = AcceptedEventAssemblyReceipt {
+        assembly_ref: row.get(0),
+        proposal_ref: proposal_ref.to_owned(),
+        event_ref: row.get(1),
+        review_item_ref: row.get(2),
+        accepted_review_command_ref: row.get(3),
+        observation_refs: proposal.observation_refs,
+        statement_refs: proposal.statement_refs,
+        reviewed_event_identity: row.get(4),
+        creates_semantic_authority: row.get(5),
+        claim_truth_promoted: row.get(6),
+    };
+    receipt
+        .validate()
+        .map_err(|_| EventDiscoveryStoreError::ExistingAssemblyConflict)?;
+    Ok(Some(receipt))
+}
+
 pub fn load_pending_event_join_proposals(
     config: &DatabaseConfig,
 ) -> Result<Vec<CandidateEventJoinProposal>, EventDiscoveryStoreError> {
@@ -315,6 +606,17 @@ mod tests {
     use sensiblaw_core::event_discovery::{
         CandidateEventJoinProposal, EventJoinSignal, EventJoinSignalKind,
     };
+
+    #[test]
+    fn assembly_ref_is_deterministic_and_does_not_equal_proposal() {
+        let reference =
+            canonical_event_assembly_ref("proposal:1", "event:reviewed:1");
+        assert_eq!(
+            reference,
+            "event-assembly:proposal:1:event:reviewed:1"
+        );
+        assert_ne!(reference, "proposal:1");
+    }
 
     #[test]
     fn proposal_remains_review_gated_before_store() {
