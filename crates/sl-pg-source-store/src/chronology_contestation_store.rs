@@ -562,6 +562,34 @@ pub fn load_claims_for_event(
         .collect()
 }
 
+pub fn load_proposition_roots_for_claims(
+    config: &DatabaseConfig,
+    claims: &[ClaimLeaf],
+) -> Result<Vec<PropositionRoot>, ChronologyContestationStoreError> {
+    let mut client = Client::connect(config.database_url(), NoTls)?;
+    let proposition_refs = claims
+        .iter()
+        .map(|claim| claim.proposition_ref.clone())
+        .collect::<std::collections::BTreeSet<_>>();
+    proposition_refs
+        .into_iter()
+        .map(|proposition_ref| {
+            let row = client.query_one(
+                "SELECT label, candidate_only, creates_semantic_authority,                  applicability_promoted, claim_truth_promoted                  FROM semantic.proposition_root WHERE proposition_ref=$1",
+                &[&proposition_ref],
+            )?;
+            Ok(PropositionRoot {
+                proposition_ref,
+                label: row.get(0),
+                candidate_only: row.get(1),
+                creates_semantic_authority: row.get(2),
+                applicability_promoted: row.get(3),
+                claim_truth_promoted: row.get(4),
+            })
+        })
+        .collect()
+}
+
 pub fn load_contestation_relations_for_claims(
     config: &DatabaseConfig,
     claim_refs: &[String],
