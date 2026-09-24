@@ -1,4 +1,4 @@
-use postgres::{Client, NoTls};
+use postgres::{Client, GenericClient, NoTls};
 use sensiblaw_core::chronology_contestation::{
     ClaimLeaf, ClaimLeafKind, ClaimReviewState, ContestationRelation, ContestationRelationKind,
     PropositionRoot, TemporalAssertion, TemporalForm,
@@ -299,8 +299,9 @@ pub fn persist_temporal_assertion(
         .validate()
         .map_err(|_| ChronologyContestationStoreError::InvalidDomainObject)?;
     let mut client = Client::connect(config.database_url(), NoTls)?;
+    let mut tx = client.transaction()?;
     let (form_ref, a, b) = temporal_form_row(&value.form);
-    client.execute(
+    tx.execute(
         r#"
         INSERT INTO semantic.temporal_assertion
           (temporal_ref, form_ref, coordinate_a, coordinate_b, review_ref,
@@ -312,7 +313,7 @@ pub fn persist_temporal_assertion(
         &[&value.temporal_ref, &form_ref, &a, &b, &value.review_ref],
     )?;
     persist_refs(
-        &mut client,
+        &mut tx,
         "semantic.temporal_statement",
         "temporal_ref",
         &value.temporal_ref,
@@ -320,13 +321,14 @@ pub fn persist_temporal_assertion(
         &value.statement_refs,
     )?;
     persist_refs(
-        &mut client,
+        &mut tx,
         "semantic.temporal_observation",
         "temporal_ref",
         &value.temporal_ref,
         "observation_ref",
         &value.observation_refs,
     )?;
+    tx.commit()?;
     let loaded = load_temporal_assertion_with_client(&mut client, &value.temporal_ref)?
         .ok_or(ChronologyContestationStoreError::ExistingRowConflict)?;
     if &loaded != value {
@@ -379,7 +381,8 @@ pub fn persist_claim_leaf(
         .validate()
         .map_err(|_| ChronologyContestationStoreError::InvalidDomainObject)?;
     let mut client = Client::connect(config.database_url(), NoTls)?;
-    client.execute(
+    let mut tx = client.transaction()?;
+    tx.execute(
         r#"
         INSERT INTO semantic.claim_leaf
           (claim_ref, proposition_ref, kind_ref, speaker_ref,
@@ -398,7 +401,7 @@ pub fn persist_claim_leaf(
         ],
     )?;
     persist_refs(
-        &mut client,
+        &mut tx,
         "semantic.claim_statement",
         "claim_ref",
         &value.claim_ref,
@@ -406,7 +409,7 @@ pub fn persist_claim_leaf(
         &value.statement_refs,
     )?;
     persist_refs(
-        &mut client,
+        &mut tx,
         "semantic.claim_observation",
         "claim_ref",
         &value.claim_ref,
@@ -414,7 +417,7 @@ pub fn persist_claim_leaf(
         &value.observation_refs,
     )?;
     persist_refs(
-        &mut client,
+        &mut tx,
         "semantic.claim_temporal",
         "claim_ref",
         &value.claim_ref,
@@ -422,13 +425,14 @@ pub fn persist_claim_leaf(
         &value.temporal_refs,
     )?;
     persist_refs(
-        &mut client,
+        &mut tx,
         "semantic.claim_scope",
         "claim_ref",
         &value.claim_ref,
         "scope_ref",
         &value.scope_refs,
     )?;
+    tx.commit()?;
     let loaded = load_claim_leaf_with_client(&mut client, &value.claim_ref)?
         .ok_or(ChronologyContestationStoreError::ExistingRowConflict)?;
     if &loaded != value {
@@ -445,7 +449,8 @@ pub fn persist_contestation_relation(
         .validate()
         .map_err(|_| ChronologyContestationStoreError::InvalidDomainObject)?;
     let mut client = Client::connect(config.database_url(), NoTls)?;
-    client.execute(
+    let mut tx = client.transaction()?;
+    tx.execute(
         r#"
         INSERT INTO semantic.contestation_relation
           (relation_ref, from_claim_ref, to_claim_ref, kind_ref, review_ref,
@@ -463,7 +468,7 @@ pub fn persist_contestation_relation(
         ],
     )?;
     persist_refs(
-        &mut client,
+        &mut tx,
         "semantic.contestation_statement",
         "relation_ref",
         &value.relation_ref,
@@ -471,13 +476,14 @@ pub fn persist_contestation_relation(
         &value.statement_refs,
     )?;
     persist_refs(
-        &mut client,
+        &mut tx,
         "semantic.contestation_observation",
         "relation_ref",
         &value.relation_ref,
         "observation_ref",
         &value.observation_refs,
     )?;
+    tx.commit()?;
     let loaded = load_contestation_relation_with_client(&mut client, &value.relation_ref)?
         .ok_or(ChronologyContestationStoreError::ExistingRowConflict)?;
     if &loaded != value {
@@ -614,7 +620,7 @@ pub fn load_contestation_relations_for_claims(
 }
 
 fn persist_refs(
-    client: &mut Client,
+    client: &mut impl GenericClient,
     table: &str,
     owner_column: &str,
     owner_ref: &str,
