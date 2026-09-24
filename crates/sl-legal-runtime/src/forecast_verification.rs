@@ -8,9 +8,10 @@
 use std::collections::BTreeSet;
 
 use sensiblaw_reader_model::{
-    BinaryOutcome, ForecastCohort, ForecastResearchDemand, ForecastResearchProbeKind,
-    ForecastResidualKind, ForecastResidualProjection, ForecastScoreProjection,
-    Probability, Rational, ScorableForecast,
+    BinaryOutcome, ForecastAggregateScorecard, ForecastCalibrationBucketObservation,
+    ForecastCalibrationBucketProjection, ForecastCohort, ForecastResearchDemand,
+    ForecastResearchProbeKind, ForecastResidualKind, ForecastResidualProjection,
+    ForecastScoreProjection, Probability, Rational, ScorableForecast,
 };
 
 pub const DASHI_FORECAST_GOLDEN_PR: &str = "chboishabba/dashi_agda#1031";
@@ -346,6 +347,91 @@ pub fn pay_forecast_residual_with_reviewed_coordinate(
     })
 }
 
+
+pub const WORLDMONITOR_SCORECARD_SOURCE_SNAPSHOT: &str =
+    "docs/snapshots/crawlable-live-pulse-2026-09-21.json";
+pub const WORLDMONITOR_SCORECARD_GENERATED_AT: &str =
+    "2026-09-20T06:02:08Z";
+
+pub fn worldmonitor_published_scorecard_fixture(
+) -> Result<ForecastAggregateScorecard, String> {
+    let populated = |bucket_ref: &str,
+                     forecast_count: u64,
+                     average_predicted: (u64, u64),
+                     observed_frequency: (u64, u64),
+                     bucket_brier: (u64, u64)|
+     -> Result<ForecastCalibrationBucketObservation, String> {
+        Ok(ForecastCalibrationBucketObservation::Populated(
+            ForecastCalibrationBucketProjection {
+                bucket_ref: bucket_ref.into(),
+                forecast_count,
+                average_predicted: Rational::new(
+                    average_predicted.0,
+                    average_predicted.1,
+                )?,
+                observed_frequency: Rational::new(
+                    observed_frequency.0,
+                    observed_frequency.1,
+                )?,
+                bucket_brier: Rational::new(bucket_brier.0, bucket_brier.1)?,
+                evidence_ref: format!(
+                    "worldmonitor-scorecard:{}:{}",
+                    WORLDMONITOR_SCORECARD_SOURCE_SNAPSHOT,
+                    bucket_ref
+                ),
+            },
+        ))
+    };
+
+    let scorecard = ForecastAggregateScorecard {
+        scorecard_ref: "scorecard:worldmonitor:2026-09-21".into(),
+        source_snapshot_ref: format!(
+            "{}@{}",
+            WORLDMONITOR_SCORECARD_SOURCE_SNAPSHOT,
+            WORLDMONITOR_SCORECARD_GENERATED_AT
+        ),
+        headline_count: 200,
+        ledger_count: 1058,
+        resolved_count: 862,
+        scored_count: 541,
+        voided_count: 321,
+        awaiting_judge_count: 94,
+        still_open_count: 102,
+        excluded_scored_count: 341,
+        headline_brier: Rational::new(115, 1000)?,
+        all_scored_brier: Rational::new(195, 1000)?,
+        market_overlap_count: Some(89),
+        market_overlap_forecast_brier: Some(Rational::new(149, 1000)?),
+        market_overlap_reference_brier: Some(Rational::new(72, 1000)?),
+        calibration: vec![
+            populated("0%-10%", 40, (60, 1000), (0, 1000), (5, 1000))?,
+            populated("10%-20%", 67, (142, 1000), (45, 1000), (54, 1000))?,
+            populated("20%-30%", 87, (254, 1000), (322, 1000), (225, 1000))?,
+            populated("30%-40%", 184, (352, 1000), (359, 1000), (229, 1000))?,
+            populated("40%-50%", 117, (412, 1000), (393, 1000), (237, 1000))?,
+            populated("50%-60%", 32, (531, 1000), (250, 1000), (268, 1000))?,
+            populated("60%-70%", 13, (640, 1000), (462, 1000), (274, 1000))?,
+            ForecastCalibrationBucketObservation::Empty {
+                bucket_ref: "70%-80%".into(),
+                reason_ref: "no forecasts scored".into(),
+            },
+            ForecastCalibrationBucketObservation::Empty {
+                bucket_ref: "80%-90%".into(),
+                reason_ref: "no forecasts scored".into(),
+            },
+            populated("90%-100%", 1, (930, 1000), (1000, 1000), (5, 1000))?,
+        ],
+        individual_forecast_lineage_available: false,
+        resolution_evidence_available: false,
+        judge_input_lineage_available: false,
+        candidate_only: true,
+        creates_semantic_authority: false,
+        creates_claim_truth: false,
+    };
+    scorecard.validate()?;
+    Ok(scorecard)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -379,6 +465,24 @@ mod tests {
             resolution_evidence_ref: format!("evidence:{reference}"),
             scoring_eligibility_ref: format!("eligibility:{reference}"),
         }
+    }
+
+
+    #[test]
+    fn worldmonitor_aggregate_fixture_reconciles_without_fabricating_row_lineage() {
+        let scorecard = worldmonitor_published_scorecard_fixture().unwrap();
+        assert_eq!(scorecard.ledger_count, 1058);
+        assert_eq!(scorecard.resolved_count, 862);
+        assert_eq!(scorecard.scored_count, 541);
+        assert_eq!(scorecard.voided_count, 321);
+        assert_eq!(scorecard.headline_count, 200);
+        assert_eq!(scorecard.excluded_scored_count, 341);
+        assert_eq!(scorecard.headline_brier, Rational::new(115, 1000).unwrap());
+        assert_eq!(scorecard.all_scored_brier, Rational::new(195, 1000).unwrap());
+        assert!(!scorecard.individual_forecast_lineage_available);
+        assert!(!scorecard.resolution_evidence_available);
+        assert!(!scorecard.judge_input_lineage_available);
+        assert!(!scorecard.creates_claim_truth);
     }
 
     #[test]
