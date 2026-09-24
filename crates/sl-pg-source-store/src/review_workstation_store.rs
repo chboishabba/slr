@@ -396,6 +396,24 @@ mod tests {
     use super::*;
 
     #[test]
+    fn navigation_effects_do_not_persist_review_status_changes() {
+        assert_eq!(
+            receipt_status_after_effect(&ReviewEffect::SourceOpenRequested),
+            None
+        );
+        assert_eq!(
+            receipt_status_after_effect(&ReviewEffect::AuthorityFollowRequested),
+            None
+        );
+        assert_eq!(
+            receipt_status_after_effect(&ReviewEffect::EvidenceRequested {
+                evidence_request_ref: "request:1".into(),
+            }),
+            Some("needs_evidence")
+        );
+    }
+
+    #[test]
     fn item_kind_and_action_storage_tags_round_trip() {
         for kind in [
             ReviewItemKind::PnfParse,
