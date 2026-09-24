@@ -72,6 +72,53 @@ pub enum OperationalSemanticRelationKind {
     Affected,
 }
 
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum OperationalOutstandingKind {
+    Carryover,
+    InterruptedThread,
+    Unresolved,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OperationalOutstandingState {
+    pub operational_state_ref: String,
+    pub state_date: String,
+    pub subject_ref: String,
+    pub label: String,
+    pub provenance_refs: Vec<String>,
+    pub kind: OperationalOutstandingKind,
+    pub producer_observed: bool,
+    pub creates_review_pending: bool,
+    pub creates_semantic_unresolved: bool,
+    pub creates_user_priority: bool,
+}
+
+impl OperationalOutstandingState {
+    pub fn validate(&self) -> Result<(), OperationalStateError> {
+        require("operational_state_ref", &self.operational_state_ref)?;
+        require("state_date", &self.state_date)?;
+        require("subject_ref", &self.subject_ref)?;
+        require("label", &self.label)?;
+        if self.provenance_refs.is_empty() {
+            return Err(OperationalStateError::MissingProvenance);
+        }
+        if self.provenance_refs.iter().any(|value| value.trim().is_empty()) {
+            return Err(OperationalStateError::EmptyCoordinate("provenance_refs"));
+        }
+        if !self.producer_observed {
+            return Err(OperationalStateError::ProducerObservationRequired);
+        }
+        if self.creates_review_pending
+            || self.creates_semantic_unresolved
+            || self.creates_user_priority
+        {
+            return Err(OperationalStateError::PromotionNotAllowed);
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OperationalSemanticLink {
     pub link_ref: String,
@@ -211,6 +258,26 @@ mod tests {
             claim_truth_promoted: false,
         };
         link.validate().unwrap();
+    }
+
+    #[test]
+    fn operational_unresolved_does_not_create_review_semantic_or_priority_state() {
+        let value = OperationalOutstandingState {
+            operational_state_ref: "operational-unresolved:1".into(),
+            state_date: "2026-09-24".into(),
+            subject_ref: "authority-follow:1".into(),
+            label: "authority follow remained unresolved".into(),
+            provenance_refs: vec!["statibaker:carryover:1".into()],
+            kind: OperationalOutstandingKind::Unresolved,
+            producer_observed: true,
+            creates_review_pending: false,
+            creates_semantic_unresolved: false,
+            creates_user_priority: false,
+        };
+        value.validate().unwrap();
+        assert!(!value.creates_review_pending);
+        assert!(!value.creates_semantic_unresolved);
+        assert!(!value.creates_user_priority);
     }
 
     #[test]
