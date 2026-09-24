@@ -115,8 +115,12 @@ pub use reviewed_pnf::{
     ReviewedPnfValidationError,
 };
 pub use review_workstation_store::{
-    install_review_workstation_schema, load_review_queue, persist_review_item,
-    persist_review_receipt, ReviewWorkstationStoreError,
+    apply_persisted_review_command, install_review_workstation_schema,
+    load_review_queue, persist_review_item, persist_review_receipt,
+    ReviewWorkstationStoreError,
+};
+pub use sensiblaw_core::review_workstation::{
+    ReviewAction, ReviewCommand, ReviewEffect, ReviewReceipt, ReviewStatus,
 };
 pub use reviewed_source_expansion::{
     load_reviewed_context_expansion_sources,
