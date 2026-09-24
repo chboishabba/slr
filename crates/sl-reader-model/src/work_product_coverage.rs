@@ -72,6 +72,7 @@ pub struct WorkProductPropositionOccurrence {
     pub statement_ref: String,
     pub source_revision_ref: String,
     pub exact_span_ref: String,
+    pub candidate_pnf_ref: String,
     pub product_proposition_ref: String,
     /// Receipt for the bounded Matter candidate lookup. This remains required
     /// even when no Matter proposition is matched, so Unsupported is reopenable
@@ -194,6 +195,8 @@ pub enum WorkProductCoverageError {
     UnknownMatterProposition(String),
     MissingMatterAncestry(String),
     DuplicateExpectation(String),
+    InvalidWorkProductTrace(String),
+    MissingCandidatePnf(String),
 }
 
 fn require(name: &'static str, value: &str) -> Result<(), WorkProductCoverageError> {
@@ -212,6 +215,7 @@ impl WorkProductPropositionOccurrence {
             ("statement_ref", self.statement_ref.as_str()),
             ("source_revision_ref", self.source_revision_ref.as_str()),
             ("exact_span_ref", self.exact_span_ref.as_str()),
+            ("candidate_pnf_ref", self.candidate_pnf_ref.as_str()),
             ("product_proposition_ref", self.product_proposition_ref.as_str()),
             (
                 "candidate_search_receipt_ref",
@@ -238,8 +242,43 @@ impl WorkProductPropositionOccurrence {
             self.source_revision_ref.clone(),
             self.exact_span_ref.clone(),
             self.statement_ref.clone(),
+            self.candidate_pnf_ref.clone(),
         ]
     }
+}
+
+
+pub fn work_product_occurrence_from_trace(
+    occurrence_ref: impl Into<String>,
+    work_product_ref: impl Into<String>,
+    product_proposition_ref: impl Into<String>,
+    candidate_search_receipt_ref: impl Into<String>,
+    trace: &SemanticTracePath,
+) -> Result<WorkProductPropositionOccurrence, WorkProductCoverageError> {
+    trace
+        .validate()
+        .map_err(|_| WorkProductCoverageError::InvalidWorkProductTrace(trace.focus_ref.clone()))?;
+    let parse = trace
+        .parse
+        .as_ref()
+        .ok_or_else(|| WorkProductCoverageError::MissingCandidatePnf(trace.focus_ref.clone()))?;
+
+    let occurrence = WorkProductPropositionOccurrence {
+        occurrence_ref: occurrence_ref.into(),
+        work_product_ref: work_product_ref.into(),
+        statement_ref: trace.statement.statement_ref.clone(),
+        source_revision_ref: trace.statement.source_revision_ref.clone(),
+        exact_span_ref: trace.statement.span_ref.clone(),
+        candidate_pnf_ref: parse.candidate_pnf_ref.clone(),
+        product_proposition_ref: product_proposition_ref.into(),
+        candidate_search_receipt_ref: candidate_search_receipt_ref.into(),
+        candidate_only: true,
+        creates_semantic_authority: false,
+        applicability_promoted: false,
+        claim_truth_promoted: false,
+    };
+    occurrence.validate()?;
+    Ok(occurrence)
 }
 
 impl WorkProductMatterMatch {
@@ -610,6 +649,7 @@ mod tests {
             statement_ref: format!("wp-statement:{reference}"),
             source_revision_ref: "wp-revision:1".into(),
             exact_span_ref: format!("wp-span:{reference}"),
+            candidate_pnf_ref: format!("wp-pnf:{reference}"),
             product_proposition_ref: format!("wp-proposition:{reference}"),
             candidate_search_receipt_ref: format!("search:{reference}"),
             candidate_only: true,
@@ -803,6 +843,43 @@ mod tests {
             applicability_promoted: false,
             claim_truth_promoted: false,
         }
+    }
+
+
+    #[test]
+    fn occurrence_constructor_reuses_m12_semantic_trace() {
+        let mut source_trace = trace("statement:reviewed", "claim:reviewed");
+        source_trace.parse = Some(crate::ParseTraceCoordinate {
+            candidate_pnf_ref: "candidate-pnf:work-product".into(),
+            parser_receipt_ref: Some("parser:work-product".into()),
+            review_ref: None,
+            admission_receipt_ref: None,
+            review_state: crate::TraceReviewState::ParseReviewed,
+        });
+
+        let occurrence = work_product_occurrence_from_trace(
+            "occ:from-trace",
+            "work-product:draft-1",
+            "wp-proposition:from-trace",
+            "search:from-trace",
+            &source_trace,
+        )
+        .unwrap();
+
+        assert_eq!(occurrence.statement_ref, "statement:reviewed");
+        assert_eq!(occurrence.exact_span_ref, "span:statement:reviewed");
+        assert_eq!(occurrence.candidate_pnf_ref, "candidate-pnf:work-product");
+        assert_eq!(
+            occurrence.source_chain(),
+            vec![
+                "revision:statement:reviewed",
+                "span:statement:reviewed",
+                "statement:reviewed",
+                "candidate-pnf:work-product",
+            ]
+        );
+        assert!(!occurrence.creates_semantic_authority);
+        assert!(!occurrence.claim_truth_promoted);
     }
 
     #[test]
