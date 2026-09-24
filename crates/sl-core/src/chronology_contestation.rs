@@ -107,7 +107,6 @@ pub struct ContestationRelation {
 pub enum ChronologyContestationError {
     EmptyCoordinate(&'static str),
     EmptyEvidenceAncestry(&'static str),
-    InvalidInterval,
     SelfRelation,
     ReviewReceiptRequired,
     PromotionNotAllowed,
@@ -175,9 +174,6 @@ impl TemporalAssertion {
             TemporalForm::Interval { start_ref, end_ref } => {
                 require_nonempty("start_ref", start_ref)?;
                 require_nonempty("end_ref", end_ref)?;
-                if start_ref > end_ref {
-                    return Err(ChronologyContestationError::InvalidInterval);
-                }
             }
             TemporalForm::Approximate { label } => {
                 require_nonempty("approximate_label", label)?;
