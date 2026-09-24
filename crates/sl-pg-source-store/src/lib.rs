@@ -5,6 +5,7 @@ mod chronology_contestation_store;
 mod candidate_pnf;
 mod context_federation;
 mod discovery_identity_baseline;
+mod event_discovery_store;
 mod gwb_ambiguity_state;
 mod gwb_campaign_commit;
 mod gwb_chronology_capstone;
@@ -13,6 +14,7 @@ mod discovery_lineage;
 mod latent_world;
 mod legal_ir_materialization;
 mod non_novel_identity_alias;
+mod operational_state_store;
 mod proposition_rows;
 mod reviewed_pnf;
 mod reviewed_source_expansion;
@@ -72,6 +74,11 @@ pub use discovery_identity_baseline::{
     DiscoveryCampaignIdentityRow, DiscoveryIdentityBaseline, DiscoveryIdentityBaselineError,
     DiscoveryIdentityBaselineRow,
 };
+pub use event_discovery_store::{
+    install_event_discovery_schema, load_event_join_proposal,
+    load_pending_event_join_proposals, persist_event_join_proposal,
+    persist_event_join_proposal_with_review, EventDiscoveryStoreError,
+};
 pub use discovery_lineage::{
     discovery_lineage_row, materialize_discovery_lineage, DiscoveryLineageError,
     DiscoveryLineageInput, DiscoveryLineageMaterializationReceipt, DiscoveryLineageRow,
@@ -89,6 +96,15 @@ pub use non_novel_identity_alias::{
     identity_alias_row, materialize_non_novel_identity_aliases, NonNovelIdentityAliasError,
     NonNovelIdentityAliasInput, NonNovelIdentityAliasMaterializationReceipt,
     NonNovelIdentityAliasRow,
+};
+pub use operational_state_store::{
+    install_operational_state_schema, load_operational_event,
+    load_operational_events_for_date, load_operational_semantic_links_for_event,
+    load_operational_semantic_links_for_target, load_statibaker_activity_ledger,
+    materialize_statibaker_activity_ledger, persist_operational_event,
+    persist_operational_semantic_link, validate_statibaker_ledger,
+    OperationalStateStoreError, StatiBakerActivityEvent, StatiBakerActivityLedger,
+    StatiBakerLedgerProvenance, StatiBakerOperationalImportReceipt,
 };
 pub use proposition_rows::{
     load_mabo_proposition_rows, load_proposition_rows, PropositionObservationRow, PropositionRows,
