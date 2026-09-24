@@ -46,7 +46,7 @@ pub use context_federation::{
 pub use gwb_chronology_capstone::{
     load_gwb_chronology_capstone_manifest, materialize_gwb_chronology_capstone,
     GwbChronologyCapstoneError, GwbChronologyCapstoneManifest,
-    GwbChronologyCapstoneReceipt, GWB_CAPSTONE_SCHEMA,
+    GwbChronologyCapstoneReceipt, GwbReviewItemKind, GWB_CAPSTONE_SCHEMA,
 };
 pub use gwb_campaign_commit::{
     materialize_gwb_campaign_commit, GwbCampaignCommitError, GwbCampaignCommitInput,
