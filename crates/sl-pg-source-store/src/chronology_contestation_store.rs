@@ -41,6 +41,35 @@ fn require(name: &'static str, value: &str) -> Result<(), ChronologyContestation
     }
 }
 
+fn canonicalize_string_set(values: &mut Vec<String>) {
+    values.sort_unstable();
+    values.dedup();
+}
+
+fn canonical_temporal_assertion_for_persistence(
+    mut value: TemporalAssertion,
+) -> TemporalAssertion {
+    canonicalize_string_set(&mut value.statement_refs);
+    canonicalize_string_set(&mut value.observation_refs);
+    value
+}
+
+fn canonical_claim_leaf_for_persistence(mut value: ClaimLeaf) -> ClaimLeaf {
+    canonicalize_string_set(&mut value.statement_refs);
+    canonicalize_string_set(&mut value.observation_refs);
+    canonicalize_string_set(&mut value.temporal_refs);
+    canonicalize_string_set(&mut value.scope_refs);
+    value
+}
+
+fn canonical_contestation_relation_for_persistence(
+    mut value: ContestationRelation,
+) -> ContestationRelation {
+    canonicalize_string_set(&mut value.statement_refs);
+    canonicalize_string_set(&mut value.observation_refs);
+    value
+}
+
 fn temporal_form_row(form: &TemporalForm) -> (&'static str, Option<&str>, Option<&str>) {
     match form {
         TemporalForm::ExactInstant { instant_ref } => ("exact_instant", Some(instant_ref), None),
@@ -295,6 +324,7 @@ pub fn persist_temporal_assertion(
     config: &DatabaseConfig,
     value: &TemporalAssertion,
 ) -> Result<TemporalAssertion, ChronologyContestationStoreError> {
+    let value = canonical_temporal_assertion_for_persistence(value.clone());
     value
         .validate()
         .map_err(|_| ChronologyContestationStoreError::InvalidDomainObject)?;
@@ -331,7 +361,7 @@ pub fn persist_temporal_assertion(
     tx.commit()?;
     let loaded = load_temporal_assertion_with_client(&mut client, &value.temporal_ref)?
         .ok_or(ChronologyContestationStoreError::ExistingRowConflict)?;
-    if &loaded != value {
+    if loaded != value {
         return Err(ChronologyContestationStoreError::ExistingRowConflict);
     }
     Ok(loaded)
@@ -377,6 +407,7 @@ pub fn persist_claim_leaf(
     config: &DatabaseConfig,
     value: &ClaimLeaf,
 ) -> Result<ClaimLeaf, ChronologyContestationStoreError> {
+    let value = canonical_claim_leaf_for_persistence(value.clone());
     value
         .validate()
         .map_err(|_| ChronologyContestationStoreError::InvalidDomainObject)?;
@@ -435,7 +466,7 @@ pub fn persist_claim_leaf(
     tx.commit()?;
     let loaded = load_claim_leaf_with_client(&mut client, &value.claim_ref)?
         .ok_or(ChronologyContestationStoreError::ExistingRowConflict)?;
-    if &loaded != value {
+    if loaded != value {
         return Err(ChronologyContestationStoreError::ExistingRowConflict);
     }
     Ok(loaded)
@@ -445,6 +476,7 @@ pub fn persist_contestation_relation(
     config: &DatabaseConfig,
     value: &ContestationRelation,
 ) -> Result<ContestationRelation, ChronologyContestationStoreError> {
+    let value = canonical_contestation_relation_for_persistence(value.clone());
     value
         .validate()
         .map_err(|_| ChronologyContestationStoreError::InvalidDomainObject)?;
@@ -486,7 +518,7 @@ pub fn persist_contestation_relation(
     tx.commit()?;
     let loaded = load_contestation_relation_with_client(&mut client, &value.relation_ref)?
         .ok_or(ChronologyContestationStoreError::ExistingRowConflict)?;
-    if &loaded != value {
+    if loaded != value {
         return Err(ChronologyContestationStoreError::ExistingRowConflict);
     }
     Ok(loaded)
@@ -825,5 +857,59 @@ mod tests {
         ] {
             assert_eq!(relation_kind_from_db(relation_kind_db(kind)).unwrap(), kind);
         }
+    }
+
+    #[test]
+    fn canonicalizes_set_valued_chronology_ancestry_before_round_trip_comparison() {
+        let temporal = canonical_temporal_assertion_for_persistence(TemporalAssertion {
+            temporal_ref: "temporal:1".into(),
+            form: TemporalForm::ExactDate { date_ref: "2026-09-24".into() },
+            statement_refs: vec!["statement:z".into(), "statement:a".into()],
+            observation_refs: vec!["observation:z".into(), "observation:a".into()],
+            review_ref: Some("review:temporal".into()),
+            candidate_only: true,
+            creates_semantic_authority: false,
+            applicability_promoted: false,
+            claim_truth_promoted: false,
+        });
+        assert_eq!(temporal.statement_refs, ["statement:a", "statement:z"]);
+        assert_eq!(temporal.observation_refs, ["observation:a", "observation:z"]);
+
+        let claim = canonical_claim_leaf_for_persistence(ClaimLeaf {
+            claim_ref: "claim:1".into(),
+            proposition_ref: "proposition:1".into(),
+            kind: ClaimLeafKind::Affirmation,
+            speaker_ref: None,
+            statement_refs: vec!["statement:z".into(), "statement:a".into()],
+            observation_refs: vec!["observation:z".into(), "observation:a".into()],
+            temporal_refs: vec!["temporal:z".into(), "temporal:a".into()],
+            scope_refs: vec!["scope:z".into(), "scope:a".into()],
+            review_state: ClaimReviewState::Accepted,
+            review_ref: Some("review:claim".into()),
+            candidate_only: true,
+            creates_semantic_authority: false,
+            applicability_promoted: false,
+            claim_truth_promoted: false,
+        });
+        assert_eq!(claim.statement_refs, ["statement:a", "statement:z"]);
+        assert_eq!(claim.observation_refs, ["observation:a", "observation:z"]);
+        assert_eq!(claim.temporal_refs, ["temporal:a", "temporal:z"]);
+        assert_eq!(claim.scope_refs, ["scope:a", "scope:z"]);
+
+        let relation = canonical_contestation_relation_for_persistence(ContestationRelation {
+            relation_ref: "relation:1".into(),
+            from_claim_ref: "claim:a".into(),
+            to_claim_ref: "claim:b".into(),
+            kind: ContestationRelationKind::Contradicts,
+            statement_refs: vec!["statement:z".into(), "statement:a".into()],
+            observation_refs: vec!["observation:z".into(), "observation:a".into()],
+            review_ref: Some("review:relation".into()),
+            candidate_only: true,
+            creates_semantic_authority: false,
+            applicability_promoted: false,
+            claim_truth_promoted: false,
+        });
+        assert_eq!(relation.statement_refs, ["statement:a", "statement:z"]);
+        assert_eq!(relation.observation_refs, ["observation:a", "observation:z"]);
     }
 }

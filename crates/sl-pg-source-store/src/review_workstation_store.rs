@@ -98,6 +98,51 @@ fn action_from_db(value: &str) -> Result<ReviewAction, ReviewWorkstationStoreErr
     }
 }
 
+fn canonicalize_string_set(values: &mut Vec<String>) {
+    values.sort_unstable();
+    values.dedup();
+}
+
+fn canonical_review_item_for_persistence(mut item: ReviewItem) -> ReviewItem {
+    canonicalize_string_set(&mut item.provenance_refs);
+    canonicalize_string_set(&mut item.source_refs);
+    canonicalize_string_set(&mut item.affected_consumer_refs);
+    item.available_actions.sort_by_key(|action| action_db(*action));
+    item.available_actions.dedup();
+    item
+}
+
+#[cfg(test)]
+mod persistence_canonicalization_tests {
+    use super::*;
+
+    #[test]
+    fn canonicalizes_set_valued_review_item_refs_before_round_trip_comparison() {
+        let item = ReviewItem {
+            review_item_ref: "review-item:1".into(),
+            semantic_ref: "proposal:1".into(),
+            item_kind: ReviewItemKind::EventAssembly,
+            reason: "review fixture".into(),
+            provenance_refs: vec!["signal:z".into(), "signal:a".into()],
+            source_refs: vec!["statement:z".into(), "statement:a".into()],
+            current_status: ReviewStatus::Pending,
+            available_actions: vec![ReviewAction::Reject, ReviewAction::Accept],
+            affected_consumer_refs: vec!["matter:z".into(), "matter:a".into()],
+            candidate_only: true,
+            creates_semantic_authority: false,
+            applicability_promoted: false,
+            claim_truth_promoted: false,
+        };
+
+        let canonical = canonical_review_item_for_persistence(item);
+
+        assert_eq!(canonical.provenance_refs, ["signal:a", "signal:z"]);
+        assert_eq!(canonical.source_refs, ["statement:a", "statement:z"]);
+        assert_eq!(canonical.affected_consumer_refs, ["matter:a", "matter:z"]);
+        assert_eq!(canonical.available_actions, [ReviewAction::Accept, ReviewAction::Reject]);
+    }
+}
+
 pub fn install_review_workstation_schema(
     config: &DatabaseConfig,
 ) -> Result<(), ReviewWorkstationStoreError> {
@@ -161,6 +206,7 @@ pub fn persist_review_item(
     config: &DatabaseConfig,
     item: &ReviewItem,
 ) -> Result<ReviewItem, ReviewWorkstationStoreError> {
+    let item = canonical_review_item_for_persistence(item.clone());
     item.validate()
         .map_err(|_| ReviewWorkstationStoreError::InvalidDomainObject)?;
     let mut client = Client::connect(config.database_url(), NoTls)?;
@@ -217,7 +263,7 @@ pub fn persist_review_item(
     tx.commit()?;
     let loaded = load_review_item_with_client(&mut client, &item.review_item_ref)?
         .ok_or(ReviewWorkstationStoreError::ExistingRowConflict)?;
-    if &loaded != item {
+    if loaded != item {
         return Err(ReviewWorkstationStoreError::ExistingRowConflict);
     }
     Ok(loaded)
