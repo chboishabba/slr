@@ -15,3 +15,5 @@ pub use persisted_workbench::*;
 
 mod comparative_workbench;
 pub use comparative_workbench::*;
+mod forecast_verification;
+pub use forecast_verification::*;
