@@ -555,6 +555,29 @@ mod tests {
     }
 
     #[test]
+    fn source_bound_admission_retains_statement_revision_and_span_without_truth_promotion() {
+        let bound = SourceBoundAdmissionReceipt {
+            statement_ref: "statement:7:10-13".into(),
+            document_ref: "document:7".into(),
+            source_revision_ref: "revision:7:v3".into(),
+            exact_span_ref: "span:7:10-13".into(),
+            admission: receipt(ResolvedScope::ScopeResolved),
+        };
+        let admitted = admit_source_bound_candidate(
+            &negation_candidate(ScopeState::ScopeUnresolved),
+            &bound,
+        )
+        .unwrap();
+
+        assert_eq!(admitted.statement_ref, bound.statement_ref);
+        assert_eq!(admitted.source_revision_ref, bound.source_revision_ref);
+        assert_eq!(admitted.exact_span_ref, bound.exact_span_ref);
+        assert!(!admitted.proposition_support_paid);
+        assert!(!admitted.applicability_paid);
+        assert!(!admitted.claim_truth_paid);
+    }
+
+    #[test]
     fn no_receipt_preserves_candidate_residual_and_alternative() {
         let candidate = negation_candidate(ScopeState::ScopeUnresolved);
         let address = candidate.address;
