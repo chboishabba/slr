@@ -397,6 +397,22 @@ pub fn persist_forecast_cohort(
     Ok(())
 }
 
+
+pub fn load_forecast_cohort(
+    client: &mut Client,
+    cohort_ref: &str,
+) -> Result<ForecastCohort, ForecastStoreError> {
+    let row = client.query_one(
+        "SELECT target_population_ref, predicate_ref FROM forecast.cohort WHERE cohort_ref = $1",
+        &[&cohort_ref],
+    )?;
+    Ok(ForecastCohort {
+        cohort_ref: cohort_ref.into(),
+        target_population_ref: row.get(0),
+        predicate_ref: row.get(1),
+    })
+}
+
 pub fn persist_forecast_cohort_member(
     client: &mut Client,
     cohort_ref: &str,
