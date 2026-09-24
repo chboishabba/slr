@@ -8,7 +8,10 @@ use sensiblaw_core::{
     review_workstation::ReviewItem,
 };
 
-use crate::{persist_review_item, DatabaseConfig, ReviewWorkstationStoreError};
+use crate::{
+    install_review_workstation_schema, persist_review_item, DatabaseConfig,
+    ReviewWorkstationStoreError,
+};
 
 #[derive(Debug, Error)]
 pub enum EventDiscoveryStoreError {
@@ -186,6 +189,7 @@ pub fn persist_event_join_proposal_with_review(
     proposal: &CandidateEventJoinProposal,
     affected_consumer_refs: Vec<String>,
 ) -> Result<(CandidateEventJoinProposal, ReviewItem), EventDiscoveryStoreError> {
+    install_review_workstation_schema(config)?;
     let proposal = persist_event_join_proposal(config, proposal)?;
     let review_item = proposal.to_review_item(affected_consumer_refs);
     persist_review_item(config, &review_item)?;
