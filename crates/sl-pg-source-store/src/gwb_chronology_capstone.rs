@@ -21,7 +21,7 @@ use sensiblaw_core::{
         ReviewAction, ReviewItem, ReviewItemKind, ReviewStatus,
     },
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::{
@@ -40,7 +40,7 @@ use crate::{
 pub const GWB_CAPSTONE_SCHEMA: &str =
     "sensiblaw.gwb-heterogeneous-chronology-capstone.v0_1";
 
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 pub struct GwbChronologyCapstoneManifest {
     pub schema: String,
     pub matter_ref: String,
@@ -58,7 +58,7 @@ pub struct GwbChronologyCapstoneManifest {
     pub semantic_promotion: bool,
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 pub struct GwbReviewedStatement {
     pub statement_key: String,
     pub document_ordinal: u32,
@@ -81,14 +81,14 @@ pub struct GwbReviewedStatement {
     pub origin: GwbStatementOrigin,
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum GwbStatementOrigin {
     InitialIntake,
     ResearchReentry,
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum GwbStatementDisposition {
     Candidate,
@@ -99,7 +99,7 @@ pub enum GwbStatementDisposition {
     Qualified,
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 pub struct GwbReviewedEventJoin {
     pub event_ref: String,
     pub observation_refs: Vec<String>,
@@ -109,7 +109,7 @@ pub struct GwbReviewedEventJoin {
     pub automatic_join: bool,
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 pub struct GwbTemporalAssertion {
     pub temporal_ref: String,
     pub event_ref: String,
@@ -121,7 +121,7 @@ pub struct GwbTemporalAssertion {
     pub review_ref: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum GwbTemporalForm {
     ExactInstant { instant_ref: String },
@@ -135,13 +135,13 @@ pub enum GwbTemporalForm {
     Unknown,
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 pub struct GwbPropositionRoot {
     pub proposition_ref: String,
     pub label: String,
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 pub struct GwbClaimLeaf {
     pub claim_ref: String,
     pub proposition_ref: String,
@@ -160,7 +160,7 @@ pub struct GwbClaimLeaf {
     pub event_assembly_receipt_ref: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum GwbClaimLeafKind {
     Affirmation,
@@ -169,7 +169,7 @@ pub enum GwbClaimLeafKind {
     AlternativeAccount,
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum GwbClaimReviewState {
     Unreviewed,
@@ -180,7 +180,7 @@ pub enum GwbClaimReviewState {
     Superseded,
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 pub struct GwbContestationRelation {
     pub relation_ref: String,
     pub from_claim_ref: String,
@@ -193,7 +193,7 @@ pub struct GwbContestationRelation {
     pub review_ref: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum GwbContestationRelationKind {
     Supports,
@@ -206,7 +206,7 @@ pub enum GwbContestationRelationKind {
     UnresolvedRelation,
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 pub struct GwbReviewItem {
     pub review_item_ref: String,
     pub semantic_ref: String,
@@ -222,7 +222,7 @@ pub struct GwbReviewItem {
     pub affected_consumer_refs: Vec<String>,
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum GwbReviewItemKind {
     PnfParse,
@@ -236,7 +236,7 @@ pub enum GwbReviewItemKind {
     ScopeHandoff,
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum GwbReviewStatus {
     Pending,
@@ -248,7 +248,7 @@ pub enum GwbReviewStatus {
     NeedsEvidence,
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum GwbReviewAction {
     Accept,
