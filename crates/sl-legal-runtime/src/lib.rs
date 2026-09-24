@@ -2891,3 +2891,5 @@ pub use worldmonitor_comparative::*;
 
 pub mod dashi_trade_comparative;
 pub use dashi_trade_comparative::*;
+pub mod forecast_verification;
+pub use forecast_verification::*;
