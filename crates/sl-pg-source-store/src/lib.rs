@@ -151,6 +151,7 @@ pub use statement_trace_store::{
     canonical_statement_ref, install_statement_trace_schema,
     load_observation_event_links_for_event,
     load_observation_event_links_for_observation, load_source_statement,
+    load_source_statements_for_document,
     load_statement_observation_links_for_observation,
     load_statement_observation_links_for_statement,
     persist_observation_event_link, persist_source_statement,
