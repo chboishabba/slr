@@ -8,9 +8,10 @@
 use postgres::Client;
 use sensiblaw_reader_model::{
     BinaryOutcome, ForecastCohort, ForecastDomain, ForecastEvidenceAvailability,
-    ForecastOrigin, ForecastResolutionRevision, ForecastResolutionState,
-    ForecastScoreProjection, Probability, PublishedBinaryForecast, Rational,
-    ResolutionEvidence, ScorableForecast,
+    ForecastOrigin, ForecastResearchDemand, ForecastResearchProbeKind,
+    ForecastResidualKind, ForecastResidualProjection, ForecastResolutionRevision,
+    ForecastResolutionState, ForecastScoreProjection, Probability,
+    PublishedBinaryForecast, Rational, ResolutionEvidence, ScorableForecast,
 };
 use thiserror::Error;
 
@@ -621,6 +622,157 @@ pub fn load_forecast_score_projection(
         creates_claim_truth: row.get(6),
         claims_causal_attribution: row.get(7),
     })
+}
+
+
+fn residual_kind_db(value: ForecastResidualKind) -> &'static str {
+    match value {
+        ForecastResidualKind::SourceProvenance => "source_provenance",
+        ForecastResidualKind::ForecastTimeAvailability => "forecast_time_availability",
+        ForecastResidualKind::Mechanism => "mechanism",
+        ForecastResidualKind::Regime => "regime",
+        ForecastResidualKind::Calibration => "calibration",
+        ForecastResidualKind::ScorabilitySelection => "scorability_selection",
+        ForecastResidualKind::ResolutionObserver => "resolution_observer",
+        ForecastResidualKind::Comparator => "comparator",
+        ForecastResidualKind::ObjectDecomposition => "object_decomposition",
+    }
+}
+
+fn probe_kind_db(value: ForecastResearchProbeKind) -> &'static str {
+    match value {
+        ForecastResearchProbeKind::Support => "support",
+        ForecastResearchProbeKind::Defeater => "defeater",
+        ForecastResearchProbeKind::Comparator => "comparator",
+        ForecastResearchProbeKind::Contradiction => "contradiction",
+        ForecastResearchProbeKind::Counterexample => "counterexample",
+        ForecastResearchProbeKind::VocabularyExploration => "vocabulary_exploration",
+        ForecastResearchProbeKind::AuthorityFamilyExploration => "authority_family_exploration",
+    }
+}
+
+pub fn persist_forecast_residual(
+    client: &mut Client,
+    residual: &ForecastResidualProjection,
+) -> Result<(), ForecastStoreError> {
+    if residual.residual_ref.trim().is_empty()
+        || residual.forecast_or_score_ref.trim().is_empty()
+        || residual.consumer_ref.trim().is_empty()
+        || residual.required_coordinate_ref.trim().is_empty()
+    {
+        return Err(ForecastStoreError::Invalid(
+            "forecast residual requires identity and coordinate refs".into(),
+        ));
+    }
+    if !residual.candidate_only
+        || residual.creates_semantic_authority
+        || residual.creates_claim_truth
+    {
+        return Err(ForecastStoreError::Invalid(
+            "forecast residual crossed non-promotion boundary".into(),
+        ));
+    }
+
+    let mut tx = client.transaction()?;
+    tx.execute(
+        r#"
+        INSERT INTO forecast.residual (
+            residual_ref, forecast_or_score_ref, consumer_ref,
+            residual_kind_ref, required_coordinate_ref, open,
+            candidate_only, creates_semantic_authority, creates_claim_truth
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+        ON CONFLICT (residual_ref) DO UPDATE SET
+            forecast_or_score_ref = EXCLUDED.forecast_or_score_ref,
+            consumer_ref = EXCLUDED.consumer_ref,
+            residual_kind_ref = EXCLUDED.residual_kind_ref,
+            required_coordinate_ref = EXCLUDED.required_coordinate_ref,
+            open = EXCLUDED.open
+        "#,
+        &[
+            &residual.residual_ref,
+            &residual.forecast_or_score_ref,
+            &residual.consumer_ref,
+            &residual_kind_db(residual.kind),
+            &residual.required_coordinate_ref,
+            &residual.open,
+            &residual.candidate_only,
+            &residual.creates_semantic_authority,
+            &residual.creates_claim_truth,
+        ],
+    )?;
+    tx.execute(
+        "DELETE FROM forecast.residual_dependency WHERE residual_ref = $1",
+        &[&residual.residual_ref],
+    )?;
+    for dependency_ref in &residual.dependency_refs {
+        tx.execute(
+            "INSERT INTO forecast.residual_dependency (residual_ref, dependency_ref) VALUES ($1,$2)",
+            &[&residual.residual_ref, dependency_ref],
+        )?;
+    }
+    tx.commit()?;
+    Ok(())
+}
+
+pub fn persist_forecast_research_demand(
+    client: &mut Client,
+    demand: &ForecastResearchDemand,
+) -> Result<(), ForecastStoreError> {
+    if demand.demand_ref.trim().is_empty()
+        || demand.residual_ref.trim().is_empty()
+        || demand.consumer_ref.trim().is_empty()
+        || demand.expected_proposition_shape_ref.trim().is_empty()
+        || demand.temporal_cut_ref.trim().is_empty()
+        || demand.source_policy_ref.trim().is_empty()
+        || demand.budget_ref.trim().is_empty()
+    {
+        return Err(ForecastStoreError::Invalid(
+            "forecast research demand requires identity refs".into(),
+        ));
+    }
+    if !demand.candidate_only
+        || demand.pays_residual
+        || demand.creates_semantic_authority
+        || demand.creates_claim_truth
+    {
+        return Err(ForecastStoreError::Invalid(
+            "research demand cannot pay residual or promote truth/authority".into(),
+        ));
+    }
+
+    client.execute(
+        r#"
+        INSERT INTO forecast.research_demand (
+            demand_ref, residual_ref, consumer_ref, probe_kind_ref,
+            expected_proposition_shape_ref, temporal_cut_ref,
+            source_policy_ref, budget_ref, candidate_only, pays_residual,
+            creates_semantic_authority, creates_claim_truth
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+        ON CONFLICT (demand_ref) DO UPDATE SET
+            residual_ref = EXCLUDED.residual_ref,
+            consumer_ref = EXCLUDED.consumer_ref,
+            probe_kind_ref = EXCLUDED.probe_kind_ref,
+            expected_proposition_shape_ref = EXCLUDED.expected_proposition_shape_ref,
+            temporal_cut_ref = EXCLUDED.temporal_cut_ref,
+            source_policy_ref = EXCLUDED.source_policy_ref,
+            budget_ref = EXCLUDED.budget_ref
+        "#,
+        &[
+            &demand.demand_ref,
+            &demand.residual_ref,
+            &demand.consumer_ref,
+            &probe_kind_db(demand.probe_kind),
+            &demand.expected_proposition_shape_ref,
+            &demand.temporal_cut_ref,
+            &demand.source_policy_ref,
+            &demand.budget_ref,
+            &demand.candidate_only,
+            &demand.pays_residual,
+            &demand.creates_semantic_authority,
+            &demand.creates_claim_truth,
+        ],
+    )?;
+    Ok(())
 }
 
 #[cfg(test)]
