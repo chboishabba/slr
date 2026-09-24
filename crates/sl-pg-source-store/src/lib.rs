@@ -93,3 +93,5 @@ pub use reviewed_source_expansion::{
 // Keep the established PostgreSQL source-store implementation byte-for-byte
 // while focused reader/materialisation projections remain separate concerns.
 include!("storage_core.rs");
+mod forecast_verification;
+pub use forecast_verification::*;
