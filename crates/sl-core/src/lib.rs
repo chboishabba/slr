@@ -637,3 +637,5 @@ mod tests {
         assert_eq!(publisher.publish(generation), Err(PublicationError::AlreadyTerminal));
     }
 }
+
+pub mod matter_context;
