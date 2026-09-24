@@ -8,7 +8,6 @@ mod semantic_runtime;
 pub use explanation_selection::*;
 pub use mabo_context::*;
 pub use semantic_runtime::*;
-<<<<<<< HEAD
 mod visualisation_transport;
 pub use visualisation_transport::*;
 mod persisted_workbench;
