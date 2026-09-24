@@ -57,8 +57,12 @@ pub use context_federation::{
 pub use gwb_chronology_capstone::{
     load_gwb_chronology_capstone_manifest, materialize_gwb_chronology_capstone,
     GwbChronologyCapstoneError, GwbChronologyCapstoneManifest,
-    GwbChronologyCapstoneReceipt, GwbReviewedEventJoin, GwbReviewedStatement,
-    GwbReviewItem, GwbReviewItemKind, GWB_CAPSTONE_SCHEMA,
+    GwbChronologyCapstoneReceipt, GwbClaimLeaf, GwbClaimLeafKind,
+    GwbClaimReviewState, GwbContestationRelation,
+    GwbContestationRelationKind, GwbPropositionRoot, GwbReviewedEventJoin,
+    GwbReviewedStatement, GwbReviewAction, GwbReviewItem, GwbReviewItemKind,
+    GwbReviewStatus, GwbStatementDisposition, GwbStatementOrigin,
+    GwbTemporalAssertion, GwbTemporalForm, GWB_CAPSTONE_SCHEMA,
 };
 pub use gwb_campaign_commit::{
     materialize_gwb_campaign_commit, GwbCampaignCommitError, GwbCampaignCommitInput,
@@ -175,3 +179,30 @@ pub use sensiblaw_core::chat_source::{
     ArchivedChatMessage, ChatBranchMembership, ChatContentKind,
     ChatMessageRole, ChatSourceError, ChatStatementCandidateSpan,
 };
+
+#[cfg(test)]
+mod public_gwb_capstone_manifest_api_tests {
+    #[test]
+    fn exposes_every_manifest_member_needed_by_the_gwb_fixture_seeder() {
+        use super::{
+            GwbClaimLeaf, GwbClaimLeafKind, GwbClaimReviewState,
+            GwbContestationRelation, GwbContestationRelationKind,
+            GwbPropositionRoot, GwbReviewAction, GwbReviewStatus,
+            GwbStatementDisposition, GwbStatementOrigin, GwbTemporalAssertion,
+            GwbTemporalForm,
+        };
+
+        let _ = std::any::TypeId::of::<GwbClaimLeaf>();
+        let _ = std::any::TypeId::of::<GwbClaimLeafKind>();
+        let _ = std::any::TypeId::of::<GwbClaimReviewState>();
+        let _ = std::any::TypeId::of::<GwbContestationRelation>();
+        let _ = std::any::TypeId::of::<GwbContestationRelationKind>();
+        let _ = std::any::TypeId::of::<GwbPropositionRoot>();
+        let _ = std::any::TypeId::of::<GwbReviewAction>();
+        let _ = std::any::TypeId::of::<GwbReviewStatus>();
+        let _ = std::any::TypeId::of::<GwbStatementDisposition>();
+        let _ = std::any::TypeId::of::<GwbStatementOrigin>();
+        let _ = std::any::TypeId::of::<GwbTemporalAssertion>();
+        let _ = std::any::TypeId::of::<GwbTemporalForm>();
+    }
+}
