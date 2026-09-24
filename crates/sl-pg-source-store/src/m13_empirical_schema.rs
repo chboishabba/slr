@@ -25,6 +25,27 @@ pub struct M13EmpiricalSchemaReceipt {
     pub canonical_world_mutated: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum M13SchemaInstallStep {
+    StatementTrace,
+    ChatSource,
+    ChronologyContestation,
+    ReviewWorkstation,
+    EventDiscovery,
+    OperationalState,
+}
+
+fn m13_empirical_schema_install_order() -> [M13SchemaInstallStep; 6] {
+    [
+        M13SchemaInstallStep::StatementTrace,
+        M13SchemaInstallStep::ChatSource,
+        M13SchemaInstallStep::ChronologyContestation,
+        M13SchemaInstallStep::ReviewWorkstation,
+        M13SchemaInstallStep::EventDiscovery,
+        M13SchemaInstallStep::OperationalState,
+    ]
+}
+
 pub fn install_m13_empirical_schema(
     config: &DatabaseConfig,
 ) -> Result<M13EmpiricalSchemaReceipt, String> {
@@ -32,16 +53,35 @@ pub fn install_m13_empirical_schema(
     // 1. source/trace layer over the existing corpus + pnf base,
     // 2. CHAT source materialisation over corpus,
     // 3. semantic chronology/contestation,
-    // 4. AUTO/event-discovery,
-    // 5. review mutation/receipts,
+    // 4. review mutation/receipts (event discovery owns foreign keys to it),
+    // 5. AUTO/event-discovery,
     // 6. operational/StatiBaker persistence.
-    install_statement_trace_schema(config).map_err(|error| format!("{error:?}"))?;
-    install_chat_source_schema(config).map_err(|error| format!("{error:?}"))?;
-    install_chronology_contestation_schema(config)
-        .map_err(|error| format!("{error:?}"))?;
-    install_event_discovery_schema(config).map_err(|error| format!("{error:?}"))?;
-    install_review_workstation_schema(config).map_err(|error| format!("{error:?}"))?;
-    install_operational_state_schema(config).map_err(|error| format!("{error:?}"))?;
+    for step in m13_empirical_schema_install_order() {
+        match step {
+            M13SchemaInstallStep::StatementTrace => {
+                install_statement_trace_schema(config).map_err(|error| format!("{error:?}"))?
+            }
+            M13SchemaInstallStep::ChatSource => {
+                install_chat_source_schema(config).map_err(|error| format!("{error:?}"))?
+            }
+            M13SchemaInstallStep::ChronologyContestation => {
+                install_chronology_contestation_schema(config)
+                    .map_err(|error| format!("{error:?}"))?
+            }
+            M13SchemaInstallStep::ReviewWorkstation => {
+                install_review_workstation_schema(config)
+                    .map_err(|error| format!("{error:?}"))?
+            }
+            M13SchemaInstallStep::EventDiscovery => {
+                install_event_discovery_schema(config)
+                    .map_err(|error| format!("{error:?}"))?
+            }
+            M13SchemaInstallStep::OperationalState => {
+                install_operational_state_schema(config)
+                    .map_err(|error| format!("{error:?}"))?
+            }
+        }
+    }
 
     Ok(M13EmpiricalSchemaReceipt {
         statement_trace: true,
@@ -59,6 +99,20 @@ pub fn install_m13_empirical_schema(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn review_schema_precedes_event_discovery_schema() {
+        let review = m13_empirical_schema_install_order()
+            .iter()
+            .position(|step| *step == M13SchemaInstallStep::ReviewWorkstation)
+            .expect("review workstation must have an install step");
+        let event_discovery = m13_empirical_schema_install_order()
+            .iter()
+            .position(|step| *step == M13SchemaInstallStep::EventDiscovery)
+            .expect("event discovery must have an install step");
+
+        assert!(review < event_discovery);
+    }
 
     #[test]
     fn receipt_shape_is_non_promoting() {
