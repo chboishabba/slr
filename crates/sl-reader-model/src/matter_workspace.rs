@@ -12,8 +12,8 @@ use sensiblaw_core::matter_context::{
 };
 
 use crate::{
-    ChronologyProjection, EventDiscoveryProjection, OperationalTimelineProjection,
-    ReviewQueueProjection, SemanticTracePath,
+    ChronologyProjection, EventDiscoveryProjection, OperationalOutstandingProjection,
+    OperationalTimelineProjection, ReviewQueueProjection, SemanticTracePath,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -34,6 +34,7 @@ pub struct MatterWorkspaceInput {
     pub event_timeline: ChronologyProjection,
     pub knowledge_timeline: Vec<KnowledgeTimelineEntry>,
     pub operational_timeline: OperationalTimelineProjection,
+    pub operational_outstanding: OperationalOutstandingProjection,
     pub join_proposals: EventDiscoveryProjection,
     pub review_queue: ReviewQueueProjection,
     pub legal_proof_refs: Vec<String>,
@@ -50,6 +51,7 @@ pub struct MatterWorkspaceProjection {
     pub event_timeline: ChronologyProjection,
     pub knowledge_timeline: Vec<KnowledgeTimelineEntry>,
     pub operational_timeline: OperationalTimelineProjection,
+    pub operational_outstanding: OperationalOutstandingProjection,
     pub join_proposals: EventDiscoveryProjection,
     pub review_queue: ReviewQueueProjection,
     pub legal_proof_refs: Vec<String>,
@@ -125,6 +127,9 @@ pub fn project_matter_workspace(
         || input.operational_timeline.creates_semantic_authority
         || input.operational_timeline.pays_evidence
         || input.operational_timeline.claim_truth_promoted
+        || input.operational_outstanding.creates_review_pending
+        || input.operational_outstanding.creates_semantic_unresolved
+        || input.operational_outstanding.creates_user_priority
         || input.join_proposals.creates_event_identity
         || input.join_proposals.creates_semantic_authority
         || input.join_proposals.claim_truth_promoted
@@ -203,6 +208,15 @@ pub fn project_matter_workspace(
         .collect::<BTreeSet<_>>()
         .len();
 
+    let mut operational_outstanding = input.operational_outstanding.clone();
+    operational_outstanding.states.retain(|state| {
+        visible.contains(state.operational_state_ref.as_str())
+            || visible.contains(state.subject_ref.as_str())
+    });
+    operational_outstanding.creates_review_pending = false;
+    operational_outstanding.creates_semantic_unresolved = false;
+    operational_outstanding.creates_user_priority = false;
+
     let mut join_proposals = input.join_proposals.clone();
     join_proposals.proposals.retain(|view| {
         visible.contains(view.proposal.proposal_ref.as_str())
@@ -245,6 +259,7 @@ pub fn project_matter_workspace(
         event_timeline,
         knowledge_timeline,
         operational_timeline,
+        operational_outstanding,
         join_proposals,
         review_queue,
         legal_proof_refs: filter_refs(&input.legal_proof_refs, &visible),
@@ -328,6 +343,7 @@ mod tests {
                 source_role_ref: Some("memoir".into()),
             }],
             operational_timeline: OperationalTimelineProjection::default(),
+            operational_outstanding: OperationalOutstandingProjection::default(),
             join_proposals: EventDiscoveryProjection::default(),
             review_queue: ReviewQueueProjection {
                 items: vec![],
@@ -353,6 +369,71 @@ mod tests {
     }
 
     #[test]
+    fn operational_outstanding_is_context_filtered_without_becoming_review_or_semantic_state() {
+        use sensiblaw_core::operational_state::{
+            OperationalOutstandingKind, OperationalOutstandingState,
+        };
+
+        let visible_state = OperationalOutstandingState {
+            operational_state_ref: "outstanding:visible".into(),
+            state_date: "2026-09-24".into(),
+            subject_ref: "authority:visible".into(),
+            label: "authority follow unresolved".into(),
+            provenance_refs: vec!["statibaker:carryover:1".into()],
+            kind: OperationalOutstandingKind::Unresolved,
+            producer_observed: true,
+            creates_review_pending: false,
+            creates_semantic_unresolved: false,
+            creates_user_priority: false,
+        };
+        let hidden_state = OperationalOutstandingState {
+            operational_state_ref: "outstanding:hidden".into(),
+            subject_ref: "authority:hidden".into(),
+            ..visible_state.clone()
+        };
+
+        let input = MatterWorkspaceInput {
+            matter_ref: "matter:1".into(),
+            context: context(),
+            context_coordinates: vec![coordinate("outstanding:visible")],
+            source_traces: vec![],
+            event_timeline: ChronologyProjection::default(),
+            knowledge_timeline: vec![],
+            operational_timeline: OperationalTimelineProjection::default(),
+            operational_outstanding: OperationalOutstandingProjection {
+                states: vec![visible_state, hidden_state],
+                creates_review_pending: false,
+                creates_semantic_unresolved: false,
+                creates_user_priority: false,
+            },
+            join_proposals: EventDiscoveryProjection::default(),
+            review_queue: ReviewQueueProjection {
+                items: vec![],
+                count_by_kind: Default::default(),
+                count_by_status: Default::default(),
+                candidate_only: true,
+                creates_semantic_authority: false,
+                applicability_promoted: false,
+                claim_truth_promoted: false,
+            },
+            legal_proof_refs: vec![],
+            research_refs: vec![],
+            work_product_refs: vec![],
+            handoff_refs: vec![],
+        };
+
+        let projection = project_matter_workspace(&input).unwrap();
+        assert_eq!(projection.operational_outstanding.states.len(), 1);
+        assert_eq!(
+            projection.operational_outstanding.states[0].operational_state_ref,
+            "outstanding:visible"
+        );
+        assert!(!projection.operational_outstanding.creates_review_pending);
+        assert!(!projection.operational_outstanding.creates_semantic_unresolved);
+        assert!(!projection.operational_outstanding.creates_user_priority);
+    }
+
+    #[test]
     fn sealed_coordinate_is_excluded_from_workspace_projection() {
         let input = MatterWorkspaceInput {
             matter_ref: "matter:1".into(),
@@ -362,6 +443,7 @@ mod tests {
             event_timeline: ChronologyProjection::default(),
             knowledge_timeline: vec![],
             operational_timeline: OperationalTimelineProjection::default(),
+            operational_outstanding: OperationalOutstandingProjection::default(),
             join_proposals: EventDiscoveryProjection::default(),
             review_queue: ReviewQueueProjection {
                 items: vec![],
