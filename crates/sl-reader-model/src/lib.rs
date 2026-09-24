@@ -8,6 +8,7 @@ mod semantic_runtime;
 pub use explanation_selection::*;
 pub use mabo_context::*;
 pub use semantic_runtime::*;
+<<<<<<< HEAD
 mod visualisation_transport;
 pub use visualisation_transport::*;
 mod persisted_workbench;
@@ -17,3 +18,6 @@ mod comparative_workbench;
 pub use comparative_workbench::*;
 mod forecast_verification;
 pub use forecast_verification::*;
+
+mod semantic_trace;
+pub use semantic_trace::*;
