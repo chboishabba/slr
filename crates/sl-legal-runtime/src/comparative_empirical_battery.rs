@@ -12,12 +12,17 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
+    compare_dashi_trade_live_shadow, compare_dashi_trade_quotient_states,
+    compare_dashi_trade_thesis, compare_worldmonitor_forecast_runs,
     compile_query_world_impact, consumer_fibre_change_set, run_observation_refinement,
     run_pabai_comparative_regression, run_personal_professional_comparison,
     run_same_world_theory_change, run_state_change_regularity_invariant,
-    temporal_change_set, temporal_comparison_from_query_world_impact, ChangeLayer, ConsumerAxis,
-    LegalWorldCoordinate, ProjectionGraph, ProjectionKind, ProjectionNode,
-    QueryDependencySlice, RevisionDependencyIndex,
+    temporal_change_set, temporal_comparison_from_query_world_impact,
+    dashi_trade_phase9_answer_changing_explanation, dashi_trade_phase9_justification_boundary,
+    ChangeLayer, ConsumerAxis, DashiTradePhase9Justification, DashiTradeQuotientState,
+    DashiTradeShadowPolicyStep, DashiTradeThesisSnapshot, LegalWorldCoordinate,
+    ProjectionGraph, ProjectionKind, ProjectionNode, QueryDependencySlice,
+    RevisionDependencyIndex, WorldMonitorForecastRun,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
