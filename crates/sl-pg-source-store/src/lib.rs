@@ -98,13 +98,16 @@ pub use statement_pnf_spine::{
     StatementOrigin, StatementParseReview, StatementPnfSpineError,
 };
 pub use statement_trace_store::{
-    canonical_statement_observation_link_ref, canonical_statement_ref,
-    install_statement_trace_schema, load_source_statement,
+    canonical_observation_event_link_ref, canonical_statement_observation_link_ref,
+    canonical_statement_ref, install_statement_trace_schema,
+    load_observation_event_links_for_event,
+    load_observation_event_links_for_observation, load_source_statement,
     load_statement_observation_links_for_observation,
-    load_statement_observation_links_for_statement, persist_source_statement,
-    persist_statement_observation_link, PersistedSourceStatement,
-    StatementObservationDisposition, StatementObservationLink,
-    StatementTraceStoreError,
+    load_statement_observation_links_for_statement,
+    persist_observation_event_link, persist_source_statement,
+    persist_statement_observation_link, ObservationEventLink,
+    PersistedSourceStatement, StatementObservationDisposition,
+    StatementObservationLink, StatementTraceStoreError,
 };
 
 // Keep the established PostgreSQL source-store implementation byte-for-byte
