@@ -45,9 +45,17 @@ pub struct MatterAcceptanceInput {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MatterAcceptanceReceipt {
     pub matter_ref: String,
+    pub exact_event_refs: Vec<String>,
+    pub approximate_event_refs: Vec<String>,
+    pub relative_event_refs: Vec<String>,
+    pub undated_event_refs: Vec<String>,
+    pub unknown_date_event_refs: Vec<String>,
     pub missing_date_event_refs: Vec<String>,
     pub missing_actor_claim_refs: Vec<String>,
     pub contradictory_relation_refs: Vec<String>,
+    pub event_without_source_trace_refs: Vec<String>,
+    pub claim_without_source_trace_refs: Vec<String>,
+    pub source_trace_without_downstream_refs: Vec<String>,
     pub no_event_refs: Vec<String>,
     pub party_assertion_refs: Vec<String>,
     pub procedural_outcome_refs: Vec<String>,
@@ -157,22 +165,72 @@ pub fn project_matter_acceptance(
         }
     }
 
+    let mut exact_event_refs = BTreeSet::new();
+    let mut approximate_event_refs = BTreeSet::new();
+    let mut relative_event_refs = BTreeSet::new();
+    let mut undated_event_refs = BTreeSet::new();
+    let mut unknown_date_event_refs = BTreeSet::new();
     let mut missing_date_event_refs = BTreeSet::new();
     for entry in &input.workspace.event_timeline.entries {
-        if matches!(
-            entry.placement,
-            ChronologyPlacementKind::Undated | ChronologyPlacementKind::Unknown
-        ) {
-            missing_date_event_refs.insert(entry.event_ref.clone());
+        match entry.placement {
+            ChronologyPlacementKind::Exact => {
+                exact_event_refs.insert(entry.event_ref.clone());
+            }
+            ChronologyPlacementKind::Approximate => {
+                approximate_event_refs.insert(entry.event_ref.clone());
+            }
+            ChronologyPlacementKind::RelativeOnly => {
+                relative_event_refs.insert(entry.event_ref.clone());
+            }
+            ChronologyPlacementKind::Undated => {
+                undated_event_refs.insert(entry.event_ref.clone());
+                missing_date_event_refs.insert(entry.event_ref.clone());
+            }
+            ChronologyPlacementKind::Unknown => {
+                unknown_date_event_refs.insert(entry.event_ref.clone());
+                missing_date_event_refs.insert(entry.event_ref.clone());
+            }
         }
     }
 
+    let trace_event_refs = input
+        .workspace
+        .source_traces
+        .iter()
+        .filter_map(|trace| trace.event_ref.clone())
+        .collect::<BTreeSet<_>>();
+    let all_event_refs = input
+        .workspace
+        .event_timeline
+        .entries
+        .iter()
+        .map(|entry| entry.event_ref.clone())
+        .collect::<BTreeSet<_>>();
+    let event_without_source_trace_refs = all_event_refs
+        .difference(&trace_event_refs)
+        .cloned()
+        .collect::<Vec<_>>();
+
+    let trace_statement_refs = input
+        .workspace
+        .source_traces
+        .iter()
+        .map(|trace| trace.statement.statement_ref.clone())
+        .collect::<BTreeSet<_>>();
+    let mut claim_without_source_trace_refs = BTreeSet::new();
     let mut missing_actor_claim_refs = BTreeSet::new();
     let mut contradictory_relation_refs = BTreeSet::new();
     for view in &input.workspace.event_timeline.proposition_views {
         for leaf in &view.leaves {
             if leaf.speaker_ref.is_none() {
                 missing_actor_claim_refs.insert(leaf.claim_ref.clone());
+            }
+            if !leaf
+                .statement_refs
+                .iter()
+                .any(|reference| trace_statement_refs.contains(reference))
+            {
+                claim_without_source_trace_refs.insert(leaf.claim_ref.clone());
             }
         }
         for relation in &view.relations {
@@ -181,6 +239,20 @@ pub fn project_matter_acceptance(
             }
         }
     }
+
+    let mut source_trace_without_downstream_refs = input
+        .workspace
+        .source_traces
+        .iter()
+        .filter(|trace| {
+            trace.event_ref.is_none()
+                && trace.claim_refs.is_empty()
+                && trace.downstream_use_refs.is_empty()
+        })
+        .map(|trace| trace.statement.statement_ref.clone())
+        .collect::<Vec<_>>();
+    source_trace_without_downstream_refs.sort();
+    source_trace_without_downstream_refs.dedup();
 
     let party_assertion_refs = role_refs(
         &role_by_ref,
@@ -211,9 +283,18 @@ pub fn project_matter_acceptance(
 
     Ok(MatterAcceptanceReceipt {
         matter_ref: input.workspace.matter_ref.clone(),
+        exact_event_refs: exact_event_refs.into_iter().collect(),
+        approximate_event_refs: approximate_event_refs.into_iter().collect(),
+        relative_event_refs: relative_event_refs.into_iter().collect(),
+        undated_event_refs: undated_event_refs.into_iter().collect(),
+        unknown_date_event_refs: unknown_date_event_refs.into_iter().collect(),
         missing_date_event_refs: missing_date_event_refs.into_iter().collect(),
         missing_actor_claim_refs: missing_actor_claim_refs.into_iter().collect(),
         contradictory_relation_refs: contradictory_relation_refs.into_iter().collect(),
+        event_without_source_trace_refs,
+        claim_without_source_trace_refs:
+            claim_without_source_trace_refs.into_iter().collect(),
+        source_trace_without_downstream_refs,
         no_event_refs,
         party_assertion_refs,
         procedural_outcome_refs,
@@ -354,6 +435,42 @@ mod tests {
         assert!(!receipt.creates_semantic_authority);
         assert!(!receipt.claim_truth_promoted);
         assert!(!receipt.no_event_means_false);
+    }
+
+    #[test]
+    fn navigation_gaps_are_explicit_acceptance_debt() {
+        let mut workspace = empty_workspace();
+        workspace.event_timeline.entries.push(crate::ChronologyEntry {
+            event_ref: "event:no-source".into(),
+            temporal_ref: None,
+            placement: ChronologyPlacementKind::Unknown,
+            display_coordinate: "unknown".into(),
+            relative_event_ref: None,
+            observation_refs: vec![],
+            statement_refs: vec![],
+            proposition_refs: vec![],
+            claim_refs: vec![],
+            contestation_relation_refs: vec![],
+            candidate_only: true,
+            creates_semantic_authority: false,
+            claim_truth_promoted: false,
+        });
+
+        let receipt = project_matter_acceptance(&MatterAcceptanceInput {
+            workspace,
+            no_event_refs: vec![],
+            role_coordinates: vec![],
+            procedural_significance_review_refs: vec![],
+        })
+        .unwrap();
+
+        assert_eq!(
+            receipt.event_without_source_trace_refs,
+            vec!["event:no-source"]
+        );
+        assert_eq!(receipt.unknown_date_event_refs, vec!["event:no-source"]);
+        assert_eq!(receipt.missing_date_event_refs, vec!["event:no-source"]);
+        assert!(!receipt.missing_date_means_event_did_not_happen);
     }
 
     #[test]
