@@ -712,6 +712,7 @@ pub fn load_operational_outstanding_state(
     config: &DatabaseConfig,
     operational_state_ref: &str,
 ) -> Result<Option<OperationalOutstandingState>, OperationalStateStoreError> {
+    install_operational_state_schema(config)?;
     let mut client = Client::connect(config.database_url(), NoTls)?;
     let Some(row) = client.query_opt(
         r#"
@@ -762,6 +763,7 @@ pub fn load_operational_outstanding_for_date(
     config: &DatabaseConfig,
     state_date: &str,
 ) -> Result<Vec<OperationalOutstandingState>, OperationalStateStoreError> {
+    install_operational_state_schema(config)?;
     let mut client = Client::connect(config.database_url(), NoTls)?;
     let refs = client
         .query(
