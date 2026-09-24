@@ -1,11 +1,13 @@
 mod workbench_projection;
 pub use workbench_projection::*;
 mod cache_first;
+mod chronology_contestation_store;
 mod candidate_pnf;
 mod context_federation;
 mod discovery_identity_baseline;
 mod gwb_ambiguity_state;
 mod gwb_campaign_commit;
+mod gwb_chronology_capstone;
 mod gwb_hop_ledger;
 mod discovery_lineage;
 mod latent_world;
@@ -14,9 +16,18 @@ mod non_novel_identity_alias;
 mod proposition_rows;
 mod reviewed_pnf;
 mod reviewed_source_expansion;
+mod review_workstation_store;
 mod statement_pnf_spine;
 mod statement_trace_store;
 
+pub use chronology_contestation_store::{
+    install_chronology_contestation_schema, load_claims_for_event,
+    load_contestation_relations_for_claims, load_proposition_roots_for_claims,
+    load_temporal_assertions_for_event,
+    persist_claim_leaf, persist_contestation_relation, persist_event_claim_link,
+    persist_event_temporal_link, persist_proposition_root, persist_temporal_assertion,
+    ChronologyContestationStoreError, EventClaimLink, EventTemporalLink,
+};
 pub use cache_first::{
     resolve_cache_first, AcquiredSourceBundle, CacheFirstAcquirer, CacheFirstError,
     CacheFirstResolution, CacheLookupDemand, CachedResolvedDocument,
@@ -31,6 +42,12 @@ pub use context_federation::{
     materialize_reviewed_context_edges, review_bounded_wikidata_candidate,
     review_mabo_wikidata_candidate, reviewed_context_edge, ContextFederationError,
     ContextMaterializationReceipt, ContextReviewDecision, ReviewedContextEdge, SourceFamily,
+};
+pub use gwb_chronology_capstone::{
+    load_gwb_chronology_capstone_manifest, materialize_gwb_chronology_capstone,
+    GwbChronologyCapstoneError, GwbChronologyCapstoneManifest,
+    GwbChronologyCapstoneReceipt, GwbReviewedEventJoin, GwbReviewedStatement,
+    GwbReviewItem, GwbReviewItemKind, GWB_CAPSTONE_SCHEMA,
 };
 pub use gwb_campaign_commit::{
     materialize_gwb_campaign_commit, GwbCampaignCommitError, GwbCampaignCommitInput,
@@ -80,6 +97,10 @@ pub use reviewed_pnf::{
     materialize_reviewed_pnf_revision, validate_reviewed_pnf_revision,
     ReviewedPnfMaterializationError, ReviewedPnfMaterializationReceipt, ReviewedPnfRevision,
     ReviewedPnfValidationError,
+};
+pub use review_workstation_store::{
+    install_review_workstation_schema, load_review_queue, persist_review_item,
+    persist_review_receipt, ReviewWorkstationStoreError,
 };
 pub use reviewed_source_expansion::{
     load_reviewed_context_expansion_sources,
