@@ -38,3 +38,6 @@ pub use matter_workspace::*;
 
 mod matter_acceptance;
 pub use matter_acceptance::*;
+
+mod work_product_coverage;
+pub use work_product_coverage::*;
