@@ -323,6 +323,18 @@ pub enum GwbChronologyCapstoneError {
     UnknownStatementKey(String),
     #[error("claim references unknown proposition root: {0}")]
     UnknownPropositionRoot(String),
+    #[error("duplicate proposition root: {0}")]
+    DuplicatePropositionRoot(String),
+    #[error("duplicate claim ref: {0}")]
+    DuplicateClaim(String),
+    #[error("temporal assertion has no source ancestry: {0}")]
+    TemporalWithoutAncestry(String),
+    #[error("claim has no statement ancestry: {0}")]
+    ClaimWithoutStatement(String),
+    #[error("reviewed claim state is missing a review receipt: {0}")]
+    MissingClaimReviewReceipt(String),
+    #[error("review item has neither provenance nor source ancestry: {0}")]
+    ReviewItemWithoutAncestry(String),
     #[error("claim event link requires an assembly receipt: {0}")]
     MissingClaimEventReceipt(String),
     #[error("contestation relation references unknown claim: {0}")]
@@ -458,6 +470,11 @@ impl GwbChronologyCapstoneManifest {
 
         for temporal in &self.temporal_assertions {
             require("temporal_ref", &temporal.temporal_ref)?;
+            if temporal.statement_keys.is_empty() && temporal.observation_refs.is_empty() {
+                return Err(GwbChronologyCapstoneError::TemporalWithoutAncestry(
+                    temporal.temporal_ref.clone(),
+                ));
+            }
             if !event_refs.contains(&temporal.event_ref) {
                 return Err(GwbChronologyCapstoneError::UnknownTemporalEvent(
                     temporal.event_ref.clone(),
@@ -474,21 +491,37 @@ impl GwbChronologyCapstoneManifest {
             }
         }
 
-        let proposition_refs = self
-            .proposition_roots
-            .iter()
-            .map(|root| root.proposition_ref.clone())
-            .collect::<BTreeSet<_>>();
+        let mut proposition_refs = BTreeSet::new();
         for root in &self.proposition_roots {
             require("proposition_ref", &root.proposition_ref)?;
             require("proposition_label", &root.label)?;
+            if !proposition_refs.insert(root.proposition_ref.clone()) {
+                return Err(GwbChronologyCapstoneError::DuplicatePropositionRoot(
+                    root.proposition_ref.clone(),
+                ));
+            }
         }
 
         let mut claim_refs = BTreeSet::new();
         for claim in &self.claim_leaves {
             require("claim_ref", &claim.claim_ref)?;
             if !claim_refs.insert(claim.claim_ref.clone()) {
-                return Err(GwbChronologyCapstoneError::UnknownClaim(
+                return Err(GwbChronologyCapstoneError::DuplicateClaim(
+                    claim.claim_ref.clone(),
+                ));
+            }
+            if claim.statement_keys.is_empty() {
+                return Err(GwbChronologyCapstoneError::ClaimWithoutStatement(
+                    claim.claim_ref.clone(),
+                ));
+            }
+            if !matches!(claim.review_state, GwbClaimReviewState::Unreviewed)
+                && claim
+                    .review_ref
+                    .as_deref()
+                    .map_or(true, |value| value.trim().is_empty())
+            {
+                return Err(GwbChronologyCapstoneError::MissingClaimReviewReceipt(
                     claim.claim_ref.clone(),
                 ));
             }
@@ -535,6 +568,11 @@ impl GwbChronologyCapstoneManifest {
             require("review_item_ref", &review.review_item_ref)?;
             require("semantic_ref", &review.semantic_ref)?;
             require("reason", &review.reason)?;
+            if review.provenance_refs.is_empty() && review.source_statement_keys.is_empty() {
+                return Err(GwbChronologyCapstoneError::ReviewItemWithoutAncestry(
+                    review.review_item_ref.clone(),
+                ));
+            }
             validate_statement_keys(&statement_keys, &review.source_statement_keys)?;
         }
 
@@ -1121,34 +1159,32 @@ mod tests {
     fn automatic_same_event_join_fails_closed() {
         let mut manifest = fixture();
         manifest.event_joins[0].automatic_join = true;
-        assert_eq!(
+        assert!(matches!(
             manifest.validate(),
-            Err(GwbChronologyCapstoneError::AutomaticEventJoin(
-                "event:gwb:1".into()
-            ))
-        );
+            Err(GwbChronologyCapstoneError::AutomaticEventJoin(ref event_ref))
+                if event_ref == "event:gwb:1"
+        ));
     }
 
     #[test]
     fn sentence_id_without_exact_source_span_is_not_enough() {
         let mut manifest = fixture();
         manifest.statements[0].literal_text.clear();
-        assert_eq!(
+        assert!(matches!(
             manifest.validate(),
             Err(GwbChronologyCapstoneError::EmptyCoordinate("literal_text"))
-        );
+        ));
     }
 
     #[test]
     fn admitted_statement_requires_explicit_admission_receipt() {
         let mut manifest = fixture();
         manifest.statements[0].admission_receipt_ref = None;
-        assert_eq!(
+        assert!(matches!(
             manifest.validate(),
-            Err(GwbChronologyCapstoneError::MissingAdmissionReceipt(
-                "memoir:a".into()
-            ))
-        );
+            Err(GwbChronologyCapstoneError::MissingAdmissionReceipt(ref key))
+                if key == "memoir:a"
+        ));
     }
 
     #[test]
