@@ -5,6 +5,8 @@
 //! residuals distinct. All probability/loss arithmetic is exact rational
 //! arithmetic over the reader-model carrier.
 
+use std::collections::BTreeSet;
+
 use sensiblaw_reader_model::{
     BinaryOutcome, ForecastCohort, ForecastResearchDemand, ForecastResearchProbeKind,
     ForecastResidualKind, ForecastResidualProjection, ForecastScoreProjection,
@@ -235,6 +237,115 @@ pub fn compile_forecast_research_demand(
     })
 }
 
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ForecastAffectedConsumerReceipt {
+    pub changed_coordinate_refs: BTreeSet<String>,
+    pub affected_residual_refs: BTreeSet<String>,
+    pub affected_consumer_refs: BTreeSet<String>,
+    pub invariant_residual_refs: BTreeSet<String>,
+    pub candidate_only: bool,
+    pub creates_semantic_authority: bool,
+    pub creates_claim_truth: bool,
+}
+
+pub fn affected_forecast_consumers(
+    changed_coordinate_refs: impl IntoIterator<Item = String>,
+    residuals: &[ForecastResidualProjection],
+) -> Result<ForecastAffectedConsumerReceipt, String> {
+    let changed_coordinate_refs =
+        changed_coordinate_refs.into_iter().collect::<BTreeSet<_>>();
+    if changed_coordinate_refs.iter().any(|r| r.trim().is_empty()) {
+        return Err("changed forecast coordinate refs must be non-empty".into());
+    }
+
+    let mut affected_residual_refs = BTreeSet::new();
+    let mut affected_consumer_refs = BTreeSet::new();
+    let mut invariant_residual_refs = BTreeSet::new();
+
+    for residual in residuals {
+        if !residual.candidate_only
+            || residual.creates_semantic_authority
+            || residual.creates_claim_truth
+        {
+            return Err("forecast residual crossed non-promotion boundary".into());
+        }
+
+        let relevant = changed_coordinate_refs
+            .contains(&residual.required_coordinate_ref)
+            || residual
+                .dependency_refs
+                .iter()
+                .any(|r| changed_coordinate_refs.contains(r));
+        if relevant {
+            affected_residual_refs.insert(residual.residual_ref.clone());
+            affected_consumer_refs.insert(residual.consumer_ref.clone());
+        } else {
+            invariant_residual_refs.insert(residual.residual_ref.clone());
+        }
+    }
+
+    Ok(ForecastAffectedConsumerReceipt {
+        changed_coordinate_refs,
+        affected_residual_refs,
+        affected_consumer_refs,
+        invariant_residual_refs,
+        candidate_only: true,
+        creates_semantic_authority: false,
+        creates_claim_truth: false,
+    })
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ForecastResidualPaymentReceipt {
+    pub residual_ref: String,
+    pub reviewed_evidence_ref: String,
+    pub reviewed_coordinate_ref: String,
+    pub dependency_witness_ref: String,
+    pub paid: bool,
+    pub search_hit_alone_paid: bool,
+    pub candidate_only: bool,
+    pub creates_semantic_authority: bool,
+    pub creates_claim_truth: bool,
+}
+
+pub fn pay_forecast_residual_with_reviewed_coordinate(
+    residual: &ForecastResidualProjection,
+    reviewed_evidence_ref: &str,
+    reviewed_coordinate_ref: &str,
+    dependency_witness_ref: &str,
+) -> Result<ForecastResidualPaymentReceipt, String> {
+    if !residual.open {
+        return Err("closed forecast residual cannot be paid again".into());
+    }
+    if reviewed_evidence_ref.trim().is_empty()
+        || reviewed_coordinate_ref.trim().is_empty()
+        || dependency_witness_ref.trim().is_empty()
+    {
+        return Err("forecast residual payment requires reviewed evidence and dependency witness".into());
+    }
+    if reviewed_coordinate_ref != residual.required_coordinate_ref
+        && !residual
+            .dependency_refs
+            .iter()
+            .any(|r| r == reviewed_coordinate_ref)
+    {
+        return Err("reviewed coordinate does not pay this forecast residual".into());
+    }
+
+    Ok(ForecastResidualPaymentReceipt {
+        residual_ref: residual.residual_ref.clone(),
+        reviewed_evidence_ref: reviewed_evidence_ref.into(),
+        reviewed_coordinate_ref: reviewed_coordinate_ref.into(),
+        dependency_witness_ref: dependency_witness_ref.into(),
+        paid: true,
+        search_hit_alone_paid: false,
+        candidate_only: true,
+        creates_semantic_authority: false,
+        creates_claim_truth: false,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -312,6 +423,90 @@ mod tests {
         assert_eq!(receipt.row_scores.len(), 2);
         assert!(!receipt.claims_causal_attribution);
         assert!(!receipt.creates_claim_truth);
+    }
+
+
+    #[test]
+    fn only_dependency_affected_forecast_consumers_reopen() {
+        let residuals = vec![
+            ForecastResidualProjection {
+                residual_ref: "residual:mechanism".into(),
+                forecast_or_score_ref: "score:1".into(),
+                consumer_ref: "consumer:explanation".into(),
+                kind: ForecastResidualKind::Mechanism,
+                required_coordinate_ref: "coordinate:mechanism".into(),
+                dependency_refs: vec!["evidence:upstream".into()],
+                open: true,
+                candidate_only: true,
+                creates_semantic_authority: false,
+                creates_claim_truth: false,
+            },
+            ForecastResidualProjection {
+                residual_ref: "residual:calibration".into(),
+                forecast_or_score_ref: "score:1".into(),
+                consumer_ref: "consumer:calibration".into(),
+                kind: ForecastResidualKind::Calibration,
+                required_coordinate_ref: "coordinate:calibration".into(),
+                dependency_refs: vec!["bucket:1".into()],
+                open: true,
+                candidate_only: true,
+                creates_semantic_authority: false,
+                creates_claim_truth: false,
+            },
+        ];
+
+        let receipt = affected_forecast_consumers(
+            ["evidence:upstream".to_string()],
+            &residuals,
+        )
+        .unwrap();
+
+        assert_eq!(
+            receipt.affected_residual_refs,
+            BTreeSet::from(["residual:mechanism".into()])
+        );
+        assert_eq!(
+            receipt.affected_consumer_refs,
+            BTreeSet::from(["consumer:explanation".into()])
+        );
+        assert_eq!(
+            receipt.invariant_residual_refs,
+            BTreeSet::from(["residual:calibration".into()])
+        );
+    }
+
+    #[test]
+    fn search_hit_cannot_pay_without_reviewed_dependency_coordinate() {
+        let residual = ForecastResidualProjection {
+            residual_ref: "residual:mechanism".into(),
+            forecast_or_score_ref: "forecast:1".into(),
+            consumer_ref: "consumer:explanation".into(),
+            kind: ForecastResidualKind::Mechanism,
+            required_coordinate_ref: "coordinate:mechanism".into(),
+            dependency_refs: vec![],
+            open: true,
+            candidate_only: true,
+            creates_semantic_authority: false,
+            creates_claim_truth: false,
+        };
+        assert!(pay_forecast_residual_with_reviewed_coordinate(
+            &residual,
+            "reviewed:evidence:1",
+            "coordinate:wrong",
+            "dependency:witness:1",
+        )
+        .is_err());
+
+        let paid = pay_forecast_residual_with_reviewed_coordinate(
+            &residual,
+            "reviewed:evidence:1",
+            "coordinate:mechanism",
+            "dependency:witness:1",
+        )
+        .unwrap();
+        assert!(paid.paid);
+        assert!(!paid.search_hit_alone_paid);
+        assert!(!paid.creates_claim_truth);
     }
 
     #[test]
