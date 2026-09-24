@@ -164,7 +164,7 @@ impl ReviewedStatementPnf {
                 && review
                     .qualification_ref
                     .as_deref()
-                    .is_none_or(|value| value.trim().is_empty())
+                    .map_or(true, |value| value.trim().is_empty())
             {
                 return Err(StatementPnfSpineError::MissingQualification);
             }
