@@ -120,7 +120,7 @@ pub use review_workstation_store::{
     ReviewWorkstationStoreError,
 };
 pub use sensiblaw_core::review_workstation::{
-    ReviewAction, ReviewCommand, ReviewEffect, ReviewReceipt, ReviewStatus,
+    ReviewAction, ReviewCommand, ReviewEffect, ReviewItem, ReviewReceipt, ReviewStatus,
 };
 pub use reviewed_source_expansion::{
     load_reviewed_context_expansion_sources,
