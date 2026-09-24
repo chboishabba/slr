@@ -14,6 +14,7 @@ mod non_novel_identity_alias;
 mod proposition_rows;
 mod reviewed_pnf;
 mod reviewed_source_expansion;
+mod statement_pnf_spine;
 
 pub use cache_first::{
     resolve_cache_first, AcquiredSourceBundle, CacheFirstAcquirer, CacheFirstError,
@@ -88,6 +89,12 @@ pub use reviewed_source_expansion::{
     ReviewedContextSourceRevisionCoordinate, ReviewedSourceExpansionError,
     ReviewedSourceExpansionInput, ReviewedSourceExpansionMaterializationReceipt,
     ReviewedSourceExpansionRow,
+};
+pub use statement_pnf_spine::{
+    compile_initial_intake_statement, compile_research_reentry_statement,
+    compile_statement_pnf, review_statement_parse, ParseReviewDisposition,
+    ReviewedStatementPnf, SourceStatementEnvelope, StatementCandidatePnf,
+    StatementOrigin, StatementParseReview, StatementPnfSpineError,
 };
 
 // Keep the established PostgreSQL source-store implementation byte-for-byte
