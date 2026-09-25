@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS digital_esd.study_family_hypothesis (
     CHECK (left_source_ref <> right_source_ref)
 );
 
-DO $
+DO $digital_esd_migration$
 BEGIN
     IF EXISTS (
         SELECT 1
@@ -49,7 +49,7 @@ BEGIN
           ADD PRIMARY KEY (corpus_ref, hypothesis_ref);
     END IF;
 END
-$;
+$digital_esd_migration$;
 
 CREATE INDEX IF NOT EXISTS digital_esd_study_family_left_idx
 ON digital_esd.study_family_hypothesis(corpus_ref, left_source_ref, relation_ref);
