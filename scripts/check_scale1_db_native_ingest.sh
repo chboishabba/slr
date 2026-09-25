@@ -55,3 +55,35 @@ jq -e '
 
 echo "SCALE1_DB_NATIVE_GREEN"
 cat /tmp/scale1-final.json
+
+
+review_item_ref="$(jq -r '.reconciliation_review_item_refs[] | select(contains("proposition-fingerprint:"))' /tmp/scale1-final.json | head -n 1)"
+if [[ -z "$review_item_ref" ]]; then
+  echo "no proposition reconciliation review item available for L3 smoke" >&2
+  exit 1
+fi
+
+"$SCALE1_BIN" review   "$review_item_ref"   accept   reviewer:scale1:ci   > /tmp/scale1-review.json
+
+jq -e '
+  .current_status == "accepted"
+  and .creates_semantic_authority == false
+  and .applicability_promoted == false
+  and .claim_truth_promoted == false
+' /tmp/scale1-review.json
+
+accepted_command_ref="$(jq -r '.command_ref' /tmp/scale1-review.json)"
+"$SCALE1_BIN" materialize-proposition   "$review_item_ref"   "$accepted_command_ref"   > /tmp/scale1-materialized-proposition.json
+
+jq -e '
+  .reviewed_grouping_identity == true
+  and .claim_review_state_unreviewed == true
+  and .grouping_review_is_claim_review == false
+  and (.claim_refs | length) > 0
+  and .creates_semantic_authority == false
+  and .applicability_promoted == false
+  and .claim_truth_promoted == false
+' /tmp/scale1-materialized-proposition.json
+
+echo "SCALE1_L3_REVIEWED_GROUPING_GREEN"
+cat /tmp/scale1-materialized-proposition.json
