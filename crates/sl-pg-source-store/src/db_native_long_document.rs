@@ -14,7 +14,7 @@ use sensiblaw_core::source_ingest::{DocumentRegionKind, SourceFamily};
 use thiserror::Error;
 
 use crate::{
-    build_plain_text_long_document_source, build_plain_text_long_source_with_family,
+    build_plain_text_long_source_with_family,
     canonical_candidate_pnf_batch_ref, canonical_statement_ref,
     compile_initial_intake_statement,
     compile_long_document_lossless_for_document_ref,
