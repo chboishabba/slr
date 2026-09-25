@@ -69,6 +69,7 @@ struct GwbProjectionManifest {
 #[derive(Debug, Deserialize)]
 struct GwbProjectionDocument {
     document_ordinal: u64,
+    source_kind: String,
     source_path: String,
     source_sha256: String,
     source_bytes: u64,
@@ -440,13 +441,20 @@ fn prepare_gwb_projection(args: &[String]) -> Result<(), Box<dyn Error>> {
         return Err("spaCy parser description did not match requested model".into());
     }
 
+    let source_family = match document.source_kind.as_str() {
+        "public_biography_html" => SourceFamily::Web,
+        "book" => SourceFamily::Document,
+        other => return Err(format!("unsupported GWB source kind: {other}").into()),
+    };
+
     let config = load_database_config(None)?;
-    let prepared = prepare_db_native_long_document(
+    let prepared = prepare_db_native_long_source(
         &config,
         &source_ref,
         &source_revision_ref,
         &provider_ref,
         &acquisition_receipt_ref,
+        source_family,
         Path::new(&document.source_path)
             .file_name()
             .map(|value| value.to_string_lossy().into_owned()),
@@ -466,6 +474,8 @@ fn prepare_gwb_projection(args: &[String]) -> Result<(), Box<dyn Error>> {
             "gwb_projection_manifest_digest": manifest_digest,
             "gwb_document_ordinal": document.document_ordinal,
             "raw_source_path": document.source_path,
+            "source_kind": document.source_kind,
+            "source_family": source_family_ref(source_family),
             "raw_source_sha256": document.source_sha256,
             "raw_source_bytes": document.source_bytes,
             "projector": document.projector,
