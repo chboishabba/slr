@@ -97,11 +97,15 @@ fn digest_ref(bytes: &[u8]) -> String {
     format!("sha256:{:x}", hash.finalize())
 }
 
+fn parser_python_bin() -> String {
+    std::env::var("PYTHON_BIN").unwrap_or_else(|_| "python3".to_owned())
+}
+
 fn parser_description(
     script: &str,
     model_ref: &str,
 ) -> Result<ParserDescription, Box<dyn Error>> {
-    let output = Command::new("python3")
+    let output = Command::new(parser_python_bin())
         .arg(script)
         .arg("--model")
         .arg(model_ref)
@@ -123,7 +127,7 @@ fn run_parser_batch(
     config_json: &str,
     requests: &[(String, String)],
 ) -> Result<BTreeMap<String, Vec<u8>>, Box<dyn Error>> {
-    let mut child = Command::new("python3")
+    let mut child = Command::new(parser_python_bin())
         .arg(script)
         .arg("--model")
         .arg(model_ref)

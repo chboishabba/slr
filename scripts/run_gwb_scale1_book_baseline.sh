@@ -9,14 +9,16 @@ PARSER_SCRIPT="${PARSER_SCRIPT:-scripts/scale1_spacy_json_parser.py}"
 SCALE1_BIN="${SCALE1_BIN:-target/release/examples/scale1_long_document}"
 OUTPUT="${OUTPUT:-/tmp/gwb-scale1-book-baseline.json}"
 BATCH_SIZE="${BATCH_SIZE:-32}"
+PYTHON_BIN="${PYTHON_BIN:-python3}"
+export PYTHON_BIN
 
 cargo build --release -p sensiblaw-pg-source-store --example scale1_long_document
-python3 -m py_compile python/gwb_scale1_book_baseline.py
-python3 -m py_compile scripts/scale1_spacy_json_parser.py
+"$PYTHON_BIN" -m py_compile python/gwb_scale1_book_baseline.py
+"$PYTHON_BIN" -m py_compile scripts/scale1_spacy_json_parser.py
 
 export SENSIBLAW_RUNTIME_HEAD="${SENSIBLAW_RUNTIME_HEAD:-$(git rev-parse HEAD)}"
 
-python3 python/gwb_scale1_book_baseline.py   --book "$GWB_BOOK"   --scale1-bin "$SCALE1_BIN"   --model "$MODEL_REF"   --parser-script "$PARSER_SCRIPT"   --batch-size "$BATCH_SIZE"   --output "$OUTPUT"   > /tmp/gwb-scale1-book-baseline.stdout.json
+"$PYTHON_BIN" python/gwb_scale1_book_baseline.py   --book "$GWB_BOOK"   --scale1-bin "$SCALE1_BIN"   --model "$MODEL_REF"   --parser-script "$PARSER_SCRIPT"   --batch-size "$BATCH_SIZE"   --output "$OUTPUT"   > /tmp/gwb-scale1-book-baseline.stdout.json
 
 jq -e '
   .invariants.canonical_projection_streamed_directly == true
