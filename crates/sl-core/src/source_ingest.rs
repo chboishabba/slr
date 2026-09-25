@@ -377,6 +377,9 @@ impl MailMessageSource {
         if !self.ingest.semantic_text_allowed() {
             return Err(SourceIngestError::MetadataOnlyMayNotBecomeTextStatement);
         }
+        if self.body_revision_ref != self.ingest.source_revision_ref {
+            return Err(SourceIngestError::RevisionMismatch);
+        }
         for (name, value) in [
             ("message_ref", self.message_ref.as_str()),
             (
