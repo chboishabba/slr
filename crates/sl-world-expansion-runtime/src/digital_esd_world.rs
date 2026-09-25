@@ -26,11 +26,42 @@ CREATE TABLE IF NOT EXISTS digital_esd.corpus_source (
     corpus_ref TEXT NOT NULL,
     source_ref TEXT NOT NULL,
     metadata_revision_ref TEXT NULL,
+    screened BOOLEAN NOT NULL DEFAULT FALSE,
+    screening_decision TEXT NOT NULL DEFAULT 'unresolved',
+    retained BOOLEAN NOT NULL DEFAULT FALSE,
+    verified BOOLEAN NOT NULL DEFAULT FALSE,
+    materialised BOOLEAN NOT NULL DEFAULT FALSE,
+    parsed BOOLEAN NOT NULL DEFAULT FALSE,
+    reviewed BOOLEAN NOT NULL DEFAULT FALSE,
+    admitted BOOLEAN NOT NULL DEFAULT FALSE,
     candidate_only BOOLEAN NOT NULL CHECK (candidate_only),
     creates_semantic_authority BOOLEAN NOT NULL CHECK (NOT creates_semantic_authority),
     first_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    PRIMARY KEY (corpus_ref, source_ref)
+    PRIMARY KEY (corpus_ref, source_ref),
+    CHECK (NOT retained OR screened),
+    CHECK (NOT verified OR retained),
+    CHECK (NOT materialised OR verified),
+    CHECK (NOT parsed OR materialised),
+    CHECK (NOT reviewed OR parsed),
+    CHECK (NOT admitted OR reviewed)
 );
+
+ALTER TABLE digital_esd.corpus_source
+ADD COLUMN IF NOT EXISTS screened BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE digital_esd.corpus_source
+ADD COLUMN IF NOT EXISTS screening_decision TEXT NOT NULL DEFAULT 'unresolved';
+ALTER TABLE digital_esd.corpus_source
+ADD COLUMN IF NOT EXISTS retained BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE digital_esd.corpus_source
+ADD COLUMN IF NOT EXISTS verified BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE digital_esd.corpus_source
+ADD COLUMN IF NOT EXISTS materialised BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE digital_esd.corpus_source
+ADD COLUMN IF NOT EXISTS parsed BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE digital_esd.corpus_source
+ADD COLUMN IF NOT EXISTS reviewed BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE digital_esd.corpus_source
+ADD COLUMN IF NOT EXISTS admitted BOOLEAN NOT NULL DEFAULT FALSE;
 
 CREATE TABLE IF NOT EXISTS digital_esd.world_revision (
     world_revision_ref TEXT PRIMARY KEY,
@@ -80,6 +111,20 @@ pub enum DigitalEsdWorldError {
     Coordinate(String),
     #[error("Digital-ESD genealogy materialization failed: {0}")]
     Genealogy(String),
+}
+
+#[derive(Debug, Clone)]
+struct CorpusSourceState {
+    source_ref: String,
+    metadata_revision_ref: Option<String>,
+    screened: bool,
+    screening_decision: String,
+    retained: bool,
+    verified: bool,
+    materialised: bool,
+    parsed: bool,
+    reviewed: bool,
+    admitted: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -193,7 +238,7 @@ pub fn ingest_processing_denominator(
     let mut parsed = 0i64;
     let mut reviewed = 0i64;
     let mut admitted = 0i64;
-    let mut memberships: Vec<(String, Option<String>)> = Vec::new();
+    let mut memberships: Vec<CorpusSourceState> = Vec::new();
 
     for line in file.lines() {
         let line = line?;
@@ -225,7 +270,22 @@ pub fn ingest_processing_denominator(
                 payload: serde_json::to_vec(&manifestation_payload)?,
             },
         )?;
-        memberships.push((id, metadata_revision));
+        memberships.push(CorpusSourceState {
+            source_ref: id,
+            metadata_revision_ref: metadata_revision,
+            screened: row.get("screened").and_then(Value::as_bool).unwrap_or(false),
+            screening_decision: row
+                .get("screening_decision")
+                .and_then(Value::as_str)
+                .unwrap_or("unresolved")
+                .to_owned(),
+            retained: row.get("retained").and_then(Value::as_bool).unwrap_or(false),
+            verified: row.get("verified").and_then(Value::as_bool).unwrap_or(false),
+            materialised: row.get("materialised").and_then(Value::as_bool).unwrap_or(false),
+            parsed: row.get("parsed").and_then(Value::as_bool).unwrap_or(false),
+            reviewed: row.get("reviewed").and_then(Value::as_bool).unwrap_or(false),
+            admitted: row.get("admitted").and_then(Value::as_bool).unwrap_or(false),
+        });
         screened += if row.get("screened").and_then(Value::as_bool).unwrap_or(false) { 1 } else { 0 };
         retained += if row.get("retained").and_then(Value::as_bool).unwrap_or(false) { 1 } else { 0 };
         verified += if row.get("verified").and_then(Value::as_bool).unwrap_or(false) { 1 } else { 0 };
@@ -241,17 +301,41 @@ pub fn ingest_processing_denominator(
     let mut client = Client::connect(config.database_url(), NoTls)?;
     client.batch_execute(WORLD_SCHEMA_SQL)?;
     let mut tx = client.transaction()?;
-    for (source_ref, metadata_revision_ref) in memberships {
+    for state in memberships {
         tx.execute(
             r#"INSERT INTO digital_esd.corpus_source (
                 corpus_ref, source_ref, metadata_revision_ref,
+                screened, screening_decision, retained, verified,
+                materialised, parsed, reviewed, admitted,
                 candidate_only, creates_semantic_authority
-            ) VALUES ($1,$2,$3,TRUE,FALSE)
+            ) VALUES (
+                $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,TRUE,FALSE
+            )
             ON CONFLICT (corpus_ref, source_ref) DO UPDATE SET
                 metadata_revision_ref = EXCLUDED.metadata_revision_ref,
+                screened = EXCLUDED.screened,
+                screening_decision = EXCLUDED.screening_decision,
+                retained = EXCLUDED.retained,
+                verified = EXCLUDED.verified,
+                materialised = EXCLUDED.materialised,
+                parsed = EXCLUDED.parsed,
+                reviewed = EXCLUDED.reviewed,
+                admitted = EXCLUDED.admitted,
                 candidate_only = TRUE,
                 creates_semantic_authority = FALSE"#,
-            &[&corpus_ref, &source_ref, &metadata_revision_ref],
+            &[
+                &corpus_ref,
+                &state.source_ref,
+                &state.metadata_revision_ref,
+                &state.screened,
+                &state.screening_decision,
+                &state.retained,
+                &state.verified,
+                &state.materialised,
+                &state.parsed,
+                &state.reviewed,
+                &state.admitted,
+            ],
         )?;
     }
     tx.commit()?;
