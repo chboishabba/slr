@@ -19,6 +19,7 @@ cargo check -p sensiblaw-proof-search-loop --example live_cullen_citation_review
 cargo check -p sensiblaw-proof-search-loop --example live_cullen_residual_review_shortlist
 cargo check -p sensiblaw-proof-search-loop --example cullen_source_grounded_review_units
 cargo check -p sensiblaw-proof-search-loop --example cullen_premise_split_audit
+cargo check -p sensiblaw-pg-source-store --example scale1_long_document
 
 echo '== pre-existing source contracts =='
 python3 scripts/verify_source_contract.py
@@ -37,6 +38,8 @@ python3 -m py_compile \
   python/gwb_full_run.py \
   python/gwb_certify.py \
   python/gwb_expanded_certify.py \
+  python/gwb_scale1_ingest.py \
+  scripts/scale1_spacy_json_parser.py \
   scripts/bench_stream.py \
   scripts/verify_source_contract.py \
   scripts/verify_semantic_status_contract.py \
