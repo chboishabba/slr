@@ -320,7 +320,11 @@ pub fn finalize_db_native_long_document(
     }
 
     let reconciliation =
-        reconcile_source_candidate_semantics(config, &source_revision_ref)?;
+        reconcile_source_candidate_semantics(
+            config,
+            &source_revision_ref,
+            parser_run_ref,
+        )?;
 
     let persisted_compilation =
         persist_long_document_compilation(config, &document, &compilation)?;
