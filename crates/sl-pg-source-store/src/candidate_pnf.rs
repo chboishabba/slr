@@ -47,6 +47,8 @@ pub enum CandidatePnfError {
     NonMonotonicTokenStream,
     #[error("no persisted parser output exists for exact span {0}")]
     MissingPersistedParserRegion(String),
+    #[error("persisted parser residual for exact span {span_ref}: {error_ref}")]
+    PersistedParserResidual { span_ref: String, error_ref: String },
 }
 
 pub trait CandidatePnfProducer {
