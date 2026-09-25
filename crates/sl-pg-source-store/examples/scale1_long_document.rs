@@ -720,6 +720,42 @@ fn finalize(args: &[String]) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+
+fn materialize_proposition(args: &[String]) -> Result<(), Box<dyn Error>> {
+    if args.len() != 4 {
+        return Err(
+            "materialize-proposition <review-item-ref> <accepted-review-command-ref>"
+                .into(),
+        );
+    }
+    let config = load_database_config(None)?;
+    let receipt = materialize_accepted_reconciliation_proposition(
+        &config,
+        &args[2],
+        &args[3],
+    )?;
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&json!({
+            "schema": "sensiblaw.scale1.reviewed-proposition-materialization.v0_1",
+            "materialization_ref": receipt.materialization_ref,
+            "proposition_ref": receipt.proposition_ref,
+            "proposition_fingerprint_ref": receipt.proposition_fingerprint_ref,
+            "source_revision_ref": receipt.source_revision_ref,
+            "review_item_ref": receipt.review_item_ref,
+            "accepted_review_command_ref": receipt.accepted_review_command_ref,
+            "claim_refs": receipt.claim_refs,
+            "reviewed_grouping_identity": receipt.reviewed_grouping_identity,
+            "claim_review_state_unreviewed": receipt.claim_review_state_unreviewed,
+            "grouping_review_is_claim_review": receipt.grouping_review_is_claim_review,
+            "creates_semantic_authority": receipt.creates_semantic_authority,
+            "applicability_promoted": receipt.applicability_promoted,
+            "claim_truth_promoted": receipt.claim_truth_promoted
+        }))?
+    );
+    Ok(())
+}
+
 fn usage() {
     eprintln!(
         "usage:\n  \
@@ -728,7 +764,8 @@ fn usage() {
          scale1_long_document prepare-stdin <source-ref> <provider-ref> <acquisition-receipt-ref> <title> <model-ref> [config-json] [parser-script]\n  \
          scale1_long_document status <parser-run-ref>\n  \
          scale1_long_document worker <parser-run-ref> <worker-ref> [batch-size] [parser-script]\n  \
-         scale1_long_document finalize <parser-run-ref>"
+         scale1_long_document finalize <parser-run-ref>\n  \
+         scale1_long_document materialize-proposition <review-item-ref> <accepted-review-command-ref>"
     );
 }
 
@@ -746,6 +783,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         "status" => status(&args),
         "worker" => worker(&args),
         "finalize" => finalize(&args),
+        "materialize-proposition" => materialize_proposition(&args),
         _ => {
             usage();
             Err(format!("unknown command: {command}").into())
