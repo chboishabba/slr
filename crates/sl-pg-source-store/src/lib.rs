@@ -202,8 +202,8 @@ pub use jmail_adapter::{
     JmailEmailRecord,
 };
 pub use plain_text_document_adapter::{
-    build_plain_text_long_document_source, PlainTextDocumentAdapterError,
-    PlainTextSegmentationReceipt,
+    build_plain_text_long_document_source, build_plain_text_long_source_with_family,
+    PlainTextDocumentAdapterError, PlainTextSegmentationReceipt,
 };
 pub use long_document_ingest_store::{
     install_long_document_ingest_schema, load_long_document_ingest_receipt,
