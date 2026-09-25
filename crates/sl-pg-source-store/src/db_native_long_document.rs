@@ -10,6 +10,8 @@
 //! No TSV/JSON file is required as a runtime handoff. TSV/JSON remain optional
 //! parser import/export/debug formats.
 
+use std::time::Instant;
+
 use sensiblaw_core::source_ingest::{DocumentRegionKind, SourceFamily};
 use thiserror::Error;
 
@@ -90,6 +92,19 @@ pub struct PreparedDbNativeLongDocument {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DbNativeLongDocumentTimings {
+    pub load_and_validate_ns: u128,
+    pub m12_compile_ns: u128,
+    pub candidate_persist_ns: u128,
+    pub reconciliation_ns: u128,
+    pub review_projection_ns: u128,
+    pub auto_event_ns: u128,
+    pub compilation_persist_ns: u128,
+    pub reload_verify_ns: u128,
+    pub finalize_total_ns: u128,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DbNativeLongDocumentReceipt {
     pub source: PersistedGenericSourceContent,
     pub parser_run_ref: String,
@@ -108,6 +123,7 @@ pub struct DbNativeLongDocumentReceipt {
     pub reconciliation: CorpusReconciliationReceipt,
     pub reconciliation_review: ReconciliationReviewReceipt,
     pub auto_event: Scale1AutoEventReceipt,
+    pub timings: DbNativeLongDocumentTimings,
     pub structural_only_regions: usize,
     pub source_region_loss_count: usize,
     pub reloaded_regions: Vec<PersistedLongDocumentRegion>,
@@ -229,6 +245,8 @@ pub fn finalize_db_native_long_document(
     config: &DatabaseConfig,
     parser_run_ref: &str,
 ) -> Result<DbNativeLongDocumentReceipt, DbNativeLongDocumentError> {
+    let finalize_started = Instant::now();
+    let load_started = Instant::now();
     let parser_state = complete_parser_run(config, parser_run_ref)?;
     let snapshot = DbNativeParserSnapshot::load(config, parser_run_ref)?;
     let source_revision_ref = snapshot.source_revision_ref().to_owned();
@@ -266,8 +284,11 @@ pub fn finalize_db_native_long_document(
         return Err(DbNativeLongDocumentError::IncompleteSemanticAttemptCoverage);
     }
 
+    let load_and_validate_ns = load_started.elapsed().as_nanos();
+
     // Compile against the canonical corpus.document identity used by the
     // durable statement trace, not merely the logical source_ref.
+    let m12_started = Instant::now();
     let compilation = compile_long_document_lossless_for_document_ref(
         &snapshot,
         &document,
@@ -275,7 +296,9 @@ pub fn finalize_db_native_long_document(
         &canonical_text,
         &format!("db-parser:{parser_run_ref}"),
     )?;
+    let m12_compile_ns = m12_started.elapsed().as_nanos();
 
+    let candidate_persist_started = Instant::now();
     install_statement_trace_schema(config)?;
     install_candidate_pnf_schema(config)?;
 
@@ -360,20 +383,27 @@ pub fn finalize_db_native_long_document(
         return Err(DbNativeLongDocumentError::IncompleteDurablePartition);
     }
 
+    let candidate_persist_ns = candidate_persist_started.elapsed().as_nanos();
+
+    let reconciliation_started = Instant::now();
     let reconciliation =
         reconcile_source_candidate_semantics(
             config,
             &source_revision_ref,
             parser_run_ref,
         )?;
+    let reconciliation_ns = reconciliation_started.elapsed().as_nanos();
 
+    let review_projection_started = Instant::now();
     let reconciliation_review =
         enqueue_reconciliation_review_items(
             config,
             &source_revision_ref,
             vec![],
         )?;
+    let review_projection_ns = review_projection_started.elapsed().as_nanos();
 
+    let auto_event_started = Instant::now();
     let auto_event =
         discover_scale1_auto_event_proposals(
             config,
@@ -381,9 +411,14 @@ pub fn finalize_db_native_long_document(
             parser_run_ref,
             vec![],
         )?;
+    let auto_event_ns = auto_event_started.elapsed().as_nanos();
 
+    let compilation_persist_started = Instant::now();
     let persisted_compilation =
         persist_long_document_compilation(config, &document, &compilation)?;
+    let compilation_persist_ns = compilation_persist_started.elapsed().as_nanos();
+
+    let reload_verify_started = Instant::now();
 
     let reloaded_regions =
         load_long_document_regions(config, &source_revision_ref)?;
@@ -400,6 +435,19 @@ pub fn finalize_db_native_long_document(
     {
         return Err(DbNativeLongDocumentError::IncompleteDurablePartition);
     }
+    let reload_verify_ns = reload_verify_started.elapsed().as_nanos();
+    let finalize_total_ns = finalize_started.elapsed().as_nanos();
+    let timings = DbNativeLongDocumentTimings {
+        load_and_validate_ns,
+        m12_compile_ns,
+        candidate_persist_ns,
+        reconciliation_ns,
+        review_projection_ns,
+        auto_event_ns,
+        compilation_persist_ns,
+        reload_verify_ns,
+        finalize_total_ns,
+    };
 
     Ok(DbNativeLongDocumentReceipt {
         source,
@@ -419,6 +467,7 @@ pub fn finalize_db_native_long_document(
         reconciliation,
         reconciliation_review,
         auto_event,
+        timings,
         structural_only_regions: compilation.transport_or_nonsemantic_region_count,
         source_region_loss_count: compilation.source_region_loss_count,
         reloaded_regions,
