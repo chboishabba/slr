@@ -277,11 +277,16 @@ pub fn ingest_processing_denominator(
             "creates_semantic_authority": false,
             "claim_truth_promoted": false
         });
+        let manifestation_id = format!(
+            "digital-esd-metadata-manifestation:{}:{}",
+            id,
+            metadata_revision.as_deref().unwrap_or("unversioned")
+        );
         encode_record(
             &mut wire,
             &WireRecord {
                 kind: WorldRecordKind::SourceManifestation,
-                id: id.clone(),
+                id: manifestation_id,
                 iteration_index: None,
                 aux1: None,
                 payload: serde_json::to_vec(&manifestation_payload)?,
