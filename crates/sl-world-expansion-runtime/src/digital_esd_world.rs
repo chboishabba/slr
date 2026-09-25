@@ -161,8 +161,8 @@ pub fn ingest_processing_denominator(
             .map(str::to_owned);
         let manifestation_payload = serde_json::json!({
             "schema": "digital-esd-metadata-manifestation-v1",
-            "source_identity_reference": id,
-            "metadata_revision_reference": metadata_revision,
+            "source_identity_reference": id.clone(),
+            "metadata_revision_reference": metadata_revision.clone(),
             "candidate_only": true,
             "creates_semantic_authority": false,
             "claim_truth_promoted": false
@@ -178,12 +178,12 @@ pub fn ingest_processing_denominator(
             },
         )?;
         memberships.push((id, metadata_revision));
-        screened += i64::from(row.get("screened").and_then(Value::as_bool).unwrap_or(false));
-        retained += i64::from(row.get("retained").and_then(Value::as_bool).unwrap_or(false));
-        verified += i64::from(row.get("verified").and_then(Value::as_bool).unwrap_or(false));
-        parsed += i64::from(row.get("parsed").and_then(Value::as_bool).unwrap_or(false));
-        reviewed += i64::from(row.get("reviewed").and_then(Value::as_bool).unwrap_or(false));
-        admitted += i64::from(row.get("admitted").and_then(Value::as_bool).unwrap_or(false));
+        screened += if row.get("screened").and_then(Value::as_bool).unwrap_or(false) { 1 } else { 0 };
+        retained += if row.get("retained").and_then(Value::as_bool).unwrap_or(false) { 1 } else { 0 };
+        verified += if row.get("verified").and_then(Value::as_bool).unwrap_or(false) { 1 } else { 0 };
+        parsed += if row.get("parsed").and_then(Value::as_bool).unwrap_or(false) { 1 } else { 0 };
+        reviewed += if row.get("reviewed").and_then(Value::as_bool).unwrap_or(false) { 1 } else { 0 };
+        admitted += if row.get("admitted").and_then(Value::as_bool).unwrap_or(false) { 1 } else { 0 };
         count += 1;
     }
 
@@ -371,4 +371,52 @@ pub fn materialize_digital_esd_world(
         applicability_promoted: false,
         claim_truth_promoted: false,
     })
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn world_revision_is_deterministic_and_sensitive_to_corpus_state() {
+        let counts = DigitalEsdWorldCounts {
+            metadata_sources: 43_996,
+            screened_sources: 200,
+            retained_sources: 28,
+            verified_fulltext_sources: 10,
+            parsed_sources: 10,
+            reviewed_sources: 0,
+            admitted_sources: 0,
+            substrate_source_revisions: 10,
+            substrate_exact_regions: 12_980,
+            substrate_statements: 1_000,
+            substrate_candidate_pnf_batches: 1_000,
+            substrate_candidate_observations: 1_000,
+            substrate_review_records: 0,
+            active_gaps: 5,
+            active_obligations: 5,
+        };
+        let a = world_revision_ref(
+            "digital-esd:eric:43996",
+            "compiler:v1",
+            "sha256:ledger",
+            &counts,
+        );
+        let b = world_revision_ref(
+            "digital-esd:eric:43996",
+            "compiler:v1",
+            "sha256:ledger",
+            &counts,
+        );
+        assert_eq!(a, b);
+
+        let changed = world_revision_ref(
+            "digital-esd:eric:43996",
+            "compiler:v1",
+            "sha256:other-ledger",
+            &counts,
+        );
+        assert_ne!(a, changed);
+    }
 }
