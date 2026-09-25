@@ -176,17 +176,15 @@ fn canonical_date_bucket(surface: &str) -> Option<String> {
             let year = parse_year(year)?;
             Some(format!("{year:04}-{month:02}"))
         }
-        [month, day, year] => {
-            let month = month_number(month)?;
-            let day = parse_day(day)?;
+        [first, second, year] => {
             let year = parse_year(year)?;
-            Some(format!("{year:04}-{month:02}-{day:02}"))
-        }
-        [day, month, year] => {
-            let day = parse_day(day)?;
-            let month = month_number(month)?;
-            let year = parse_year(year)?;
-            Some(format!("{year:04}-{month:02}-{day:02}"))
+            if let (Some(month), Some(day)) = (month_number(first), parse_day(second)) {
+                Some(format!("{year:04}-{month:02}-{day:02}"))
+            } else if let (Some(day), Some(month)) = (parse_day(first), month_number(second)) {
+                Some(format!("{year:04}-{month:02}-{day:02}"))
+            } else {
+                None
+            }
         }
         _ => None,
     }
