@@ -222,6 +222,7 @@ pub struct DbNativeParserSnapshot {
     parser_run_ref: String,
     source_revision_ref: String,
     by_region: BTreeMap<String, Vec<PersistedParserToken>>,
+    residual_by_region: BTreeMap<String, String>,
 }
 
 fn require(value: &str) -> Result<(), DbNativeParserError> {
@@ -818,10 +819,35 @@ impl DbNativeParserSnapshot {
             by_region.insert(region_ref, tokens);
         }
 
+        let residual_rows = client.query(
+            "SELECT region_ref, error_ref
+             FROM ingest.parser_job
+             WHERE parser_run_ref = $1
+               AND status = 'residual'
+               AND candidate_only = TRUE
+               AND creates_semantic_authority = FALSE
+               AND applicability_promoted = FALSE
+               AND claim_truth_promoted = FALSE
+             ORDER BY region_ref",
+            &[&parser_run_ref],
+        )?;
+        let residual_by_region = residual_rows
+            .into_iter()
+            .map(|row| {
+                let region_ref: String = row.get(0);
+                let error_ref: Option<String> = row.get(1);
+                (
+                    region_ref,
+                    error_ref.unwrap_or_else(|| "parser-residual:unspecified".into()),
+                )
+            })
+            .collect::<BTreeMap<_, _>>();
+
         Ok(Self {
             parser_run_ref: parser_run_ref.to_owned(),
             source_revision_ref,
             by_region,
+            residual_by_region,
         })
     }
 
@@ -839,12 +865,23 @@ impl DbNativeParserSnapshot {
     pub fn compiled_region_count(&self) -> usize {
         self.by_region.len()
     }
+
+    #[must_use]
+    pub fn residual_region_count(&self) -> usize {
+        self.residual_by_region.len()
+    }
 }
 
 impl CandidatePnfProducer for DbNativeParserSnapshot {
     fn produce(&self, source: &ExactSourceSpan) -> Result<CandidatePnfBatch, CandidatePnfError> {
         if source.start_char >= source.end_char {
             return Err(CandidatePnfError::InvalidExactSpan);
+        }
+        if let Some(error_ref) = self.residual_by_region.get(&source.span_ref) {
+            return Err(CandidatePnfError::PersistedParserResidual {
+                span_ref: source.span_ref.clone(),
+                error_ref: error_ref.clone(),
+            });
         }
         let tokens = self
             .by_region
