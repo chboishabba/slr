@@ -467,7 +467,8 @@ pub fn claim_parser_jobs(
             FROM ingest.parser_job
             WHERE parser_run_ref = $1
               AND (
-                status = 'queued'
+                (status = 'queued'
+                 AND (lease_expires_at IS NULL OR lease_expires_at < NOW()))
                 OR (status = 'leased' AND lease_expires_at < NOW())
               )
             ORDER BY region_ref
@@ -716,6 +717,60 @@ pub fn persist_parser_success(
         applicability_promoted: false,
         claim_truth_promoted: false,
     })
+}
+
+
+pub fn defer_parser_job_retry(
+    config: &DatabaseConfig,
+    job: &ClaimedParserJob,
+    worker_ref: &str,
+    error_ref: &str,
+) -> Result<(), DbNativeParserError> {
+    require(error_ref)?;
+    let mut client = Client::connect(config.database_url(), NoTls)?;
+    client.batch_execute(DB_NATIVE_PARSER_SCHEMA_SQL)?;
+    let changed = client.execute(
+        "UPDATE ingest.parser_job
+         SET status = 'queued',
+             lease_owner = NULL,
+             lease_expires_at = NOW() + INTERVAL '5 minutes',
+             error_ref = $3,
+             completed_at = NULL,
+             candidate_only = TRUE,
+             creates_semantic_authority = FALSE,
+             applicability_promoted = FALSE,
+             claim_truth_promoted = FALSE
+         WHERE compilation_key = $1
+           AND status = 'leased'
+           AND lease_owner = $2",
+        &[&job.compilation_key, &worker_ref, &error_ref],
+    )?;
+    if changed != 1 {
+        return Err(DbNativeParserError::LeaseLost(job.compilation_key.clone()));
+    }
+    Ok(())
+}
+
+pub fn renew_parser_job_lease(
+    config: &DatabaseConfig,
+    job: &ClaimedParserJob,
+    worker_ref: &str,
+) -> Result<(), DbNativeParserError> {
+    let mut client = Client::connect(config.database_url(), NoTls)?;
+    client.batch_execute(DB_NATIVE_PARSER_SCHEMA_SQL)?;
+    let changed = client.execute(
+        "UPDATE ingest.parser_job
+         SET lease_expires_at = NOW() + INTERVAL '15 minutes'
+         WHERE compilation_key = $1
+           AND status = 'leased'
+           AND lease_owner = $2
+           AND lease_expires_at >= NOW()",
+        &[&job.compilation_key, &worker_ref],
+    )?;
+    if changed != 1 {
+        return Err(DbNativeParserError::LeaseLost(job.compilation_key.clone()));
+    }
+    Ok(())
 }
 
 pub fn persist_parser_residual(
