@@ -13,8 +13,8 @@ use sensiblaw_pg_source_store::{
     defer_parser_job_retry, finalize_db_native_long_document,
     load_claimed_job_text,
     load_database_config, parser_run_state, persist_parser_residual,
-    persist_parser_success, prepare_db_native_long_document, ParserArtifactRecord,
-    ParserTokenRecord,
+    persist_parser_success_with_entities, prepare_db_native_long_document,
+    ParserArtifactRecord, ParserEntityRecord, ParserTokenRecord,
 };
 
 #[derive(Debug, Deserialize)]
@@ -30,6 +30,8 @@ struct WireArtifact {
     parser_version: String,
     model_ref: String,
     tokens: Vec<WireToken>,
+    #[serde(default)]
+    entities: Vec<WireEntity>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -43,6 +45,14 @@ struct WireToken {
     morph: Value,
     head_ordinal: Option<u32>,
     dependency_ref: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct WireEntity {
+    start_char: u32,
+    end_char: u32,
+    text: String,
+    label: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -501,6 +511,36 @@ fn worker(args: &[String]) -> Result<(), Box<dyn Error>> {
                 continue;
             }
 
+            let mut entities = Vec::with_capacity(wire.entities.len());
+            let mut entity_overflow = false;
+            for (entity_ordinal, entity) in wire.entities.into_iter().enumerate() {
+                let Some(start_char) = global_offset.checked_add(entity.start_char) else {
+                    entity_overflow = true;
+                    break;
+                };
+                let Some(end_char) = global_offset.checked_add(entity.end_char) else {
+                    entity_overflow = true;
+                    break;
+                };
+                entities.push(ParserEntityRecord {
+                    entity_ordinal: entity_ordinal as u32,
+                    start_char,
+                    end_char,
+                    surface: entity.text,
+                    label_ref: entity.label,
+                });
+            }
+            if entity_overflow {
+                persist_parser_residual(
+                    &config,
+                    &job,
+                    worker_ref,
+                    "parser-entity-offset-overflow",
+                )?;
+                residual += 1;
+                continue;
+            }
+
             let output_text = String::from_utf8(output.clone())?;
             let artifact = ParserArtifactRecord {
                 format_ref: "application/vnd.sensiblaw.spacy-region+json".into(),
@@ -508,11 +548,12 @@ fn worker(args: &[String]) -> Result<(), Box<dyn Error>> {
                 artifact_json: Some(output_text),
                 object_locator: None,
             };
-            persist_parser_success(
+            persist_parser_success_with_entities(
                 &config,
                 &job,
                 worker_ref,
                 &tokens,
+                &entities,
                 Some(&artifact),
             )?;
             succeeded += 1;
