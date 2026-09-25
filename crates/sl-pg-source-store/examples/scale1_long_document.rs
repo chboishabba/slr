@@ -1066,6 +1066,9 @@ fn ingest_book_values(
                 "source_region_loss_count": receipt.source_region_loss_count,
                 "every_region_reloaded": receipt.every_region_reloaded,
                 "candidate_pnf_reopen_complete": receipt.candidate_pnf_reopen_complete,
+                "candidate_persistence_reused": receipt.candidate_persistence_reused,
+                "l2_reconciliation_reused": receipt.reconciliation.stage_reused,
+                "auto_event_projection_reused": receipt.auto_event.stage_reused,
                 "compiled_statement_count": receipt.compiled_statement_count,
                 "candidate_pnf_count": receipt.candidate_pnf_count,
                 "persisted_statement_count": receipt.persisted_statement_count,
@@ -1125,6 +1128,9 @@ fn ingest_book_values(
                     prepared.reused_existing_job_count as f64
                         / prepared.semantic_region_count as f64
                 },
+                "downstream_candidate_persistence_reused": receipt.candidate_persistence_reused,
+                "downstream_l2_reused": receipt.reconciliation.stage_reused,
+                "downstream_auto_reused": receipt.auto_event.stage_reused,
                 "recompute_ratio": if prepared.semantic_region_count == 0 {
                     0.0
                 } else {
@@ -1220,6 +1226,9 @@ fn finalize(args: &[String]) -> Result<(), Box<dyn Error>> {
             "persisted_candidate_batch_count": receipt.persisted_candidate_batch_count,
             "persisted_candidate_factor_count": receipt.persisted_candidate_factor_count,
             "candidate_pnf_reopen_complete": receipt.candidate_pnf_reopen_complete,
+            "candidate_persistence_reused": receipt.candidate_persistence_reused,
+            "l2_reconciliation_reused": receipt.reconciliation.stage_reused,
+            "auto_event_projection_reused": receipt.auto_event.stage_reused,
             "entity_mention_candidates": receipt.reconciliation.entity_mention_count,
             "entity_fingerprint_candidates": receipt.reconciliation.entity_fingerprint_count,
             "named_entity_mention_candidates": receipt.reconciliation.named_entity_mention_count,
