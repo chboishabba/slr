@@ -111,7 +111,8 @@ def main() -> int:
     proc = subprocess.run(
         [
             str(scale1_bin),
-            "ingest-book-stdin",
+            "compile-source-stdin",
+            "document",
             source_ref,
             provider_ref,
             acquisition_receipt_ref,
@@ -142,6 +143,8 @@ def main() -> int:
     source = compiler.get("source", {})
     integrity = compiler.get("integrity", {})
     parser = compiler.get("parser", {})
+    if compiler.get("source_family") != "document":
+        raise SystemExit("GWB baseline did not compile through the document source family")
     if compiler.get("input_transport") != "stdin":
         raise SystemExit("book baseline did not use stdin transport")
     if source.get("content_digest_ref") != expected_digest:
