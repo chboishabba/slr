@@ -8,7 +8,9 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
-use crate::digital_esd_coordinates::materialize_study_coordinate_candidates;
+use crate::digital_esd_coordinates::{
+    materialize_study_coordinate_candidates, CANONICAL_19_COORDINATES,
+};
 
 use sensiblaw_world_store::{
     active_frontier_gap_sql, active_frontier_obligation_sql, latest_iteration_sql,
@@ -103,6 +105,24 @@ pub struct InspectionResidual {
 }
 
 #[derive(Debug, Clone, Serialize)]
+pub struct CoordinateCoverage {
+    pub coordinate_ref: String,
+    pub candidate_count: i64,
+    pub distinct_source_count: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct InspectionCoordinateCandidate {
+    pub candidate_ref: String,
+    pub source_ref: String,
+    pub source_revision_ref: String,
+    pub coordinate_ref: String,
+    pub statement_ref: Option<String>,
+    pub exact_span_ref: Option<String>,
+    pub evidence_basis_ref: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct DigitalEsdWorldReceipt {
     pub schema: &'static str,
     pub world_revision_ref: String,
@@ -112,6 +132,8 @@ pub struct DigitalEsdWorldReceipt {
     pub denominator_rows_ingested: usize,
     pub counts: DigitalEsdWorldCounts,
     pub inspection: Vec<InspectionResidual>,
+    pub coordinate_coverage: Vec<CoordinateCoverage>,
+    pub coordinate_inspection: Vec<InspectionCoordinateCandidate>,
     pub inspection_is_bounded: bool,
     pub postgres_is_canonical_runtime_state: bool,
     pub json_is_canonical_runtime_state: bool,
@@ -288,6 +310,78 @@ fn active_frontier(
     Ok((gap_count, obligation_count, inspection))
 }
 
+
+fn coordinate_inspection(
+    client: &mut Client,
+    corpus_ref: &str,
+    limit: usize,
+) -> Result<(Vec<CoordinateCoverage>, Vec<InspectionCoordinateCandidate>), postgres::Error> {
+    let rows = client.query(
+        r#"
+        SELECT coordinate_ref, COUNT(*)::BIGINT, COUNT(DISTINCT source_ref)::BIGINT
+        FROM digital_esd.study_coordinate_candidate
+        WHERE corpus_ref=$1
+          AND candidate_only AND review_required
+          AND NOT coordinate_paid AND NOT automatic_absence_inference
+          AND NOT creates_semantic_authority
+          AND NOT applicability_promoted AND NOT claim_truth_promoted
+        GROUP BY coordinate_ref
+        "#,
+        &[&corpus_ref],
+    )?;
+    let observed = rows
+        .into_iter()
+        .map(|row| {
+            (
+                row.get::<_, String>(0),
+                (row.get::<_, i64>(1), row.get::<_, i64>(2)),
+            )
+        })
+        .collect::<std::collections::BTreeMap<_, _>>();
+
+    let coverage = CANONICAL_19_COORDINATES
+        .iter()
+        .map(|coordinate| {
+            let (candidate_count, distinct_source_count) =
+                observed.get(*coordinate).copied().unwrap_or((0, 0));
+            CoordinateCoverage {
+                coordinate_ref: (*coordinate).to_owned(),
+                candidate_count,
+                distinct_source_count,
+            }
+        })
+        .collect();
+
+    let candidates = client
+        .query(
+            r#"
+            SELECT candidate_ref, source_ref, source_revision_ref, coordinate_ref,
+                   statement_ref, exact_span_ref, evidence_basis_ref
+            FROM digital_esd.study_coordinate_candidate
+            WHERE corpus_ref=$1
+              AND candidate_only AND review_required
+              AND NOT coordinate_paid AND NOT automatic_absence_inference
+              AND NOT creates_semantic_authority
+              AND NOT applicability_promoted AND NOT claim_truth_promoted
+            ORDER BY source_ref, coordinate_ref, exact_span_ref NULLS FIRST, candidate_ref
+            LIMIT $2
+            "#,
+            &[&corpus_ref, &(limit as i64)],
+        )?
+        .into_iter()
+        .map(|row| InspectionCoordinateCandidate {
+            candidate_ref: row.get(0),
+            source_ref: row.get(1),
+            source_revision_ref: row.get(2),
+            coordinate_ref: row.get(3),
+            statement_ref: row.get(4),
+            exact_span_ref: row.get(5),
+            evidence_basis_ref: row.get(6),
+        })
+        .collect();
+    Ok((coverage, candidates))
+}
+
 fn world_revision_ref(
     corpus_ref: &str,
     compiler_ref: &str,
@@ -320,6 +414,8 @@ pub fn materialize_digital_esd_world(
 
     let (active_gaps, active_obligations, inspection) =
         active_frontier(&mut client, inspection_limit)?;
+    let (coordinate_coverage, coordinate_inspection) =
+        coordinate_inspection(&mut client, corpus_ref, inspection_limit)?;
 
     counts.substrate_source_revisions =
         table_count(&mut client, "ingest.generic_source_revision")?;
@@ -394,6 +490,8 @@ pub fn materialize_digital_esd_world(
         denominator_rows_ingested,
         counts,
         inspection,
+        coordinate_coverage,
+        coordinate_inspection,
         inspection_is_bounded: true,
         postgres_is_canonical_runtime_state: true,
         json_is_canonical_runtime_state: false,
