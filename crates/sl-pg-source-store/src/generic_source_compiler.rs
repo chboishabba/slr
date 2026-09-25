@@ -152,6 +152,7 @@ pub fn compile_long_document<P: CandidatePnfProducer>(
     parser_receipt_prefix: &str,
 ) -> Result<BulkSourceCompilation, GenericSourceCompilerError> {
     document.validate()?;
+    let _canonical_regions = document.canonical_regions()?;
 
     let mut compiled = Vec::new();
     for region in document
@@ -405,6 +406,12 @@ pub fn compile_long_document_lossless<P: CandidatePnfProducer>(
     parser_receipt_prefix: &str,
 ) -> Result<LosslessBulkSourceCompilation, GenericSourceCompilerError> {
     document.validate()?;
+    let canonical_regions = document.canonical_regions()?;
+    if canonical_regions.len() != document.regions.len() {
+        return Err(GenericSourceCompilerError::SourceIngest(
+            SourceIngestError::ContentSpanRequired,
+        ));
+    }
 
     let sentence_regions = document
         .regions
