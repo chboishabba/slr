@@ -87,3 +87,63 @@ jq -e '
 
 echo "SCALE1_L3_REVIEWED_GROUPING_GREEN"
 cat /tmp/scale1-materialized-proposition.json
+
+
+cat > /tmp/scale1-web-source.txt <<'EOF'
+Alice called Bob on January 1, 1997.
+EOF
+
+"$SCALE1_BIN" prepare-stdin-family   web   source:scale1:ci:web   provider:scale1:ci:web   acquisition:scale1:ci:web   scale1-ci-web-document   "$MODEL_REF"   '{}'   "$PARSER_SCRIPT"   < /tmp/scale1-web-source.txt   > /tmp/scale1-web-prepare.json
+
+jq -e '.source_family == "web"' /tmp/scale1-web-prepare.json
+web_run_ref="$(jq -r '.parser_run_ref' /tmp/scale1-web-prepare.json)"
+
+"$SCALE1_BIN" worker   "$web_run_ref" worker:scale1:ci:web 16 "$PARSER_SCRIPT"   > /tmp/scale1-web-worker.json
+
+jq -e '
+  .unattempted_semantic_regions == 0
+  and .queued == 0
+  and .leased == 0
+' /tmp/scale1-web-worker.json
+
+"$SCALE1_BIN" finalize "$web_run_ref" > /tmp/scale1-web-final.json
+
+jq -e '
+  .auto_event_observations_materialized > 0
+  and .auto_event_bounded_pairs > 0
+  and .auto_event_proposals > 0
+  and .auto_event_review_items > 0
+  and .auto_event_creates_observation_identity == false
+  and .auto_event_creates_event_identity == false
+  and .auto_event_creates_semantic_authority == false
+  and .auto_event_claim_truth_promoted == false
+' /tmp/scale1-web-final.json
+
+auto_review_item_ref="$(jq -r '.auto_event_review_item_refs[0]' /tmp/scale1-web-final.json)"
+auto_proposal_ref="$(jq -r '.auto_event_proposal_refs[0]' /tmp/scale1-web-final.json)"
+if [[ -z "$auto_review_item_ref" || "$auto_review_item_ref" == "null"    || -z "$auto_proposal_ref" || "$auto_proposal_ref" == "null" ]]; then
+  echo "no heterogeneous AUTO event proposal available for review smoke" >&2
+  exit 1
+fi
+
+"$SCALE1_BIN" review   "$auto_review_item_ref"   accept   reviewer:scale1:auto:ci   > /tmp/scale1-auto-review.json
+
+jq -e '
+  .current_status == "accepted"
+  and .creates_semantic_authority == false
+  and .claim_truth_promoted == false
+' /tmp/scale1-auto-review.json
+
+auto_accept_command_ref="$(jq -r '.command_ref' /tmp/scale1-auto-review.json)"
+"$SCALE1_BIN" materialize-event   "$auto_proposal_ref"   "$auto_accept_command_ref"   > /tmp/scale1-auto-event.json
+
+jq -e '
+  .reviewed_event_identity == true
+  and (.observation_refs | length) >= 2
+  and (.statement_refs | length) >= 2
+  and .creates_semantic_authority == false
+  and .claim_truth_promoted == false
+' /tmp/scale1-auto-event.json
+
+echo "SCALE1_AUTO_REVIEWED_EVENT_GREEN"
+cat /tmp/scale1-auto-event.json
