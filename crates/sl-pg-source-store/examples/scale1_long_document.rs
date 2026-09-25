@@ -10,7 +10,8 @@ use sha2::{Digest, Sha256};
 
 use sensiblaw_pg_source_store::{
     canonical_generic_source_revision_ref, claim_parser_jobs,
-    finalize_db_native_long_document, load_claimed_job_text,
+    defer_parser_job_retry, finalize_db_native_long_document,
+    load_claimed_job_text,
     load_database_config, parser_run_state, persist_parser_residual,
     persist_parser_success, prepare_db_native_long_document, ParserArtifactRecord,
     ParserTokenRecord,
@@ -222,6 +223,7 @@ fn worker(args: &[String]) -> Result<(), Box<dyn Error>> {
     let config = load_database_config(None)?;
     let mut succeeded = 0usize;
     let mut residual = 0usize;
+    let mut deferred_retry = 0usize;
 
     loop {
         let jobs = claim_parser_jobs(
@@ -249,13 +251,13 @@ fn worker(args: &[String]) -> Result<(), Box<dyn Error>> {
             let description = match parser_description(parser_script, &job.model_ref) {
                 Ok(value) => value,
                 Err(error) => {
-                    persist_parser_residual(
+                    defer_parser_job_retry(
                         &config,
                         &job,
                         worker_ref,
                         &format!("parser-describe-error:{error}"),
                     )?;
-                    residual += 1;
+                    deferred_retry += 1;
                     continue;
                 }
             };
@@ -263,12 +265,12 @@ fn worker(args: &[String]) -> Result<(), Box<dyn Error>> {
                 || description.parser_version != job.parser_version
                 || description.model_ref != job.model_ref
             {
-                persist_parser_residual(
+                defer_parser_job_retry(
                     &config,
                     &job,
                     worker_ref,
                     &format!(
-                        "parser-identity-mismatch:expected={}/{}/{}:actual={}/{}/{}",
+                        "worker-parser-identity-mismatch:expected={}/{}/{}:actual={}/{}/{}",
                         job.parser_family,
                         job.parser_version,
                         job.model_ref,
@@ -277,7 +279,6 @@ fn worker(args: &[String]) -> Result<(), Box<dyn Error>> {
                         description.model_ref
                     ),
                 )?;
-                residual += 1;
                 continue;
             }
 
@@ -290,13 +291,13 @@ fn worker(args: &[String]) -> Result<(), Box<dyn Error>> {
             ) {
                 Ok(value) => value,
                 Err(error) => {
-                    persist_parser_residual(
+                    defer_parser_job_retry(
                         &config,
                         &job,
                         worker_ref,
                         &format!("parser-process-error:{error}"),
                     )?;
-                    residual += 1;
+                    deferred_retry += 1;
                     continue;
                 }
             };
@@ -304,13 +305,13 @@ fn worker(args: &[String]) -> Result<(), Box<dyn Error>> {
             let wire: WireArtifact = match serde_json::from_slice(&output) {
                 Ok(value) => value,
                 Err(error) => {
-                    persist_parser_residual(
+                    defer_parser_job_retry(
                         &config,
                         &job,
                         worker_ref,
                         &format!("parser-json-error:{error}"),
                     )?;
-                    residual += 1;
+                    deferred_retry += 1;
                     continue;
                 }
             };
@@ -318,13 +319,12 @@ fn worker(args: &[String]) -> Result<(), Box<dyn Error>> {
                 || wire.parser_version != job.parser_version
                 || wire.model_ref != job.model_ref
             {
-                persist_parser_residual(
+                defer_parser_job_retry(
                     &config,
                     &job,
                     worker_ref,
                     "parser-output-identity-mismatch",
                 )?;
-                residual += 1;
                 continue;
             }
 
@@ -392,6 +392,7 @@ fn worker(args: &[String]) -> Result<(), Box<dyn Error>> {
             "worker_ref": worker_ref,
             "succeeded_this_worker": succeeded,
             "residual_this_worker": residual,
+            "deferred_retry_this_worker": deferred_retry,
             "queued": state.queued,
             "leased": state.leased,
             "succeeded_total": state.succeeded,
