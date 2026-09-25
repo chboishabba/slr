@@ -683,6 +683,54 @@ fn require_source_ancestry(
     client: &mut Client,
     statement: &SourceStatementEnvelope,
 ) -> Result<(), StatementTraceStoreError> {
+    // SCALE-1 generic long-document ancestry uses character coordinates over
+    // the immutable UTF-8 canonical text. Do not reinterpret those coordinates
+    // as byte offsets through corpus.span.
+    let generic = client.query_opt(
+        r#"
+        SELECT r.start_char, r.end_char, c.payload
+        FROM ingest.long_document_region r
+        JOIN ingest.generic_source_revision g
+          ON g.source_revision_ref = r.source_revision_ref
+        JOIN corpus.document d ON d.document_ref = g.document_ref
+        JOIN corpus.canonical_content c ON c.canonical_ref = d.canonical_ref
+        WHERE r.source_revision_ref=$1
+          AND r.region_ref=$2
+          AND g.document_ref=$3
+        "#,
+        &[
+            &statement.source_revision_ref,
+            &statement.span.span_ref,
+            &statement.document_ref,
+        ],
+    )?;
+
+    if let Some(row) = generic {
+        let start = row.get::<_, i64>(0);
+        let end = row.get::<_, i64>(1);
+        if start < 0
+            || end < 0
+            || start as u32 != statement.span.start_char
+            || end as u32 != statement.span.end_char
+        {
+            return Err(StatementTraceStoreError::SpanDocumentMismatch);
+        }
+        let payload: Vec<u8> = row.get(2);
+        let canonical_text = String::from_utf8(payload)
+            .map_err(|_| StatementTraceStoreError::LiteralTextMismatch)?;
+        let literal = canonical_text
+            .chars()
+            .skip(start as usize)
+            .take((end - start) as usize)
+            .collect::<String>();
+        if literal != statement.literal_text {
+            return Err(StatementTraceStoreError::LiteralTextMismatch);
+        }
+        return Ok(());
+    }
+
+    // Existing legal/source slices retain the historical corpus.span byte
+    // coordinate contract. This fallback remains byte-for-byte compatible.
     let span = client.query_opt(
         r#"
         SELECT start_char, end_char
@@ -723,9 +771,6 @@ fn require_source_ancestry(
         return Err(StatementTraceStoreError::LiteralTextMismatch);
     }
 
-    // source_revision_ref is retained as an upstream-owned opaque revision
-    // coordinate. The generic statement membrane must not hard-code one source
-    // family such as corpus.external_source_revision.
     Ok(())
 }
 
