@@ -695,32 +695,78 @@ pub fn persist_parser_success_with_entities(
         "DELETE FROM ingest.parser_token WHERE compilation_key = $1",
         &[&job.compilation_key],
     )?;
-    for token in tokens {
-        let morph_json = token
-            .morph_json
-            .as_deref()
-            .map(canonical_json_text)
-            .transpose()?;
-        // `ingest.parser_token.head_ordinal` is INTEGER, like token_ordinal.
-        // Keep the optional wire coordinate in that same database width rather
-        // than binding an Option<i64>, which PostgreSQL correctly rejects.
-        let head_ordinal = token.head_ordinal.map(|ordinal| ordinal as i32);
+    if !tokens.is_empty() {
+        let token_ordinals = tokens
+            .iter()
+            .map(|token| token.token_ordinal as i32)
+            .collect::<Vec<_>>();
+        let starts = tokens
+            .iter()
+            .map(|token| token.start_char as i64)
+            .collect::<Vec<_>>();
+        let ends = tokens
+            .iter()
+            .map(|token| token.end_char as i64)
+            .collect::<Vec<_>>();
+        let surfaces = tokens
+            .iter()
+            .map(|token| token.surface.clone())
+            .collect::<Vec<_>>();
+        let lemmas = tokens
+            .iter()
+            .map(|token| token.lemma.clone())
+            .collect::<Vec<_>>();
+        let pos = tokens
+            .iter()
+            .map(|token| token.pos.clone())
+            .collect::<Vec<_>>();
+        let morph_json = tokens
+            .iter()
+            .map(|token| {
+                token
+                    .morph_json
+                    .as_deref()
+                    .map(canonical_json_text)
+                    .transpose()
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let head_ordinals = tokens
+            .iter()
+            .map(|token| token.head_ordinal.map(|ordinal| ordinal as i32))
+            .collect::<Vec<_>>();
+        let dependencies = tokens
+            .iter()
+            .map(|token| token.dependency_ref.clone())
+            .collect::<Vec<_>>();
+
         tx.execute(
-            "INSERT INTO ingest.parser_token (
-                compilation_key, token_ordinal, start_char, end_char,
-                surface, lemma, pos, morph_json, head_ordinal, dependency_ref
-             ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)",
+            r#"
+            INSERT INTO ingest.parser_token (
+              compilation_key, token_ordinal, start_char, end_char,
+              surface, lemma, pos, morph_json, head_ordinal, dependency_ref
+            )
+            SELECT $1, token_ordinal, start_char, end_char,
+                   surface, lemma, pos, morph_json, head_ordinal, dependency_ref
+            FROM UNNEST(
+              $2::INTEGER[], $3::BIGINT[], $4::BIGINT[],
+              $5::TEXT[], $6::TEXT[], $7::TEXT[], $8::TEXT[],
+              $9::INTEGER[], $10::TEXT[]
+            ) AS u(
+              token_ordinal, start_char, end_char,
+              surface, lemma, pos, morph_json, head_ordinal, dependency_ref
+            )
+            "#,
             &[
                 &job.compilation_key,
-                &(token.token_ordinal as i32),
-                &(token.start_char as i64),
-                &(token.end_char as i64),
-                &token.surface,
-                &token.lemma,
-                &token.pos,
+                &token_ordinals,
+                &starts,
+                &ends,
+                &surfaces,
+                &lemmas,
+                &pos,
                 &morph_json,
-                &head_ordinal,
-                &token.dependency_ref,
+                &head_ordinals,
+                &dependencies,
             ],
         )?;
     }
@@ -729,19 +775,46 @@ pub fn persist_parser_success_with_entities(
         "DELETE FROM ingest.parser_entity WHERE compilation_key = $1",
         &[&job.compilation_key],
     )?;
-    for entity in entities {
+    if !entities.is_empty() {
+        let entity_ordinals = entities
+            .iter()
+            .map(|entity| entity.entity_ordinal as i32)
+            .collect::<Vec<_>>();
+        let starts = entities
+            .iter()
+            .map(|entity| entity.start_char as i64)
+            .collect::<Vec<_>>();
+        let ends = entities
+            .iter()
+            .map(|entity| entity.end_char as i64)
+            .collect::<Vec<_>>();
+        let surfaces = entities
+            .iter()
+            .map(|entity| entity.surface.clone())
+            .collect::<Vec<_>>();
+        let labels = entities
+            .iter()
+            .map(|entity| entity.label_ref.clone())
+            .collect::<Vec<_>>();
+
         tx.execute(
-            "INSERT INTO ingest.parser_entity (
-                compilation_key, entity_ordinal, start_char, end_char,
-                surface, label_ref
-             ) VALUES ($1,$2,$3,$4,$5,$6)",
+            r#"
+            INSERT INTO ingest.parser_entity (
+              compilation_key, entity_ordinal, start_char, end_char,
+              surface, label_ref
+            )
+            SELECT $1, entity_ordinal, start_char, end_char, surface, label_ref
+            FROM UNNEST(
+              $2::INTEGER[], $3::BIGINT[], $4::BIGINT[], $5::TEXT[], $6::TEXT[]
+            ) AS u(entity_ordinal, start_char, end_char, surface, label_ref)
+            "#,
             &[
                 &job.compilation_key,
-                &(entity.entity_ordinal as i32),
-                &(entity.start_char as i64),
-                &(entity.end_char as i64),
-                &entity.surface,
-                &entity.label_ref,
+                &entity_ordinals,
+                &starts,
+                &ends,
+                &surfaces,
+                &labels,
             ],
         )?;
     }
