@@ -197,51 +197,104 @@ pub(crate) fn persist_statement_candidate_pnf_with_client(
         return Err(CandidatePnfStoreError::ExistingBatchConflict);
     }
 
-    for factor in &candidate.pnf.candidates {
+    if !candidate.pnf.candidates.is_empty() {
+        let candidate_refs = candidate
+            .pnf
+            .candidates
+            .iter()
+            .map(|factor| factor.candidate_ref.clone())
+            .collect::<Vec<_>>();
+        let batch_refs = vec![batch_ref.clone(); candidate.pnf.candidates.len()];
+        let statement_refs = vec![
+            candidate.statement.statement_ref.clone();
+            candidate.pnf.candidates.len()
+        ];
+        let role_refs = candidate
+            .pnf
+            .candidates
+            .iter()
+            .map(|factor| role_db(factor.role).to_owned())
+            .collect::<Vec<_>>();
+        let starts = candidate
+            .pnf
+            .candidates
+            .iter()
+            .map(|factor| factor.source_start_char as i64)
+            .collect::<Vec<_>>();
+        let ends = candidate
+            .pnf
+            .candidates
+            .iter()
+            .map(|factor| factor.source_end_char as i64)
+            .collect::<Vec<_>>();
+        let surfaces = candidate
+            .pnf
+            .candidates
+            .iter()
+            .map(|factor| factor.surface.clone())
+            .collect::<Vec<_>>();
+        let lemmas = candidate
+            .pnf
+            .candidates
+            .iter()
+            .map(|factor| factor.lemma.clone())
+            .collect::<Vec<_>>();
+        let dependencies = candidate
+            .pnf
+            .candidates
+            .iter()
+            .map(|factor| factor.dependency_ref.clone())
+            .collect::<Vec<_>>();
+
         tx.execute(
-            r#"INSERT INTO pnf.statement_candidate_factor
-               (candidate_ref, batch_ref, statement_ref, role_ref,
-                source_start_char, source_end_char, surface, lemma,
-                dependency_ref, candidate_only)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,TRUE)
-               ON CONFLICT (batch_ref, candidate_ref) DO NOTHING"#,
+            r#"
+            INSERT INTO pnf.statement_candidate_factor
+              (candidate_ref, batch_ref, statement_ref, role_ref,
+               source_start_char, source_end_char, surface, lemma,
+               dependency_ref, candidate_only)
+            SELECT candidate_ref, batch_ref, statement_ref, role_ref,
+                   source_start_char, source_end_char, surface, lemma,
+                   dependency_ref, TRUE
+            FROM UNNEST(
+              $1::TEXT[], $2::TEXT[], $3::TEXT[], $4::TEXT[],
+              $5::BIGINT[], $6::BIGINT[], $7::TEXT[], $8::TEXT[], $9::TEXT[]
+            ) AS u(
+              candidate_ref, batch_ref, statement_ref, role_ref,
+              source_start_char, source_end_char, surface, lemma, dependency_ref
+            )
+            ON CONFLICT (batch_ref, candidate_ref) DO NOTHING
+            "#,
             &[
-                &factor.candidate_ref,
-                &batch_ref,
-                &candidate.statement.statement_ref,
-                &role_db(factor.role),
-                &(factor.source_start_char as i64),
-                &(factor.source_end_char as i64),
-                &factor.surface,
-                &factor.lemma,
-                &factor.dependency_ref,
+                &candidate_refs,
+                &batch_refs,
+                &statement_refs,
+                &role_refs,
+                &starts,
+                &ends,
+                &surfaces,
+                &lemmas,
+                &dependencies,
             ],
         )?;
-
-        let stored = tx.query_one(
-            "SELECT batch_ref, statement_ref, role_ref, source_start_char,
-                    source_end_char, surface, lemma, dependency_ref, candidate_only
-             FROM pnf.statement_candidate_factor
-             WHERE batch_ref=$1 AND candidate_ref=$2",
-            &[&batch_ref, &factor.candidate_ref],
-        )?;
-        if stored.get::<_, String>(0) != batch_ref
-            || stored.get::<_, String>(1) != candidate.statement.statement_ref
-            || stored.get::<_, String>(2) != role_db(factor.role)
-            || stored.get::<_, i64>(3) != factor.source_start_char as i64
-            || stored.get::<_, i64>(4) != factor.source_end_char as i64
-            || stored.get::<_, String>(5) != factor.surface
-            || stored.get::<_, String>(6) != factor.lemma
-            || stored.get::<_, String>(7) != factor.dependency_ref
-            || !stored.get::<_, bool>(8)
-        {
-            return Err(CandidatePnfStoreError::ExistingFactorConflict);
-        }
     }
 
     tx.commit()?;
-    load_candidate_pnf_batch_with_client(client, &batch_ref)?
-        .ok_or(CandidatePnfStoreError::ExistingBatchConflict)
+
+    let persisted = load_candidate_pnf_batch_with_client(client, &batch_ref)?
+        .ok_or(CandidatePnfStoreError::ExistingBatchConflict)?;
+    if persisted.statement_ref != candidate.statement.statement_ref
+        || persisted.exact_span_ref != candidate.statement.span.span_ref
+        || persisted.parser_receipt_ref != candidate.parser_receipt_ref
+        || persisted.factors != candidate.pnf.candidates
+        || !persisted.candidate_only
+        || persisted.semantic_admission_paid
+        || persisted.proposition_support_paid
+        || persisted.applicability_paid
+        || persisted.claim_truth_paid
+    {
+        return Err(CandidatePnfStoreError::ExistingBatchConflict);
+    }
+    Ok(persisted)
 }
 
 pub fn load_candidate_pnf_batch(
