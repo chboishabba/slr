@@ -267,8 +267,15 @@ pub fn build_plain_text_long_document_source(
         paragraph_refs.push((start, end, reference));
     }
 
+    let all_chars = text.chars().collect::<Vec<_>>();
     let mut sentence_count = 0usize;
     for (paragraph_start, paragraph_end, paragraph_ref) in &paragraph_refs {
+        let paragraph_text = all_chars[*paragraph_start..*paragraph_end]
+            .iter()
+            .collect::<String>();
+        if chapter_heading(&paragraph_text) {
+            continue;
+        }
         for (start, end) in sentence_ranges(text, *paragraph_start, *paragraph_end) {
             let reference = format!(
                 "document-region:{source_revision_ref}:sentence:{sentence_count}:{start}-{end}"
@@ -346,14 +353,14 @@ mod tests {
 
         assert_eq!(receipt.chapter_count, 2);
         assert_eq!(receipt.paragraph_count, 4);
-        assert_eq!(receipt.sentence_count, 5);
+        assert_eq!(receipt.sentence_count, 3);
         assert_eq!(
             source
                 .regions
                 .iter()
                 .filter(|region| region.kind == DocumentRegionKind::Sentence)
                 .count(),
-            5
+            3
         );
         assert!(source
             .regions
