@@ -13,7 +13,7 @@ pub const DIGITAL_ESD_GENEALOGY_SCHEMA_SQL: &str = r#"
 CREATE SCHEMA IF NOT EXISTS digital_esd;
 
 CREATE TABLE IF NOT EXISTS digital_esd.study_family_hypothesis (
-    hypothesis_ref TEXT PRIMARY KEY,
+    hypothesis_ref TEXT NOT NULL,
     corpus_ref TEXT NOT NULL,
     left_source_ref TEXT NOT NULL,
     right_source_ref TEXT NOT NULL,
@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS digital_esd.study_family_hypothesis (
     creates_semantic_authority BOOLEAN NOT NULL CHECK (NOT creates_semantic_authority),
     claim_truth_promoted BOOLEAN NOT NULL CHECK (NOT claim_truth_promoted),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (corpus_ref, hypothesis_ref),
     CHECK (left_source_ref <> right_source_ref)
 );
 
@@ -183,7 +184,7 @@ pub fn ingest_study_family_hypotheses(
                 claim_truth_promoted
             ) VALUES (
                 $1,$2,$3,$4,$5,$6,TRUE,TRUE,FALSE,FALSE,FALSE,FALSE,FALSE
-            ) ON CONFLICT (hypothesis_ref) DO NOTHING"#,
+            ) ON CONFLICT (corpus_ref, hypothesis_ref) DO NOTHING"#,
             &[&hypothesis_ref, &corpus_ref, &left, &right, &relation, &evidence_json],
         )?;
     }
