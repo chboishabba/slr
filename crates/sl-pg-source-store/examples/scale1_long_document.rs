@@ -943,7 +943,7 @@ fn compile_source_values(
 ) -> Result<(), Box<dyn Error>> {
     let total_started = Instant::now();
     if canonical_text.is_empty() {
-        return Err("ingest-book received empty canonical text".into());
+        return Err("compile-source received empty canonical text".into());
     }
     let content_digest_ref = digest_ref(canonical_text.as_bytes());
     let source_revision_ref = canonical_generic_source_revision_ref(
@@ -979,7 +979,7 @@ fn compile_source_values(
     let prepare_ns = prepare_started.elapsed().as_nanos();
 
     let worker_ref = format!(
-        "worker:scale1-book:{}",
+        "worker:scale1-source:{}",
         digest_ref(prepared.parser_run.parser_run_ref.as_bytes())
     );
     let worker_started = Instant::now();
@@ -999,7 +999,7 @@ fn compile_source_values(
         || worker.deferred_retry != 0
     {
         return Err(format!(
-            "book ingest did not drain parser ledger: queued={} leased={} unattempted={} deferred_retry={}",
+            "source compile did not drain parser ledger: queued={} leased={} unattempted={} deferred_retry={}",
             state.queued,
             state.leased,
             state.unattempted_semantic_regions,
