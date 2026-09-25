@@ -23,7 +23,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap_or_else(|| "digital-esd:eric:43996".into());
 
     let compiler_ref = arg_value(&args, "--compiler-ref")
-        .unwrap_or_else(|| "sensiblaw:db-native-world:v0_1".into());
+        .unwrap_or_else(|| "sensiblaw:db-native-world:v0_2".into());
 
     let limit = arg_value(&args, "--limit")
         .and_then(|value| value.parse::<usize>().ok())
