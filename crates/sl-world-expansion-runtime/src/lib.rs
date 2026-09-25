@@ -765,3 +765,5 @@ pub mod reviewed_campaign;
 pub mod digital_esd_world;
 
 pub mod digital_esd_coordinates;
+
+pub mod digital_esd_genealogy;
