@@ -8,6 +8,7 @@ mod candidate_pnf_store;
 mod corpus_reconciliation_store;
 mod reconciliation_review_store;
 mod reconciliation_materialization;
+mod scale1_auto_event_store;
 mod context_federation;
 mod discovery_identity_baseline;
 mod event_discovery_store;
@@ -81,6 +82,10 @@ pub use reconciliation_materialization::{
     ReconciliationMaterializationError,
     ReviewedReconciliationPropositionReceipt,
     RECONCILIATION_MATERIALIZATION_SCHEMA_SQL,
+};
+pub use scale1_auto_event_store::{
+    discover_scale1_auto_event_proposals, Scale1AutoEventError,
+    Scale1AutoEventReceipt, SCALE1_AUTO_EVENT_SCHEMA_SQL,
 };
 pub use context_federation::{
     bounded_wikidata_relation_type, mabo_wikidata_property_ref,
