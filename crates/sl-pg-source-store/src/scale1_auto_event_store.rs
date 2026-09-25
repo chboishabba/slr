@@ -691,6 +691,21 @@ mod tests {
     }
 
     #[test]
+    fn consumer_scope_is_order_and_duplicate_invariant() {
+        let a = vec!["consumer:b".to_owned(), "consumer:a".to_owned()];
+        let b = vec![
+            "consumer:a".to_owned(),
+            "consumer:b".to_owned(),
+            "consumer:a".to_owned(),
+        ];
+        assert_eq!(consumer_scope_ref(&a), consumer_scope_ref(&b));
+        assert_ne!(
+            consumer_scope_ref(&a),
+            consumer_scope_ref(&["consumer:c".to_owned()])
+        );
+    }
+
+    #[test]
     fn detector_domains_do_not_collapse() {
         assert_ne!(
             digest_ref("scale1-temporal-bucket:v1", &["DATE", "1997"]),
