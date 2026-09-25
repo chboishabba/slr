@@ -25,7 +25,7 @@ use thiserror::Error;
 use crate::{
     canonical_statement_observation_link_ref, install_event_discovery_schema,
     install_statement_trace_schema, persist_event_join_proposal_with_review,
-    persist_statement_observation_link_with_client, DatabaseConfig, EventDiscoveryStoreError,
+    persist_statement_observation_links_with_client, DatabaseConfig, EventDiscoveryStoreError,
     StatementObservationDisposition, StatementObservationLink,
     StatementTraceStoreError,
 };
@@ -437,36 +437,39 @@ fn materialize_source_observations(
         )?;
     }
 
-    // Trace links retain their existing exact structural verifier. They reuse
-    // the same PG session; a later tranche can batch this without weakening the
-    // statement/candidate/observation identity checks.
-    for (((observation_ref, batch_ref), statement_ref), parser_receipt_ref) in
-        observation_refs
-            .iter()
-            .zip(batch_refs.iter())
-            .zip(statement_refs.iter())
-            .zip(parser_receipt_refs.iter())
-    {
-        let link = StatementObservationLink {
-            link_ref: canonical_statement_observation_link_ref(
-                statement_ref,
-                batch_ref,
-                observation_ref,
-            ),
-            statement_ref: statement_ref.clone(),
-            candidate_pnf_ref: batch_ref.clone(),
-            observation_ref: observation_ref.clone(),
-            parser_receipt_ref: Some(parser_receipt_ref.clone()),
-            parse_review_ref: None,
-            admission_receipt_ref: None,
-            disposition: StatementObservationDisposition::Candidate,
-            qualification_ref: None,
-            candidate_only: true,
-            creates_semantic_authority: false,
-            applicability_promoted: false,
-            claim_truth_promoted: false,
-        };
-        persist_statement_observation_link_with_client(&mut client, &link)?;
+    // Trace links retain the same canonical digest and full persisted reopen
+    // comparison, but are written and reopened set-wise.
+    let links = observation_refs
+        .iter()
+        .zip(batch_refs.iter())
+        .zip(statement_refs.iter())
+        .zip(parser_receipt_refs.iter())
+        .map(|(((observation_ref, batch_ref), statement_ref), parser_receipt_ref)| {
+            StatementObservationLink {
+                link_ref: canonical_statement_observation_link_ref(
+                    statement_ref,
+                    batch_ref,
+                    observation_ref,
+                ),
+                statement_ref: statement_ref.clone(),
+                candidate_pnf_ref: batch_ref.clone(),
+                observation_ref: observation_ref.clone(),
+                parser_receipt_ref: Some(parser_receipt_ref.clone()),
+                parse_review_ref: None,
+                admission_receipt_ref: None,
+                disposition: StatementObservationDisposition::Candidate,
+                qualification_ref: None,
+                candidate_only: true,
+                creates_semantic_authority: false,
+                applicability_promoted: false,
+                claim_truth_promoted: false,
+            }
+        })
+        .collect::<Vec<_>>();
+    let persisted_links =
+        persist_statement_observation_links_with_client(&mut client, &links)?;
+    if persisted_links.len() != links.len() {
+        return Err(Scale1AutoEventError::PromotionBoundary);
     }
 
     Ok(observation_refs.len())
