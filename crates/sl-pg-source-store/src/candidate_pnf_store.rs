@@ -282,10 +282,23 @@ pub(crate) fn persist_statement_candidate_pnf_with_client(
 
     let persisted = load_candidate_pnf_batch_with_client(client, &batch_ref)?
         .ok_or(CandidatePnfStoreError::ExistingBatchConflict)?;
+    let mut expected_factors = candidate.pnf.candidates.clone();
+    expected_factors.sort_by(|left, right| {
+        (
+            left.source_start_char,
+            left.source_end_char,
+            left.candidate_ref.as_str(),
+        )
+            .cmp(&(
+                right.source_start_char,
+                right.source_end_char,
+                right.candidate_ref.as_str(),
+            ))
+    });
     if persisted.statement_ref != candidate.statement.statement_ref
         || persisted.exact_span_ref != candidate.statement.span.span_ref
         || persisted.parser_receipt_ref != candidate.parser_receipt_ref
-        || persisted.factors != candidate.pnf.candidates
+        || persisted.factors != expected_factors
         || !persisted.candidate_only
         || persisted.semantic_admission_paid
         || persisted.proposition_support_paid
