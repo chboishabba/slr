@@ -80,8 +80,18 @@ def main() -> int:
             }
         )
 
+    entities = [
+        {
+            "start_char": ent.start_char,
+            "end_char": ent.end_char,
+            "text": ent.text,
+            "label": ent.label_,
+        }
+        for ent in doc.ents
+    ]
+
     artifact = {
-        "schema": "sensiblaw.scale1.spacy-region.v0_1",
+        "schema": "sensiblaw.scale1.spacy-region.v0_2",
         "parser_family": "spacy",
         "parser_version": spacy.__version__,
         "model_ref": args.model,
@@ -89,6 +99,7 @@ def main() -> int:
         "config": config,
         "text_char_count": len(text),
         "tokens": tokens,
+        "entities": entities,
     }
     print(json.dumps(artifact, sort_keys=True, separators=(",", ":"), ensure_ascii=False))
     return 0
