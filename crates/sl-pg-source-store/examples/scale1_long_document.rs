@@ -279,6 +279,7 @@ fn worker(args: &[String]) -> Result<(), Box<dyn Error>> {
                         description.model_ref
                     ),
                 )?;
+                deferred_retry += 1;
                 continue;
             }
 
@@ -325,6 +326,7 @@ fn worker(args: &[String]) -> Result<(), Box<dyn Error>> {
                     worker_ref,
                     "parser-output-identity-mismatch",
                 )?;
+                deferred_retry += 1;
                 continue;
             }
 
