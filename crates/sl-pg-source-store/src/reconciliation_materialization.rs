@@ -69,6 +69,8 @@ pub enum ReconciliationMaterializationError {
     AcceptedReviewReceiptMissing,
     #[error("review item does not point at a proposition fingerprint candidate")]
     NotPropositionFingerprint,
+    #[error("review item lacks matching reconciliation-pressure provenance")]
+    MissingReconciliationPressureProvenance,
     #[error("review source ancestry does not match proposition occurrences")]
     SourceAncestryMismatch,
     #[error("reconciliation candidate crossed a non-promotion boundary")]
@@ -145,6 +147,32 @@ pub fn materialize_accepted_reconciliation_proposition(
         || review.get::<_, bool>(6)
     {
         return Err(ReconciliationMaterializationError::ReviewNotAccepted);
+    }
+
+    let matching_pressure_provenance: bool = client
+        .query_one(
+            r#"
+            SELECT EXISTS (
+              SELECT 1
+              FROM semantic.review_item_provenance rp
+              JOIN semantic.reconciliation_pressure_candidate p
+                ON p.pressure_ref=rp.provenance_ref
+              WHERE rp.review_item_ref=$1
+                AND p.semantic_kind_ref='proposition'
+                AND p.semantic_fingerprint_ref=$2
+                AND p.candidate_only
+                AND p.requires_review
+                AND NOT p.creates_semantic_authority
+                AND NOT p.claim_truth_promoted
+            )
+            "#,
+            &[&review_item_ref, &fingerprint_ref],
+        )?
+        .get(0);
+    if !matching_pressure_provenance {
+        return Err(
+            ReconciliationMaterializationError::MissingReconciliationPressureProvenance,
+        );
     }
 
     let accepted_receipt: bool = client
