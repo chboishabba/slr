@@ -321,9 +321,46 @@ impl LosslessBulkSourceCompilation {
             .iter()
             .map(|assignment| assignment.region_ref.as_str())
             .collect::<std::collections::BTreeSet<_>>();
+        let compiled_assignments = self
+            .assignments
+            .iter()
+            .filter(|assignment| {
+                matches!(
+                    assignment.disposition,
+                    RegionCompilationDisposition::CompiledCandidate { .. }
+                )
+            })
+            .count();
+        let residual_assignments = self
+            .assignments
+            .iter()
+            .filter(|assignment| {
+                matches!(
+                    assignment.disposition,
+                    RegionCompilationDisposition::ParserResidual { .. }
+                )
+            })
+            .count();
+        let nonsemantic_assignments = self
+            .assignments
+            .iter()
+            .filter(|assignment| {
+                matches!(
+                    assignment.disposition,
+                    RegionCompilationDisposition::TransportOnly
+                        | RegionCompilationDisposition::StructuralOnly
+                )
+            })
+            .count();
+
         self.source_region_accounted_count == self.exact_region_count
             && self.assignments.len() == self.exact_region_count
             && unique.len() == self.exact_region_count
+            && compiled_assignments == self.compiled_statement_count
+            && residual_assignments == self.residuals.len()
+            && compiled_assignments + residual_assignments
+                == self.semantic_candidate_region_count
+            && nonsemantic_assignments == self.transport_or_nonsemantic_region_count
             && self.assignments.iter().all(|assignment| {
                 assignment.source_revision_ref == self.source_revision_ref
                     && assignment.source_region_preserved
@@ -852,6 +889,72 @@ mod tests {
         assert!(receipt.source_coverage_complete());
         assert!(!receipt.parse_failure_deletes_source);
         assert!(!receipt.claim_truth_promoted);
+    }
+
+
+    #[test]
+    fn explicit_partition_has_no_unaccounted_fourth_bucket() {
+        let text = "One sentence. Two sentence.";
+        let document = LongDocumentSource {
+            ingest: ingest(SourceFamily::Document),
+            title: None,
+            edition_ref: None,
+            regions: vec![
+                DocumentRegion {
+                    region_ref: "chapter:1".into(),
+                    source_revision_ref: "revision:fixture".into(),
+                    parent_region_ref: None,
+                    kind: DocumentRegionKind::Chapter,
+                    start_char: 0,
+                    end_char: 27,
+                },
+                DocumentRegion {
+                    region_ref: "sentence:1".into(),
+                    source_revision_ref: "revision:fixture".into(),
+                    parent_region_ref: Some("chapter:1".into()),
+                    kind: DocumentRegionKind::Sentence,
+                    start_char: 0,
+                    end_char: 13,
+                },
+                DocumentRegion {
+                    region_ref: "sentence:2".into(),
+                    source_revision_ref: "revision:fixture".into(),
+                    parent_region_ref: Some("chapter:1".into()),
+                    kind: DocumentRegionKind::Sentence,
+                    start_char: 14,
+                    end_char: 27,
+                },
+            ],
+        };
+
+        let receipt =
+            compile_long_document_lossless(&EchoProducer, &document, text, "parse:book")
+                .unwrap();
+
+        assert_eq!(receipt.assignments.len(), 3);
+        assert_eq!(
+            receipt
+                .assignments
+                .iter()
+                .filter(|assignment| matches!(
+                    assignment.disposition,
+                    RegionCompilationDisposition::CompiledCandidate { .. }
+                ))
+                .count(),
+            2
+        );
+        assert_eq!(
+            receipt
+                .assignments
+                .iter()
+                .filter(|assignment| matches!(
+                    assignment.disposition,
+                    RegionCompilationDisposition::StructuralOnly
+                ))
+                .count(),
+            1
+        );
+        assert!(receipt.source_coverage_complete());
     }
 
     #[test]
