@@ -5,6 +5,7 @@ mod chat_source_store;
 mod chronology_contestation_store;
 mod candidate_pnf;
 mod candidate_pnf_store;
+mod corpus_reconciliation_store;
 mod context_federation;
 mod discovery_identity_baseline;
 mod event_discovery_store;
@@ -62,6 +63,11 @@ pub use candidate_pnf_store::{
     load_candidate_pnf_batch, load_candidate_pnf_batches_for_statement,
     persist_statement_candidate_pnf, CandidatePnfStoreError,
     PersistedCandidatePnfBatch, CANDIDATE_PNF_SCHEMA_SQL,
+};
+pub use corpus_reconciliation_store::{
+    install_corpus_reconciliation_schema, reconcile_source_candidate_semantics,
+    CorpusReconciliationError, CorpusReconciliationReceipt,
+    CORPUS_RECONCILIATION_SCHEMA_SQL,
 };
 pub use context_federation::{
     bounded_wikidata_relation_type, mabo_wikidata_property_ref,
