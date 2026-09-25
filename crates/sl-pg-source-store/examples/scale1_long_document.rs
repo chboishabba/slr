@@ -532,6 +532,8 @@ struct LocalWorkerReceipt {
     deferred_retry: usize,
     token_count: usize,
     entity_count: usize,
+    parser_process_ns: u128,
+    parser_persist_ns: u128,
     parser_job_ns: Vec<u128>,
 }
 
@@ -568,6 +570,8 @@ fn drain_local_worker(
     let mut deferred_retry = 0usize;
     let mut token_count = 0usize;
     let mut entity_count = 0usize;
+    let mut parser_process_ns = 0u128;
+    let mut parser_persist_ns = 0u128;
     let mut parser_job_ns = Vec::new();
 
     loop {
@@ -633,14 +637,19 @@ fn drain_local_worker(
             }
 
             let region_text = load_claimed_job_text(config, &job)?;
+            let parser_started = Instant::now();
             let output = match run_parser(
                 parser_script,
                 &job.model_ref,
                 &job.config_json,
                 &region_text,
             ) {
-                Ok(value) => value,
+                Ok(value) => {
+                    parser_process_ns += parser_started.elapsed().as_nanos();
+                    value
+                }
                 Err(error) => {
+                    parser_process_ns += parser_started.elapsed().as_nanos();
                     defer_parser_job_retry(
                         config,
                         &job,
@@ -755,6 +764,7 @@ fn drain_local_worker(
                 artifact_json: Some(output_text),
                 object_locator: None,
             };
+            let persist_started = Instant::now();
             persist_parser_success_with_entities(
                 config,
                 &job,
@@ -763,6 +773,7 @@ fn drain_local_worker(
                 &entities,
                 Some(&artifact),
             )?;
+            parser_persist_ns += persist_started.elapsed().as_nanos();
             succeeded += 1;
             parser_job_ns.push(job_started.elapsed().as_nanos());
         }
@@ -774,6 +785,8 @@ fn drain_local_worker(
         deferred_retry,
         token_count,
         entity_count,
+        parser_process_ns,
+        parser_persist_ns,
         parser_job_ns,
     })
 }
@@ -816,6 +829,8 @@ fn worker(args: &[String]) -> Result<(), Box<dyn Error>> {
             "deferred_retry_this_worker": worker.deferred_retry,
             "token_count": worker.token_count,
             "entity_count": worker.entity_count,
+            "parser_process_ns": worker.parser_process_ns,
+            "parser_persist_ns": worker.parser_persist_ns,
             "parser_job_p50_ns": percentile_ns(&worker.parser_job_ns, 50),
             "parser_job_p95_ns": percentile_ns(&worker.parser_job_ns, 95),
             "parser_job_p99_ns": percentile_ns(&worker.parser_job_ns, 99),
@@ -999,6 +1014,8 @@ fn ingest_book_values(
             "performance": {
                 "prepare_ns": prepare_ns,
                 "worker_ns": worker_ns,
+                "parser_process_ns": worker.parser_process_ns,
+                "parser_persist_ns": worker.parser_persist_ns,
                 "finalize_ns": finalize_ns,
                 "finalize_load_and_validate_ns": receipt.timings.load_and_validate_ns,
                 "m12_compile_ns": receipt.timings.m12_compile_ns,
