@@ -6,7 +6,8 @@
 //! compiler without source loss or semantic promotion.
 
 use sensiblaw_core::source_ingest::{
-    DocumentRegionKind, LongDocumentSource, MailMessageSource, SourceIngestError,
+    DocumentRegionKind, LongDocumentSource, MailBodySegmentKind, MailMessageSource,
+    SourceIngestError,
 };
 use thiserror::Error;
 
@@ -259,6 +260,28 @@ pub fn compile_mail_message<P: CandidatePnfProducer>(
 }
 
 
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RegionCompilationDisposition {
+    CompiledCandidate { statement_ref: String },
+    ParserResidual {
+        parser_receipt_ref: String,
+        error_ref: String,
+    },
+    TransportOnly,
+    StructuralOnly,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RegionCompilationAssignment {
+    pub region_ref: String,
+    pub source_revision_ref: String,
+    pub disposition: RegionCompilationDisposition,
+    pub source_region_preserved: bool,
+    pub semantic_authority_created: bool,
+    pub claim_truth_promoted: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RegionCompilationResidual {
     pub region_ref: String,
@@ -279,6 +302,7 @@ pub struct LosslessBulkSourceCompilation {
     pub compiled_statement_count: usize,
     pub candidate_pnf_count: usize,
     pub residuals: Vec<RegionCompilationResidual>,
+    pub assignments: Vec<RegionCompilationAssignment>,
     pub transport_or_nonsemantic_region_count: usize,
     pub source_region_accounted_count: usize,
     pub source_region_loss_count: usize,
@@ -292,7 +316,20 @@ pub struct LosslessBulkSourceCompilation {
 impl LosslessBulkSourceCompilation {
     #[must_use]
     pub fn source_coverage_complete(&self) -> bool {
+        let unique = self
+            .assignments
+            .iter()
+            .map(|assignment| assignment.region_ref.as_str())
+            .collect::<std::collections::BTreeSet<_>>();
         self.source_region_accounted_count == self.exact_region_count
+            && self.assignments.len() == self.exact_region_count
+            && unique.len() == self.exact_region_count
+            && self.assignments.iter().all(|assignment| {
+                assignment.source_revision_ref == self.source_revision_ref
+                    && assignment.source_region_preserved
+                    && !assignment.semantic_authority_created
+                    && !assignment.claim_truth_promoted
+            })
             && self.source_region_loss_count == 0
     }
 
@@ -340,6 +377,19 @@ pub fn compile_long_document_lossless<P: CandidatePnfProducer>(
 
     let mut compiled = Vec::new();
     let mut residuals = Vec::new();
+    let mut assignments = document
+        .regions
+        .iter()
+        .filter(|region| region.kind != DocumentRegionKind::Sentence)
+        .map(|region| RegionCompilationAssignment {
+            region_ref: region.region_ref.clone(),
+            source_revision_ref: region.source_revision_ref.clone(),
+            disposition: RegionCompilationDisposition::StructuralOnly,
+            source_region_preserved: true,
+            semantic_authority_created: false,
+            claim_truth_promoted: false,
+        })
+        .collect::<Vec<_>>();
 
     for region in &sentence_regions {
         let parser_receipt_ref = format!("{parser_receipt_prefix}:{}", region.region_ref);
@@ -363,13 +413,38 @@ pub fn compile_long_document_lossless<P: CandidatePnfProducer>(
         });
 
         match result {
-            Ok(value) => compiled.push(value),
-            Err(error) => residuals.push(residual_for(
-                &region.region_ref,
-                &document.ingest.source_revision_ref,
-                parser_receipt_ref,
-                &error,
-            )),
+            Ok(value) => {
+                assignments.push(RegionCompilationAssignment {
+                    region_ref: region.region_ref.clone(),
+                    source_revision_ref: document.ingest.source_revision_ref.clone(),
+                    disposition: RegionCompilationDisposition::CompiledCandidate {
+                        statement_ref: value.statement.statement_ref.clone(),
+                    },
+                    source_region_preserved: true,
+                    semantic_authority_created: false,
+                    claim_truth_promoted: false,
+                });
+                compiled.push(value);
+            }
+            Err(error) => {
+                assignments.push(RegionCompilationAssignment {
+                    region_ref: region.region_ref.clone(),
+                    source_revision_ref: document.ingest.source_revision_ref.clone(),
+                    disposition: RegionCompilationDisposition::ParserResidual {
+                        parser_receipt_ref: parser_receipt_ref.clone(),
+                        error_ref: format!("{error}"),
+                    },
+                    source_region_preserved: true,
+                    semantic_authority_created: false,
+                    claim_truth_promoted: false,
+                });
+                residuals.push(residual_for(
+                    &region.region_ref,
+                    &document.ingest.source_revision_ref,
+                    parser_receipt_ref,
+                    &error,
+                ));
+            }
         }
     }
 
@@ -379,9 +454,8 @@ pub fn compile_long_document_lossless<P: CandidatePnfProducer>(
         .sum::<usize>();
     let transport_or_nonsemantic_region_count =
         document.regions.len().saturating_sub(sentence_regions.len());
-    let source_region_accounted_count = transport_or_nonsemantic_region_count
-        + compiled.len()
-        + residuals.len();
+    assignments.sort_by(|left, right| left.region_ref.cmp(&right.region_ref));
+    let source_region_accounted_count = assignments.len();
 
     Ok(LosslessBulkSourceCompilation {
         source_ref: document.ingest.source_ref.clone(),
@@ -391,6 +465,7 @@ pub fn compile_long_document_lossless<P: CandidatePnfProducer>(
         compiled_statement_count: compiled.len(),
         candidate_pnf_count,
         residuals,
+        assignments,
         transport_or_nonsemantic_region_count,
         source_region_accounted_count,
         source_region_loss_count: document
@@ -421,6 +496,25 @@ pub fn compile_mail_message_lossless<P: CandidatePnfProducer>(
 
     let mut compiled = Vec::new();
     let mut residuals = Vec::new();
+    let mut assignments = message
+        .segments
+        .iter()
+        .filter(|segment| !segment.is_independent_authorship_candidate())
+        .map(|segment| RegionCompilationAssignment {
+            region_ref: segment.segment_ref.clone(),
+            source_revision_ref: segment.body_revision_ref.clone(),
+            disposition: match segment.kind {
+                MailBodySegmentKind::QuotedPriorMessage
+                | MailBodySegmentKind::ForwardedMessage => {
+                    RegionCompilationDisposition::TransportOnly
+                }
+                _ => RegionCompilationDisposition::StructuralOnly,
+            },
+            source_region_preserved: true,
+            semantic_authority_created: false,
+            claim_truth_promoted: false,
+        })
+        .collect::<Vec<_>>();
 
     for segment in &semantic_segments {
         let parser_receipt_ref =
@@ -445,13 +539,38 @@ pub fn compile_mail_message_lossless<P: CandidatePnfProducer>(
         });
 
         match result {
-            Ok(value) => compiled.push(value),
-            Err(error) => residuals.push(residual_for(
-                &segment.segment_ref,
-                &message.body_revision_ref,
-                parser_receipt_ref,
-                &error,
-            )),
+            Ok(value) => {
+                assignments.push(RegionCompilationAssignment {
+                    region_ref: segment.segment_ref.clone(),
+                    source_revision_ref: message.body_revision_ref.clone(),
+                    disposition: RegionCompilationDisposition::CompiledCandidate {
+                        statement_ref: value.statement.statement_ref.clone(),
+                    },
+                    source_region_preserved: true,
+                    semantic_authority_created: false,
+                    claim_truth_promoted: false,
+                });
+                compiled.push(value);
+            }
+            Err(error) => {
+                assignments.push(RegionCompilationAssignment {
+                    region_ref: segment.segment_ref.clone(),
+                    source_revision_ref: message.body_revision_ref.clone(),
+                    disposition: RegionCompilationDisposition::ParserResidual {
+                        parser_receipt_ref: parser_receipt_ref.clone(),
+                        error_ref: format!("{error}"),
+                    },
+                    source_region_preserved: true,
+                    semantic_authority_created: false,
+                    claim_truth_promoted: false,
+                });
+                residuals.push(residual_for(
+                    &segment.segment_ref,
+                    &message.body_revision_ref,
+                    parser_receipt_ref,
+                    &error,
+                ));
+            }
         }
     }
 
@@ -461,9 +580,8 @@ pub fn compile_mail_message_lossless<P: CandidatePnfProducer>(
         .sum::<usize>();
     let transport_or_nonsemantic_region_count =
         message.segments.len().saturating_sub(semantic_segments.len());
-    let source_region_accounted_count = transport_or_nonsemantic_region_count
-        + compiled.len()
-        + residuals.len();
+    assignments.sort_by(|left, right| left.region_ref.cmp(&right.region_ref));
+    let source_region_accounted_count = assignments.len();
 
     Ok(LosslessBulkSourceCompilation {
         source_ref: message.message_ref.clone(),
@@ -473,6 +591,7 @@ pub fn compile_mail_message_lossless<P: CandidatePnfProducer>(
         compiled_statement_count: compiled.len(),
         candidate_pnf_count,
         residuals,
+        assignments,
         transport_or_nonsemantic_region_count,
         source_region_accounted_count,
         source_region_loss_count: message
@@ -721,6 +840,14 @@ mod tests {
         assert_eq!(receipt.residuals[0].region_ref, "sentence:2");
         assert!(receipt.residuals[0].source_region_preserved);
         assert_eq!(receipt.source_region_accounted_count, 3);
+        assert_eq!(receipt.assignments.len(), 3);
+        assert!(receipt.assignments.iter().any(|assignment| {
+            assignment.region_ref == "sentence:2"
+                && matches!(
+                    assignment.disposition,
+                    RegionCompilationDisposition::ParserResidual { .. }
+                )
+        }));
         assert_eq!(receipt.source_region_loss_count, 0);
         assert!(receipt.source_coverage_complete());
         assert!(!receipt.parse_failure_deletes_source);
