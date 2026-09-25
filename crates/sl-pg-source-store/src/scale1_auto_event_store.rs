@@ -4,7 +4,9 @@
 //! candidate observations. Postgres indexes their detector signals so corpus
 //! scale event discovery need not compare every observation pair.
 //!
-//! SQL only preselects cross-family pairs sharing >=2 independent signal kinds.
+//! SQL only preselects cross-family pairs sharing a temporal signal plus at
+//! least one other signal kind. This avoids counting entity + an event
+//! fingerprint derived from the same PNF factors as independent evidence.
 //! The established S28.AUTO detector is then run on the bounded observations
 //! and remains the owner of CandidateEventJoinProposal construction.
 //!
@@ -331,6 +333,7 @@ fn bounded_pair_refs(
         FROM pair_signal
         GROUP BY left_ref, right_ref
         HAVING COUNT(DISTINCT signal_kind_ref) >= 2
+           AND BOOL_OR(signal_kind_ref = 'temporal')
         ORDER BY left_ref, right_ref
         "#,
         &[&source_revision_ref],
