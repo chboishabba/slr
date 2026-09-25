@@ -23,6 +23,7 @@ mod reviewed_source_expansion;
 mod review_workstation_store;
 mod statement_pnf_spine;
 mod generic_source_compiler;
+mod jmail_adapter;
 mod statement_trace_store;
 
 pub use chronology_contestation_store::{
@@ -161,6 +162,10 @@ pub use generic_source_compiler::{
     compile_mail_message_lossless, BulkSourceCompilation,
     GenericSourceCompilerError, LosslessBulkSourceCompilation,
     RegionCompilationResidual,
+};
+pub use jmail_adapter::{
+    jmail_record_to_mail_source, segment_jmail_body, JmailAdapterError,
+    JmailEmailRecord,
 };
 pub use statement_trace_store::{
     canonical_observation_event_link_ref, canonical_statement_observation_link_ref,
