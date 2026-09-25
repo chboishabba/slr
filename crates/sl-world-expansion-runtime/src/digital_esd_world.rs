@@ -808,7 +808,7 @@ pub fn materialize_digital_esd_world(
     )?;
 
     Ok(DigitalEsdWorldReceipt {
-        schema: "sensiblaw.digital-esd.db-native-world.v0_1",
+        schema: "sensiblaw.digital-esd.db-native-world.v0_2",
         world_revision_ref,
         corpus_ref: corpus_ref.to_owned(),
         compiler_ref: compiler_ref.to_owned(),
