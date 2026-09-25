@@ -162,6 +162,7 @@ pub use generic_source_compiler::{
     compile_long_document, compile_long_document_lossless, compile_mail_message,
     compile_mail_message_lossless, BulkSourceCompilation,
     GenericSourceCompilerError, LosslessBulkSourceCompilation,
+    RegionCompilationAssignment, RegionCompilationDisposition,
     RegionCompilationResidual,
 };
 pub use jmail_adapter::{
