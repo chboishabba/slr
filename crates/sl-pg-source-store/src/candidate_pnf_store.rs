@@ -7,9 +7,7 @@ use postgres::{Client, NoTls};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
-use crate::{
-    CandidatePnfFactor, CandidatePnfRole, DatabaseConfig, StatementCandidatePnf,
-};
+use crate::{CandidatePnfFactor, CandidatePnfRole, DatabaseConfig, StatementCandidatePnf};
 
 pub const CANDIDATE_PNF_SCHEMA_SQL: &str = r#"
 CREATE SCHEMA IF NOT EXISTS pnf;
@@ -120,9 +118,7 @@ fn role_from_db(value: &str) -> Result<CandidatePnfRole, CandidatePnfStoreError>
     }
 }
 
-pub fn install_candidate_pnf_schema(
-    config: &DatabaseConfig,
-) -> Result<(), CandidatePnfStoreError> {
+pub fn install_candidate_pnf_schema(config: &DatabaseConfig) -> Result<(), CandidatePnfStoreError> {
     let mut client = Client::connect(config.database_url(), NoTls)?;
     client.batch_execute(CANDIDATE_PNF_SCHEMA_SQL)?;
     Ok(())
@@ -132,13 +128,25 @@ pub fn persist_statement_candidate_pnf(
     config: &DatabaseConfig,
     candidate: &StatementCandidatePnf,
 ) -> Result<PersistedCandidatePnfBatch, CandidatePnfStoreError> {
+    let mut client = Client::connect(config.database_url(), NoTls)?;
+    client.batch_execute(CANDIDATE_PNF_SCHEMA_SQL)?;
+    persist_statement_candidate_pnf_with_client(&mut client, candidate)
+}
+
+/// Persist one immutable candidate batch using an existing client.
+///
+/// This is intentionally crate-private: the public API keeps the ordinary
+/// single-item connection lifecycle, while the book-scale compiler can reuse
+/// one client without relaxing any row-level integrity or reopen checks.
+pub(crate) fn persist_statement_candidate_pnf_with_client(
+    client: &mut Client,
+    candidate: &StatementCandidatePnf,
+) -> Result<PersistedCandidatePnfBatch, CandidatePnfStoreError> {
     candidate
         .validate()
         .map_err(|_| CandidatePnfStoreError::InvalidCandidate)?;
 
     let batch_ref = canonical_candidate_pnf_batch_ref(candidate);
-    let mut client = Client::connect(config.database_url(), NoTls)?;
-    client.batch_execute(CANDIDATE_PNF_SCHEMA_SQL)?;
 
     let statement_exists: bool = client
         .query_one(
@@ -232,7 +240,7 @@ pub fn persist_statement_candidate_pnf(
     }
 
     tx.commit()?;
-    load_candidate_pnf_batch(config, &batch_ref)?
+    load_candidate_pnf_batch_with_client(client, &batch_ref)?
         .ok_or(CandidatePnfStoreError::ExistingBatchConflict)
 }
 
@@ -242,6 +250,13 @@ pub fn load_candidate_pnf_batch(
 ) -> Result<Option<PersistedCandidatePnfBatch>, CandidatePnfStoreError> {
     let mut client = Client::connect(config.database_url(), NoTls)?;
     client.batch_execute(CANDIDATE_PNF_SCHEMA_SQL)?;
+    load_candidate_pnf_batch_with_client(&mut client, batch_ref)
+}
+
+pub(crate) fn load_candidate_pnf_batch_with_client(
+    client: &mut Client,
+    batch_ref: &str,
+) -> Result<Option<PersistedCandidatePnfBatch>, CandidatePnfStoreError> {
     let Some(batch) = client.query_opt(
         "SELECT statement_ref, exact_span_ref, parser_receipt_ref, factor_count,
                 candidate_only, semantic_admission_paid, proposition_support_paid,
@@ -249,7 +264,8 @@ pub fn load_candidate_pnf_batch(
          FROM pnf.statement_candidate_batch
          WHERE batch_ref=$1",
         &[&batch_ref],
-    )? else {
+    )?
+    else {
         return Ok(None);
     };
 

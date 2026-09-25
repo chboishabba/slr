@@ -34,7 +34,9 @@ impl StatementObservationDisposition {
             "rejected" => Ok(Self::Rejected),
             "abstained" => Ok(Self::Abstained),
             "qualified" => Ok(Self::Qualified),
-            _ => Err(StatementTraceStoreError::UnknownDisposition(value.to_owned())),
+            _ => Err(StatementTraceStoreError::UnknownDisposition(
+                value.to_owned(),
+            )),
         }
     }
 }
@@ -105,11 +107,13 @@ impl StatementObservationLink {
         {
             return Err(StatementTraceStoreError::PromotionNotAllowed);
         }
-        if matches!(self.disposition, StatementObservationDisposition::SemanticallyAdmitted)
-            && self
-                .admission_receipt_ref
-                .as_deref()
-                .map_or(true, |value| value.trim().is_empty())
+        if matches!(
+            self.disposition,
+            StatementObservationDisposition::SemanticallyAdmitted
+        ) && self
+            .admission_receipt_ref
+            .as_deref()
+            .map_or(true, |value| value.trim().is_empty())
         {
             return Err(StatementTraceStoreError::MissingAdmissionReceipt);
         }
@@ -207,15 +211,8 @@ pub fn canonical_statement_observation_link_ref(
     format!("statement-observation-link:sha256:{}", hex(&digest))
 }
 
-pub fn canonical_observation_event_link_ref(
-    observation_ref: &str,
-    event_ref: &str,
-) -> String {
-    let digest = digest_parts(&[
-        "observation-event-link:v1",
-        observation_ref,
-        event_ref,
-    ]);
+pub fn canonical_observation_event_link_ref(observation_ref: &str, event_ref: &str) -> String {
+    let digest = digest_parts(&["observation-event-link:v1", observation_ref, event_ref]);
     format!("observation-event-link:sha256:{}", hex(&digest))
 }
 
@@ -302,6 +299,20 @@ pub fn persist_source_statement(
     config: &DatabaseConfig,
     statement: &SourceStatementEnvelope,
 ) -> Result<PersistedSourceStatement, StatementTraceStoreError> {
+    let mut client = Client::connect(config.database_url(), NoTls)?;
+    persist_source_statement_with_client(&mut client, statement)
+}
+
+/// Persist one immutable source statement using an existing PostgreSQL client.
+///
+/// Long-document ingestion deliberately uses this form so the durable
+/// statement/candidate/reopen loop does not create a new database connection
+/// for every sentence.  It retains the same ancestry and immutable-row checks
+/// as the public single-statement entry point.
+pub(crate) fn persist_source_statement_with_client(
+    client: &mut Client,
+    statement: &SourceStatementEnvelope,
+) -> Result<PersistedSourceStatement, StatementTraceStoreError> {
     statement
         .validate()
         .map_err(|_| StatementTraceStoreError::PromotionNotAllowed)?;
@@ -311,8 +322,7 @@ pub fn persist_source_statement(
         return Err(StatementTraceStoreError::ExistingStatementConflict);
     }
 
-    let mut client = Client::connect(config.database_url(), NoTls)?;
-    require_source_ancestry(&mut client, statement)?;
+    require_source_ancestry(client, statement)?;
 
     let digest = statement_digest(statement);
     client.execute(
@@ -343,7 +353,7 @@ pub fn persist_source_statement(
         &[&statement.statement_ref, &origin_as_db(statement.origin)],
     )?;
 
-    let persisted = load_source_statement_with_client(&mut client, &statement.statement_ref)?
+    let persisted = load_source_statement_with_client(client, &statement.statement_ref)?
         .ok_or(StatementTraceStoreError::ExistingStatementConflict)?;
 
     if persisted.document_ref != statement.document_ref
@@ -692,8 +702,7 @@ fn require_source_ancestry(
            to_regclass('ingest.generic_source_revision')::text",
         &[],
     )?;
-    let generic_ready =
-        ingest_tables.get::<_, Option<String>>(0).is_some()
+    let generic_ready = ingest_tables.get::<_, Option<String>>(0).is_some()
         && ingest_tables.get::<_, Option<String>>(1).is_some();
 
     let generic = if generic_ready {
@@ -855,16 +864,8 @@ mod tests {
     #[test]
     fn observation_link_identity_is_structural() {
         assert_eq!(
-            canonical_statement_observation_link_ref(
-                "statement:x",
-                "candidate:y",
-                "observation:z"
-            ),
-            canonical_statement_observation_link_ref(
-                "statement:x",
-                "candidate:y",
-                "observation:z"
-            )
+            canonical_statement_observation_link_ref("statement:x", "candidate:y", "observation:z"),
+            canonical_statement_observation_link_ref("statement:x", "candidate:y", "observation:z")
         );
     }
 

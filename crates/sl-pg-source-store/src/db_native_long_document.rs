@@ -12,34 +12,32 @@
 
 use std::time::Instant;
 
+use postgres::{Client, NoTls};
 use sensiblaw_core::source_ingest::{DocumentRegionKind, SourceFamily};
 use thiserror::Error;
 
+use crate::candidate_pnf_store::{
+    load_candidate_pnf_batch_with_client, persist_statement_candidate_pnf_with_client,
+};
+use crate::statement_trace_store::persist_source_statement_with_client;
 use crate::{
-    build_plain_text_long_source_with_family,
-    canonical_candidate_pnf_batch_ref, canonical_statement_ref,
-    compile_initial_intake_statement,
-    compile_long_document_lossless_for_document_ref,
-    complete_parser_run, enqueue_parser_regions, install_candidate_pnf_schema,
-    install_statement_trace_schema, load_candidate_pnf_batch,
-    reconcile_source_candidate_semantics, enqueue_reconciliation_review_items,
-    discover_scale1_auto_event_proposals, load_generic_source_envelope,
-    load_generic_text_source, load_long_document_regions,
-    load_long_document_structure, persist_generic_text_source,
+    build_plain_text_long_source_with_family, canonical_candidate_pnf_batch_ref,
+    canonical_statement_ref, compile_initial_intake_statement,
+    compile_long_document_lossless_for_document_ref, complete_parser_run,
+    discover_scale1_auto_event_proposals, enqueue_parser_regions,
+    enqueue_reconciliation_review_items, install_candidate_pnf_schema,
+    install_statement_trace_schema, load_generic_source_envelope, load_generic_text_source,
+    load_long_document_regions, load_long_document_structure, persist_generic_text_source,
     persist_long_document_compilation, persist_long_document_structure,
-    persist_source_statement, persist_statement_candidate_pnf,
-    start_parser_run, CandidatePnfError, CandidatePnfStoreError,
-    CorpusReconciliationError, CorpusReconciliationReceipt,
-    ReconciliationReviewError, ReconciliationReviewReceipt,
-    Scale1AutoEventError, Scale1AutoEventReceipt,
-    DatabaseConfig, DbNativeParserError,
-    DbNativeParserSnapshot, GenericSourceCompilerError,
-    GenericSourceContentStoreError, LongDocumentIngestStoreError,
-    ParserRegionJobSpec, ParserRunReceipt, ParserRunState,
-    PersistedGenericSourceContent, PersistedLongDocumentIngestReceipt,
-    PersistedLongDocumentRegion, PlainTextDocumentAdapterError,
-    PlainTextSegmentationReceipt, SourceStatementEnvelope, StatementOrigin,
-    StatementPnfSpineError, StatementTraceStoreError, ExactSourceSpan,
+    reconcile_source_candidate_semantics, start_parser_run, CandidatePnfError,
+    CandidatePnfStoreError, CorpusReconciliationError, CorpusReconciliationReceipt, DatabaseConfig,
+    DbNativeParserError, DbNativeParserSnapshot, ExactSourceSpan, GenericSourceCompilerError,
+    GenericSourceContentStoreError, LongDocumentIngestStoreError, ParserRegionJobSpec,
+    ParserRunReceipt, ParserRunState, PersistedGenericSourceContent,
+    PersistedLongDocumentIngestReceipt, PersistedLongDocumentRegion, PlainTextDocumentAdapterError,
+    PlainTextSegmentationReceipt, ReconciliationReviewError, ReconciliationReviewReceipt,
+    Scale1AutoEventError, Scale1AutoEventReceipt, SourceStatementEnvelope, StatementOrigin,
+    StatementPnfSpineError, StatementTraceStoreError,
 };
 
 #[derive(Debug, Error)]
@@ -218,20 +216,15 @@ pub fn prepare_db_native_long_source(
         })
         .collect::<Vec<_>>();
 
-    let newly_enqueued_job_count =
-        enqueue_parser_regions(config, &parser_run, &semantic_jobs)?;
-    let reused_existing_job_count =
-        semantic_jobs.len().saturating_sub(newly_enqueued_job_count);
+    let newly_enqueued_job_count = enqueue_parser_regions(config, &parser_run, &semantic_jobs)?;
+    let reused_existing_job_count = semantic_jobs.len().saturating_sub(newly_enqueued_job_count);
 
     Ok(PreparedDbNativeLongDocument {
         structural,
         source,
         parser_run,
         semantic_region_count: semantic_jobs.len(),
-        structural_region_count: document
-            .regions
-            .len()
-            .saturating_sub(semantic_jobs.len()),
+        structural_region_count: document.regions.len().saturating_sub(semantic_jobs.len()),
         newly_enqueued_job_count,
         reused_existing_job_count,
         candidate_only: true,
@@ -251,8 +244,7 @@ pub fn finalize_db_native_long_document(
     let snapshot = DbNativeParserSnapshot::load(config, parser_run_ref)?;
     let source_revision_ref = snapshot.source_revision_ref().to_owned();
 
-    let (source, canonical_text) =
-        load_generic_text_source(config, &source_revision_ref)?;
+    let (source, canonical_text) = load_generic_text_source(config, &source_revision_ref)?;
     let envelope = load_generic_source_envelope(config, &source_revision_ref)?;
     if !envelope.semantic_text_allowed() {
         return Err(DbNativeLongDocumentError::NotDocumentContentSource);
@@ -269,8 +261,7 @@ pub fn finalize_db_native_long_document(
         &canonical_text,
     )?;
 
-    let persisted_structure =
-        load_long_document_structure(config, &source_revision_ref)?;
+    let persisted_structure = load_long_document_structure(config, &source_revision_ref)?;
     if persisted_structure.len() != document.regions.len() {
         return Err(DbNativeLongDocumentError::IncompleteDurablePartition);
     }
@@ -301,6 +292,8 @@ pub fn finalize_db_native_long_document(
     let candidate_persist_started = Instant::now();
     install_statement_trace_schema(config)?;
     install_candidate_pnf_schema(config)?;
+    let mut persistence_client =
+        Client::connect(config.database_url(), NoTls).map_err(CandidatePnfStoreError::from)?;
 
     let mut persisted_statement_count = 0usize;
     let mut persisted_candidate_batch_count = 0usize;
@@ -344,26 +337,29 @@ pub fn finalize_db_native_long_document(
         };
         statement.statement_ref = canonical_statement_ref(&statement);
 
-        let parser_receipt_ref =
-            format!("db-parser:{parser_run_ref}:{}", region.region_ref);
-        match compile_initial_intake_statement(
-            &snapshot,
-            statement,
-            parser_receipt_ref,
-        ) {
+        let parser_receipt_ref = format!("db-parser:{parser_run_ref}:{}", region.region_ref);
+        match compile_initial_intake_statement(&snapshot, statement, parser_receipt_ref) {
             Ok(candidate) => {
-                persist_source_statement(config, &candidate.statement)?;
+                persist_source_statement_with_client(
+                    &mut persistence_client,
+                    &candidate.statement,
+                )?;
                 persisted_statement_count += 1;
 
                 let expected_batch_ref = canonical_candidate_pnf_batch_ref(&candidate);
-                let persisted = persist_statement_candidate_pnf(config, &candidate)?;
+                let persisted = persist_statement_candidate_pnf_with_client(
+                    &mut persistence_client,
+                    &candidate,
+                )?;
                 persisted_candidate_batch_count += 1;
                 persisted_candidate_factor_count += persisted.factors.len();
 
-                let reopened = load_candidate_pnf_batch(config, &expected_batch_ref)?;
-                candidate_pnf_reopen_complete &= reopened
-                    .as_ref()
-                    .is_some_and(|batch| batch == &persisted);
+                let reopened = load_candidate_pnf_batch_with_client(
+                    &mut persistence_client,
+                    &expected_batch_ref,
+                )?;
+                candidate_pnf_reopen_complete &=
+                    reopened.as_ref().is_some_and(|batch| batch == &persisted);
             }
             Err(StatementPnfSpineError::CandidatePnf(
                 CandidatePnfError::PersistedParserResidual { .. },
@@ -387,43 +383,27 @@ pub fn finalize_db_native_long_document(
 
     let reconciliation_started = Instant::now();
     let reconciliation =
-        reconcile_source_candidate_semantics(
-            config,
-            &source_revision_ref,
-            parser_run_ref,
-        )?;
+        reconcile_source_candidate_semantics(config, &source_revision_ref, parser_run_ref)?;
     let reconciliation_ns = reconciliation_started.elapsed().as_nanos();
 
     let review_projection_started = Instant::now();
     let reconciliation_review =
-        enqueue_reconciliation_review_items(
-            config,
-            &source_revision_ref,
-            vec![],
-        )?;
+        enqueue_reconciliation_review_items(config, &source_revision_ref, vec![])?;
     let review_projection_ns = review_projection_started.elapsed().as_nanos();
 
     let auto_event_started = Instant::now();
     let auto_event =
-        discover_scale1_auto_event_proposals(
-            config,
-            &source_revision_ref,
-            parser_run_ref,
-            vec![],
-        )?;
+        discover_scale1_auto_event_proposals(config, &source_revision_ref, parser_run_ref, vec![])?;
     let auto_event_ns = auto_event_started.elapsed().as_nanos();
 
     let compilation_persist_started = Instant::now();
-    let persisted_compilation =
-        persist_long_document_compilation(config, &document, &compilation)?;
+    let persisted_compilation = persist_long_document_compilation(config, &document, &compilation)?;
     let compilation_persist_ns = compilation_persist_started.elapsed().as_nanos();
 
     let reload_verify_started = Instant::now();
 
-    let reloaded_regions =
-        load_long_document_regions(config, &source_revision_ref)?;
-    let (reloaded_source, reloaded_text) =
-        load_generic_text_source(config, &source_revision_ref)?;
+    let reloaded_regions = load_long_document_regions(config, &source_revision_ref)?;
+    let (reloaded_source, reloaded_text) = load_generic_text_source(config, &source_revision_ref)?;
     if source != reloaded_source || reloaded_text != canonical_text {
         return Err(DbNativeLongDocumentError::LiteralReloadMismatch);
     }
