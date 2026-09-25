@@ -282,6 +282,10 @@ def main() -> int:
             "event_occurrences": sum(int(d["final"]["event_occurrence_candidates"]) for d in documents),
             "polarity_conflict_candidates": sum(int(d["final"]["polarity_conflict_candidates"]) for d in documents),
             "review_items": sum(int(d["final"]["reconciliation_review_items"]) for d in documents),
+            "auto_event_observations": sum(int(d["final"]["auto_event_observations_materialized"]) for d in documents),
+            "auto_event_bounded_pairs": sum(int(d["final"]["auto_event_bounded_pairs"]) for d in documents),
+            "auto_event_proposals": sum(int(d["final"]["auto_event_proposals"]) for d in documents),
+            "auto_event_review_items": sum(int(d["final"]["auto_event_review_items"]) for d in documents),
         },
         "invariants": {
             "runtime_parser_state_is_postgres": True,
@@ -309,6 +313,22 @@ def main() -> int:
             ),
             "review_projection_creates_event_identity": any(
                 bool(d["final"]["reconciliation_review_creates_event_identity"])
+                for d in documents
+            ),
+            "auto_event_creates_observation_identity": any(
+                bool(d["final"]["auto_event_creates_observation_identity"])
+                for d in documents
+            ),
+            "auto_event_creates_event_identity": any(
+                bool(d["final"]["auto_event_creates_event_identity"])
+                for d in documents
+            ),
+            "auto_event_creates_semantic_authority": any(
+                bool(d["final"]["auto_event_creates_semantic_authority"])
+                for d in documents
+            ),
+            "auto_event_claim_truth_promoted": any(
+                bool(d["final"]["auto_event_claim_truth_promoted"])
                 for d in documents
             ),
             "semantic_authority_created": any(
