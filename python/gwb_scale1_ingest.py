@@ -115,10 +115,12 @@ def ingest_document(
         projector,
     )
 
+    source_family = "web" if source_kind(path) == "public_biography_html" else "document"
     prepare = run_json(
         [
             str(scale1_bin),
-            "prepare-stdin",
+            "prepare-stdin-family",
+            source_family,
             source_ref,
             provider_ref,
             acquisition_ref,
@@ -175,6 +177,7 @@ def ingest_document(
     return {
         "document_ordinal": ordinal,
         "source_kind": source_kind(path),
+        "source_family": source_family,
         "source_path": str(path),
         "source_sha256": raw_sha256,
         "source_bytes": len(raw),
