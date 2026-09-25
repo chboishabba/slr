@@ -26,6 +26,7 @@ mod generic_source_compiler;
 mod jmail_adapter;
 mod plain_text_document_adapter;
 mod long_document_ingest_store;
+mod generic_source_content_store;
 mod statement_trace_store;
 
 pub use chronology_contestation_store::{
@@ -178,6 +179,11 @@ pub use long_document_ingest_store::{
     install_long_document_ingest_schema, load_long_document_ingest_receipt,
     persist_long_document_compilation, LongDocumentIngestStoreError,
     PersistedLongDocumentIngestReceipt, LONG_DOCUMENT_INGEST_SCHEMA_SQL,
+};
+pub use generic_source_content_store::{
+    install_generic_source_revision_schema, load_generic_text_source,
+    persist_generic_text_source, GenericSourceContentStoreError,
+    PersistedGenericSourceContent, GENERIC_SOURCE_REVISION_SCHEMA_SQL,
 };
 pub use statement_trace_store::{
     canonical_observation_event_link_ref, canonical_statement_observation_link_ref,
