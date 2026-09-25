@@ -372,6 +372,14 @@ pub fn persist_statement_observation_link(
     config: &DatabaseConfig,
     link: &StatementObservationLink,
 ) -> Result<StatementObservationLink, StatementTraceStoreError> {
+    let mut client = Client::connect(config.database_url(), NoTls)?;
+    persist_statement_observation_link_with_client(&mut client, link)
+}
+
+pub(crate) fn persist_statement_observation_link_with_client(
+    client: &mut Client,
+    link: &StatementObservationLink,
+) -> Result<StatementObservationLink, StatementTraceStoreError> {
     link.validate()?;
     let expected = canonical_statement_observation_link_ref(
         &link.statement_ref,
@@ -382,7 +390,6 @@ pub fn persist_statement_observation_link(
         return Err(StatementTraceStoreError::ExistingLinkConflict);
     }
 
-    let mut client = Client::connect(config.database_url(), NoTls)?;
     let statement_exists: bool = client
         .query_one(
             "SELECT EXISTS (SELECT 1 FROM corpus.source_statement WHERE statement_ref=$1)",
@@ -416,7 +423,7 @@ pub fn persist_statement_observation_link(
         ],
     )?;
 
-    let persisted = load_statement_observation_link_with_client(&mut client, &link.link_ref)?
+    let persisted = load_statement_observation_link_with_client(client, &link.link_ref)?
         .ok_or(StatementTraceStoreError::ExistingLinkConflict)?;
     if &persisted != link {
         return Err(StatementTraceStoreError::ExistingLinkConflict);
