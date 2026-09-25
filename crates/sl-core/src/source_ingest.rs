@@ -140,7 +140,13 @@ impl SourceIngestEnvelope {
             SourceFamily::Transcript | SourceFamily::Audio => {
                 EvidenceManifestationFamily::Transcript
             }
-            SourceFamily::Document => EvidenceManifestationFamily::PdfDocument,
+            SourceFamily::Document => {
+                if self.media_type_ref.eq_ignore_ascii_case("application/pdf") {
+                    EvidenceManifestationFamily::PdfDocument
+                } else {
+                    EvidenceManifestationFamily::Other
+                }
+            },
             SourceFamily::Wiki => EvidenceManifestationFamily::Wikipedia,
             _ => EvidenceManifestationFamily::Other,
         };
@@ -465,14 +471,22 @@ pub fn document_compilation_receipt(
     document: &LongDocumentSource,
 ) -> Result<SourceCompilationReceipt, SourceIngestError> {
     document.validate()?;
+    let semantic_candidate_region_count = document
+        .regions
+        .iter()
+        .filter(|region| region.kind == DocumentRegionKind::Sentence)
+        .count();
     Ok(SourceCompilationReceipt {
         source_ref: document.ingest.source_ref.clone(),
         source_revision_ref: document.ingest.source_revision_ref.clone(),
         family: SourceFamily::Document,
         role_class: document.ingest.role_class,
         exact_region_count: document.regions.len(),
-        semantic_candidate_region_count: document.regions.len(),
-        transport_or_nonsemantic_region_count: 0,
+        semantic_candidate_region_count,
+        transport_or_nonsemantic_region_count: document
+            .regions
+            .len()
+            .saturating_sub(semantic_candidate_region_count),
         candidate_only: true,
         creates_semantic_authority: false,
         applicability_promoted: false,
@@ -619,7 +633,8 @@ mod tests {
         let receipt = document_compilation_receipt(&document).unwrap();
         assert_eq!(spans.len(), 3);
         assert_eq!(receipt.exact_region_count, 3);
-        assert_eq!(receipt.semantic_candidate_region_count, 3);
+        assert_eq!(receipt.semantic_candidate_region_count, 1);
+        assert_eq!(receipt.transport_or_nonsemantic_region_count, 2);
         assert!(!receipt.source_omitted_when_parse_fails);
         assert!(!receipt.candidate_interpretation_is_truth);
     }
