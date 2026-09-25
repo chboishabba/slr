@@ -1,6 +1,6 @@
 use std::error::Error;
 use std::fs;
-use std::io::Write;
+use std::io::{Error as IoError, ErrorKind, Write};
 use std::path::Path;
 use std::process::{Command, Stdio};
 
@@ -92,7 +92,7 @@ fn run_parser(
     child
         .stdin
         .as_mut()
-        .ok_or("parser stdin unavailable")?
+        .ok_or_else(|| IoError::new(ErrorKind::BrokenPipe, "parser stdin unavailable"))?
         .write_all(text.as_bytes())?;
     let output = child.wait_with_output()?;
     if !output.status.success() {
@@ -126,7 +126,7 @@ fn prepare_spacy(args: &[String]) -> Result<(), Box<dyn Error>> {
     let canonical_text = fs::read_to_string(text_file)?;
     let source_revision_ref = content_revision_ref(&canonical_text);
     let description = parser_description(parser_script, model_ref)?;
-    if description.parser_family != "spacy" || description.model_ref != *model_ref {
+    if description.parser_family != "spacy" || description.model_ref != model_ref.as_str() {
         return Err("spaCy parser description did not match requested model".into());
     }
 
@@ -324,8 +324,9 @@ fn worker(args: &[String]) -> Result<(), Box<dyn Error>> {
                 continue;
             }
 
-            let global_offset =
-                u32::try_from(job.start_char).map_err(|_| "region start exceeds u32 M12 ABI")?;
+            let global_offset = u32::try_from(job.start_char).map_err(|_| {
+                IoError::new(ErrorKind::InvalidData, "region start exceeds u32 M12 ABI")
+            })?;
             let mut tokens = Vec::with_capacity(wire.tokens.len());
             let mut overflow = false;
             for token in wire.tokens {
