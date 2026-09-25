@@ -17,7 +17,10 @@ use sensiblaw_core::source_ingest::{DocumentRegionKind, SourceFamily};
 use thiserror::Error;
 
 use crate::candidate_pnf_store::{
-    load_candidate_pnf_batch_with_client, persist_statement_candidate_pnf_with_client,
+    load_candidate_persistence_stage_receipt_with_client,
+    load_candidate_pnf_batch_with_client,
+    persist_candidate_persistence_stage_receipt_with_client,
+    persist_statement_candidate_pnf_with_client,
 };
 use crate::statement_trace_store::persist_source_statement_with_client;
 use crate::{
@@ -297,43 +300,31 @@ pub fn finalize_db_native_long_document(
     let mut persistence_client =
         Client::connect(config.database_url(), NoTls).map_err(CandidatePnfStoreError::from)?;
 
-    let parser_receipt_prefix = format!("db-parser:{parser_run_ref}:%");
-    let existing = persistence_client.query_one(
-        r#"
-        SELECT COUNT(DISTINCT s.statement_ref)::BIGINT,
-               COUNT(DISTINCT b.batch_ref)::BIGINT,
-               COUNT(f.candidate_ref)::BIGINT,
-               COALESCE(BOOL_AND(
-                 s.candidate_only
-                 AND NOT s.creates_semantic_authority
-                 AND NOT s.applicability_promoted
-                 AND NOT s.claim_truth_promoted
-                 AND b.candidate_only
-                 AND NOT b.semantic_admission_paid
-                 AND NOT b.proposition_support_paid
-                 AND NOT b.applicability_paid
-                 AND NOT b.claim_truth_paid
-                 AND COALESCE(f.candidate_only, TRUE)
-               ), TRUE)
-        FROM corpus.source_statement s
-        JOIN pnf.statement_candidate_batch b
-          ON b.statement_ref=s.statement_ref
-        LEFT JOIN pnf.statement_candidate_factor f
-          ON f.batch_ref=b.batch_ref
-        WHERE s.source_revision_ref=$1
-          AND b.parser_receipt_ref LIKE $2
-        "#,
-        &[&source_revision_ref, &parser_receipt_prefix],
-    )?;
-    let existing_statement_count = existing.get::<_, i64>(0).max(0) as usize;
-    let existing_batch_count = existing.get::<_, i64>(1).max(0) as usize;
-    let existing_factor_count = existing.get::<_, i64>(2).max(0) as usize;
-    let existing_boundaries_ok = existing.get::<_, bool>(3);
-    let candidate_persistence_reused =
-        existing_statement_count == parser_state.succeeded
-        && existing_batch_count == parser_state.succeeded
-        && existing_factor_count == compilation.candidate_pnf_count
-        && existing_boundaries_ok;
+    let existing_stage =
+        load_candidate_persistence_stage_receipt_with_client(
+            &mut persistence_client,
+            &source_revision_ref,
+            parser_run_ref,
+        )?;
+    let candidate_persistence_reused = existing_stage.as_ref().is_some_and(|receipt| {
+        receipt.statement_count == parser_state.succeeded
+            && receipt.batch_count == parser_state.succeeded
+            && receipt.factor_count == compilation.candidate_pnf_count
+            && receipt.exact_reopen_validated
+            && receipt.candidate_only
+            && !receipt.creates_semantic_authority
+            && !receipt.applicability_promoted
+            && !receipt.claim_truth_promoted
+    });
+    let existing_statement_count = existing_stage
+        .as_ref()
+        .map_or(0, |receipt| receipt.statement_count);
+    let existing_batch_count = existing_stage
+        .as_ref()
+        .map_or(0, |receipt| receipt.batch_count);
+    let existing_factor_count = existing_stage
+        .as_ref()
+        .map_or(0, |receipt| receipt.factor_count);
 
     let mut persisted_statement_count = if candidate_persistence_reused {
         existing_statement_count
@@ -431,6 +422,24 @@ pub fn finalize_db_native_long_document(
         || !candidate_pnf_reopen_complete
     {
         return Err(DbNativeLongDocumentError::IncompleteDurablePartition);
+    }
+
+    if !candidate_persistence_reused {
+        let stage = persist_candidate_persistence_stage_receipt_with_client(
+            &mut persistence_client,
+            &source_revision_ref,
+            parser_run_ref,
+            persisted_statement_count,
+            persisted_candidate_batch_count,
+            persisted_candidate_factor_count,
+        )?;
+        if stage.statement_count != persisted_statement_count
+            || stage.batch_count != persisted_candidate_batch_count
+            || stage.factor_count != persisted_candidate_factor_count
+            || !stage.exact_reopen_validated
+        {
+            return Err(DbNativeLongDocumentError::IncompleteDurablePartition);
+        }
     }
 
     let candidate_persist_ns = candidate_persist_started.elapsed().as_nanos();
