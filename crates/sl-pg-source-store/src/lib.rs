@@ -24,6 +24,7 @@ mod review_workstation_store;
 mod statement_pnf_spine;
 mod generic_source_compiler;
 mod jmail_adapter;
+mod plain_text_document_adapter;
 mod statement_trace_store;
 
 pub use chronology_contestation_store::{
@@ -166,6 +167,10 @@ pub use generic_source_compiler::{
 pub use jmail_adapter::{
     jmail_record_to_mail_source, segment_jmail_body, JmailAdapterError,
     JmailEmailRecord,
+};
+pub use plain_text_document_adapter::{
+    build_plain_text_long_document_source, PlainTextDocumentAdapterError,
+    PlainTextSegmentationReceipt,
 };
 pub use statement_trace_store::{
     canonical_observation_event_link_ref, canonical_statement_observation_link_ref,
