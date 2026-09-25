@@ -63,6 +63,59 @@ ADD COLUMN IF NOT EXISTS reviewed BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE digital_esd.corpus_source
 ADD COLUMN IF NOT EXISTS admitted BOOLEAN NOT NULL DEFAULT FALSE;
 
+DO $digital_esd_stage_constraints$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'digital_esd_corpus_source_retained_screened'
+    ) THEN
+        ALTER TABLE digital_esd.corpus_source
+          ADD CONSTRAINT digital_esd_corpus_source_retained_screened
+          CHECK (NOT retained OR screened);
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'digital_esd_corpus_source_verified_retained'
+    ) THEN
+        ALTER TABLE digital_esd.corpus_source
+          ADD CONSTRAINT digital_esd_corpus_source_verified_retained
+          CHECK (NOT verified OR retained);
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'digital_esd_corpus_source_materialised_verified'
+    ) THEN
+        ALTER TABLE digital_esd.corpus_source
+          ADD CONSTRAINT digital_esd_corpus_source_materialised_verified
+          CHECK (NOT materialised OR verified);
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'digital_esd_corpus_source_parsed_materialised'
+    ) THEN
+        ALTER TABLE digital_esd.corpus_source
+          ADD CONSTRAINT digital_esd_corpus_source_parsed_materialised
+          CHECK (NOT parsed OR materialised);
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'digital_esd_corpus_source_reviewed_parsed'
+    ) THEN
+        ALTER TABLE digital_esd.corpus_source
+          ADD CONSTRAINT digital_esd_corpus_source_reviewed_parsed
+          CHECK (NOT reviewed OR parsed);
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'digital_esd_corpus_source_admitted_reviewed'
+    ) THEN
+        ALTER TABLE digital_esd.corpus_source
+          ADD CONSTRAINT digital_esd_corpus_source_admitted_reviewed
+          CHECK (NOT admitted OR reviewed);
+    END IF;
+END
+$digital_esd_stage_constraints$;
+
 CREATE TABLE IF NOT EXISTS digital_esd.world_revision (
     world_revision_ref TEXT PRIMARY KEY,
     corpus_ref TEXT NOT NULL,
