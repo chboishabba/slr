@@ -7,6 +7,7 @@ use std::process::{Command, Stdio};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
+use sensiblaw_core::source_ingest::SourceFamily;
 
 use sensiblaw_pg_source_store::{
     canonical_generic_source_revision_ref, claim_parser_jobs,
@@ -14,6 +15,7 @@ use sensiblaw_pg_source_store::{
     load_claimed_job_text,
     load_database_config, parser_run_state, persist_parser_residual,
     persist_parser_success_with_entities, prepare_db_native_long_document,
+    prepare_db_native_long_source,
     ParserArtifactRecord, ParserEntityRecord, ParserTokenRecord,
     ReviewAction, ReviewCommand, ReviewStatus, apply_persisted_review_command,
 };
@@ -214,24 +216,61 @@ fn prepare_spacy(args: &[String]) -> Result<(), Box<dyn Error>> {
 
 
 
-fn prepare_stdin(args: &[String]) -> Result<(), Box<dyn Error>> {
-    if args.len() < 7 {
-        return Err(
-            "prepare-stdin <source-ref> <provider-ref> <acquisition-receipt-ref> <title> <model-ref> [config-json] [parser-script]"
-                .into(),
-        );
-    }
-    let source_ref = &args[2];
-    let provider_ref = &args[3];
-    let acquisition_receipt_ref = &args[4];
-    let title = &args[5];
-    let model_ref = &args[6];
-    let config_json = args.get(7).map(String::as_str).unwrap_or("{}");
-    let parser_script = args
-        .get(8)
-        .map(String::as_str)
-        .unwrap_or("scripts/scale1_spacy_json_parser.py");
 
+fn source_family_ref(family: SourceFamily) -> &'static str {
+    match family {
+        SourceFamily::Document => "document",
+        SourceFamily::Mail => "mail",
+        SourceFamily::Chat => "chat",
+        SourceFamily::SocialMessage => "social_message",
+        SourceFamily::Transcript => "transcript",
+        SourceFamily::Audio => "audio",
+        SourceFamily::ImageOcr => "image_ocr",
+        SourceFamily::Web => "web",
+        SourceFamily::Wiki => "wiki",
+        SourceFamily::LegalAuthority => "legal_authority",
+        SourceFamily::NoteResearch => "note_research",
+        SourceFamily::FieldCapture => "field_capture",
+        SourceFamily::Calendar => "calendar",
+        SourceFamily::FinancialRecord => "financial_record",
+        SourceFamily::StructuredDataset => "structured_dataset",
+        SourceFamily::MachineArtifact => "machine_artifact",
+    }
+}
+
+fn parse_source_family(value: &str) -> Result<SourceFamily, Box<dyn Error>> {
+    Ok(match value {
+        "document" => SourceFamily::Document,
+        "web" => SourceFamily::Web,
+        "wiki" => SourceFamily::Wiki,
+        "transcript" => SourceFamily::Transcript,
+        "note_research" => SourceFamily::NoteResearch,
+        "legal_authority" => SourceFamily::LegalAuthority,
+        "image_ocr" => SourceFamily::ImageOcr,
+        "mail" => SourceFamily::Mail,
+        "chat" => SourceFamily::Chat,
+        "social_message" => SourceFamily::SocialMessage,
+        "audio" => SourceFamily::Audio,
+        "field_capture" => SourceFamily::FieldCapture,
+        "calendar" => SourceFamily::Calendar,
+        "financial_record" => SourceFamily::FinancialRecord,
+        "structured_dataset" => SourceFamily::StructuredDataset,
+        "machine_artifact" => SourceFamily::MachineArtifact,
+        _ => return Err(format!("unknown source family: {value}").into()),
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+fn prepare_stdin_values(
+    source_ref: &str,
+    provider_ref: &str,
+    acquisition_receipt_ref: &str,
+    title: &str,
+    model_ref: &str,
+    source_family: SourceFamily,
+    config_json: &str,
+    parser_script: &str,
+) -> Result<(), Box<dyn Error>> {
     let mut canonical_text = String::new();
     std::io::stdin().read_to_string(&mut canonical_text)?;
     if canonical_text.is_empty() {
@@ -247,18 +286,19 @@ fn prepare_stdin(args: &[String]) -> Result<(), Box<dyn Error>> {
         "text/plain",
     );
     let description = parser_description(parser_script, model_ref)?;
-    if description.parser_family != "spacy" || description.model_ref != model_ref.as_str() {
+    if description.parser_family != "spacy" || description.model_ref != model_ref {
         return Err("spaCy parser description did not match requested model".into());
     }
 
     let config = load_database_config(None)?;
-    let prepared = prepare_db_native_long_document(
+    let prepared = prepare_db_native_long_source(
         &config,
         source_ref,
         &source_revision_ref,
         provider_ref,
         acquisition_receipt_ref,
-        (!title.is_empty()).then(|| title.clone()),
+        source_family,
+        (!title.is_empty()).then(|| title.to_owned()),
         None,
         &canonical_text,
         &description.parser_family,
@@ -272,6 +312,7 @@ fn prepare_stdin(args: &[String]) -> Result<(), Box<dyn Error>> {
         serde_json::to_string_pretty(&json!({
             "schema": "sensiblaw.scale1.long-document-prepare.v0_1",
             "input_transport": "stdin",
+            "source_family": source_family_ref(source_family),
             "source_ref": prepared.source.source_ref,
             "source_revision_ref": prepared.source.source_revision_ref,
             "content_digest_ref": prepared.source.content_digest_ref,
@@ -292,6 +333,49 @@ fn prepare_stdin(args: &[String]) -> Result<(), Box<dyn Error>> {
         }))?
     );
     Ok(())
+}
+
+fn prepare_stdin(args: &[String]) -> Result<(), Box<dyn Error>> {
+    if args.len() < 7 {
+        return Err(
+            "prepare-stdin <source-ref> <provider-ref> <acquisition-receipt-ref> <title> <model-ref> [config-json] [parser-script]"
+                .into(),
+        );
+    }
+    prepare_stdin_values(
+        &args[2],
+        &args[3],
+        &args[4],
+        &args[5],
+        &args[6],
+        SourceFamily::Document,
+        args.get(7).map(String::as_str).unwrap_or("{}"),
+        args.get(8)
+            .map(String::as_str)
+            .unwrap_or("scripts/scale1_spacy_json_parser.py"),
+    )
+}
+
+fn prepare_stdin_family(args: &[String]) -> Result<(), Box<dyn Error>> {
+    if args.len() < 8 {
+        return Err(
+            "prepare-stdin-family <source-family> <source-ref> <provider-ref> <acquisition-receipt-ref> <title> <model-ref> [config-json] [parser-script]"
+                .into(),
+        );
+    }
+    let source_family = parse_source_family(&args[2])?;
+    prepare_stdin_values(
+        &args[3],
+        &args[4],
+        &args[5],
+        &args[6],
+        &args[7],
+        source_family,
+        args.get(8).map(String::as_str).unwrap_or("{}"),
+        args.get(9)
+            .map(String::as_str)
+            .unwrap_or("scripts/scale1_spacy_json_parser.py"),
+    )
 }
 
 fn prepare_gwb_projection(args: &[String]) -> Result<(), Box<dyn Error>> {
@@ -854,6 +938,7 @@ fn usage() {
          scale1_long_document prepare-spacy <text-file> <source-ref> <provider-ref> <acquisition-receipt-ref> <model-ref> [config-json] [parser-script]\n  \
          scale1_long_document prepare-gwb <projection-manifest> <document-ordinal> <model-ref> [config-json] [parser-script]\n  \
          scale1_long_document prepare-stdin <source-ref> <provider-ref> <acquisition-receipt-ref> <title> <model-ref> [config-json] [parser-script]\n  \
+         scale1_long_document prepare-stdin-family <source-family> <source-ref> <provider-ref> <acquisition-receipt-ref> <title> <model-ref> [config-json] [parser-script]\n  \
          scale1_long_document status <parser-run-ref>\n  \
          scale1_long_document worker <parser-run-ref> <worker-ref> [batch-size] [parser-script]\n  \
          scale1_long_document finalize <parser-run-ref>\n  \
@@ -873,6 +958,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         "prepare-spacy" => prepare_spacy(&args),
         "prepare-gwb" => prepare_gwb_projection(&args),
         "prepare-stdin" => prepare_stdin(&args),
+        "prepare-stdin-family" => prepare_stdin_family(&args),
         "status" => status(&args),
         "worker" => worker(&args),
         "finalize" => finalize(&args),
