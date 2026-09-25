@@ -7,6 +7,7 @@ pub mod chat_source;
 pub mod event_discovery;
 pub mod operational_state;
 pub mod review_workstation;
+pub mod source_ingest;
 
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
