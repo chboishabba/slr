@@ -180,12 +180,14 @@ pub use plain_text_document_adapter::{
 pub use long_document_ingest_store::{
     install_long_document_ingest_schema, load_long_document_ingest_receipt,
     load_long_document_regions, persist_long_document_compilation,
+    persist_long_document_structure,
     LongDocumentIngestStoreError, PersistedLongDocumentIngestReceipt,
     PersistedLongDocumentRegion, LONG_DOCUMENT_INGEST_SCHEMA_SQL,
 };
 pub use generic_source_content_store::{
-    install_generic_source_revision_schema, load_generic_text_source,
-    persist_generic_text_source, GenericSourceContentStoreError,
+    install_generic_source_revision_schema, load_generic_source_envelope,
+    load_generic_text_source, persist_generic_text_source,
+    GenericSourceContentStoreError,
     PersistedGenericSourceContent, GENERIC_SOURCE_REVISION_SCHEMA_SQL,
 };
 pub use long_document_pipeline::{
