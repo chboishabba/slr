@@ -177,8 +177,9 @@ pub use plain_text_document_adapter::{
 };
 pub use long_document_ingest_store::{
     install_long_document_ingest_schema, load_long_document_ingest_receipt,
-    persist_long_document_compilation, LongDocumentIngestStoreError,
-    PersistedLongDocumentIngestReceipt, LONG_DOCUMENT_INGEST_SCHEMA_SQL,
+    load_long_document_regions, persist_long_document_compilation,
+    LongDocumentIngestStoreError, PersistedLongDocumentIngestReceipt,
+    PersistedLongDocumentRegion, LONG_DOCUMENT_INGEST_SCHEMA_SQL,
 };
 pub use generic_source_content_store::{
     install_generic_source_revision_schema, load_generic_text_source,
