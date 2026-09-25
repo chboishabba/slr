@@ -218,6 +218,28 @@ pub fn build_plain_text_long_document_source(
     edition_ref: Option<String>,
     text: &str,
 ) -> Result<(LongDocumentSource, PlainTextSegmentationReceipt), PlainTextDocumentAdapterError> {
+    build_plain_text_long_source_with_family(
+        source_ref,
+        source_revision_ref,
+        provider_ref,
+        acquisition_receipt_ref,
+        SourceFamily::Document,
+        title,
+        edition_ref,
+        text,
+    )
+}
+
+pub fn build_plain_text_long_source_with_family(
+    source_ref: &str,
+    source_revision_ref: &str,
+    provider_ref: &str,
+    acquisition_receipt_ref: &str,
+    family: SourceFamily,
+    title: Option<String>,
+    edition_ref: Option<String>,
+    text: &str,
+) -> Result<(LongDocumentSource, PlainTextSegmentationReceipt), PlainTextDocumentAdapterError> {
     if source_ref.trim().is_empty() {
         return Err(PlainTextDocumentAdapterError::EmptySourceRef);
     }
@@ -297,7 +319,7 @@ pub fn build_plain_text_long_document_source(
             source_ref: source_ref.to_owned(),
             source_revision_ref: source_revision_ref.to_owned(),
             provider_ref: provider_ref.to_owned(),
-            family: SourceFamily::Document,
+            family,
             role_class: IngestRoleClass::ContentSource,
             content_digest_ref: sha256_ref(text),
             acquisition_receipt_ref: acquisition_receipt_ref.to_owned(),
