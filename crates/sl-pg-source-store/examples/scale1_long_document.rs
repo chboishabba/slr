@@ -917,6 +917,54 @@ fn apply_review(args: &[String]) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+
+fn materialize_event(args: &[String]) -> Result<(), Box<dyn Error>> {
+    if args.len() < 4 || args.len() > 5 {
+        return Err(
+            "materialize-event <proposal-ref> <accepted-review-command-ref> [event-ref]"
+                .into(),
+        );
+    }
+    let proposal_ref = &args[2];
+    let accepted_review_command_ref = &args[3];
+    let event_ref = args.get(4).cloned().unwrap_or_else(|| {
+        format!(
+            "event:reviewed:{}",
+            digest_ref(
+                format!(
+                    "{proposal_ref}\u{1f}{accepted_review_command_ref}"
+                )
+                .as_bytes(),
+            )
+        )
+    });
+
+    let config = load_database_config(None)?;
+    let receipt = materialize_accepted_event_join(
+        &config,
+        proposal_ref,
+        &event_ref,
+        accepted_review_command_ref,
+    )?;
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&json!({
+            "schema": "sensiblaw.scale1.reviewed-event-materialization.v0_1",
+            "assembly_ref": receipt.assembly_ref,
+            "proposal_ref": receipt.proposal_ref,
+            "event_ref": receipt.event_ref,
+            "review_item_ref": receipt.review_item_ref,
+            "accepted_review_command_ref": receipt.accepted_review_command_ref,
+            "observation_refs": receipt.observation_refs,
+            "statement_refs": receipt.statement_refs,
+            "reviewed_event_identity": receipt.reviewed_event_identity,
+            "creates_semantic_authority": receipt.creates_semantic_authority,
+            "claim_truth_promoted": receipt.claim_truth_promoted
+        }))?
+    );
+    Ok(())
+}
+
 fn materialize_proposition(args: &[String]) -> Result<(), Box<dyn Error>> {
     if args.len() != 4 {
         return Err(
@@ -963,6 +1011,7 @@ fn usage() {
          scale1_long_document worker <parser-run-ref> <worker-ref> [batch-size] [parser-script]\n  \
          scale1_long_document finalize <parser-run-ref>\n  \
          scale1_long_document review <review-item-ref> <action> <reviewer-ref> [qualification-ref] [evidence-request-ref]\n  \
+         scale1_long_document materialize-event <proposal-ref> <accepted-review-command-ref> [event-ref]\n  \
          scale1_long_document materialize-proposition <review-item-ref> <accepted-review-command-ref>"
     );
 }
@@ -983,6 +1032,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         "worker" => worker(&args),
         "finalize" => finalize(&args),
         "review" => apply_review(&args),
+        "materialize-event" => materialize_event(&args),
         "materialize-proposition" => materialize_proposition(&args),
         _ => {
             usage();
