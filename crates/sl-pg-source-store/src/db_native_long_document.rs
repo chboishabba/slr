@@ -91,6 +91,7 @@ pub struct PreparedDbNativeLongDocument {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DbNativeLongDocumentTimings {
+    pub candidate_persistence_reused: bool,
     pub load_and_validate_ns: u128,
     pub m12_compile_ns: u128,
     pub candidate_persist_ns: u128,
@@ -118,6 +119,7 @@ pub struct DbNativeLongDocumentReceipt {
     pub persisted_candidate_batch_count: usize,
     pub persisted_candidate_factor_count: usize,
     pub candidate_pnf_reopen_complete: bool,
+    pub candidate_persistence_reused: bool,
     pub reconciliation: CorpusReconciliationReceipt,
     pub reconciliation_review: ReconciliationReviewReceipt,
     pub auto_event: Scale1AutoEventReceipt,
@@ -295,11 +297,62 @@ pub fn finalize_db_native_long_document(
     let mut persistence_client =
         Client::connect(config.database_url(), NoTls).map_err(CandidatePnfStoreError::from)?;
 
-    let mut persisted_statement_count = 0usize;
-    let mut persisted_candidate_batch_count = 0usize;
-    let mut persisted_candidate_factor_count = 0usize;
-    let mut candidate_pnf_reopen_complete = true;
+    let parser_receipt_prefix = format!("db-parser:{parser_run_ref}:%");
+    let existing = persistence_client.query_one(
+        r#"
+        SELECT COUNT(DISTINCT s.statement_ref)::BIGINT,
+               COUNT(DISTINCT b.batch_ref)::BIGINT,
+               COUNT(f.candidate_ref)::BIGINT,
+               COALESCE(BOOL_AND(
+                 s.candidate_only
+                 AND NOT s.creates_semantic_authority
+                 AND NOT s.applicability_promoted
+                 AND NOT s.claim_truth_promoted
+                 AND b.candidate_only
+                 AND NOT b.semantic_admission_paid
+                 AND NOT b.proposition_support_paid
+                 AND NOT b.applicability_paid
+                 AND NOT b.claim_truth_paid
+                 AND COALESCE(f.candidate_only, TRUE)
+               ), TRUE)
+        FROM corpus.source_statement s
+        JOIN pnf.statement_candidate_batch b
+          ON b.statement_ref=s.statement_ref
+        LEFT JOIN pnf.statement_candidate_factor f
+          ON f.batch_ref=b.batch_ref
+        WHERE s.source_revision_ref=$1
+          AND b.parser_receipt_ref LIKE $2
+        "#,
+        &[&source_revision_ref, &parser_receipt_prefix],
+    )?;
+    let existing_statement_count = existing.get::<_, i64>(0).max(0) as usize;
+    let existing_batch_count = existing.get::<_, i64>(1).max(0) as usize;
+    let existing_factor_count = existing.get::<_, i64>(2).max(0) as usize;
+    let existing_boundaries_ok = existing.get::<_, bool>(3);
+    let candidate_persistence_reused =
+        existing_statement_count == parser_state.succeeded
+        && existing_batch_count == parser_state.succeeded
+        && existing_factor_count == compilation.candidate_pnf_count
+        && existing_boundaries_ok;
 
+    let mut persisted_statement_count = if candidate_persistence_reused {
+        existing_statement_count
+    } else {
+        0
+    };
+    let mut persisted_candidate_batch_count = if candidate_persistence_reused {
+        existing_batch_count
+    } else {
+        0
+    };
+    let mut persisted_candidate_factor_count = if candidate_persistence_reused {
+        existing_factor_count
+    } else {
+        0
+    };
+    let mut candidate_pnf_reopen_complete = candidate_persistence_reused;
+
+    if !candidate_persistence_reused {
     for region in document
         .regions
         .iter()
@@ -371,7 +424,8 @@ pub fn finalize_db_native_long_document(
         }
     }
 
-    if persisted_statement_count != parser_state.succeeded
+    }
+        if persisted_statement_count != parser_state.succeeded
         || persisted_candidate_batch_count != parser_state.succeeded
         || persisted_candidate_factor_count != compilation.candidate_pnf_count
         || !candidate_pnf_reopen_complete
@@ -418,6 +472,7 @@ pub fn finalize_db_native_long_document(
     let reload_verify_ns = reload_verify_started.elapsed().as_nanos();
     let finalize_total_ns = finalize_started.elapsed().as_nanos();
     let timings = DbNativeLongDocumentTimings {
+        candidate_persistence_reused,
         load_and_validate_ns,
         m12_compile_ns,
         candidate_persist_ns,
@@ -444,6 +499,7 @@ pub fn finalize_db_native_long_document(
         persisted_candidate_batch_count,
         persisted_candidate_factor_count,
         candidate_pnf_reopen_complete,
+        candidate_persistence_reused,
         reconciliation,
         reconciliation_review,
         auto_event,
