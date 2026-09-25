@@ -317,8 +317,7 @@ pub fn reconcile_source_candidate_semantics(
     let mut entity_fingerprints = BTreeSet::new();
     let mut proposition_fingerprints = BTreeSet::new();
     let mut event_fingerprints = BTreeSet::new();
-    let mut proposition_by_base: BTreeMap<String, BTreeMap<&'static str, String>> =
-        BTreeMap::new();
+    let mut touched_base_signatures = BTreeSet::new();
 
     let mut entity_mention_count = 0usize;
     let mut proposition_occurrence_count = 0usize;
@@ -403,10 +402,7 @@ pub fn reconcile_source_candidate_semantics(
         )?;
         proposition_occurrence_count += 1;
         proposition_fingerprints.insert(proposition_fingerprint_ref.clone());
-        proposition_by_base
-            .entry(base.clone())
-            .or_default()
-            .insert(polarity, proposition_fingerprint_ref);
+        touched_base_signatures.insert(base.clone());
 
         let actors = role_lemmas(batch, "actor");
         let patients = role_lemmas(batch, "patient");
@@ -446,7 +442,18 @@ pub fn reconcile_source_candidate_semantics(
     }
 
     let mut polarity_conflict_candidate_count = 0usize;
-    for (base, by_polarity) in &proposition_by_base {
+    for base in &touched_base_signatures {
+        let rows = tx.query(
+            "SELECT polarity_ref, proposition_fingerprint_ref
+             FROM semantic.proposition_fingerprint_candidate
+             WHERE base_signature_ref=$1
+             ORDER BY polarity_ref, proposition_fingerprint_ref",
+            &[base],
+        )?;
+        let mut by_polarity = BTreeMap::new();
+        for row in rows {
+            by_polarity.insert(row.get::<_, String>(0), row.get::<_, String>(1));
+        }
         if let (Some(positive), Some(negative)) =
             (by_polarity.get("positive"), by_polarity.get("negative"))
         {
@@ -475,19 +482,32 @@ pub fn reconcile_source_candidate_semantics(
     // candidate semantics; this is not a truth/importance score.
     let pressure_rows = tx.query(
         r#"
-        SELECT 'proposition'::TEXT, proposition_fingerprint_ref,
-               COUNT(*)::BIGINT, COUNT(DISTINCT source_revision_ref)::BIGINT
-        FROM semantic.proposition_candidate_occurrence
-        GROUP BY proposition_fingerprint_ref
+        WITH touched_proposition AS (
+          SELECT DISTINCT proposition_fingerprint_ref
+          FROM semantic.proposition_candidate_occurrence
+          WHERE source_revision_ref=$1
+        ),
+        touched_event AS (
+          SELECT DISTINCT event_fingerprint_ref
+          FROM semantic.event_candidate_occurrence
+          WHERE source_revision_ref=$1
+        )
+        SELECT 'proposition'::TEXT, o.proposition_fingerprint_ref,
+               COUNT(*)::BIGINT, COUNT(DISTINCT o.source_revision_ref)::BIGINT
+        FROM semantic.proposition_candidate_occurrence o
+        JOIN touched_proposition t
+          ON t.proposition_fingerprint_ref=o.proposition_fingerprint_ref
+        GROUP BY o.proposition_fingerprint_ref
         HAVING COUNT(*) > 1
         UNION ALL
-        SELECT 'event'::TEXT, event_fingerprint_ref,
-               COUNT(*)::BIGINT, COUNT(DISTINCT source_revision_ref)::BIGINT
-        FROM semantic.event_candidate_occurrence
-        GROUP BY event_fingerprint_ref
+        SELECT 'event'::TEXT, o.event_fingerprint_ref,
+               COUNT(*)::BIGINT, COUNT(DISTINCT o.source_revision_ref)::BIGINT
+        FROM semantic.event_candidate_occurrence o
+        JOIN touched_event t ON t.event_fingerprint_ref=o.event_fingerprint_ref
+        GROUP BY o.event_fingerprint_ref
         HAVING COUNT(*) > 1
         "#,
-        &[],
+        &[&source_revision_ref],
     )?;
     let mut review_pressure_candidate_count = 0usize;
     for row in pressure_rows {
