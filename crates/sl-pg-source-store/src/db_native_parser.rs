@@ -87,6 +87,19 @@ CREATE TABLE IF NOT EXISTS ingest.parser_token (
 CREATE INDEX IF NOT EXISTS parser_token_span_idx
 ON ingest.parser_token(compilation_key, start_char, end_char);
 
+CREATE TABLE IF NOT EXISTS ingest.parser_entity (
+    compilation_key TEXT NOT NULL REFERENCES ingest.parser_job(compilation_key) ON DELETE CASCADE,
+    entity_ordinal INTEGER NOT NULL,
+    start_char BIGINT NOT NULL,
+    end_char BIGINT NOT NULL,
+    surface TEXT NOT NULL,
+    label_ref TEXT NOT NULL,
+    PRIMARY KEY (compilation_key, entity_ordinal)
+);
+
+CREATE INDEX IF NOT EXISTS parser_entity_span_idx
+ON ingest.parser_entity(compilation_key, start_char, end_char, label_ref);
+
 CREATE TABLE IF NOT EXISTS ingest.parser_artifact (
     compilation_key TEXT PRIMARY KEY REFERENCES ingest.parser_job(compilation_key) ON DELETE CASCADE,
     format_ref TEXT NOT NULL,
@@ -180,6 +193,15 @@ pub struct ParserTokenRecord {
     pub morph_json: Option<String>,
     pub head_ordinal: Option<u32>,
     pub dependency_ref: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParserEntityRecord {
+    pub entity_ordinal: u32,
+    pub start_char: u32,
+    pub end_char: u32,
+    pub surface: String,
+    pub label_ref: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -595,7 +617,43 @@ pub fn persist_parser_success(
     tokens: &[ParserTokenRecord],
     artifact: Option<&ParserArtifactRecord>,
 ) -> Result<PersistedParserOutputReceipt, DbNativeParserError> {
+    persist_parser_success_with_entities(
+        config,
+        job,
+        worker_ref,
+        tokens,
+        &[],
+        artifact,
+    )
+}
+
+pub fn persist_parser_success_with_entities(
+    config: &DatabaseConfig,
+    job: &ClaimedParserJob,
+    worker_ref: &str,
+    tokens: &[ParserTokenRecord],
+    entities: &[ParserEntityRecord],
+    artifact: Option<&ParserArtifactRecord>,
+) -> Result<PersistedParserOutputReceipt, DbNativeParserError> {
     validate_tokens(job, tokens)?;
+    let mut entity_ordinals = BTreeSet::new();
+    for entity in entities {
+        if entity.start_char >= entity.end_char
+            || u64::from(entity.start_char) < job.start_char
+            || u64::from(entity.end_char) > job.end_char
+            || entity.surface.trim().is_empty()
+            || entity.label_ref.trim().is_empty()
+        {
+            return Err(DbNativeParserError::TokenOutsideRegion {
+                ordinal: entity.entity_ordinal,
+            });
+        }
+        if !entity_ordinals.insert(entity.entity_ordinal) {
+            return Err(DbNativeParserError::DuplicateTokenOrdinal(
+                entity.entity_ordinal,
+            ));
+        }
+    }
     if let Some(artifact) = artifact {
         require(&artifact.format_ref)?;
         require(&artifact.content_digest_ref)?;
@@ -660,6 +718,27 @@ pub fn persist_parser_success(
                 &morph_json,
                 &head_ordinal,
                 &token.dependency_ref,
+            ],
+        )?;
+    }
+
+    tx.execute(
+        "DELETE FROM ingest.parser_entity WHERE compilation_key = $1",
+        &[&job.compilation_key],
+    )?;
+    for entity in entities {
+        tx.execute(
+            "INSERT INTO ingest.parser_entity (
+                compilation_key, entity_ordinal, start_char, end_char,
+                surface, label_ref
+             ) VALUES ($1,$2,$3,$4,$5,$6)",
+            &[
+                &job.compilation_key,
+                &(entity.entity_ordinal as i32),
+                &(entity.start_char as i64),
+                &(entity.end_char as i64),
+                &entity.surface,
+                &entity.label_ref,
             ],
         )?;
     }
