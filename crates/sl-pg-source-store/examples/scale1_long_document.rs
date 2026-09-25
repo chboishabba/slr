@@ -832,32 +832,20 @@ fn worker(args: &[String]) -> Result<(), Box<dyn Error>> {
 }
 
 
-fn ingest_book(args: &[String]) -> Result<(), Box<dyn Error>> {
-    if args.len() < 7 {
-        return Err(
-            "ingest-book <text-file> <source-ref> <provider-ref> <acquisition-receipt-ref> <model-ref> [config-json] [parser-script] [batch-size]"
-                .into(),
-        );
-    }
-
+#[allow(clippy::too_many_arguments)]
+fn ingest_book_values(
+    canonical_text: String,
+    title: Option<String>,
+    source_ref: &str,
+    provider_ref: &str,
+    acquisition_receipt_ref: &str,
+    model_ref: &str,
+    config_json: &str,
+    parser_script: &str,
+    batch_size: usize,
+    input_transport: &str,
+) -> Result<(), Box<dyn Error>> {
     let total_started = Instant::now();
-    let text_file = &args[2];
-    let source_ref = &args[3];
-    let provider_ref = &args[4];
-    let acquisition_receipt_ref = &args[5];
-    let model_ref = &args[6];
-    let config_json = args.get(7).map(String::as_str).unwrap_or("{}");
-    let parser_script = args
-        .get(8)
-        .map(String::as_str)
-        .unwrap_or("scripts/scale1_spacy_json_parser.py");
-    let batch_size = args
-        .get(9)
-        .map(|value| value.parse::<usize>())
-        .transpose()?
-        .unwrap_or(32);
-
-    let canonical_text = fs::read_to_string(text_file)?;
     if canonical_text.is_empty() {
         return Err("ingest-book received empty canonical text".into());
     }
@@ -870,7 +858,7 @@ fn ingest_book(args: &[String]) -> Result<(), Box<dyn Error>> {
         "text/plain",
     );
     let description = parser_description(parser_script, model_ref)?;
-    if description.parser_family != "spacy" || description.model_ref != model_ref.as_str() {
+    if description.parser_family != "spacy" || description.model_ref != model_ref {
         return Err("spaCy parser description did not match requested model".into());
     }
 
@@ -883,9 +871,7 @@ fn ingest_book(args: &[String]) -> Result<(), Box<dyn Error>> {
         &source_revision_ref,
         provider_ref,
         acquisition_receipt_ref,
-        Path::new(text_file)
-            .file_name()
-            .map(|value| value.to_string_lossy().into_owned()),
+        title,
         None,
         &canonical_text,
         &description.parser_family,
@@ -943,6 +929,7 @@ fn ingest_book(args: &[String]) -> Result<(), Box<dyn Error>> {
             "schema": "sensiblaw.scale1.book-ingest-baseline.v0_1",
             "authority": "execution_and_measurement_receipt_only",
             "runtime_head": runtime_head,
+            "input_transport": input_transport,
             "source": {
                 "source_ref": receipt.source.source_ref,
                 "source_revision_ref": receipt.source.source_revision_ref,
@@ -1037,6 +1024,64 @@ fn ingest_book(args: &[String]) -> Result<(), Box<dyn Error>> {
         }))?
     );
     Ok(())
+}
+
+fn ingest_book(args: &[String]) -> Result<(), Box<dyn Error>> {
+    if args.len() < 7 {
+        return Err(
+            "ingest-book <text-file> <source-ref> <provider-ref> <acquisition-receipt-ref> <model-ref> [config-json] [parser-script] [batch-size]"
+                .into(),
+        );
+    }
+    let text_file = &args[2];
+    let canonical_text = fs::read_to_string(text_file)?;
+    ingest_book_values(
+        canonical_text,
+        Path::new(text_file)
+            .file_name()
+            .map(|value| value.to_string_lossy().into_owned()),
+        &args[3],
+        &args[4],
+        &args[5],
+        &args[6],
+        args.get(7).map(String::as_str).unwrap_or("{}"),
+        args.get(8)
+            .map(String::as_str)
+            .unwrap_or("scripts/scale1_spacy_json_parser.py"),
+        args.get(9)
+            .map(|value| value.parse::<usize>())
+            .transpose()?
+            .unwrap_or(32),
+        "file",
+    )
+}
+
+fn ingest_book_stdin(args: &[String]) -> Result<(), Box<dyn Error>> {
+    if args.len() < 7 {
+        return Err(
+            "ingest-book-stdin <source-ref> <provider-ref> <acquisition-receipt-ref> <title> <model-ref> [config-json] [parser-script] [batch-size]"
+                .into(),
+        );
+    }
+    let mut canonical_text = String::new();
+    std::io::stdin().read_to_string(&mut canonical_text)?;
+    ingest_book_values(
+        canonical_text,
+        (!args[5].is_empty()).then(|| args[5].clone()),
+        &args[2],
+        &args[3],
+        &args[4],
+        &args[6],
+        args.get(7).map(String::as_str).unwrap_or("{}"),
+        args.get(8)
+            .map(String::as_str)
+            .unwrap_or("scripts/scale1_spacy_json_parser.py"),
+        args.get(9)
+            .map(|value| value.parse::<usize>())
+            .transpose()?
+            .unwrap_or(32),
+        "stdin",
+    )
 }
 
 fn finalize(args: &[String]) -> Result<(), Box<dyn Error>> {
@@ -1286,6 +1331,7 @@ fn usage() {
     eprintln!(
         "usage:\n  \
          scale1_long_document ingest-book <text-file> <source-ref> <provider-ref> <acquisition-receipt-ref> <model-ref> [config-json] [parser-script] [batch-size]\n  \
+         scale1_long_document ingest-book-stdin <source-ref> <provider-ref> <acquisition-receipt-ref> <title> <model-ref> [config-json] [parser-script] [batch-size]\n  \
          scale1_long_document prepare-spacy <text-file> <source-ref> <provider-ref> <acquisition-receipt-ref> <model-ref> [config-json] [parser-script]\n  \
          scale1_long_document prepare-gwb <projection-manifest> <document-ordinal> <model-ref> [config-json] [parser-script]\n  \
          scale1_long_document prepare-stdin <source-ref> <provider-ref> <acquisition-receipt-ref> <title> <model-ref> [config-json] [parser-script]\n  \
@@ -1308,6 +1354,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     match command {
         "ingest-book" => ingest_book(&args),
+        "ingest-book-stdin" => ingest_book_stdin(&args),
         "prepare-spacy" => prepare_spacy(&args),
         "prepare-gwb" => prepare_gwb_projection(&args),
         "prepare-stdin" => prepare_stdin(&args),
