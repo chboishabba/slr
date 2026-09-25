@@ -25,7 +25,7 @@ use thiserror::Error;
 use crate::{
     canonical_statement_observation_link_ref, install_event_discovery_schema,
     install_statement_trace_schema, persist_event_join_proposal_with_review,
-    persist_statement_observation_link, DatabaseConfig, EventDiscoveryStoreError,
+    persist_statement_observation_link_with_client, DatabaseConfig, EventDiscoveryStoreError,
     StatementObservationDisposition, StatementObservationLink,
     StatementTraceStoreError,
 };
@@ -300,8 +300,7 @@ fn materialize_source_observations(
             )
         );
 
-        let mut tx = client.transaction()?;
-        tx.execute(
+        client.execute(
             r#"INSERT INTO semantic.scale1_auto_observation_candidate
                (observation_ref, statement_ref, batch_ref, parser_run_ref,
                 source_revision_ref, source_family_ref, candidate_only,
@@ -320,7 +319,7 @@ fn materialize_source_observations(
             ],
         )?;
 
-        for entity in tx.query(
+        for entity in client.query(
             r#"
             SELECT entity_fingerprint_ref
             FROM semantic.named_entity_candidate
@@ -334,10 +333,10 @@ fn materialize_source_observations(
             &[&statement_ref, &parser_run_ref],
         )? {
             let reference: String = entity.get(0);
-            persist_signal(&mut tx, &observation_ref, "entity", &reference)?;
+            persist_signal(&mut client, &observation_ref, "entity", &reference)?;
         }
 
-        for temporal in tx.query(
+        for temporal in client.query(
             r#"
             SELECT label_ref, surface
             FROM semantic.temporal_mention_candidate
@@ -349,10 +348,10 @@ fn materialize_source_observations(
             let label_ref: String = temporal.get(0);
             let surface: String = temporal.get(1);
             let reference = temporal_bucket_ref(&label_ref, &surface);
-            persist_signal(&mut tx, &observation_ref, "temporal", &reference)?;
+            persist_signal(&mut client, &observation_ref, "temporal", &reference)?;
         }
 
-        for fingerprint in tx.query(
+        for fingerprint in client.query(
             r#"
             SELECT event_fingerprint_ref
             FROM semantic.event_candidate_occurrence
@@ -362,10 +361,8 @@ fn materialize_source_observations(
             &[&statement_ref, &source_revision_ref],
         )? {
             let reference: String = fingerprint.get(0);
-            persist_signal(&mut tx, &observation_ref, "fingerprint", &reference)?;
+            persist_signal(&mut client, &observation_ref, "fingerprint", &reference)?;
         }
-        tx.commit()?;
-
         let link = StatementObservationLink {
             link_ref: canonical_statement_observation_link_ref(
                 &statement_ref,
@@ -385,7 +382,7 @@ fn materialize_source_observations(
             applicability_promoted: false,
             claim_truth_promoted: false,
         };
-        persist_statement_observation_link(config, &link)?;
+        persist_statement_observation_link_with_client(&mut client, &link)?;
         count += 1;
     }
     Ok(count)
