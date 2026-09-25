@@ -45,6 +45,8 @@ pub enum CandidatePnfError {
     MalformedRow { line: usize, detail: String },
     #[error("parser token stream is not monotonic in source coordinates")]
     NonMonotonicTokenStream,
+    #[error("no persisted parser output exists for exact span {0}")]
+    MissingPersistedParserRegion(String),
 }
 
 pub trait CandidatePnfProducer {
@@ -205,7 +207,7 @@ impl CandidatePnfProducer for IndexedSpacyTsvAdapter {
     }
 }
 
-fn role_for(pos: &str, dependency: &str) -> CandidatePnfRole {
+pub(crate) fn role_for(pos: &str, dependency: &str) -> CandidatePnfRole {
     match dependency {
         "nsubj" | "nsubjpass" | "csubj" | "csubjpass" | "agent" => CandidatePnfRole::Actor,
         "dobj" | "obj" | "pobj" | "attr" | "oprd" => CandidatePnfRole::Patient,
