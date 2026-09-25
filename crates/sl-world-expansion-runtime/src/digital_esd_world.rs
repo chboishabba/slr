@@ -8,6 +8,8 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
+use crate::digital_esd_coordinates::materialize_study_coordinate_candidates;
+
 use sensiblaw_world_store::{
     active_frontier_gap_sql, active_frontier_obligation_sql, latest_iteration_sql,
     DatabaseConfig, WireRecord, WorldRecordKind, WorldStore, WorldStoreError,
@@ -38,6 +40,7 @@ CREATE TABLE IF NOT EXISTS digital_esd.world_revision (
     statement_count BIGINT NOT NULL,
     candidate_pnf_batch_count BIGINT NOT NULL,
     candidate_observation_count BIGINT NOT NULL,
+    candidate_study_coordinate_count BIGINT NOT NULL DEFAULT 0,
     reviewed_world_record_count BIGINT NOT NULL,
     active_gap_count BIGINT NOT NULL,
     active_obligation_count BIGINT NOT NULL,
@@ -47,6 +50,9 @@ CREATE TABLE IF NOT EXISTS digital_esd.world_revision (
     claim_truth_promoted BOOLEAN NOT NULL CHECK (NOT claim_truth_promoted),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+ALTER TABLE digital_esd.world_revision
+ADD COLUMN IF NOT EXISTS candidate_study_coordinate_count BIGINT NOT NULL DEFAULT 0;
 
 CREATE INDEX IF NOT EXISTS digital_esd_world_revision_created_idx
 ON digital_esd.world_revision(created_at DESC);
@@ -64,6 +70,8 @@ pub enum DigitalEsdWorldError {
     WorldStore(#[from] WorldStoreError),
     #[error("processing row lacks source_identity_reference")]
     MissingSourceIdentity,
+    #[error("Digital-ESD coordinate materialization failed: {0}")]
+    Coordinate(String),
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -80,6 +88,7 @@ pub struct DigitalEsdWorldCounts {
     pub substrate_statements: i64,
     pub substrate_candidate_pnf_batches: i64,
     pub substrate_candidate_observations: i64,
+    pub candidate_study_coordinate_nominations: i64,
     pub substrate_review_records: i64,
     pub active_gaps: i64,
     pub active_obligations: i64,
@@ -221,6 +230,7 @@ pub fn ingest_processing_denominator(
         substrate_statements: 0,
         substrate_candidate_pnf_batches: 0,
         substrate_candidate_observations: 0,
+        candidate_study_coordinate_nominations: 0,
         substrate_review_records: 0,
         active_gaps: 0,
         active_obligations: 0,
@@ -304,6 +314,10 @@ pub fn materialize_digital_esd_world(
     let (denominator_rows_ingested, mut counts) =
         ingest_processing_denominator(config, processing_ledger, corpus_ref)?;
 
+    let coordinate_receipt =
+        materialize_study_coordinate_candidates(config, corpus_ref)
+            .map_err(|error| DigitalEsdWorldError::Coordinate(error.to_string()))?;
+
     let (active_gaps, active_obligations, inspection) =
         active_frontier(&mut client, inspection_limit)?;
 
@@ -317,6 +331,21 @@ pub fn materialize_digital_esd_world(
         table_count(&mut client, "pnf.statement_candidate_batch")?;
     counts.substrate_candidate_observations =
         table_count(&mut client, "semantic.scale1_auto_observation_candidate")?;
+    counts.candidate_study_coordinate_nominations = client
+        .query_one(
+            "SELECT COUNT(*)::BIGINT
+             FROM digital_esd.study_coordinate_candidate
+             WHERE corpus_ref=$1 AND candidate_only AND review_required
+               AND NOT coordinate_paid AND NOT automatic_absence_inference
+               AND NOT creates_semantic_authority
+               AND NOT applicability_promoted AND NOT claim_truth_promoted",
+            &[&corpus_ref],
+        )?
+        .get(0);
+    debug_assert_eq!(
+        coordinate_receipt.total_candidates,
+        coordinate_receipt.source_level_candidates + coordinate_receipt.statement_level_candidates
+    );
     counts.substrate_review_records =
         table_count(&mut client, "slr_world_v2_review")?;
     counts.active_gaps = active_gaps;
@@ -330,11 +359,12 @@ pub fn materialize_digital_esd_world(
             world_revision_ref, corpus_ref, compiler_ref, processing_ledger_sha256,
             metadata_source_count, canonical_source_revision_count, exact_region_count,
             statement_count, candidate_pnf_batch_count, candidate_observation_count,
-            reviewed_world_record_count, active_gap_count, active_obligation_count,
+            candidate_study_coordinate_count, reviewed_world_record_count,
+            active_gap_count, active_obligation_count,
             candidate_only, creates_semantic_authority, applicability_promoted,
             claim_truth_promoted
         ) VALUES (
-            $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,
+            $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,
             TRUE,FALSE,FALSE,FALSE
         ) ON CONFLICT (world_revision_ref) DO NOTHING"#,
         &[
@@ -348,6 +378,7 @@ pub fn materialize_digital_esd_world(
             &counts.substrate_statements,
             &counts.substrate_candidate_pnf_batches,
             &counts.substrate_candidate_observations,
+            &counts.candidate_study_coordinate_nominations,
             &counts.substrate_review_records,
             &counts.active_gaps,
             &counts.active_obligations,
@@ -393,6 +424,7 @@ mod tests {
             substrate_statements: 1_000,
             substrate_candidate_pnf_batches: 1_000,
             substrate_candidate_observations: 1_000,
+            candidate_study_coordinate_nominations: 500,
             substrate_review_records: 0,
             active_gaps: 5,
             active_obligations: 5,
