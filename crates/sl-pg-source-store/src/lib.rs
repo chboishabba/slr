@@ -207,10 +207,11 @@ pub use long_document_pipeline::{
 };
 pub use db_native_parser::{
     claim_parser_jobs, complete_parser_run, compilation_key,
-    enqueue_parser_regions, install_db_native_parser_schema,
+    defer_parser_job_retry, enqueue_parser_regions, install_db_native_parser_schema,
     load_claimed_job_text,
     parser_run_ref, parser_run_state, persist_parser_residual,
-    persist_parser_success, start_parser_run, ClaimedParserJob,
+    persist_parser_success, renew_parser_job_lease, start_parser_run,
+    ClaimedParserJob,
     DbNativeParserError, DbNativeParserSnapshot, ParserArtifactRecord,
     ParserRegionJobSpec, ParserRunReceipt, ParserRunState, ParserTokenRecord,
     PersistedParserOutputReceipt, DB_NATIVE_PARSER_SCHEMA_SQL,
