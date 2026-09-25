@@ -21,7 +21,7 @@ use crate::{
     complete_parser_run, enqueue_parser_regions, install_candidate_pnf_schema,
     install_statement_trace_schema, load_candidate_pnf_batch,
     reconcile_source_candidate_semantics, enqueue_reconciliation_review_items,
-    load_generic_source_envelope,
+    discover_scale1_auto_event_proposals, load_generic_source_envelope,
     load_generic_text_source, load_long_document_regions,
     load_long_document_structure, persist_generic_text_source,
     persist_long_document_compilation, persist_long_document_structure,
@@ -29,6 +29,7 @@ use crate::{
     start_parser_run, CandidatePnfError, CandidatePnfStoreError,
     CorpusReconciliationError, CorpusReconciliationReceipt,
     ReconciliationReviewError, ReconciliationReviewReceipt,
+    Scale1AutoEventError, Scale1AutoEventReceipt,
     DatabaseConfig, DbNativeParserError,
     DbNativeParserSnapshot, GenericSourceCompilerError,
     GenericSourceContentStoreError, LongDocumentIngestStoreError,
@@ -61,6 +62,8 @@ pub enum DbNativeLongDocumentError {
     Reconciliation(#[from] CorpusReconciliationError),
     #[error("reconciliation review projection error: {0}")]
     ReconciliationReview(#[from] ReconciliationReviewError),
+    #[error("automatic event discovery error: {0}")]
+    AutoEvent(#[from] Scale1AutoEventError),
     #[error("persisted source is not a document content source")]
     NotDocumentContentSource,
     #[error("parser run did not attempt every semantic-eligible region")]
@@ -104,6 +107,7 @@ pub struct DbNativeLongDocumentReceipt {
     pub candidate_pnf_reopen_complete: bool,
     pub reconciliation: CorpusReconciliationReceipt,
     pub reconciliation_review: ReconciliationReviewReceipt,
+    pub auto_event: Scale1AutoEventReceipt,
     pub structural_only_regions: usize,
     pub source_region_loss_count: usize,
     pub reloaded_regions: Vec<PersistedLongDocumentRegion>,
@@ -370,6 +374,14 @@ pub fn finalize_db_native_long_document(
             vec![],
         )?;
 
+    let auto_event =
+        discover_scale1_auto_event_proposals(
+            config,
+            &source_revision_ref,
+            parser_run_ref,
+            vec![],
+        )?;
+
     let persisted_compilation =
         persist_long_document_compilation(config, &document, &compilation)?;
 
@@ -406,6 +418,7 @@ pub fn finalize_db_native_long_document(
         candidate_pnf_reopen_complete,
         reconciliation,
         reconciliation_review,
+        auto_event,
         structural_only_regions: compilation.transport_or_nonsemantic_region_count,
         source_region_loss_count: compilation.source_region_loss_count,
         reloaded_regions,
