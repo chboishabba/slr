@@ -29,6 +29,7 @@ mod long_document_ingest_store;
 mod generic_source_content_store;
 mod long_document_pipeline;
 mod db_native_parser;
+mod db_native_long_document;
 mod statement_trace_store;
 
 pub use chronology_contestation_store::{
@@ -204,6 +205,11 @@ pub use db_native_parser::{
     DbNativeParserError, DbNativeParserSnapshot, ParserArtifactRecord,
     ParserRegionJobSpec, ParserRunReceipt, ParserRunState, ParserTokenRecord,
     PersistedParserOutputReceipt, DB_NATIVE_PARSER_SCHEMA_SQL,
+};
+pub use db_native_long_document::{
+    finalize_db_native_long_document, prepare_db_native_long_document,
+    DbNativeLongDocumentError, DbNativeLongDocumentReceipt,
+    PreparedDbNativeLongDocument,
 };
 pub use statement_trace_store::{
     canonical_observation_event_link_ref, canonical_statement_observation_link_ref,
