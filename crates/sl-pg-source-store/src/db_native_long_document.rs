@@ -14,7 +14,7 @@ use sensiblaw_core::source_ingest::{DocumentRegionKind, SourceFamily};
 use thiserror::Error;
 
 use crate::{
-    build_plain_text_long_document_source,
+    build_plain_text_long_document_source, build_plain_text_long_source_with_family,
     canonical_candidate_pnf_batch_ref, canonical_statement_ref,
     compile_initial_intake_statement,
     compile_long_document_lossless_for_document_ref,
@@ -131,11 +131,45 @@ pub fn prepare_db_native_long_document(
     model_ref: &str,
     parser_config_json: &str,
 ) -> Result<PreparedDbNativeLongDocument, DbNativeLongDocumentError> {
-    let (document, structural) = build_plain_text_long_document_source(
+    prepare_db_native_long_source(
+        config,
         source_ref,
         source_revision_ref,
         provider_ref,
         acquisition_receipt_ref,
+        SourceFamily::Document,
+        title,
+        edition_ref,
+        canonical_text,
+        parser_family,
+        parser_version,
+        model_ref,
+        parser_config_json,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn prepare_db_native_long_source(
+    config: &DatabaseConfig,
+    source_ref: &str,
+    source_revision_ref: &str,
+    provider_ref: &str,
+    acquisition_receipt_ref: &str,
+    source_family: SourceFamily,
+    title: Option<String>,
+    edition_ref: Option<String>,
+    canonical_text: &str,
+    parser_family: &str,
+    parser_version: &str,
+    model_ref: &str,
+    parser_config_json: &str,
+) -> Result<PreparedDbNativeLongDocument, DbNativeLongDocumentError> {
+    let (document, structural) = build_plain_text_long_source_with_family(
+        source_ref,
+        source_revision_ref,
+        provider_ref,
+        acquisition_receipt_ref,
+        source_family,
         title,
         edition_ref,
         canonical_text,
@@ -198,17 +232,16 @@ pub fn finalize_db_native_long_document(
     let (source, canonical_text) =
         load_generic_text_source(config, &source_revision_ref)?;
     let envelope = load_generic_source_envelope(config, &source_revision_ref)?;
-    if envelope.family != SourceFamily::Document
-        || !envelope.semantic_text_allowed()
-    {
+    if !envelope.semantic_text_allowed() {
         return Err(DbNativeLongDocumentError::NotDocumentContentSource);
     }
 
-    let (document, structural) = build_plain_text_long_document_source(
+    let (document, structural) = build_plain_text_long_source_with_family(
         &envelope.source_ref,
         &envelope.source_revision_ref,
         &envelope.provider_ref,
         &envelope.acquisition_receipt_ref,
+        envelope.family,
         None,
         None,
         &canonical_text,
