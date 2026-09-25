@@ -45,6 +45,26 @@ struct WireToken {
     dependency_ref: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct GwbProjectionManifest {
+    schema_version: String,
+    authority: String,
+    profile_ref: String,
+    documents: Vec<GwbProjectionDocument>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GwbProjectionDocument {
+    document_ordinal: u64,
+    source_path: String,
+    source_sha256: String,
+    source_bytes: u64,
+    projector: String,
+    projected_path: String,
+    projected_sha256: String,
+    projected_bytes: u64,
+}
+
 fn digest_ref(bytes: &[u8]) -> String {
     let mut hash = Sha256::new();
     hash.update(bytes);
@@ -175,6 +195,120 @@ fn prepare_spacy(args: &[String]) -> Result<(), Box<dyn Error>> {
             "candidate_only": prepared.candidate_only,
             "creates_semantic_authority": prepared.creates_semantic_authority,
             "applicability_promoted": prepared.applicability_promoted,
+            "claim_truth_promoted": prepared.claim_truth_promoted
+        }))?
+    );
+    Ok(())
+}
+
+
+fn prepare_gwb_projection(args: &[String]) -> Result<(), Box<dyn Error>> {
+    if args.len() < 5 {
+        return Err(
+            "prepare-gwb <projection-manifest> <document-ordinal> <model-ref> [config-json] [parser-script]"
+                .into(),
+        );
+    }
+    let manifest_path = &args[2];
+    let document_ordinal = args[3].parse::<u64>()?;
+    let model_ref = &args[4];
+    let config_json = args.get(5).map(String::as_str).unwrap_or("{}");
+    let parser_script = args
+        .get(6)
+        .map(String::as_str)
+        .unwrap_or("scripts/scale1_spacy_json_parser.py");
+
+    let manifest_bytes = fs::read(manifest_path)?;
+    let manifest: GwbProjectionManifest = serde_json::from_slice(&manifest_bytes)?;
+    if manifest.authority != "source_projection_only"
+        || manifest.profile_ref != "tranche-profile:gwb:v0_1"
+        || !manifest.schema_version.starts_with("sensiblaw.gwb")
+    {
+        return Err("not a canonical GWB source-projection manifest".into());
+    }
+    let document = manifest
+        .documents
+        .iter()
+        .find(|document| document.document_ordinal == document_ordinal)
+        .ok_or_else(|| IoError::new(ErrorKind::NotFound, "GWB document ordinal not found"))?;
+
+    let canonical_text = fs::read_to_string(&document.projected_path)?;
+    let projected_digest = digest_ref(canonical_text.as_bytes());
+    let expected_projected_digest = format!("sha256:{}", document.projected_sha256);
+    if projected_digest != expected_projected_digest
+        || canonical_text.as_bytes().len() as u64 != document.projected_bytes
+    {
+        return Err("GWB projected text digest/byte count mismatch".into());
+    }
+
+    let manifest_digest = digest_ref(&manifest_bytes);
+    let source_ref = format!("source:gwb:raw-sha256:{}", document.source_sha256);
+    let provider_ref = format!("gwb-source-projection:{}", document.projector);
+    let acquisition_receipt_ref = format!(
+        "gwb-projection:{}:document:{}:raw-sha256:{}:raw-bytes:{}",
+        manifest_digest,
+        document.document_ordinal,
+        document.source_sha256,
+        document.source_bytes
+    );
+    let source_revision_ref = canonical_generic_source_revision_ref(
+        &source_ref,
+        &provider_ref,
+        &acquisition_receipt_ref,
+        &projected_digest,
+        "text/plain",
+    );
+
+    let description = parser_description(parser_script, model_ref)?;
+    if description.parser_family != "spacy" || description.model_ref != model_ref.as_str() {
+        return Err("spaCy parser description did not match requested model".into());
+    }
+
+    let config = load_database_config(None)?;
+    let prepared = prepare_db_native_long_document(
+        &config,
+        &source_ref,
+        &source_revision_ref,
+        &provider_ref,
+        &acquisition_receipt_ref,
+        Path::new(&document.source_path)
+            .file_name()
+            .map(|value| value.to_string_lossy().into_owned()),
+        None,
+        &canonical_text,
+        &description.parser_family,
+        &description.parser_version,
+        model_ref,
+        config_json,
+    )?;
+
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&json!({
+            "schema": "sensiblaw.scale1.gwb-book-prepare.v0_1",
+            "gwb_projection_manifest": manifest_path,
+            "gwb_projection_manifest_digest": manifest_digest,
+            "gwb_document_ordinal": document.document_ordinal,
+            "raw_source_path": document.source_path,
+            "raw_source_sha256": document.source_sha256,
+            "raw_source_bytes": document.source_bytes,
+            "projector": document.projector,
+            "projected_sha256": document.projected_sha256,
+            "projected_bytes": document.projected_bytes,
+            "source_ref": prepared.source.source_ref,
+            "source_revision_ref": prepared.source.source_revision_ref,
+            "canonical_ref": prepared.source.canonical_ref,
+            "document_ref": prepared.source.document_ref,
+            "parser_run_ref": prepared.parser_run.parser_run_ref,
+            "parser_family": prepared.parser_run.parser_family,
+            "parser_version": prepared.parser_run.parser_version,
+            "model_ref": prepared.parser_run.model_ref,
+            "semantic_regions": prepared.semantic_region_count,
+            "structural_regions": prepared.structural_region_count,
+            "new_jobs": prepared.newly_enqueued_job_count,
+            "reused_jobs": prepared.reused_existing_job_count,
+            "candidate_only": prepared.candidate_only,
+            "creates_semantic_authority": prepared.creates_semantic_authority,
             "claim_truth_promoted": prepared.claim_truth_promoted
         }))?
     );
@@ -459,6 +593,7 @@ fn usage() {
     eprintln!(
         "usage:\n  \
          scale1_long_document prepare-spacy <text-file> <source-ref> <provider-ref> <acquisition-receipt-ref> <model-ref> [config-json] [parser-script]\n  \
+         scale1_long_document prepare-gwb <projection-manifest> <document-ordinal> <model-ref> [config-json] [parser-script]\n  \
          scale1_long_document status <parser-run-ref>\n  \
          scale1_long_document worker <parser-run-ref> <worker-ref> [batch-size] [parser-script]\n  \
          scale1_long_document finalize <parser-run-ref>"
@@ -474,6 +609,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     match command {
         "prepare-spacy" => prepare_spacy(&args),
+        "prepare-gwb" => prepare_gwb_projection(&args),
         "status" => status(&args),
         "worker" => worker(&args),
         "finalize" => finalize(&args),
