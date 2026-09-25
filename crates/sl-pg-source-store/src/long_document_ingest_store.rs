@@ -83,8 +83,25 @@ pub enum LongDocumentIngestStoreError {
     InvalidAssignment(String),
     #[error("stored receipt differs from supplied receipt")]
     ReceiptRoundTripMismatch,
+    #[error("persisted long-document structure differs from supplied canonical structure")]
+    StoredStructureMismatch,
 }
 
+
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PersistedLongDocumentStructureRegion {
+    pub source_revision_ref: String,
+    pub source_ref: String,
+    pub region_ref: String,
+    pub parent_region_ref: Option<String>,
+    pub region_kind: String,
+    pub start_char: u64,
+    pub end_char: u64,
+    pub candidate_only: bool,
+    pub creates_semantic_authority: bool,
+    pub claim_truth_promoted: bool,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PersistedLongDocumentRegion {
@@ -252,6 +269,102 @@ pub fn persist_long_document_structure(
     Ok(persisted)
 }
 
+
+pub fn load_long_document_structure(
+    config: &DatabaseConfig,
+    source_revision_ref: &str,
+) -> Result<Vec<PersistedLongDocumentStructureRegion>, LongDocumentIngestStoreError> {
+    let mut client = Client::connect(config.database_url(), NoTls)?;
+    client.batch_execute(LONG_DOCUMENT_INGEST_SCHEMA_SQL)?;
+    let rows = client.query(
+        "SELECT source_ref, region_ref, parent_region_ref, region_kind,
+                start_char, end_char, candidate_only,
+                creates_semantic_authority, claim_truth_promoted
+         FROM ingest.long_document_region
+         WHERE source_revision_ref = $1
+         ORDER BY region_ref",
+        &[&source_revision_ref],
+    )?;
+
+    rows.into_iter()
+        .map(|row| {
+            let start = row.get::<_, i64>(4);
+            let end = row.get::<_, i64>(5);
+            if start < 0 || end < 0 {
+                return Err(LongDocumentIngestStoreError::StoredStructureMismatch);
+            }
+            let region = PersistedLongDocumentStructureRegion {
+                source_revision_ref: source_revision_ref.to_owned(),
+                source_ref: row.get(0),
+                region_ref: row.get(1),
+                parent_region_ref: row.get(2),
+                region_kind: row.get(3),
+                start_char: start as u64,
+                end_char: end as u64,
+                candidate_only: row.get(6),
+                creates_semantic_authority: row.get(7),
+                claim_truth_promoted: row.get(8),
+            };
+            if !region.candidate_only
+                || region.creates_semantic_authority
+                || region.claim_truth_promoted
+            {
+                return Err(LongDocumentIngestStoreError::StoredStructureMismatch);
+            }
+            Ok(region)
+        })
+        .collect()
+}
+
+fn ensure_long_document_structure_matches(
+    config: &DatabaseConfig,
+    document: &LongDocumentSource,
+) -> Result<(), LongDocumentIngestStoreError> {
+    let stored = load_long_document_structure(config, &document.ingest.source_revision_ref)?;
+    if stored.is_empty() {
+        persist_long_document_structure(config, document)?;
+        return Ok(());
+    }
+
+    if stored.len() != document.regions.len() {
+        return Err(LongDocumentIngestStoreError::StoredStructureMismatch);
+    }
+    let supplied = document
+        .regions
+        .iter()
+        .map(|region| {
+            (
+                region.region_ref.as_str(),
+                region.parent_region_ref.as_deref(),
+                region_kind_db(region.kind),
+                region.start_char,
+                region.end_char,
+            )
+        })
+        .collect::<BTreeSet<_>>();
+    let persisted = stored
+        .iter()
+        .map(|region| {
+            (
+                region.region_ref.as_str(),
+                region.parent_region_ref.as_deref(),
+                region.region_kind.as_str(),
+                region.start_char,
+                region.end_char,
+            )
+        })
+        .collect::<BTreeSet<_>>();
+
+    if supplied != persisted
+        || stored
+            .iter()
+            .any(|region| region.source_ref != document.ingest.source_ref)
+    {
+        return Err(LongDocumentIngestStoreError::StoredStructureMismatch);
+    }
+    Ok(())
+}
+
 pub fn persist_long_document_compilation(
     config: &DatabaseConfig,
     document: &LongDocumentSource,
@@ -259,7 +372,7 @@ pub fn persist_long_document_compilation(
 ) -> Result<PersistedLongDocumentIngestReceipt, LongDocumentIngestStoreError> {
     validate_partition(document, compilation)?;
 
-    persist_long_document_structure(config, document)?;
+    ensure_long_document_structure_matches(config, document)?;
 
     let mut client = Client::connect(config.database_url(), NoTls)?;
     let mut tx = client.transaction()?;
