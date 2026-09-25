@@ -15,6 +15,7 @@ use sensiblaw_pg_source_store::{
     load_database_config, parser_run_state, persist_parser_residual,
     persist_parser_success_with_entities, prepare_db_native_long_document,
     ParserArtifactRecord, ParserEntityRecord, ParserTokenRecord,
+    ReviewAction, ReviewCommand, ReviewStatus, apply_persisted_review_command,
 };
 
 #[derive(Debug, Deserialize)]
@@ -721,6 +722,96 @@ fn finalize(args: &[String]) -> Result<(), Box<dyn Error>> {
 }
 
 
+
+fn parse_review_action(value: &str) -> Result<ReviewAction, Box<dyn Error>> {
+    Ok(match value {
+        "accept" => ReviewAction::Accept,
+        "reject" => ReviewAction::Reject,
+        "abstain" => ReviewAction::Abstain,
+        "qualify" => ReviewAction::Qualify,
+        "request-evidence" => ReviewAction::RequestEvidence,
+        "open-source" => ReviewAction::OpenSource,
+        _ => return Err(format!("unsupported review action: {value}").into()),
+    })
+}
+
+fn review_status_ref(value: ReviewStatus) -> &'static str {
+    match value {
+        ReviewStatus::Pending => "pending",
+        ReviewStatus::Accepted => "accepted",
+        ReviewStatus::Rejected => "rejected",
+        ReviewStatus::Abstained => "abstained",
+        ReviewStatus::Qualified => "qualified",
+        ReviewStatus::Superseded => "superseded",
+        ReviewStatus::NeedsEvidence => "needs_evidence",
+    }
+}
+
+fn apply_review(args: &[String]) -> Result<(), Box<dyn Error>> {
+    if args.len() < 5 {
+        return Err(
+            "review <review-item-ref> <action> <reviewer-ref> [qualification-ref] [evidence-request-ref]"
+                .into(),
+        );
+    }
+    let review_item_ref = &args[2];
+    let action = parse_review_action(&args[3])?;
+    let reviewer_ref = &args[4];
+    let qualification_ref = args.get(5).filter(|value| !value.is_empty()).cloned();
+    let evidence_request_ref = args.get(6).filter(|value| !value.is_empty()).cloned();
+
+    let action_ref = match action {
+        ReviewAction::Accept => "accept",
+        ReviewAction::Reject => "reject",
+        ReviewAction::Abstain => "abstain",
+        ReviewAction::Qualify => "qualify",
+        ReviewAction::Supersede => "supersede",
+        ReviewAction::RequestEvidence => "request-evidence",
+        ReviewAction::OpenSource => "open-source",
+        ReviewAction::FollowAuthority => "follow-authority",
+    };
+    let command_ref = format!(
+        "review-command:scale1:{}",
+        digest_ref(
+            format!(
+                "{review_item_ref}\u{1f}{action_ref}\u{1f}{reviewer_ref}\u{1f}{}\u{1f}{}",
+                qualification_ref.as_deref().unwrap_or(""),
+                evidence_request_ref.as_deref().unwrap_or("")
+            )
+            .as_bytes(),
+        )
+    );
+
+    let command = ReviewCommand {
+        command_ref: command_ref.clone(),
+        review_item_ref: review_item_ref.clone(),
+        action,
+        reviewer_ref: reviewer_ref.clone(),
+        qualification_ref,
+        evidence_request_ref,
+    };
+
+    let config = load_database_config(None)?;
+    let (receipt, item) = apply_persisted_review_command(&config, &command)?;
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&json!({
+            "schema": "sensiblaw.scale1.review-command.v0_1",
+            "command_ref": receipt.command_ref,
+            "review_item_ref": receipt.review_item_ref,
+            "semantic_ref": receipt.semantic_ref,
+            "reviewer_ref": receipt.reviewer_ref,
+            "action": action_ref,
+            "current_status": review_status_ref(item.current_status),
+            "candidate_only": receipt.candidate_only,
+            "creates_semantic_authority": receipt.creates_semantic_authority,
+            "applicability_promoted": receipt.applicability_promoted,
+            "claim_truth_promoted": receipt.claim_truth_promoted
+        }))?
+    );
+    Ok(())
+}
+
 fn materialize_proposition(args: &[String]) -> Result<(), Box<dyn Error>> {
     if args.len() != 4 {
         return Err(
@@ -765,6 +856,7 @@ fn usage() {
          scale1_long_document status <parser-run-ref>\n  \
          scale1_long_document worker <parser-run-ref> <worker-ref> [batch-size] [parser-script]\n  \
          scale1_long_document finalize <parser-run-ref>\n  \
+         scale1_long_document review <review-item-ref> <action> <reviewer-ref> [qualification-ref] [evidence-request-ref]\n  \
          scale1_long_document materialize-proposition <review-item-ref> <accepted-review-command-ref>"
     );
 }
@@ -783,6 +875,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         "status" => status(&args),
         "worker" => worker(&args),
         "finalize" => finalize(&args),
+        "review" => apply_review(&args),
         "materialize-proposition" => materialize_proposition(&args),
         _ => {
             usage();
