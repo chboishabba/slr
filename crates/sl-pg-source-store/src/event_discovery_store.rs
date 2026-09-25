@@ -63,6 +63,10 @@ fn signal_kind_from_db(value: &str) -> Result<EventJoinSignalKind, EventDiscover
 pub fn install_event_discovery_schema(
     config: &DatabaseConfig,
 ) -> Result<(), EventDiscoveryStoreError> {
+    // event_assembly_materialization has a foreign key to semantic.review_item;
+    // install the owned dependency here so callers cannot accidentally depend
+    // on external migration ordering.
+    install_review_workstation_schema(config)?;
     let mut client = Client::connect(config.database_url(), NoTls)?;
     client.batch_execute(
         r#"
