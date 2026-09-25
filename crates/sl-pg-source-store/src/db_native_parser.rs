@@ -498,6 +498,30 @@ pub fn claim_parser_jobs(
         .collect()
 }
 
+
+pub fn load_claimed_job_text(
+    config: &DatabaseConfig,
+    job: &ClaimedParserJob,
+) -> Result<String, DbNativeParserError> {
+    let (source, canonical_text) = crate::load_generic_text_source(
+        config,
+        &job.source_revision_ref,
+    )
+    .map_err(|_| DbNativeParserError::SourceRevisionMismatch)?;
+    if source.source_revision_ref != job.source_revision_ref {
+        return Err(DbNativeParserError::SourceRevisionMismatch);
+    }
+    let text_len = canonical_text.chars().count() as u64;
+    if job.start_char >= job.end_char || job.end_char > text_len {
+        return Err(DbNativeParserError::InvalidRegionSpan);
+    }
+    Ok(canonical_text
+        .chars()
+        .skip(job.start_char as usize)
+        .take((job.end_char - job.start_char) as usize)
+        .collect())
+}
+
 fn validate_tokens(
     job: &ClaimedParserJob,
     tokens: &[ParserTokenRecord],
