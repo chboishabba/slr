@@ -39,6 +39,7 @@ python3 -m py_compile \
   python/gwb_certify.py \
   python/gwb_expanded_certify.py \
   python/gwb_scale1_ingest.py \
+  python/gwb_scale1_book_baseline.py \
   scripts/scale1_spacy_json_parser.py \
   scripts/bench_stream.py \
   scripts/verify_source_contract.py \
