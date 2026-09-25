@@ -9,7 +9,8 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
 use sensiblaw_pg_source_store::{
-    claim_parser_jobs, finalize_db_native_long_document, load_claimed_job_text,
+    canonical_generic_source_revision_ref, claim_parser_jobs,
+    finalize_db_native_long_document, load_claimed_job_text,
     load_database_config, parser_run_state, persist_parser_residual,
     persist_parser_success, prepare_db_native_long_document, ParserArtifactRecord,
     ParserTokenRecord,
@@ -47,10 +48,6 @@ fn digest_ref(bytes: &[u8]) -> String {
     let mut hash = Sha256::new();
     hash.update(bytes);
     format!("sha256:{:x}", hash.finalize())
-}
-
-fn content_revision_ref(text: &str) -> String {
-    format!("source-revision:{}", digest_ref(text.as_bytes()))
 }
 
 fn parser_description(
@@ -124,7 +121,14 @@ fn prepare_spacy(args: &[String]) -> Result<(), Box<dyn Error>> {
         .unwrap_or("scripts/scale1_spacy_json_parser.py");
 
     let canonical_text = fs::read_to_string(text_file)?;
-    let source_revision_ref = content_revision_ref(&canonical_text);
+    let content_digest_ref = digest_ref(canonical_text.as_bytes());
+    let source_revision_ref = canonical_generic_source_revision_ref(
+        source_ref,
+        provider_ref,
+        acquisition_receipt_ref,
+        &content_digest_ref,
+        "text/plain",
+    );
     let description = parser_description(parser_script, model_ref)?;
     if description.parser_family != "spacy" || description.model_ref != model_ref.as_str() {
         return Err("spaCy parser description did not match requested model".into());
@@ -420,6 +424,10 @@ fn finalize(args: &[String]) -> Result<(), Box<dyn Error>> {
             "unattempted_semantic_regions": receipt.unattempted_semantic_regions,
             "compiled_statement_count": receipt.compiled_statement_count,
             "candidate_pnf_count": receipt.candidate_pnf_count,
+            "persisted_statement_count": receipt.persisted_statement_count,
+            "persisted_candidate_batch_count": receipt.persisted_candidate_batch_count,
+            "persisted_candidate_factor_count": receipt.persisted_candidate_factor_count,
+            "candidate_pnf_reopen_complete": receipt.candidate_pnf_reopen_complete,
             "structural_only_regions": receipt.structural_only_regions,
             "source_region_loss_count": receipt.source_region_loss_count,
             "canonical_bytes_reload_identically": receipt.canonical_bytes_reload_identically,
