@@ -914,7 +914,6 @@ fn persist_parser_success_with_entities_on_client(
         claim_truth_promoted: false,
     })
 }
-}
 
 pub fn defer_parser_job_retry(
     config: &DatabaseConfig,
