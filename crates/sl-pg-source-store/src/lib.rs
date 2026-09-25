@@ -245,7 +245,8 @@ pub use db_native_parser::{
 pub use db_native_long_document::{
     finalize_db_native_long_document, prepare_db_native_long_document,
     prepare_db_native_long_source, DbNativeLongDocumentError,
-    DbNativeLongDocumentReceipt, PreparedDbNativeLongDocument,
+    DbNativeLongDocumentReceipt, DbNativeLongDocumentTimings,
+    PreparedDbNativeLongDocument,
 };
 pub use statement_trace_store::{
     canonical_observation_event_link_ref, canonical_statement_observation_link_ref,
