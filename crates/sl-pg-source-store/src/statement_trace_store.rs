@@ -686,24 +686,38 @@ fn require_source_ancestry(
     // SCALE-1 generic long-document ancestry uses character coordinates over
     // the immutable UTF-8 canonical text. Do not reinterpret those coordinates
     // as byte offsets through corpus.span.
-    let generic = client.query_opt(
-        r#"
-        SELECT r.start_char, r.end_char, c.payload
-        FROM ingest.long_document_region r
-        JOIN ingest.generic_source_revision g
-          ON g.source_revision_ref = r.source_revision_ref
-        JOIN corpus.document d ON d.document_ref = g.document_ref
-        JOIN corpus.canonical_content c ON c.canonical_ref = d.canonical_ref
-        WHERE r.source_revision_ref=$1
-          AND r.region_ref=$2
-          AND g.document_ref=$3
-        "#,
-        &[
-            &statement.source_revision_ref,
-            &statement.span.span_ref,
-            &statement.document_ref,
-        ],
+    let ingest_tables = client.query_one(
+        "SELECT
+           to_regclass('ingest.long_document_region')::text,
+           to_regclass('ingest.generic_source_revision')::text",
+        &[],
     )?;
+    let generic_ready =
+        ingest_tables.get::<_, Option<String>>(0).is_some()
+        && ingest_tables.get::<_, Option<String>>(1).is_some();
+
+    let generic = if generic_ready {
+        client.query_opt(
+            r#"
+            SELECT r.start_char, r.end_char, c.payload
+            FROM ingest.long_document_region r
+            JOIN ingest.generic_source_revision g
+              ON g.source_revision_ref = r.source_revision_ref
+            JOIN corpus.document d ON d.document_ref = g.document_ref
+            JOIN corpus.canonical_content c ON c.canonical_ref = d.canonical_ref
+            WHERE r.source_revision_ref=$1
+              AND r.region_ref=$2
+              AND g.document_ref=$3
+            "#,
+            &[
+                &statement.source_revision_ref,
+                &statement.span.span_ref,
+                &statement.document_ref,
+            ],
+        )?
+    } else {
+        None
+    };
 
     if let Some(row) = generic {
         let start = row.get::<_, i64>(0);
