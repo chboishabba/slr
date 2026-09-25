@@ -22,7 +22,7 @@ use sensiblaw_pg_source_store::{
     persist_parser_residual,
     persist_parser_success_with_entities, prepare_db_native_long_document,
     prepare_db_native_long_source,
-    ParserArtifactRecord, ParserEntityRecord, ParserTokenRecord,
+    DbNativeParserWriter, ParserArtifactRecord, ParserEntityRecord, ParserTokenRecord,
     ReviewAction, ReviewCommand, ReviewStatus, apply_persisted_review_command,
 };
 
@@ -621,6 +621,7 @@ fn drain_local_worker(
     let mut parser_process_ns = 0u128;
     let mut parser_persist_ns = 0u128;
     let mut parser_job_ns = Vec::new();
+    let mut parser_writer = DbNativeParserWriter::connect(config)?;
 
     loop {
         let jobs = claim_parser_jobs(
@@ -843,8 +844,7 @@ fn drain_local_worker(
                 object_locator: None,
             };
             let persist_started = Instant::now();
-            persist_parser_success_with_entities(
-                config,
+            parser_writer.persist_success_with_entities(
                 &job,
                 worker_ref,
                 &tokens,
