@@ -237,7 +237,7 @@ pub use db_native_parser::{
     parser_run_ref, parser_run_state, persist_parser_residual,
     persist_parser_success, persist_parser_success_with_entities,
     renew_parser_job_lease, start_parser_run, ClaimedParserJob,
-    DbNativeParserError, DbNativeParserSnapshot, ParserArtifactRecord,
+    DbNativeParserError, DbNativeParserSnapshot, DbNativeParserWriter, ParserArtifactRecord,
     ParserEntityRecord, ParserRegionJobSpec, ParserRunReceipt, ParserRunState,
     ParserTokenRecord,
     PersistedParserOutputReceipt, DB_NATIVE_PARSER_SCHEMA_SQL,
