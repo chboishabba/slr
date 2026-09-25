@@ -60,24 +60,25 @@ fn load_occurrence_statement_refs(
     client: &mut Client,
     kind: &str,
     fingerprint_ref: &str,
+    source_revision_ref: &str,
 ) -> Result<Vec<String>, postgres::Error> {
     let sql = match kind {
         "proposition" => {
             "SELECT DISTINCT statement_ref
              FROM semantic.proposition_candidate_occurrence
-             WHERE proposition_fingerprint_ref=$1
+             WHERE proposition_fingerprint_ref=$1 AND source_revision_ref=$2
              ORDER BY statement_ref"
         }
         "event" => {
             "SELECT DISTINCT statement_ref
              FROM semantic.event_candidate_occurrence
-             WHERE event_fingerprint_ref=$1
+             WHERE event_fingerprint_ref=$1 AND source_revision_ref=$2
              ORDER BY statement_ref"
         }
         _ => unreachable!("fixed reconciliation semantic kind"),
     };
     Ok(client
-        .query(sql, &[&fingerprint_ref])?
+        .query(sql, &[&fingerprint_ref, &source_revision_ref])?
         .into_iter()
         .map(|row| row.get::<_, String>(0))
         .collect())
@@ -124,8 +125,8 @@ pub fn enqueue_reconciliation_review_items(
         let pressure_ref: String = row.get(0);
         let kind: String = row.get(1);
         let fingerprint_ref: String = row.get(2);
-        let occurrence_count: i64 = row.get(3);
-        let source_revision_count: i64 = row.get(4);
+        let _occurrence_count: i64 = row.get(3);
+        let _source_revision_count: i64 = row.get(4);
         let reason_ref: String = row.get(5);
         let candidate_only: bool = row.get(6);
         let requires_review: bool = row.get(7);
@@ -136,8 +137,12 @@ pub fn enqueue_reconciliation_review_items(
             return Err(ReconciliationReviewError::PromotionBoundary);
         }
 
-        let source_refs =
-            load_occurrence_statement_refs(&mut client, &kind, &fingerprint_ref)?;
+        let source_refs = load_occurrence_statement_refs(
+            &mut client,
+            &kind,
+            &fingerprint_ref,
+            source_revision_ref,
+        )?;
         if source_refs.is_empty() {
             continue;
         }
@@ -149,13 +154,15 @@ pub fn enqueue_reconciliation_review_items(
             "event" => ReviewItemKind::Observation,
             _ => continue,
         };
-        let review_item_ref = format!("review-item:reconciliation:{fingerprint_ref}");
+        let review_item_ref = format!(
+            "review-item:reconciliation:{source_revision_ref}:{fingerprint_ref}"
+        );
         let item = ReviewItem {
             review_item_ref: review_item_ref.clone(),
             semantic_ref: fingerprint_ref,
             item_kind,
             reason: format!(
-                "automatic {kind} candidate cluster has {occurrence_count} occurrences across {source_revision_count} source revisions ({reason_ref}); review does not create semantic identity"
+                "automatic {kind} candidate cluster surfaced by {reason_ref}; review does not create semantic identity"
             ),
             provenance_refs: vec![pressure_ref],
             source_refs,
@@ -222,6 +229,7 @@ pub fn enqueue_reconciliation_review_items(
                 &mut client,
                 "proposition",
                 fingerprint,
+                source_revision_ref,
             )? {
                 source_refs.insert(statement_ref);
             }
@@ -230,7 +238,9 @@ pub fn enqueue_reconciliation_review_items(
             continue;
         }
 
-        let review_item_ref = format!("review-item:{relation_ref}");
+        let review_item_ref = format!(
+            "review-item:{source_revision_ref}:{relation_ref}"
+        );
         let item = ReviewItem {
             review_item_ref: review_item_ref.clone(),
             semantic_ref: relation_ref.clone(),
