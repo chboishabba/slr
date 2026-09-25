@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS pnf.statement_candidate_batch (
 );
 
 CREATE TABLE IF NOT EXISTS pnf.statement_candidate_factor (
-    candidate_ref TEXT PRIMARY KEY,
+    candidate_ref TEXT NOT NULL,
     batch_ref TEXT NOT NULL REFERENCES pnf.statement_candidate_batch(batch_ref) ON DELETE CASCADE,
     statement_ref TEXT NOT NULL REFERENCES corpus.source_statement(statement_ref) ON DELETE CASCADE,
     role_ref TEXT NOT NULL,
@@ -38,7 +38,8 @@ CREATE TABLE IF NOT EXISTS pnf.statement_candidate_factor (
     surface TEXT NOT NULL,
     lemma TEXT NOT NULL,
     dependency_ref TEXT NOT NULL,
-    candidate_only BOOLEAN NOT NULL CHECK (candidate_only)
+    candidate_only BOOLEAN NOT NULL CHECK (candidate_only),
+    PRIMARY KEY (batch_ref, candidate_ref)
 );
 
 CREATE INDEX IF NOT EXISTS statement_candidate_factor_batch_idx
@@ -195,7 +196,7 @@ pub fn persist_statement_candidate_pnf(
                 source_start_char, source_end_char, surface, lemma,
                 dependency_ref, candidate_only)
                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,TRUE)
-               ON CONFLICT (candidate_ref) DO NOTHING"#,
+               ON CONFLICT (batch_ref, candidate_ref) DO NOTHING"#,
             &[
                 &factor.candidate_ref,
                 &batch_ref,
@@ -213,8 +214,8 @@ pub fn persist_statement_candidate_pnf(
             "SELECT batch_ref, statement_ref, role_ref, source_start_char,
                     source_end_char, surface, lemma, dependency_ref, candidate_only
              FROM pnf.statement_candidate_factor
-             WHERE candidate_ref=$1",
-            &[&factor.candidate_ref],
+             WHERE batch_ref=$1 AND candidate_ref=$2",
+            &[&batch_ref, &factor.candidate_ref],
         )?;
         if stored.get::<_, String>(0) != batch_ref
             || stored.get::<_, String>(1) != candidate.statement.statement_ref
@@ -242,7 +243,7 @@ pub fn load_candidate_pnf_batch(
     let mut client = Client::connect(config.database_url(), NoTls)?;
     client.batch_execute(CANDIDATE_PNF_SCHEMA_SQL)?;
     let Some(batch) = client.query_opt(
-        "SELECT statement_ref, exact_span_ref, parser_receipt_ref,
+        "SELECT statement_ref, exact_span_ref, parser_receipt_ref, factor_count,
                 candidate_only, semantic_admission_paid, proposition_support_paid,
                 applicability_paid, claim_truth_paid
          FROM pnf.statement_candidate_batch
@@ -279,17 +280,22 @@ pub fn load_candidate_pnf_batch(
         });
     }
 
+    let expected_factor_count = batch.get::<_, i64>(3);
+    if expected_factor_count < 0 || expected_factor_count as usize != factors.len() {
+        return Err(CandidatePnfStoreError::ExistingBatchConflict);
+    }
+
     Ok(Some(PersistedCandidatePnfBatch {
         batch_ref: batch_ref.to_owned(),
         statement_ref: batch.get(0),
         exact_span_ref: batch.get(1),
         parser_receipt_ref: batch.get(2),
         factors,
-        candidate_only: batch.get(3),
-        semantic_admission_paid: batch.get(4),
-        proposition_support_paid: batch.get(5),
-        applicability_paid: batch.get(6),
-        claim_truth_paid: batch.get(7),
+        candidate_only: batch.get(4),
+        semantic_admission_paid: batch.get(5),
+        proposition_support_paid: batch.get(6),
+        applicability_paid: batch.get(7),
+        claim_truth_paid: batch.get(8),
     }))
 }
 
