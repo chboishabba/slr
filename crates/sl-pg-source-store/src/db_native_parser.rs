@@ -701,7 +701,10 @@ pub fn persist_parser_success_with_entities(
             .as_deref()
             .map(canonical_json_text)
             .transpose()?;
-        let head_ordinal = token.head_ordinal.map(i64::from);
+        // `ingest.parser_token.head_ordinal` is INTEGER, like token_ordinal.
+        // Keep the optional wire coordinate in that same database width rather
+        // than binding an Option<i64>, which PostgreSQL correctly rejects.
+        let head_ordinal = token.head_ordinal.map(|ordinal| ordinal as i32);
         tx.execute(
             "INSERT INTO ingest.parser_token (
                 compilation_key, token_ordinal, start_char, end_char,

@@ -1,3 +1,6 @@
+#![recursion_limit = "256"]
+
+use std::collections::BTreeMap;
 use std::error::Error;
 use std::fs;
 use std::io::{Error as IoError, ErrorKind, Read, Write};
@@ -38,6 +41,12 @@ struct WireArtifact {
     tokens: Vec<WireToken>,
     #[serde(default)]
     entities: Vec<WireEntity>,
+}
+
+#[derive(Debug, Deserialize)]
+struct WireBatchArtifact {
+    request_ref: String,
+    artifact: Value,
 }
 
 #[derive(Debug, Deserialize)]
@@ -108,36 +117,71 @@ fn parser_description(
     Ok(serde_json::from_slice(&output.stdout)?)
 }
 
-fn run_parser(
+fn run_parser_batch(
     script: &str,
     model_ref: &str,
     config_json: &str,
-    text: &str,
-) -> Result<Vec<u8>, Box<dyn Error>> {
+    requests: &[(String, String)],
+) -> Result<BTreeMap<String, Vec<u8>>, Box<dyn Error>> {
     let mut child = Command::new("python3")
         .arg(script)
         .arg("--model")
         .arg(model_ref)
         .arg("--config-json")
         .arg(config_json)
+        .arg("--batch-jsonl")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()?;
-    child
+    let mut stdin = child
         .stdin
-        .as_mut()
-        .ok_or_else(|| IoError::new(ErrorKind::BrokenPipe, "parser stdin unavailable"))?
-        .write_all(text.as_bytes())?;
+        .take()
+        .ok_or_else(|| IoError::new(ErrorKind::BrokenPipe, "parser stdin unavailable"))?;
+    for (request_ref, text) in requests {
+        serde_json::to_writer(&mut stdin, &json!({
+            "request_ref": request_ref,
+            "text": text,
+        }))?;
+        stdin.write_all(b"\n")?;
+    }
+    drop(stdin);
+
     let output = child.wait_with_output()?;
     if !output.status.success() {
         return Err(format!(
-            "parser process failed: {}",
+            "batched parser process failed: {}",
             String::from_utf8_lossy(&output.stderr)
         )
         .into());
     }
-    Ok(output.stdout)
+
+    let mut artifacts = BTreeMap::new();
+    for line in output.stdout.split(|byte| *byte == b'\n') {
+        if line.is_empty() {
+            continue;
+        }
+        let artifact: WireBatchArtifact = serde_json::from_slice(line)?;
+        if artifacts
+            .insert(artifact.request_ref.clone(), serde_json::to_vec(&artifact.artifact)?)
+            .is_some()
+        {
+            return Err(format!("batched parser emitted duplicate request {}", artifact.request_ref).into());
+        }
+    }
+    if artifacts.len() != requests.len()
+        || requests
+            .iter()
+            .any(|(request_ref, _)| !artifacts.contains_key(request_ref))
+    {
+        return Err(format!(
+            "batched parser response mismatch: requested={} returned={}",
+            requests.len(),
+            artifacts.len()
+        )
+        .into());
+    }
+    Ok(artifacts)
 }
 
 fn prepare_spacy(args: &[String]) -> Result<(), Box<dyn Error>> {
@@ -585,6 +629,78 @@ fn drain_local_worker(
             break;
         }
 
+        // Parser jobs in a run share an identity/configuration, but retain the
+        // per-region lease and persistence boundary.  Feed each homogeneous
+        // lease batch through one spaCy process so model initialisation is not
+        // paid once per sentence.
+        let mut requests_by_identity: BTreeMap<
+            (String, String, String, String),
+            Vec<(String, String)>,
+        > = BTreeMap::new();
+        for job in &jobs {
+            if job.parser_family == "spacy" {
+                let region_text = load_claimed_job_text(config, job)?;
+                requests_by_identity
+                    .entry((
+                        job.parser_family.clone(),
+                        job.parser_version.clone(),
+                        job.model_ref.clone(),
+                        job.config_json.clone(),
+                    ))
+                    .or_default()
+                    .push((job.compilation_key.clone(), region_text));
+            }
+        }
+
+        let mut batched_outputs: BTreeMap<String, Result<Vec<u8>, String>> = BTreeMap::new();
+        for ((parser_family, parser_version, model_ref, config_json), requests) in requests_by_identity {
+            let description = parser_description(parser_script, &model_ref);
+            let identity_error = match description {
+                Ok(description)
+                    if description.parser_family == parser_family
+                        && description.parser_version == parser_version
+                        && description.model_ref == model_ref => None,
+                Ok(description) => Some(format!(
+                    "worker-parser-identity-mismatch:expected={}/{}/{}:actual={}/{}/{}",
+                    parser_family,
+                    parser_version,
+                    model_ref,
+                    description.parser_family,
+                    description.parser_version,
+                    description.model_ref
+                )),
+                Err(error) => Some(format!("parser-describe-error:{error}")),
+            };
+            if let Some(error) = identity_error {
+                for (request_ref, _) in requests {
+                    batched_outputs.insert(request_ref, Err(error.clone()));
+                }
+                continue;
+            }
+
+            let parser_started = Instant::now();
+            let output = run_parser_batch(
+                parser_script,
+                &model_ref,
+                &config_json,
+                &requests,
+            );
+            parser_process_ns += parser_started.elapsed().as_nanos();
+            match output {
+                Ok(output) => {
+                    for (request_ref, artifact) in output {
+                        batched_outputs.insert(request_ref, Ok(artifact));
+                    }
+                }
+                Err(error) => {
+                    let error = format!("parser-process-error:{error}");
+                    for (request_ref, _) in requests {
+                        batched_outputs.insert(request_ref, Err(error.clone()));
+                    }
+                }
+            }
+        }
+
         for job in jobs {
             let job_started = Instant::now();
             if job.parser_family != "spacy" {
@@ -599,62 +715,20 @@ fn drain_local_worker(
                 continue;
             }
 
-            let description = match parser_description(parser_script, &job.model_ref) {
-                Ok(value) => value,
-                Err(error) => {
-                    defer_parser_job_retry(
-                        config,
-                        &job,
-                        worker_ref,
-                        &format!("parser-describe-error:{error}"),
-                    )?;
+            let output = match batched_outputs.remove(&job.compilation_key) {
+                Some(Ok(value)) => value,
+                Some(Err(error)) => {
+                    defer_parser_job_retry(config, &job, worker_ref, &error)?;
                     deferred_retry += 1;
                     parser_job_ns.push(job_started.elapsed().as_nanos());
                     continue;
                 }
-            };
-            if description.parser_family != job.parser_family
-                || description.parser_version != job.parser_version
-                || description.model_ref != job.model_ref
-            {
-                defer_parser_job_retry(
-                    config,
-                    &job,
-                    worker_ref,
-                    &format!(
-                        "worker-parser-identity-mismatch:expected={}/{}/{}:actual={}/{}/{}",
-                        job.parser_family,
-                        job.parser_version,
-                        job.model_ref,
-                        description.parser_family,
-                        description.parser_version,
-                        description.model_ref
-                    ),
-                )?;
-                deferred_retry += 1;
-                parser_job_ns.push(job_started.elapsed().as_nanos());
-                continue;
-            }
-
-            let region_text = load_claimed_job_text(config, &job)?;
-            let parser_started = Instant::now();
-            let output = match run_parser(
-                parser_script,
-                &job.model_ref,
-                &job.config_json,
-                &region_text,
-            ) {
-                Ok(value) => {
-                    parser_process_ns += parser_started.elapsed().as_nanos();
-                    value
-                }
-                Err(error) => {
-                    parser_process_ns += parser_started.elapsed().as_nanos();
+                None => {
                     defer_parser_job_retry(
                         config,
                         &job,
                         worker_ref,
-                        &format!("parser-process-error:{error}"),
+                        "missing-batched-parser-output",
                     )?;
                     deferred_retry += 1;
                     parser_job_ns.push(job_started.elapsed().as_nanos());
