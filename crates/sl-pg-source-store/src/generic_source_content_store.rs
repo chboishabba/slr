@@ -50,6 +50,8 @@ pub enum GenericSourceContentStoreError {
     InvalidUtf8,
     #[error("stored source revision violated non-promotion boundary")]
     StoredPromotionBoundary,
+    #[error("source revision ref already exists with different immutable identity")]
+    SourceRevisionIdentityConflict,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -216,19 +218,7 @@ pub fn persist_generic_text_source(
           content_digest_ref, media_type_ref, candidate_only,
           creates_semantic_authority, applicability_promoted, claim_truth_promoted)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,TRUE,FALSE,FALSE,FALSE)
-         ON CONFLICT (source_revision_ref) DO UPDATE SET
-           source_ref = EXCLUDED.source_ref,
-           document_ref = EXCLUDED.document_ref,
-           provider_ref = EXCLUDED.provider_ref,
-           source_family_ref = EXCLUDED.source_family_ref,
-           ingest_role_class_ref = EXCLUDED.ingest_role_class_ref,
-           acquisition_receipt_ref = EXCLUDED.acquisition_receipt_ref,
-           content_digest_ref = EXCLUDED.content_digest_ref,
-           media_type_ref = EXCLUDED.media_type_ref,
-           candidate_only = TRUE,
-           creates_semantic_authority = FALSE,
-           applicability_promoted = FALSE,
-           claim_truth_promoted = FALSE",
+         ON CONFLICT (source_revision_ref) DO NOTHING",
         &[
             &envelope.source_revision_ref,
             &envelope.source_ref,
@@ -241,6 +231,33 @@ pub fn persist_generic_text_source(
             &envelope.media_type_ref,
         ],
     )?;
+
+    let identity = tx.query_one(
+        "SELECT source_ref, document_ref, provider_ref, source_family_ref,
+                ingest_role_class_ref, acquisition_receipt_ref,
+                content_digest_ref, media_type_ref, candidate_only,
+                creates_semantic_authority, applicability_promoted,
+                claim_truth_promoted
+         FROM ingest.generic_source_revision
+         WHERE source_revision_ref = $1",
+        &[&envelope.source_revision_ref],
+    )?;
+    let identity_matches =
+        identity.get::<_, String>(0) == envelope.source_ref
+        && identity.get::<_, String>(1) == document_ref
+        && identity.get::<_, String>(2) == envelope.provider_ref
+        && identity.get::<_, String>(3) == family_db(envelope.family)
+        && identity.get::<_, String>(4) == role_db(envelope.role_class)
+        && identity.get::<_, String>(5) == envelope.acquisition_receipt_ref
+        && identity.get::<_, String>(6) == envelope.content_digest_ref
+        && identity.get::<_, String>(7) == envelope.media_type_ref
+        && identity.get::<_, bool>(8)
+        && !identity.get::<_, bool>(9)
+        && !identity.get::<_, bool>(10)
+        && !identity.get::<_, bool>(11);
+    if !identity_matches {
+        return Err(GenericSourceContentStoreError::SourceRevisionIdentityConflict);
+    }
 
     tx.commit()?;
 
