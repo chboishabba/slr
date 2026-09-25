@@ -1,6 +1,6 @@
 use std::error::Error;
 use std::fs;
-use std::io::{Error as IoError, ErrorKind, Write};
+use std::io::{Error as IoError, ErrorKind, Read, Write};
 use std::path::Path;
 use std::process::{Command, Stdio};
 
@@ -211,6 +211,87 @@ fn prepare_spacy(args: &[String]) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+
+
+fn prepare_stdin(args: &[String]) -> Result<(), Box<dyn Error>> {
+    if args.len() < 7 {
+        return Err(
+            "prepare-stdin <source-ref> <provider-ref> <acquisition-receipt-ref> <title> <model-ref> [config-json] [parser-script]"
+                .into(),
+        );
+    }
+    let source_ref = &args[2];
+    let provider_ref = &args[3];
+    let acquisition_receipt_ref = &args[4];
+    let title = &args[5];
+    let model_ref = &args[6];
+    let config_json = args.get(7).map(String::as_str).unwrap_or("{}");
+    let parser_script = args
+        .get(8)
+        .map(String::as_str)
+        .unwrap_or("scripts/scale1_spacy_json_parser.py");
+
+    let mut canonical_text = String::new();
+    std::io::stdin().read_to_string(&mut canonical_text)?;
+    if canonical_text.is_empty() {
+        return Err("prepare-stdin received empty canonical text".into());
+    }
+
+    let content_digest_ref = digest_ref(canonical_text.as_bytes());
+    let source_revision_ref = canonical_generic_source_revision_ref(
+        source_ref,
+        provider_ref,
+        acquisition_receipt_ref,
+        &content_digest_ref,
+        "text/plain",
+    );
+    let description = parser_description(parser_script, model_ref)?;
+    if description.parser_family != "spacy" || description.model_ref != model_ref.as_str() {
+        return Err("spaCy parser description did not match requested model".into());
+    }
+
+    let config = load_database_config(None)?;
+    let prepared = prepare_db_native_long_document(
+        &config,
+        source_ref,
+        &source_revision_ref,
+        provider_ref,
+        acquisition_receipt_ref,
+        (!title.is_empty()).then(|| title.clone()),
+        None,
+        &canonical_text,
+        &description.parser_family,
+        &description.parser_version,
+        model_ref,
+        config_json,
+    )?;
+
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&json!({
+            "schema": "sensiblaw.scale1.long-document-prepare.v0_1",
+            "input_transport": "stdin",
+            "source_ref": prepared.source.source_ref,
+            "source_revision_ref": prepared.source.source_revision_ref,
+            "content_digest_ref": prepared.source.content_digest_ref,
+            "canonical_ref": prepared.source.canonical_ref,
+            "document_ref": prepared.source.document_ref,
+            "parser_run_ref": prepared.parser_run.parser_run_ref,
+            "parser_family": prepared.parser_run.parser_family,
+            "parser_version": prepared.parser_run.parser_version,
+            "model_ref": prepared.parser_run.model_ref,
+            "semantic_regions": prepared.semantic_region_count,
+            "structural_regions": prepared.structural_region_count,
+            "new_jobs": prepared.newly_enqueued_job_count,
+            "reused_jobs": prepared.reused_existing_job_count,
+            "candidate_only": prepared.candidate_only,
+            "creates_semantic_authority": prepared.creates_semantic_authority,
+            "applicability_promoted": prepared.applicability_promoted,
+            "claim_truth_promoted": prepared.claim_truth_promoted
+        }))?
+    );
+    Ok(())
+}
 
 fn prepare_gwb_projection(args: &[String]) -> Result<(), Box<dyn Error>> {
     if args.len() < 5 {
