@@ -83,6 +83,7 @@ pub enum SourceIngestError {
     MissingBodyRevision,
     InvalidMailParticipant,
     InvalidDocumentRegion,
+    CanonicalWeldMismatch(&'static str),
     CanonicalEvidence(EvidenceSubstrateError),
 }
 
@@ -174,6 +175,125 @@ impl SourceIngestEnvelope {
             &manifestation,
             self.acquisition_receipt_ref.clone(),
         )?)
+    }
+}
+
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CanonicalCompiledSource {
+    pub ingest: SourceIngestEnvelope,
+    pub manifestation: EvidenceManifestation,
+    pub revision: EvidenceSourceRevision,
+    pub provider_specific_review_shortcut: bool,
+    pub provider_specific_projection_shortcut: bool,
+}
+
+impl CanonicalCompiledSource {
+    pub fn from_ingest(ingest: SourceIngestEnvelope) -> Result<Self, SourceIngestError> {
+        ingest.validate()?;
+        let manifestation = ingest.to_manifestation()?;
+        let revision = EvidenceSourceRevision::from_manifestation(
+            &manifestation,
+            ingest.acquisition_receipt_ref.clone(),
+        )?;
+        let compiled = Self {
+            ingest,
+            manifestation,
+            revision,
+            provider_specific_review_shortcut: false,
+            provider_specific_projection_shortcut: false,
+        };
+        compiled.validate()?;
+        Ok(compiled)
+    }
+
+    pub fn validate(&self) -> Result<(), SourceIngestError> {
+        self.ingest.validate()?;
+        self.manifestation
+            .validate()
+            .map_err(|_| SourceIngestError::PromotionNotAllowed)?;
+        self.revision.validate()?;
+        if self.manifestation.source_ref != self.ingest.source_ref {
+            return Err(SourceIngestError::CanonicalWeldMismatch("source_ref"));
+        }
+        if self.manifestation.source_revision_ref != self.ingest.source_revision_ref {
+            return Err(SourceIngestError::CanonicalWeldMismatch(
+                "manifestation_source_revision_ref",
+            ));
+        }
+        if self.revision.source_revision_ref != self.manifestation.source_revision_ref {
+            return Err(SourceIngestError::CanonicalWeldMismatch(
+                "revision_source_revision_ref",
+            ));
+        }
+        if self.revision.manifestation_ref != self.manifestation.manifestation_ref {
+            return Err(SourceIngestError::CanonicalWeldMismatch(
+                "revision_manifestation_ref",
+            ));
+        }
+        if self.revision.content_digest_ref != self.manifestation.content_digest_ref {
+            return Err(SourceIngestError::CanonicalWeldMismatch(
+                "revision_content_digest_ref",
+            ));
+        }
+        if self.provider_specific_review_shortcut
+            || self.provider_specific_projection_shortcut
+        {
+            return Err(SourceIngestError::PromotionNotAllowed);
+        }
+        Ok(())
+    }
+
+    pub fn weld_span(&self, span: EvidenceSpan) -> Result<CanonicalSourceRegion, SourceIngestError> {
+        self.validate()?;
+        span.validate()?;
+        if span.source_revision_ref != self.revision.source_revision_ref {
+            return Err(SourceIngestError::RevisionMismatch);
+        }
+        Ok(CanonicalSourceRegion {
+            source_revision_ref: self.revision.source_revision_ref.clone(),
+            span,
+            eligibility: SemanticRegionEligibility::Unknown,
+            structure_creates_semantic_observation: false,
+            structure_creates_claim_truth: false,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SemanticRegionEligibility {
+    SemanticCandidate,
+    TransportOnly,
+    StructuralOnly,
+    ObserverOnly,
+    Unknown,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CanonicalSourceRegion {
+    pub source_revision_ref: String,
+    pub span: EvidenceSpan,
+    pub eligibility: SemanticRegionEligibility,
+    pub structure_creates_semantic_observation: bool,
+    pub structure_creates_claim_truth: bool,
+}
+
+impl CanonicalSourceRegion {
+    pub fn validate(&self) -> Result<(), SourceIngestError> {
+        self.span.validate()?;
+        if self.source_revision_ref != self.span.source_revision_ref {
+            return Err(SourceIngestError::RevisionMismatch);
+        }
+        if self.structure_creates_semantic_observation || self.structure_creates_claim_truth {
+            return Err(SourceIngestError::PromotionNotAllowed);
+        }
+        Ok(())
+    }
+
+    #[must_use]
+    pub fn with_eligibility(mut self, eligibility: SemanticRegionEligibility) -> Self {
+        self.eligibility = eligibility;
+        self
     }
 }
 
@@ -544,6 +664,46 @@ mod tests {
             applicability_promoted: false,
             claim_truth_promoted: false,
         }
+    }
+
+
+    #[test]
+    fn canonical_compiled_source_is_a_real_manifestation_revision_weld() {
+        let envelope = ingest(SourceFamily::Document, IngestRoleClass::ContentSource);
+        let compiled = CanonicalCompiledSource::from_ingest(envelope).unwrap();
+
+        assert_eq!(
+            compiled.revision.source_revision_ref,
+            compiled.manifestation.source_revision_ref
+        );
+        assert_eq!(
+            compiled.revision.manifestation_ref,
+            compiled.manifestation.manifestation_ref
+        );
+        assert_eq!(
+            compiled.revision.content_digest_ref,
+            compiled.manifestation.content_digest_ref
+        );
+        assert!(!compiled.provider_specific_review_shortcut);
+        assert!(!compiled.provider_specific_projection_shortcut);
+
+        let region = compiled
+            .weld_span(EvidenceSpan::text(
+                compiled.revision.source_revision_ref.clone(),
+                "span:fixture",
+                0,
+                10,
+            )
+            .unwrap())
+            .unwrap()
+            .with_eligibility(SemanticRegionEligibility::SemanticCandidate);
+        assert!(region.validate().is_ok());
+        assert_eq!(
+            region.span.source_revision_ref,
+            compiled.revision.source_revision_ref
+        );
+        assert!(!region.structure_creates_semantic_observation);
+        assert!(!region.structure_creates_claim_truth);
     }
 
     #[test]
