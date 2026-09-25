@@ -126,8 +126,8 @@ fn compile_region<P: CandidatePnfProducer>(
     literal_text: String,
     parser_receipt_ref: String,
 ) -> Result<StatementCandidatePnf, GenericSourceCompilerError> {
-    let statement = SourceStatementEnvelope {
-        statement_ref: format!("statement:{source_revision_ref}:{start_char}-{end_char}"),
+    let mut statement = SourceStatementEnvelope {
+        statement_ref: String::new(),
         document_ref: document_ref.to_owned(),
         source_revision_ref: source_revision_ref.to_owned(),
         span: exact_span(span_ref, start_char, end_char)?,
@@ -138,6 +138,7 @@ fn compile_region<P: CandidatePnfProducer>(
         applicability_promoted: false,
         claim_truth_promoted: false,
     };
+    statement.statement_ref = crate::canonical_statement_ref(&statement);
     Ok(compile_initial_intake_statement(
         producer,
         statement,
@@ -405,6 +406,43 @@ pub fn compile_long_document_lossless<P: CandidatePnfProducer>(
     canonical_text: &str,
     parser_receipt_prefix: &str,
 ) -> Result<LosslessBulkSourceCompilation, GenericSourceCompilerError> {
+    compile_long_document_lossless_with_statement_document_ref(
+        producer,
+        document,
+        &document.ingest.source_ref,
+        canonical_text,
+        parser_receipt_prefix,
+    )
+}
+
+pub fn compile_long_document_lossless_for_document_ref<P: CandidatePnfProducer>(
+    producer: &P,
+    document: &LongDocumentSource,
+    statement_document_ref: &str,
+    canonical_text: &str,
+    parser_receipt_prefix: &str,
+) -> Result<LosslessBulkSourceCompilation, GenericSourceCompilerError> {
+    if statement_document_ref.trim().is_empty() {
+        return Err(GenericSourceCompilerError::StatementPnf(
+            StatementPnfSpineError::EmptyCoordinate("document_ref"),
+        ));
+    }
+    compile_long_document_lossless_with_statement_document_ref(
+        producer,
+        document,
+        statement_document_ref,
+        canonical_text,
+        parser_receipt_prefix,
+    )
+}
+
+fn compile_long_document_lossless_with_statement_document_ref<P: CandidatePnfProducer>(
+    producer: &P,
+    document: &LongDocumentSource,
+    statement_document_ref: &str,
+    canonical_text: &str,
+    parser_receipt_prefix: &str,
+) -> Result<LosslessBulkSourceCompilation, GenericSourceCompilerError> {
     document.validate()?;
     let canonical_regions = document.canonical_regions()?;
     if canonical_regions.len() != document.regions.len() {
@@ -446,7 +484,7 @@ pub fn compile_long_document_lossless<P: CandidatePnfProducer>(
         .and_then(|literal| {
             compile_region(
                 producer,
-                &document.ingest.source_ref,
+                statement_document_ref,
                 &document.ingest.source_revision_ref,
                 &region.region_ref,
                 region.start_char,
