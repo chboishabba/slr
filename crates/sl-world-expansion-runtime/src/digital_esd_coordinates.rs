@@ -46,6 +46,28 @@ ON digital_esd.study_coordinate_candidate
 
 const DETECTOR_REF: &str = "digital-esd:pnf-coordinate-nominator:v1";
 
+pub const CANONICAL_19_COORDINATES: [&str; 19] = [
+    "sourceIdentityCoordinate",
+    "sourceKindAndRoleCoordinate",
+    "publicationDateCoordinate",
+    "populationEducationLevelCoordinate",
+    "jurisdictionInstitutionContextCoordinate",
+    "digitalTechnologyOrPracticeCoordinate",
+    "pedagogyCurriculumCompetenceCoordinate",
+    "sustainabilityDimensionCoordinate",
+    "studyOrReviewDesignCoordinate",
+    "outcomeOrClaimCoordinate",
+    "timeHorizonCoordinate",
+    "lifecycleBoundaryCoordinate",
+    "circularityRepairabilityCoordinate",
+    "participantAgencyAuthorityCoordinate",
+    "interoperabilityGovernanceCoordinate",
+    "externalityIncidenceCoordinate",
+    "sameObjectStatusCoordinate",
+    "contextTransferCoordinate",
+    "uncertaintyLimitationCoordinate",
+];
+
 #[derive(Debug, Error)]
 pub enum DigitalEsdCoordinateError {
     #[error("postgres error: {0}")]
@@ -73,7 +95,7 @@ struct Rule {
 
 const RULES: &[Rule] = &[
     Rule {
-        coordinate_ref: "population_education_level",
+        coordinate_ref: "populationEducationLevelCoordinate",
         terms: &[
             "student", "students", "learner", "learners", "teacher", "teachers",
             "school", "schools", "university", "universities", "undergraduate",
@@ -81,14 +103,14 @@ const RULES: &[Rule] = &[
         ],
     },
     Rule {
-        coordinate_ref: "jurisdiction_institution_context",
+        coordinate_ref: "jurisdictionInstitutionContextCoordinate",
         terms: &[
             "institution", "institutional", "school", "university", "college",
             "district", "ministry", "department", "campus", "classroom",
         ],
     },
     Rule {
-        coordinate_ref: "digital_technology_or_practice",
+        coordinate_ref: "digitalTechnologyOrPracticeCoordinate",
         terms: &[
             "digital", "online", "computer", "technology", "technologies",
             "software", "platform", "internet", "virtual", "ai",
@@ -96,7 +118,7 @@ const RULES: &[Rule] = &[
         ],
     },
     Rule {
-        coordinate_ref: "pedagogy_curriculum_competence",
+        coordinate_ref: "pedagogyCurriculumCompetenceCoordinate",
         terms: &[
             "pedagogy", "pedagogical", "curriculum", "curricular", "competence",
             "competency", "learning", "teaching", "instruction", "education",
@@ -104,14 +126,14 @@ const RULES: &[Rule] = &[
         ],
     },
     Rule {
-        coordinate_ref: "sustainability_dimension",
+        coordinate_ref: "sustainabilityDimensionCoordinate",
         terms: &[
             "sustainability", "sustainable", "esd", "climate", "environmental",
             "environment", "social", "economic", "ecological",
         ],
     },
     Rule {
-        coordinate_ref: "study_or_review_design",
+        coordinate_ref: "studyOrReviewDesignCoordinate",
         terms: &[
             "randomized", "randomised", "trial", "experiment", "experimental",
             "survey", "interview", "qualitative", "quantitative", "mixed methods",
@@ -120,7 +142,7 @@ const RULES: &[Rule] = &[
         ],
     },
     Rule {
-        coordinate_ref: "outcome_or_claim",
+        coordinate_ref: "outcomeOrClaimCoordinate",
         terms: &[
             "outcome", "outcomes", "effect", "effects", "result", "results",
             "finding", "findings", "score", "scores", "performance", "knowledge",
@@ -128,14 +150,14 @@ const RULES: &[Rule] = &[
         ],
     },
     Rule {
-        coordinate_ref: "time_horizon",
+        coordinate_ref: "timeHorizonCoordinate",
         terms: &[
             "follow-up", "follow up", "longitudinal", "semester", "year",
             "years", "month", "months", "week", "weeks", "day", "days",
         ],
     },
     Rule {
-        coordinate_ref: "lifecycle_boundary",
+        coordinate_ref: "lifecycleBoundaryCoordinate",
         terms: &[
             "lifecycle", "life cycle", "embodied", "hardware", "infrastructure",
             "data center", "data centre", "energy", "carbon", "emission",
@@ -143,7 +165,7 @@ const RULES: &[Rule] = &[
         ],
     },
     Rule {
-        coordinate_ref: "circularity_repairability",
+        coordinate_ref: "circularityRepairabilityCoordinate",
         terms: &[
             "circular", "circularity", "repair", "repairability", "reuse",
             "reusable", "recycle", "recycling", "e-waste", "ewaste",
@@ -151,7 +173,7 @@ const RULES: &[Rule] = &[
         ],
     },
     Rule {
-        coordinate_ref: "participant_agency_authority",
+        coordinate_ref: "participantAgencyAuthorityCoordinate",
         terms: &[
             "agency", "voice", "participation", "participatory", "consent",
             "autonomy", "authority", "co-design", "codesign", "choice",
@@ -159,7 +181,7 @@ const RULES: &[Rule] = &[
         ],
     },
     Rule {
-        coordinate_ref: "interoperability_governance",
+        coordinate_ref: "interoperabilityGovernanceCoordinate",
         terms: &[
             "interoperability", "interoperable", "governance", "privacy",
             "data governance", "portability", "open source", "open-source",
@@ -167,7 +189,7 @@ const RULES: &[Rule] = &[
         ],
     },
     Rule {
-        coordinate_ref: "externality_incidence",
+        coordinate_ref: "externalityIncidenceCoordinate",
         terms: &[
             "externality", "externalities", "burden", "burdens", "benefit",
             "benefits", "cost", "costs", "energy", "water", "emission",
@@ -175,7 +197,7 @@ const RULES: &[Rule] = &[
         ],
     },
     Rule {
-        coordinate_ref: "context_transfer",
+        coordinate_ref: "contextTransferCoordinate",
         terms: &[
             "transfer", "transferability", "generalisability", "generalizability",
             "external validity", "context", "contexts", "scale-up", "scaling",
@@ -183,7 +205,7 @@ const RULES: &[Rule] = &[
         ],
     },
     Rule {
-        coordinate_ref: "uncertainty_limitation",
+        coordinate_ref: "uncertaintyLimitationCoordinate",
         terms: &[
             "limitation", "limitations", "uncertainty", "confidence interval",
             "confidence intervals", "bias", "attrition", "missing", "caveat",
@@ -321,7 +343,7 @@ pub fn materialize_study_coordinate_candidates(
             None,
             None,
             None,
-            "source_identity",
+            "sourceIdentityCoordinate",
             &format!("source-revision:{source_revision_ref}"),
         )? { 1 } else { 0 };
         source_level += if persist_candidate(
@@ -332,7 +354,7 @@ pub fn materialize_study_coordinate_candidates(
             None,
             None,
             None,
-            "source_kind_and_role",
+            "sourceKindAndRoleCoordinate",
             &format!("family:{family}|role:{role}"),
         )? { 1 } else { 0 };
         source_level += if persist_candidate(
@@ -343,7 +365,7 @@ pub fn materialize_study_coordinate_candidates(
             None,
             None,
             None,
-            "same_object_status",
+            "sameObjectStatusCoordinate",
             &format!("revision:{source_revision_ref}|digest:{digest}"),
         )? { 1 } else { 0 };
     }
@@ -453,12 +475,19 @@ mod tests {
             .map(|rule| rule.coordinate_ref)
             .collect::<BTreeSet<_>>();
 
-        assert!(coordinates.contains("population_education_level"));
-        assert!(coordinates.contains("digital_technology_or_practice"));
-        assert!(coordinates.contains("pedagogy_curriculum_competence"));
-        assert!(coordinates.contains("sustainability_dimension"));
-        assert!(coordinates.contains("uncertainty_limitation"));
-        assert!(!coordinates.contains("circularity_repairability"));
+        assert!(coordinates.contains("populationEducationLevelCoordinate"));
+        assert!(coordinates.contains("digitalTechnologyOrPracticeCoordinate"));
+        assert!(coordinates.contains("pedagogyCurriculumCompetenceCoordinate"));
+        assert!(coordinates.contains("sustainabilityDimensionCoordinate"));
+        assert!(coordinates.contains("uncertaintyLimitationCoordinate"));
+        assert!(!coordinates.contains("circularityRepairabilityCoordinate"));
+    }
+
+    #[test]
+    fn runtime_vocabulary_is_exactly_the_nineteen_coordinate_schema() {
+        assert_eq!(CANONICAL_19_COORDINATES.len(), 19);
+        assert!(CANONICAL_19_COORDINATES.contains(&"publicationDateCoordinate"));
+        assert!(CANONICAL_19_COORDINATES.contains(&"sameObjectStatusCoordinate"));
     }
 
     #[test]
