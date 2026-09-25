@@ -254,6 +254,36 @@ pub struct DbNativeParserSnapshot {
     residual_by_region: BTreeMap<String, String>,
 }
 
+pub struct DbNativeParserWriter {
+    client: Client,
+}
+
+impl DbNativeParserWriter {
+    pub fn connect(config: &DatabaseConfig) -> Result<Self, DbNativeParserError> {
+        let mut client = Client::connect(config.database_url(), NoTls)?;
+        client.batch_execute(DB_NATIVE_PARSER_SCHEMA_SQL)?;
+        Ok(Self { client })
+    }
+
+    pub fn persist_success_with_entities(
+        &mut self,
+        job: &ClaimedParserJob,
+        worker_ref: &str,
+        tokens: &[ParserTokenRecord],
+        entities: &[ParserEntityRecord],
+        artifact: Option<&ParserArtifactRecord>,
+    ) -> Result<PersistedParserOutputReceipt, DbNativeParserError> {
+        persist_parser_success_with_entities_on_client(
+            &mut self.client,
+            job,
+            worker_ref,
+            tokens,
+            entities,
+            artifact,
+        )
+    }
+}
+
 fn require(value: &str) -> Result<(), DbNativeParserError> {
     if value.trim().is_empty() {
         Err(DbNativeParserError::EmptyCoordinate)
@@ -635,6 +665,18 @@ pub fn persist_parser_success_with_entities(
     entities: &[ParserEntityRecord],
     artifact: Option<&ParserArtifactRecord>,
 ) -> Result<PersistedParserOutputReceipt, DbNativeParserError> {
+    let mut writer = DbNativeParserWriter::connect(config)?;
+    writer.persist_success_with_entities(job, worker_ref, tokens, entities, artifact)
+}
+
+fn persist_parser_success_with_entities_on_client(
+    client: &mut Client,
+    job: &ClaimedParserJob,
+    worker_ref: &str,
+    tokens: &[ParserTokenRecord],
+    entities: &[ParserEntityRecord],
+    artifact: Option<&ParserArtifactRecord>,
+) -> Result<PersistedParserOutputReceipt, DbNativeParserError> {
     validate_tokens(job, tokens)?;
     let mut entity_ordinals = BTreeSet::new();
     for entity in entities {
@@ -668,9 +710,8 @@ pub fn persist_parser_success_with_entities(
         }
     }
 
-    let mut client = Client::connect(config.database_url(), NoTls)?;
     let mut tx = client.transaction()?;
-    tx.batch_execute(DB_NATIVE_PARSER_SCHEMA_SQL)?;
+
 
     let owned = tx.query_opt(
         "SELECT source_revision_ref, region_ref, region_start_char, region_end_char
@@ -873,7 +914,7 @@ pub fn persist_parser_success_with_entities(
         claim_truth_promoted: false,
     })
 }
-
+}
 
 pub fn defer_parser_job_retry(
     config: &DatabaseConfig,
