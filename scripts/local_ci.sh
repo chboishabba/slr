@@ -20,6 +20,7 @@ cargo check -p sensiblaw-proof-search-loop --example live_cullen_residual_review
 cargo check -p sensiblaw-proof-search-loop --example cullen_source_grounded_review_units
 cargo check -p sensiblaw-proof-search-loop --example cullen_premise_split_audit
 cargo check -p sensiblaw-pg-source-store --example scale1_long_document
+cargo check -p sensiblaw-pg-source-store --example scale1_source_compiler
 
 echo '== SCALE-1 source-neutral script syntax =='
 bash -n scripts/check_scale1_db_native_ingest.sh
