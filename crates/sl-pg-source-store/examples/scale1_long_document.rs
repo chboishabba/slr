@@ -725,6 +725,7 @@ fn usage() {
         "usage:\n  \
          scale1_long_document prepare-spacy <text-file> <source-ref> <provider-ref> <acquisition-receipt-ref> <model-ref> [config-json] [parser-script]\n  \
          scale1_long_document prepare-gwb <projection-manifest> <document-ordinal> <model-ref> [config-json] [parser-script]\n  \
+         scale1_long_document prepare-stdin <source-ref> <provider-ref> <acquisition-receipt-ref> <title> <model-ref> [config-json] [parser-script]\n  \
          scale1_long_document status <parser-run-ref>\n  \
          scale1_long_document worker <parser-run-ref> <worker-ref> [batch-size] [parser-script]\n  \
          scale1_long_document finalize <parser-run-ref>"
@@ -741,6 +742,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     match command {
         "prepare-spacy" => prepare_spacy(&args),
         "prepare-gwb" => prepare_gwb_projection(&args),
+        "prepare-stdin" => prepare_stdin(&args),
         "status" => status(&args),
         "worker" => worker(&args),
         "finalize" => finalize(&args),
