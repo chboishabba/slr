@@ -13,7 +13,7 @@
 //! No operation here creates event identity, semantic authority, applicability,
 //! or claim truth.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
 use postgres::{Client, NoTls};
 use sensiblaw_core::event_discovery::{
