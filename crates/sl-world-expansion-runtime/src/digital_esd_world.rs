@@ -184,6 +184,21 @@ pub struct InspectionStudyFamilyHypothesis {
 }
 
 #[derive(Debug, Clone, Serialize)]
+pub struct DigitalEsdResidualCount {
+    pub residual_kind: String,
+    pub count: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct InspectionDigitalEsdResidual {
+    pub residual_kind: String,
+    pub object_ref: String,
+    pub source_ref: String,
+    pub reason_ref: String,
+    pub workflow_order: i32,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct DigitalEsdWorldReceipt {
     pub schema: &'static str,
     pub world_revision_ref: String,
@@ -196,6 +211,8 @@ pub struct DigitalEsdWorldReceipt {
     pub coordinate_coverage: Vec<CoordinateCoverage>,
     pub coordinate_inspection: Vec<InspectionCoordinateCandidate>,
     pub genealogy_inspection: Vec<InspectionStudyFamilyHypothesis>,
+    pub digital_esd_residual_counts: Vec<DigitalEsdResidualCount>,
+    pub digital_esd_residual_inspection: Vec<InspectionDigitalEsdResidual>,
     pub inspection_is_bounded: bool,
     pub postgres_is_canonical_runtime_state: bool,
     pub json_is_canonical_runtime_state: bool,
@@ -519,6 +536,168 @@ fn genealogy_inspection(
         .collect()
 }
 
+
+fn scalar_count(
+    client: &mut Client,
+    sql: &str,
+    corpus_ref: &str,
+) -> Result<i64, postgres::Error> {
+    Ok(client.query_one(sql, &[&corpus_ref])?.get(0))
+}
+
+fn digital_esd_residuals(
+    client: &mut Client,
+    corpus_ref: &str,
+    limit: usize,
+) -> Result<(Vec<DigitalEsdResidualCount>, Vec<InspectionDigitalEsdResidual>), postgres::Error> {
+    let counts = vec![
+        DigitalEsdResidualCount {
+            residual_kind: "sourceAuditAdmission".into(),
+            count: scalar_count(
+                client,
+                "SELECT COUNT(*)::BIGINT FROM digital_esd.corpus_source
+                 WHERE corpus_ref=$1 AND reviewed AND NOT admitted",
+                corpus_ref,
+            )?,
+        },
+        DigitalEsdResidualCount {
+            residual_kind: "reviewedCanonicalEvidence".into(),
+            count: scalar_count(
+                client,
+                "SELECT COUNT(*)::BIGINT FROM digital_esd.corpus_source
+                 WHERE corpus_ref=$1 AND parsed AND NOT reviewed",
+                corpus_ref,
+            )?,
+        },
+        DigitalEsdResidualCount {
+            residual_kind: "fullTextAcquisition".into(),
+            count: scalar_count(
+                client,
+                "SELECT COUNT(*)::BIGINT FROM digital_esd.corpus_source
+                 WHERE corpus_ref=$1 AND retained AND NOT verified",
+                corpus_ref,
+            )?,
+        },
+        DigitalEsdResidualCount {
+            residual_kind: "extractionCoordinateReview".into(),
+            count: scalar_count(
+                client,
+                "SELECT COUNT(*)::BIGINT FROM digital_esd.study_coordinate_candidate
+                 WHERE corpus_ref=$1 AND review_required AND NOT coordinate_paid
+                   AND candidate_only AND NOT automatic_absence_inference
+                   AND NOT creates_semantic_authority
+                   AND NOT applicability_promoted AND NOT claim_truth_promoted",
+                corpus_ref,
+            )?,
+        },
+        DigitalEsdResidualCount {
+            residual_kind: "studyGenealogyReview".into(),
+            count: scalar_count(
+                client,
+                "SELECT COUNT(*)::BIGINT FROM digital_esd.study_family_hypothesis
+                 WHERE corpus_ref=$1 AND review_required AND candidate_only
+                   AND NOT creates_duplicate_decision
+                   AND NOT creates_same_empirical_study
+                   AND NOT creates_evidence_independence
+                   AND NOT creates_semantic_authority
+                   AND NOT claim_truth_promoted",
+                corpus_ref,
+            )?,
+        },
+        DigitalEsdResidualCount {
+            residual_kind: "screeningReview".into(),
+            count: scalar_count(
+                client,
+                "SELECT COUNT(*)::BIGINT FROM digital_esd.corpus_source
+                 WHERE corpus_ref=$1 AND NOT screened",
+                corpus_ref,
+            )?,
+        },
+    ];
+
+    let mut out = Vec::new();
+    let mut remaining = limit;
+
+    let stage_queries: [(&str, i32, &str); 6] = [
+        (
+            "sourceAuditAdmission",
+            10,
+            "SELECT source_ref, source_ref, 'reviewed-source-awaits-SourceAuditAdmission'
+             FROM digital_esd.corpus_source
+             WHERE corpus_ref=$1 AND reviewed AND NOT admitted
+             ORDER BY source_ref LIMIT $2",
+        ),
+        (
+            "reviewedCanonicalEvidence",
+            20,
+            "SELECT source_ref, source_ref, 'parsed-source-awaits-reviewed-canonical-evidence'
+             FROM digital_esd.corpus_source
+             WHERE corpus_ref=$1 AND parsed AND NOT reviewed
+             ORDER BY source_ref LIMIT $2",
+        ),
+        (
+            "fullTextAcquisition",
+            30,
+            "SELECT source_ref, source_ref, 'retained-source-lacks-verified-fulltext'
+             FROM digital_esd.corpus_source
+             WHERE corpus_ref=$1 AND retained AND NOT verified
+             ORDER BY source_ref LIMIT $2",
+        ),
+        (
+            "extractionCoordinateReview",
+            40,
+            "SELECT candidate_ref, source_ref, coordinate_ref
+             FROM digital_esd.study_coordinate_candidate
+             WHERE corpus_ref=$1 AND review_required AND NOT coordinate_paid
+               AND candidate_only AND NOT automatic_absence_inference
+               AND NOT creates_semantic_authority
+               AND NOT applicability_promoted AND NOT claim_truth_promoted
+             ORDER BY source_ref, coordinate_ref, candidate_ref LIMIT $2",
+        ),
+        (
+            "studyGenealogyReview",
+            50,
+            "SELECT hypothesis_ref, left_source_ref, relation_ref
+             FROM digital_esd.study_family_hypothesis
+             WHERE corpus_ref=$1 AND review_required AND candidate_only
+               AND NOT creates_duplicate_decision
+               AND NOT creates_same_empirical_study
+               AND NOT creates_evidence_independence
+               AND NOT creates_semantic_authority
+               AND NOT claim_truth_promoted
+             ORDER BY relation_ref, left_source_ref, right_source_ref, hypothesis_ref
+             LIMIT $2",
+        ),
+        (
+            "screeningReview",
+            60,
+            "SELECT source_ref, source_ref, 'metadata-source-awaits-explicit-screening'
+             FROM digital_esd.corpus_source
+             WHERE corpus_ref=$1 AND NOT screened
+             ORDER BY source_ref LIMIT $2",
+        ),
+    ];
+
+    for (kind, workflow_order, sql) in stage_queries {
+        if remaining == 0 {
+            break;
+        }
+        let rows = client.query(sql, &[&corpus_ref, &(remaining as i64)])?;
+        for row in rows {
+            out.push(InspectionDigitalEsdResidual {
+                residual_kind: kind.to_owned(),
+                object_ref: row.get(0),
+                source_ref: row.get(1),
+                reason_ref: row.get(2),
+                workflow_order,
+            });
+        }
+        remaining = limit.saturating_sub(out.len());
+    }
+
+    Ok((counts, out))
+}
+
 fn world_revision_ref(
     corpus_ref: &str,
     compiler_ref: &str,
@@ -559,6 +738,8 @@ pub fn materialize_digital_esd_world(
         coordinate_inspection(&mut client, corpus_ref, inspection_limit)?;
     let genealogy_inspection =
         genealogy_inspection(&mut client, corpus_ref, inspection_limit)?;
+    let (digital_esd_residual_counts, digital_esd_residual_inspection) =
+        digital_esd_residuals(&mut client, corpus_ref, inspection_limit)?;
 
     counts.substrate_source_revisions =
         table_count(&mut client, "ingest.generic_source_revision")?;
@@ -638,6 +819,8 @@ pub fn materialize_digital_esd_world(
         coordinate_coverage,
         coordinate_inspection,
         genealogy_inspection,
+        digital_esd_residual_counts,
+        digital_esd_residual_inspection,
         inspection_is_bounded: true,
         postgres_is_canonical_runtime_state: true,
         json_is_canonical_runtime_state: false,
