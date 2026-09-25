@@ -22,6 +22,7 @@ mod reviewed_pnf;
 mod reviewed_source_expansion;
 mod review_workstation_store;
 mod statement_pnf_spine;
+mod generic_source_compiler;
 mod statement_trace_store;
 
 pub use chronology_contestation_store::{
@@ -154,6 +155,10 @@ pub use statement_pnf_spine::{
     compile_statement_pnf, review_statement_parse, ParseReviewDisposition,
     ReviewedStatementPnf, SourceStatementEnvelope, StatementCandidatePnf,
     StatementOrigin, StatementParseReview, StatementPnfSpineError,
+};
+pub use generic_source_compiler::{
+    compile_long_document, compile_mail_message, BulkSourceCompilation,
+    GenericSourceCompilerError,
 };
 pub use statement_trace_store::{
     canonical_observation_event_link_ref, canonical_statement_observation_link_ref,
