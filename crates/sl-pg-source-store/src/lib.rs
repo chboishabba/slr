@@ -127,8 +127,9 @@ pub use discovery_identity_baseline::{
     DiscoveryIdentityBaselineRow,
 };
 pub use event_discovery_store::{
-    install_event_discovery_schema, load_event_join_proposal,
-    load_pending_event_join_proposals, persist_event_join_proposal,
+    install_event_discovery_schema, load_event_assembly_receipt,
+    load_event_join_proposal, load_pending_event_join_proposals,
+    materialize_accepted_event_join, persist_event_join_proposal,
     persist_event_join_proposal_with_review, EventDiscoveryStoreError,
 };
 pub use discovery_lineage::{
