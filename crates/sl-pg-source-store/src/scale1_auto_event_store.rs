@@ -70,9 +70,34 @@ CREATE TABLE IF NOT EXISTS semantic.scale1_auto_observation_signal (
 
 CREATE INDEX IF NOT EXISTS scale1_auto_signal_lookup_idx
 ON semantic.scale1_auto_observation_signal(signal_kind_ref, signal_ref, observation_ref);
+
+CREATE TABLE IF NOT EXISTS semantic.scale1_auto_event_stage_receipt (
+    source_revision_ref TEXT NOT NULL,
+    parser_run_ref TEXT NOT NULL,
+    detector_ref TEXT NOT NULL,
+    policy_ref TEXT NOT NULL,
+    consumer_scope_ref TEXT NOT NULL,
+    observations_materialized BIGINT NOT NULL,
+    bounded_pair_count BIGINT NOT NULL,
+    proposal_count BIGINT NOT NULL,
+    review_item_count BIGINT NOT NULL,
+    proposal_refs TEXT[] NOT NULL,
+    review_item_refs TEXT[] NOT NULL,
+    candidate_only BOOLEAN NOT NULL CHECK (candidate_only),
+    creates_observation_identity BOOLEAN NOT NULL CHECK (NOT creates_observation_identity),
+    creates_event_identity BOOLEAN NOT NULL CHECK (NOT creates_event_identity),
+    creates_semantic_authority BOOLEAN NOT NULL CHECK (NOT creates_semantic_authority),
+    applicability_promoted BOOLEAN NOT NULL CHECK (NOT applicability_promoted),
+    claim_truth_promoted BOOLEAN NOT NULL CHECK (NOT claim_truth_promoted),
+    PRIMARY KEY (
+      source_revision_ref, parser_run_ref, detector_ref, policy_ref, consumer_scope_ref
+    )
+);
+
 "#;
 
 const DETECTOR_REF: &str = "scale1:auto-event-signal:v1";
+const POLICY_REF: &str = "scale1:auto-event-default-policy:v1";
 
 #[derive(Debug, Error)]
 pub enum Scale1AutoEventError {
@@ -93,6 +118,7 @@ pub enum Scale1AutoEventError {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Scale1AutoEventReceipt {
     pub source_revision_ref: String,
+    pub stage_reused: bool,
     pub parser_run_ref: String,
     pub observations_materialized: usize,
     pub bounded_pair_count: usize,
@@ -482,6 +508,68 @@ fn load_observation(
     })
 }
 
+fn consumer_scope_ref(affected_consumer_refs: &[String]) -> String {
+    let mut refs = affected_consumer_refs.to_vec();
+    refs.sort();
+    refs.dedup();
+    let borrowed = refs.iter().map(String::as_str).collect::<Vec<_>>();
+    digest_ref("scale1-auto-consumer-scope:v1", &borrowed)
+}
+
+fn load_auto_stage_receipt(
+    client: &mut Client,
+    source_revision_ref: &str,
+    parser_run_ref: &str,
+    consumer_scope_ref: &str,
+) -> Result<Option<Scale1AutoEventReceipt>, Scale1AutoEventError> {
+    let Some(row) = client.query_opt(
+        r#"
+        SELECT observations_materialized, bounded_pair_count, proposal_count,
+               review_item_count, proposal_refs, review_item_refs,
+               candidate_only, creates_observation_identity,
+               creates_event_identity, creates_semantic_authority,
+               applicability_promoted, claim_truth_promoted
+        FROM semantic.scale1_auto_event_stage_receipt
+        WHERE source_revision_ref=$1
+          AND parser_run_ref=$2
+          AND detector_ref=$3
+          AND policy_ref=$4
+          AND consumer_scope_ref=$5
+        "#,
+        &[&source_revision_ref, &parser_run_ref, &DETECTOR_REF, &POLICY_REF, &consumer_scope_ref],
+    )? else {
+        return Ok(None);
+    };
+    let count = |idx: usize| row.get::<_, i64>(idx).max(0) as usize;
+    let receipt = Scale1AutoEventReceipt {
+        source_revision_ref: source_revision_ref.to_owned(),
+        stage_reused: true,
+        parser_run_ref: parser_run_ref.to_owned(),
+        observations_materialized: count(0),
+        bounded_pair_count: count(1),
+        proposal_count: count(2),
+        review_item_count: count(3),
+        proposal_refs: row.get(4),
+        review_item_refs: row.get(5),
+        candidate_only: row.get(6),
+        creates_observation_identity: row.get(7),
+        creates_event_identity: row.get(8),
+        creates_semantic_authority: row.get(9),
+        applicability_promoted: row.get(10),
+        claim_truth_promoted: row.get(11),
+    };
+    if !receipt.candidate_only
+        || receipt.creates_observation_identity
+        || receipt.creates_event_identity
+        || receipt.creates_semantic_authority
+        || receipt.applicability_promoted
+        || receipt.claim_truth_promoted
+    {
+        return Err(Scale1AutoEventError::PromotionBoundary);
+    }
+    Ok(Some(receipt))
+}
+
 pub fn discover_scale1_auto_event_proposals(
     config: &DatabaseConfig,
     source_revision_ref: &str,
@@ -489,11 +577,20 @@ pub fn discover_scale1_auto_event_proposals(
     affected_consumer_refs: Vec<String>,
 ) -> Result<Scale1AutoEventReceipt, Scale1AutoEventError> {
     install_event_discovery_schema(config)?;
-    let observations_materialized =
-        materialize_source_observations(config, source_revision_ref, parser_run_ref)?;
-
+    let consumer_scope_ref = consumer_scope_ref(&affected_consumer_refs);
     let mut client = Client::connect(config.database_url(), NoTls)?;
     client.batch_execute(SCALE1_AUTO_EVENT_SCHEMA_SQL)?;
+    if let Some(receipt) = load_auto_stage_receipt(
+        &mut client,
+        source_revision_ref,
+        parser_run_ref,
+        &consumer_scope_ref,
+    )? {
+        return Ok(receipt);
+    }
+
+    let observations_materialized =
+        materialize_source_observations(config, source_revision_ref, parser_run_ref)?;
     let pairs = bounded_pair_refs(&mut client, source_revision_ref)?;
 
     let policy = EventDiscoveryPolicy::default();
@@ -519,8 +616,9 @@ pub fn discover_scale1_auto_event_proposals(
         }
     }
 
-    Ok(Scale1AutoEventReceipt {
+    let receipt = Scale1AutoEventReceipt {
         source_revision_ref: source_revision_ref.to_owned(),
+        stage_reused: false,
         parser_run_ref: parser_run_ref.to_owned(),
         observations_materialized,
         bounded_pair_count: pairs.len(),
@@ -534,7 +632,38 @@ pub fn discover_scale1_auto_event_proposals(
         creates_semantic_authority: false,
         applicability_promoted: false,
         claim_truth_promoted: false,
-    })
+    };
+
+    client.execute(
+        r#"
+        INSERT INTO semantic.scale1_auto_event_stage_receipt
+        (source_revision_ref, parser_run_ref, detector_ref, policy_ref,
+         consumer_scope_ref, observations_materialized, bounded_pair_count,
+         proposal_count, review_item_count, proposal_refs, review_item_refs,
+         candidate_only, creates_observation_identity, creates_event_identity,
+         creates_semantic_authority, applicability_promoted, claim_truth_promoted)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,
+                TRUE,FALSE,FALSE,FALSE,FALSE,FALSE)
+        ON CONFLICT (
+          source_revision_ref, parser_run_ref, detector_ref, policy_ref, consumer_scope_ref
+        ) DO NOTHING
+        "#,
+        &[
+            &source_revision_ref,
+            &parser_run_ref,
+            &DETECTOR_REF,
+            &POLICY_REF,
+            &consumer_scope_ref,
+            &(receipt.observations_materialized as i64),
+            &(receipt.bounded_pair_count as i64),
+            &(receipt.proposal_count as i64),
+            &(receipt.review_item_count as i64),
+            &receipt.proposal_refs,
+            &receipt.review_item_refs,
+        ],
+    )?;
+
+    Ok(receipt)
 }
 
 #[cfg(test)]
