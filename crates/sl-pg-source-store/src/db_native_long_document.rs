@@ -14,18 +14,26 @@ use sensiblaw_core::source_ingest::{DocumentRegionKind, SourceFamily};
 use thiserror::Error;
 
 use crate::{
-    build_plain_text_long_document_source, compile_long_document_lossless,
-    complete_parser_run, enqueue_parser_regions, load_generic_source_envelope,
+    build_plain_text_long_document_source,
+    canonical_candidate_pnf_batch_ref, canonical_statement_ref,
+    compile_initial_intake_statement,
+    compile_long_document_lossless_for_document_ref,
+    complete_parser_run, enqueue_parser_regions, install_candidate_pnf_schema,
+    install_statement_trace_schema, load_candidate_pnf_batch,
+    load_generic_source_envelope,
     load_generic_text_source, load_long_document_regions,
     load_long_document_structure, persist_generic_text_source,
     persist_long_document_compilation, persist_long_document_structure,
-    start_parser_run, DatabaseConfig, DbNativeParserError,
+    persist_source_statement, persist_statement_candidate_pnf,
+    start_parser_run, CandidatePnfError, CandidatePnfStoreError,
+    DatabaseConfig, DbNativeParserError,
     DbNativeParserSnapshot, GenericSourceCompilerError,
     GenericSourceContentStoreError, LongDocumentIngestStoreError,
     ParserRegionJobSpec, ParserRunReceipt, ParserRunState,
     PersistedGenericSourceContent, PersistedLongDocumentIngestReceipt,
     PersistedLongDocumentRegion, PlainTextDocumentAdapterError,
-    PlainTextSegmentationReceipt,
+    PlainTextSegmentationReceipt, SourceStatementEnvelope, StatementOrigin,
+    StatementPnfSpineError, StatementTraceStoreError, ExactSourceSpan,
 };
 
 #[derive(Debug, Error)]
@@ -40,6 +48,12 @@ pub enum DbNativeLongDocumentError {
     Parser(#[from] DbNativeParserError),
     #[error("M12 compilation error: {0}")]
     Compiler(#[from] GenericSourceCompilerError),
+    #[error("statement/PNF compile error: {0}")]
+    StatementCompiler(#[from] StatementPnfSpineError),
+    #[error("statement trace persistence error: {0}")]
+    StatementStore(#[from] StatementTraceStoreError),
+    #[error("candidate PNF persistence error: {0}")]
+    CandidatePnfStore(#[from] CandidatePnfStoreError),
     #[error("persisted source is not a document content source")]
     NotDocumentContentSource,
     #[error("parser run did not attempt every semantic-eligible region")]
@@ -77,6 +91,10 @@ pub struct DbNativeLongDocumentReceipt {
     pub unattempted_semantic_regions: usize,
     pub compiled_statement_count: usize,
     pub candidate_pnf_count: usize,
+    pub persisted_statement_count: usize,
+    pub persisted_candidate_batch_count: usize,
+    pub persisted_candidate_factor_count: usize,
+    pub candidate_pnf_reopen_complete: bool,
     pub structural_only_regions: usize,
     pub source_region_loss_count: usize,
     pub reloaded_regions: Vec<PersistedLongDocumentRegion>,
@@ -202,12 +220,100 @@ pub fn finalize_db_native_long_document(
         return Err(DbNativeLongDocumentError::IncompleteSemanticAttemptCoverage);
     }
 
-    let compilation = compile_long_document_lossless(
+    // Compile against the canonical corpus.document identity used by the
+    // durable statement trace, not merely the logical source_ref.
+    let compilation = compile_long_document_lossless_for_document_ref(
         &snapshot,
         &document,
+        &source.document_ref,
         &canonical_text,
         &format!("db-parser:{parser_run_ref}"),
     )?;
+
+    install_statement_trace_schema(config)?;
+    install_candidate_pnf_schema(config)?;
+
+    let mut persisted_statement_count = 0usize;
+    let mut persisted_candidate_batch_count = 0usize;
+    let mut persisted_candidate_factor_count = 0usize;
+    let mut candidate_pnf_reopen_complete = true;
+
+    for region in document
+        .regions
+        .iter()
+        .filter(|region| region.kind == DocumentRegionKind::Sentence)
+    {
+        let start = usize::try_from(region.start_char)
+            .map_err(|_| DbNativeLongDocumentError::IncompleteDurablePartition)?;
+        let end = usize::try_from(region.end_char)
+            .map_err(|_| DbNativeLongDocumentError::IncompleteDurablePartition)?;
+        let literal_text = canonical_text
+            .chars()
+            .skip(start)
+            .take(end.saturating_sub(start))
+            .collect::<String>();
+        let start_char = u32::try_from(region.start_char)
+            .map_err(|_| DbNativeLongDocumentError::IncompleteDurablePartition)?;
+        let end_char = u32::try_from(region.end_char)
+            .map_err(|_| DbNativeLongDocumentError::IncompleteDurablePartition)?;
+
+        let mut statement = SourceStatementEnvelope {
+            statement_ref: String::new(),
+            document_ref: source.document_ref.clone(),
+            source_revision_ref: source_revision_ref.clone(),
+            span: ExactSourceSpan {
+                span_ref: region.region_ref.clone(),
+                start_char,
+                end_char,
+            },
+            literal_text,
+            origin: StatementOrigin::InitialIntake,
+            candidate_only: true,
+            creates_semantic_authority: false,
+            applicability_promoted: false,
+            claim_truth_promoted: false,
+        };
+        statement.statement_ref = canonical_statement_ref(&statement);
+
+        let parser_receipt_ref =
+            format!("db-parser:{parser_run_ref}:{}", region.region_ref);
+        match compile_initial_intake_statement(
+            &snapshot,
+            statement,
+            parser_receipt_ref,
+        ) {
+            Ok(candidate) => {
+                persist_source_statement(config, &candidate.statement)?;
+                persisted_statement_count += 1;
+
+                let expected_batch_ref = canonical_candidate_pnf_batch_ref(&candidate);
+                let persisted = persist_statement_candidate_pnf(config, &candidate)?;
+                persisted_candidate_batch_count += 1;
+                persisted_candidate_factor_count += persisted.factors.len();
+
+                let reopened = load_candidate_pnf_batch(config, &expected_batch_ref)?;
+                candidate_pnf_reopen_complete &= reopened
+                    .as_ref()
+                    .is_some_and(|batch| batch == &persisted);
+            }
+            Err(StatementPnfSpineError::CandidatePnf(
+                CandidatePnfError::PersistedParserResidual { .. },
+            )) => {
+                // Attempted parser residuals remain durable in parser_job and
+                // intentionally do not manufacture empty statement/PNF rows.
+            }
+            Err(error) => return Err(error.into()),
+        }
+    }
+
+    if persisted_statement_count != parser_state.succeeded
+        || persisted_candidate_batch_count != parser_state.succeeded
+        || persisted_candidate_factor_count != compilation.candidate_pnf_count
+        || !candidate_pnf_reopen_complete
+    {
+        return Err(DbNativeLongDocumentError::IncompleteDurablePartition);
+    }
+
     let persisted_compilation =
         persist_long_document_compilation(config, &document, &compilation)?;
 
@@ -238,6 +344,10 @@ pub fn finalize_db_native_long_document(
         unattempted_semantic_regions: parser_state.unattempted_semantic_regions,
         compiled_statement_count: compilation.compiled_statement_count,
         candidate_pnf_count: compilation.candidate_pnf_count,
+        persisted_statement_count,
+        persisted_candidate_batch_count,
+        persisted_candidate_factor_count,
+        candidate_pnf_reopen_complete,
         structural_only_regions: compilation.transport_or_nonsemantic_region_count,
         source_region_loss_count: compilation.source_region_loss_count,
         reloaded_regions,
