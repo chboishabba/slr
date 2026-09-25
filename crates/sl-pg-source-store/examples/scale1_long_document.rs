@@ -3,6 +3,7 @@ use std::fs;
 use std::io::{Error as IoError, ErrorKind, Read, Write};
 use std::path::Path;
 use std::process::{Command, Stdio};
+use std::time::Instant;
 
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -522,32 +523,54 @@ fn status(args: &[String]) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn worker(args: &[String]) -> Result<(), Box<dyn Error>> {
-    if args.len() < 4 {
-        return Err(
-            "worker <parser-run-ref> <worker-ref> [batch-size] [parser-script]".into(),
-        );
-    }
-    let parser_run_ref = &args[2];
-    let worker_ref = &args[3];
-    let batch_size = args
-        .get(4)
-        .map(|value| value.parse::<usize>())
-        .transpose()?
-        .unwrap_or(32);
-    let parser_script = args
-        .get(5)
-        .map(String::as_str)
-        .unwrap_or("scripts/scale1_spacy_json_parser.py");
+#[derive(Debug)]
+struct LocalWorkerReceipt {
+    succeeded: usize,
+    residual: usize,
+    deferred_retry: usize,
+    token_count: usize,
+    entity_count: usize,
+    parser_job_ns: Vec<u128>,
+}
 
-    let config = load_database_config(None)?;
+fn percentile_ns(values: &[u128], percentile: usize) -> u128 {
+    if values.is_empty() {
+        return 0;
+    }
+    let mut sorted = values.to_vec();
+    sorted.sort_unstable();
+    let index = ((sorted.len() - 1) * percentile + 99) / 100;
+    sorted[index.min(sorted.len() - 1)]
+}
+
+fn concentration_ratio(values: &[u128], top_n: usize) -> f64 {
+    let total: u128 = values.iter().copied().sum();
+    if total == 0 {
+        return 0.0;
+    }
+    let mut sorted = values.to_vec();
+    sorted.sort_unstable_by(|a, b| b.cmp(a));
+    let top: u128 = sorted.into_iter().take(top_n).sum();
+    top as f64 / total as f64
+}
+
+fn drain_local_worker(
+    config: &sensiblaw_pg_source_store::DatabaseConfig,
+    parser_run_ref: &str,
+    worker_ref: &str,
+    batch_size: usize,
+    parser_script: &str,
+) -> Result<LocalWorkerReceipt, Box<dyn Error>> {
     let mut succeeded = 0usize;
     let mut residual = 0usize;
     let mut deferred_retry = 0usize;
+    let mut token_count = 0usize;
+    let mut entity_count = 0usize;
+    let mut parser_job_ns = Vec::new();
 
     loop {
         let jobs = claim_parser_jobs(
-            &config,
+            config,
             parser_run_ref,
             worker_ref,
             batch_size,
@@ -557,14 +580,16 @@ fn worker(args: &[String]) -> Result<(), Box<dyn Error>> {
         }
 
         for job in jobs {
+            let job_started = Instant::now();
             if job.parser_family != "spacy" {
                 persist_parser_residual(
-                    &config,
+                    config,
                     &job,
                     worker_ref,
                     &format!("unsupported-parser-family:{}", job.parser_family),
                 )?;
                 residual += 1;
+                parser_job_ns.push(job_started.elapsed().as_nanos());
                 continue;
             }
 
@@ -572,12 +597,13 @@ fn worker(args: &[String]) -> Result<(), Box<dyn Error>> {
                 Ok(value) => value,
                 Err(error) => {
                     defer_parser_job_retry(
-                        &config,
+                        config,
                         &job,
                         worker_ref,
                         &format!("parser-describe-error:{error}"),
                     )?;
                     deferred_retry += 1;
+                    parser_job_ns.push(job_started.elapsed().as_nanos());
                     continue;
                 }
             };
@@ -586,7 +612,7 @@ fn worker(args: &[String]) -> Result<(), Box<dyn Error>> {
                 || description.model_ref != job.model_ref
             {
                 defer_parser_job_retry(
-                    &config,
+                    config,
                     &job,
                     worker_ref,
                     &format!(
@@ -600,10 +626,11 @@ fn worker(args: &[String]) -> Result<(), Box<dyn Error>> {
                     ),
                 )?;
                 deferred_retry += 1;
+                parser_job_ns.push(job_started.elapsed().as_nanos());
                 continue;
             }
 
-            let region_text = load_claimed_job_text(&config, &job)?;
+            let region_text = load_claimed_job_text(config, &job)?;
             let output = match run_parser(
                 parser_script,
                 &job.model_ref,
@@ -613,12 +640,13 @@ fn worker(args: &[String]) -> Result<(), Box<dyn Error>> {
                 Ok(value) => value,
                 Err(error) => {
                     defer_parser_job_retry(
-                        &config,
+                        config,
                         &job,
                         worker_ref,
                         &format!("parser-process-error:{error}"),
                     )?;
                     deferred_retry += 1;
+                    parser_job_ns.push(job_started.elapsed().as_nanos());
                     continue;
                 }
             };
@@ -627,12 +655,13 @@ fn worker(args: &[String]) -> Result<(), Box<dyn Error>> {
                 Ok(value) => value,
                 Err(error) => {
                     defer_parser_job_retry(
-                        &config,
+                        config,
                         &job,
                         worker_ref,
                         &format!("parser-json-error:{error}"),
                     )?;
                     deferred_retry += 1;
+                    parser_job_ns.push(job_started.elapsed().as_nanos());
                     continue;
                 }
             };
@@ -641,12 +670,13 @@ fn worker(args: &[String]) -> Result<(), Box<dyn Error>> {
                 || wire.model_ref != job.model_ref
             {
                 defer_parser_job_retry(
-                    &config,
+                    config,
                     &job,
                     worker_ref,
                     "parser-output-identity-mismatch",
                 )?;
                 deferred_retry += 1;
+                parser_job_ns.push(job_started.elapsed().as_nanos());
                 continue;
             }
 
@@ -677,13 +707,9 @@ fn worker(args: &[String]) -> Result<(), Box<dyn Error>> {
                 });
             }
             if overflow {
-                persist_parser_residual(
-                    &config,
-                    &job,
-                    worker_ref,
-                    "parser-offset-overflow",
-                )?;
+                persist_parser_residual(config, &job, worker_ref, "parser-offset-overflow")?;
                 residual += 1;
+                parser_job_ns.push(job_started.elapsed().as_nanos());
                 continue;
             }
 
@@ -708,15 +734,18 @@ fn worker(args: &[String]) -> Result<(), Box<dyn Error>> {
             }
             if entity_overflow {
                 persist_parser_residual(
-                    &config,
+                    config,
                     &job,
                     worker_ref,
                     "parser-entity-offset-overflow",
                 )?;
                 residual += 1;
+                parser_job_ns.push(job_started.elapsed().as_nanos());
                 continue;
             }
 
+            token_count += tokens.len();
+            entity_count += entities.len();
             let output_text = String::from_utf8(output.clone())?;
             let artifact = ParserArtifactRecord {
                 format_ref: "application/vnd.sensiblaw.spacy-region+json".into(),
@@ -725,7 +754,7 @@ fn worker(args: &[String]) -> Result<(), Box<dyn Error>> {
                 object_locator: None,
             };
             persist_parser_success_with_entities(
-                &config,
+                config,
                 &job,
                 worker_ref,
                 &tokens,
@@ -733,19 +762,64 @@ fn worker(args: &[String]) -> Result<(), Box<dyn Error>> {
                 Some(&artifact),
             )?;
             succeeded += 1;
+            parser_job_ns.push(job_started.elapsed().as_nanos());
         }
     }
 
+    Ok(LocalWorkerReceipt {
+        succeeded,
+        residual,
+        deferred_retry,
+        token_count,
+        entity_count,
+        parser_job_ns,
+    })
+}
+
+fn worker(args: &[String]) -> Result<(), Box<dyn Error>> {
+    if args.len() < 4 {
+        return Err(
+            "worker <parser-run-ref> <worker-ref> [batch-size] [parser-script]".into(),
+        );
+    }
+    let parser_run_ref = &args[2];
+    let worker_ref = &args[3];
+    let batch_size = args
+        .get(4)
+        .map(|value| value.parse::<usize>())
+        .transpose()?
+        .unwrap_or(32);
+    let parser_script = args
+        .get(5)
+        .map(String::as_str)
+        .unwrap_or("scripts/scale1_spacy_json_parser.py");
+
+    let config = load_database_config(None)?;
+    let worker = drain_local_worker(
+        &config,
+        parser_run_ref,
+        worker_ref,
+        batch_size,
+        parser_script,
+    )?;
     let state = parser_run_state(&config, parser_run_ref)?;
     println!(
         "{}",
         serde_json::to_string_pretty(&json!({
-            "schema": "sensiblaw.scale1.worker-receipt.v0_1",
+            "schema": "sensiblaw.scale1.worker-receipt.v0_2",
             "parser_run_ref": parser_run_ref,
             "worker_ref": worker_ref,
-            "succeeded_this_worker": succeeded,
-            "residual_this_worker": residual,
-            "deferred_retry_this_worker": deferred_retry,
+            "succeeded_this_worker": worker.succeeded,
+            "residual_this_worker": worker.residual,
+            "deferred_retry_this_worker": worker.deferred_retry,
+            "token_count": worker.token_count,
+            "entity_count": worker.entity_count,
+            "parser_job_p50_ns": percentile_ns(&worker.parser_job_ns, 50),
+            "parser_job_p95_ns": percentile_ns(&worker.parser_job_ns, 95),
+            "parser_job_p99_ns": percentile_ns(&worker.parser_job_ns, 99),
+            "parser_job_max_ns": worker.parser_job_ns.iter().copied().max().unwrap_or(0),
+            "parser_job_c1": concentration_ratio(&worker.parser_job_ns, 1),
+            "parser_job_c10": concentration_ratio(&worker.parser_job_ns, 10),
             "queued": state.queued,
             "leased": state.leased,
             "succeeded_total": state.succeeded,
