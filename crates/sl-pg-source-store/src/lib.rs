@@ -179,10 +179,11 @@ pub use plain_text_document_adapter::{
 };
 pub use long_document_ingest_store::{
     install_long_document_ingest_schema, load_long_document_ingest_receipt,
-    load_long_document_regions, persist_long_document_compilation,
-    persist_long_document_structure,
+    load_long_document_regions, load_long_document_structure,
+    persist_long_document_compilation, persist_long_document_structure,
     LongDocumentIngestStoreError, PersistedLongDocumentIngestReceipt,
-    PersistedLongDocumentRegion, LONG_DOCUMENT_INGEST_SCHEMA_SQL,
+    PersistedLongDocumentRegion, PersistedLongDocumentStructureRegion,
+    LONG_DOCUMENT_INGEST_SCHEMA_SQL,
 };
 pub use generic_source_content_store::{
     install_generic_source_revision_schema, load_generic_source_envelope,
@@ -197,6 +198,7 @@ pub use long_document_pipeline::{
 pub use db_native_parser::{
     claim_parser_jobs, complete_parser_run, compilation_key,
     enqueue_parser_regions, install_db_native_parser_schema,
+    load_claimed_job_text,
     parser_run_ref, parser_run_state, persist_parser_residual,
     persist_parser_success, start_parser_run, ClaimedParserJob,
     DbNativeParserError, DbNativeParserSnapshot, ParserArtifactRecord,
