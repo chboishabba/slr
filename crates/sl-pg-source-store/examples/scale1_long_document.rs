@@ -831,6 +831,214 @@ fn worker(args: &[String]) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+
+fn ingest_book(args: &[String]) -> Result<(), Box<dyn Error>> {
+    if args.len() < 7 {
+        return Err(
+            "ingest-book <text-file> <source-ref> <provider-ref> <acquisition-receipt-ref> <model-ref> [config-json] [parser-script] [batch-size]"
+                .into(),
+        );
+    }
+
+    let total_started = Instant::now();
+    let text_file = &args[2];
+    let source_ref = &args[3];
+    let provider_ref = &args[4];
+    let acquisition_receipt_ref = &args[5];
+    let model_ref = &args[6];
+    let config_json = args.get(7).map(String::as_str).unwrap_or("{}");
+    let parser_script = args
+        .get(8)
+        .map(String::as_str)
+        .unwrap_or("scripts/scale1_spacy_json_parser.py");
+    let batch_size = args
+        .get(9)
+        .map(|value| value.parse::<usize>())
+        .transpose()?
+        .unwrap_or(32);
+
+    let canonical_text = fs::read_to_string(text_file)?;
+    if canonical_text.is_empty() {
+        return Err("ingest-book received empty canonical text".into());
+    }
+    let content_digest_ref = digest_ref(canonical_text.as_bytes());
+    let source_revision_ref = canonical_generic_source_revision_ref(
+        source_ref,
+        provider_ref,
+        acquisition_receipt_ref,
+        &content_digest_ref,
+        "text/plain",
+    );
+    let description = parser_description(parser_script, model_ref)?;
+    if description.parser_family != "spacy" || description.model_ref != model_ref.as_str() {
+        return Err("spaCy parser description did not match requested model".into());
+    }
+
+    let config = load_database_config(None)?;
+
+    let prepare_started = Instant::now();
+    let prepared = prepare_db_native_long_document(
+        &config,
+        source_ref,
+        &source_revision_ref,
+        provider_ref,
+        acquisition_receipt_ref,
+        Path::new(text_file)
+            .file_name()
+            .map(|value| value.to_string_lossy().into_owned()),
+        None,
+        &canonical_text,
+        &description.parser_family,
+        &description.parser_version,
+        model_ref,
+        config_json,
+    )?;
+    let prepare_ns = prepare_started.elapsed().as_nanos();
+
+    let worker_ref = format!(
+        "worker:scale1-book:{}",
+        digest_ref(prepared.parser_run.parser_run_ref.as_bytes())
+    );
+    let worker_started = Instant::now();
+    let worker = drain_local_worker(
+        &config,
+        &prepared.parser_run.parser_run_ref,
+        &worker_ref,
+        batch_size,
+        parser_script,
+    )?;
+    let worker_ns = worker_started.elapsed().as_nanos();
+
+    let state = parser_run_state(&config, &prepared.parser_run.parser_run_ref)?;
+    if state.queued != 0
+        || state.leased != 0
+        || state.unattempted_semantic_regions != 0
+        || worker.deferred_retry != 0
+    {
+        return Err(format!(
+            "book ingest did not drain parser ledger: queued={} leased={} unattempted={} deferred_retry={}",
+            state.queued,
+            state.leased,
+            state.unattempted_semantic_regions,
+            worker.deferred_retry
+        )
+        .into());
+    }
+
+    let finalize_started = Instant::now();
+    let receipt =
+        finalize_db_native_long_document(&config, &prepared.parser_run.parser_run_ref)?;
+    let finalize_ns = finalize_started.elapsed().as_nanos();
+    let total_ns = total_started.elapsed().as_nanos();
+
+    let parser_jobs = worker.parser_job_ns.len();
+    let total_job_ns: u128 = worker.parser_job_ns.iter().copied().sum();
+    let tokens = worker.token_count;
+    let token_denominator = tokens.max(1) as u128;
+    let runtime_head = std::env::var("SENSIBLAW_RUNTIME_HEAD").ok();
+
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&json!({
+            "schema": "sensiblaw.scale1.book-ingest-baseline.v0_1",
+            "authority": "execution_and_measurement_receipt_only",
+            "runtime_head": runtime_head,
+            "source": {
+                "source_ref": receipt.source.source_ref,
+                "source_revision_ref": receipt.source.source_revision_ref,
+                "content_digest_ref": receipt.source.content_digest_ref,
+                "canonical_ref": receipt.source.canonical_ref,
+                "document_ref": receipt.source.document_ref,
+                "canonical_bytes": canonical_text.len(),
+                "canonical_chars": canonical_text.chars().count(),
+                "canonical_bytes_reload_identically": receipt.canonical_bytes_reload_identically
+            },
+            "parser": {
+                "parser_run_ref": receipt.parser_run_ref,
+                "parser_family": prepared.parser_run.parser_family,
+                "parser_version": prepared.parser_run.parser_version,
+                "model_ref": prepared.parser_run.model_ref,
+                "config_digest_ref": prepared.parser_run.config_digest_ref,
+                "worker_ref": worker_ref,
+                "batch_size": batch_size,
+                "new_jobs": prepared.newly_enqueued_job_count,
+                "reused_jobs": prepared.reused_existing_job_count,
+                "jobs_observed_this_run": parser_jobs,
+                "succeeded_this_run": worker.succeeded,
+                "residual_this_run": worker.residual,
+                "deferred_retry_this_run": worker.deferred_retry,
+                "tokens_this_run": worker.token_count,
+                "entities_this_run": worker.entity_count
+            },
+            "integrity": {
+                "total_structural_regions": receipt.total_structural_regions,
+                "semantic_eligible_regions": receipt.semantic_eligible_regions,
+                "parser_success_regions": receipt.parser_success_regions,
+                "parser_residual_regions": receipt.parser_residual_regions,
+                "unattempted_semantic_regions": receipt.unattempted_semantic_regions,
+                "structural_only_regions": receipt.structural_only_regions,
+                "source_region_loss_count": receipt.source_region_loss_count,
+                "every_region_reloaded": receipt.every_region_reloaded,
+                "candidate_pnf_reopen_complete": receipt.candidate_pnf_reopen_complete,
+                "compiled_statement_count": receipt.compiled_statement_count,
+                "candidate_pnf_count": receipt.candidate_pnf_count,
+                "persisted_statement_count": receipt.persisted_statement_count,
+                "persisted_candidate_batch_count": receipt.persisted_candidate_batch_count,
+                "persisted_candidate_factor_count": receipt.persisted_candidate_factor_count,
+                "candidate_only": receipt.candidate_only,
+                "creates_semantic_authority": receipt.creates_semantic_authority,
+                "applicability_promoted": receipt.applicability_promoted,
+                "claim_truth_promoted": receipt.claim_truth_promoted
+            },
+            "candidate_cardinality": {
+                "entity_mentions": receipt.reconciliation.entity_mention_count,
+                "entity_fingerprints": receipt.reconciliation.entity_fingerprint_count,
+                "named_entity_mentions": receipt.reconciliation.named_entity_mention_count,
+                "named_entity_fingerprints": receipt.reconciliation.named_entity_fingerprint_count,
+                "temporal_mentions": receipt.reconciliation.temporal_mention_count,
+                "proposition_occurrences": receipt.reconciliation.proposition_occurrence_count,
+                "proposition_fingerprints": receipt.reconciliation.proposition_fingerprint_count,
+                "event_occurrences": receipt.reconciliation.event_occurrence_count,
+                "event_fingerprints": receipt.reconciliation.event_fingerprint_count,
+                "polarity_conflicts": receipt.reconciliation.polarity_conflict_candidate_count,
+                "review_pressure": receipt.reconciliation.review_pressure_candidate_count,
+                "review_items": receipt.reconciliation_review.review_item_refs.len(),
+                "auto_event_observations": receipt.auto_event.observations_materialized,
+                "auto_event_bounded_pairs": receipt.auto_event.bounded_pair_count,
+                "auto_event_proposals": receipt.auto_event.proposal_count
+            },
+            "performance": {
+                "prepare_ns": prepare_ns,
+                "worker_ns": worker_ns,
+                "finalize_ns": finalize_ns,
+                "total_ns": total_ns,
+                "parser_job_sum_ns": total_job_ns,
+                "parser_job_p50_ns": percentile_ns(&worker.parser_job_ns, 50),
+                "parser_job_p95_ns": percentile_ns(&worker.parser_job_ns, 95),
+                "parser_job_p99_ns": percentile_ns(&worker.parser_job_ns, 99),
+                "parser_job_max_ns": worker.parser_job_ns.iter().copied().max().unwrap_or(0),
+                "parser_job_c1": concentration_ratio(&worker.parser_job_ns, 1),
+                "parser_job_c10": concentration_ratio(&worker.parser_job_ns, 10),
+                "wall_ns_per_token": total_ns / token_denominator,
+                "worker_ns_per_token": worker_ns / token_denominator,
+                "db_native_reuse_ratio": if prepared.semantic_region_count == 0 {
+                    1.0
+                } else {
+                    prepared.reused_existing_job_count as f64
+                        / prepared.semantic_region_count as f64
+                },
+                "recompute_ratio": if prepared.semantic_region_count == 0 {
+                    0.0
+                } else {
+                    prepared.newly_enqueued_job_count as f64
+                        / prepared.semantic_region_count as f64
+                }
+            }
+        }))?
+    );
+    Ok(())
+}
+
 fn finalize(args: &[String]) -> Result<(), Box<dyn Error>> {
     if args.len() != 3 {
         return Err("finalize <parser-run-ref>".into());
@@ -1077,6 +1285,7 @@ fn materialize_proposition(args: &[String]) -> Result<(), Box<dyn Error>> {
 fn usage() {
     eprintln!(
         "usage:\n  \
+         scale1_long_document ingest-book <text-file> <source-ref> <provider-ref> <acquisition-receipt-ref> <model-ref> [config-json] [parser-script] [batch-size]\n  \
          scale1_long_document prepare-spacy <text-file> <source-ref> <provider-ref> <acquisition-receipt-ref> <model-ref> [config-json] [parser-script]\n  \
          scale1_long_document prepare-gwb <projection-manifest> <document-ordinal> <model-ref> [config-json] [parser-script]\n  \
          scale1_long_document prepare-stdin <source-ref> <provider-ref> <acquisition-receipt-ref> <title> <model-ref> [config-json] [parser-script]\n  \
@@ -1098,6 +1307,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
 
     match command {
+        "ingest-book" => ingest_book(&args),
         "prepare-spacy" => prepare_spacy(&args),
         "prepare-gwb" => prepare_gwb_projection(&args),
         "prepare-stdin" => prepare_stdin(&args),
