@@ -16,7 +16,7 @@ use crate::{
     StatementPnfSpineError,
 };
 
-#[derive(Debug, Error, Clone, PartialEq, Eq)]
+#[derive(Debug, Error)]
 pub enum GenericSourceCompilerError {
     #[error("source ingest error: {0:?}")]
     SourceIngest(SourceIngestError),
