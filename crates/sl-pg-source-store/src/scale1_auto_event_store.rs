@@ -26,7 +26,7 @@ use crate::{
     canonical_statement_observation_link_ref, install_event_discovery_schema,
     install_statement_trace_schema, persist_event_join_proposal_with_review,
     persist_statement_observation_link, DatabaseConfig, EventDiscoveryStoreError,
-    ReviewItem, StatementObservationDisposition, StatementObservationLink,
+    StatementObservationDisposition, StatementObservationLink,
     StatementTraceStoreError,
 };
 
@@ -438,7 +438,7 @@ pub fn discover_scale1_auto_event_proposals(
         let proposals = discover_event_join_proposals(&observations, &policy)
             .map_err(|_| Scale1AutoEventError::Detector)?;
         for proposal in proposals {
-            let (persisted, review): (_, ReviewItem) =
+            let (persisted, review) =
                 persist_event_join_proposal_with_review(
                     config,
                     &proposal,
