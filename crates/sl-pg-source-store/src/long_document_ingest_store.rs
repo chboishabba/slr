@@ -245,15 +245,7 @@ pub fn persist_long_document_structure(
                 region_kind, start_char, end_char, candidate_only,
                 creates_semantic_authority, claim_truth_promoted
              ) VALUES ($1,$2,$3,$4,$5,$6,$7,TRUE,FALSE,FALSE)
-             ON CONFLICT (source_revision_ref, region_ref) DO UPDATE SET
-                source_ref = EXCLUDED.source_ref,
-                parent_region_ref = EXCLUDED.parent_region_ref,
-                region_kind = EXCLUDED.region_kind,
-                start_char = EXCLUDED.start_char,
-                end_char = EXCLUDED.end_char,
-                candidate_only = TRUE,
-                creates_semantic_authority = FALSE,
-                claim_truth_promoted = FALSE",
+             ON CONFLICT (source_revision_ref, region_ref) DO NOTHING",
             &[
                 &document.ingest.source_revision_ref,
                 &document.ingest.source_ref,
