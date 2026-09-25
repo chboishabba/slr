@@ -85,6 +85,22 @@ pub enum LongDocumentIngestStoreError {
     ReceiptRoundTripMismatch,
 }
 
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PersistedLongDocumentRegion {
+    pub source_revision_ref: String,
+    pub source_ref: String,
+    pub region_ref: String,
+    pub parent_region_ref: Option<String>,
+    pub region_kind: String,
+    pub start_char: u64,
+    pub end_char: u64,
+    pub disposition: RegionCompilationDisposition,
+    pub source_region_preserved: bool,
+    pub semantic_authority_created: bool,
+    pub claim_truth_promoted: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PersistedLongDocumentIngestReceipt {
     pub source_ref: String,
@@ -301,6 +317,98 @@ pub fn persist_long_document_compilation(
     load_long_document_ingest_receipt(config, &compilation.source_revision_ref)
 }
 
+
+pub fn load_long_document_regions(
+    config: &DatabaseConfig,
+    source_revision_ref: &str,
+) -> Result<Vec<PersistedLongDocumentRegion>, LongDocumentIngestStoreError> {
+    let mut client = Client::connect(config.database_url(), NoTls)?;
+    client.batch_execute(LONG_DOCUMENT_INGEST_SCHEMA_SQL)?;
+
+    let rows = client.query(
+        "SELECT
+           r.source_ref,
+           r.region_ref,
+           r.parent_region_ref,
+           r.region_kind,
+           r.start_char,
+           r.end_char,
+           a.disposition,
+           a.statement_ref,
+           a.parser_receipt_ref,
+           a.error_ref,
+           a.source_region_preserved,
+           a.semantic_authority_created,
+           a.claim_truth_promoted
+         FROM ingest.long_document_region r
+         JOIN ingest.region_compilation_assignment a
+           ON a.source_revision_ref = r.source_revision_ref
+          AND a.region_ref = r.region_ref
+         WHERE r.source_revision_ref = $1
+         ORDER BY r.start_char, r.end_char, r.region_ref",
+        &[&source_revision_ref],
+    )?;
+
+    rows.into_iter()
+        .map(|row| {
+            let disposition_ref: String = row.get(6);
+            let statement_ref: Option<String> = row.get(7);
+            let parser_receipt_ref: Option<String> = row.get(8);
+            let error_ref: Option<String> = row.get(9);
+
+            let disposition = match disposition_ref.as_str() {
+                "compiled_candidate" => RegionCompilationDisposition::CompiledCandidate {
+                    statement_ref: statement_ref.ok_or(
+                        LongDocumentIngestStoreError::ReceiptRoundTripMismatch,
+                    )?,
+                },
+                "parser_residual" => RegionCompilationDisposition::ParserResidual {
+                    parser_receipt_ref: parser_receipt_ref.ok_or(
+                        LongDocumentIngestStoreError::ReceiptRoundTripMismatch,
+                    )?,
+                    error_ref: error_ref.ok_or(
+                        LongDocumentIngestStoreError::ReceiptRoundTripMismatch,
+                    )?,
+                },
+                "transport_only" => RegionCompilationDisposition::TransportOnly,
+                "structural_only" => RegionCompilationDisposition::StructuralOnly,
+                _ => return Err(LongDocumentIngestStoreError::ReceiptRoundTripMismatch),
+            };
+
+            let start_char = row.get::<_, i64>(4);
+            let end_char = row.get::<_, i64>(5);
+            if start_char < 0 || end_char < 0 {
+                return Err(LongDocumentIngestStoreError::ReceiptRoundTripMismatch);
+            }
+
+            let region = PersistedLongDocumentRegion {
+                source_revision_ref: source_revision_ref.to_owned(),
+                source_ref: row.get(0),
+                region_ref: row.get(1),
+                parent_region_ref: row.get(2),
+                region_kind: row.get(3),
+                start_char: start_char as u64,
+                end_char: end_char as u64,
+                disposition,
+                source_region_preserved: row.get(10),
+                semantic_authority_created: row.get(11),
+                claim_truth_promoted: row.get(12),
+            };
+
+            if !region.source_region_preserved
+                || region.semantic_authority_created
+                || region.claim_truth_promoted
+            {
+                return Err(LongDocumentIngestStoreError::InvalidAssignment(
+                    region.region_ref.clone(),
+                ));
+            }
+
+            Ok(region)
+        })
+        .collect()
+}
+
 pub fn load_long_document_ingest_receipt(
     config: &DatabaseConfig,
     source_revision_ref: &str,
@@ -451,6 +559,33 @@ mod tests {
             claim_truth_promoted: false,
             parse_failure_deletes_source: false,
         }
+    }
+
+
+    #[test]
+    fn persisted_region_type_retains_exact_partition_disposition() {
+        let region = PersistedLongDocumentRegion {
+            source_revision_ref: "revision:fixture".into(),
+            source_ref: "book:fixture".into(),
+            region_ref: "sentence:1".into(),
+            parent_region_ref: Some("chapter:1".into()),
+            region_kind: "sentence".into(),
+            start_char: 0,
+            end_char: 10,
+            disposition: RegionCompilationDisposition::CompiledCandidate {
+                statement_ref: "statement:1".into(),
+            },
+            source_region_preserved: true,
+            semantic_authority_created: false,
+            claim_truth_promoted: false,
+        };
+        assert!(matches!(
+            region.disposition,
+            RegionCompilationDisposition::CompiledCandidate { .. }
+        ));
+        assert!(region.source_region_preserved);
+        assert!(!region.semantic_authority_created);
+        assert!(!region.claim_truth_promoted);
     }
 
     #[test]
