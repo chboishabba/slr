@@ -158,6 +158,32 @@ CREATE TABLE IF NOT EXISTS semantic.reconciliation_pressure_candidate (
     creates_semantic_authority BOOLEAN NOT NULL CHECK (NOT creates_semantic_authority),
     claim_truth_promoted BOOLEAN NOT NULL CHECK (NOT claim_truth_promoted)
 );
+
+CREATE TABLE IF NOT EXISTS semantic.corpus_reconciliation_stage_receipt (
+    source_revision_ref TEXT NOT NULL,
+    parser_run_ref TEXT NOT NULL,
+    detector_ref TEXT NOT NULL,
+    statement_count BIGINT NOT NULL,
+    entity_mention_count BIGINT NOT NULL,
+    entity_fingerprint_count BIGINT NOT NULL,
+    named_entity_mention_count BIGINT NOT NULL,
+    named_entity_fingerprint_count BIGINT NOT NULL,
+    temporal_mention_count BIGINT NOT NULL,
+    proposition_occurrence_count BIGINT NOT NULL,
+    proposition_fingerprint_count BIGINT NOT NULL,
+    event_occurrence_count BIGINT NOT NULL,
+    event_fingerprint_count BIGINT NOT NULL,
+    polarity_conflict_candidate_count BIGINT NOT NULL,
+    review_pressure_candidate_count BIGINT NOT NULL,
+    candidate_only BOOLEAN NOT NULL CHECK (candidate_only),
+    creates_semantic_authority BOOLEAN NOT NULL CHECK (NOT creates_semantic_authority),
+    creates_entity_identity BOOLEAN NOT NULL CHECK (NOT creates_entity_identity),
+    creates_proposition_identity BOOLEAN NOT NULL CHECK (NOT creates_proposition_identity),
+    creates_event_identity BOOLEAN NOT NULL CHECK (NOT creates_event_identity),
+    claim_truth_promoted BOOLEAN NOT NULL CHECK (NOT claim_truth_promoted),
+    PRIMARY KEY (source_revision_ref, parser_run_ref, detector_ref)
+);
+
 "#;
 
 const DETECTOR_REF: &str = "scale1:persistent-pnf-fingerprint:v1";
@@ -175,6 +201,7 @@ pub enum CorpusReconciliationError {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CorpusReconciliationReceipt {
     pub source_revision_ref: String,
+    pub stage_reused: bool,
     pub statement_count: usize,
     pub entity_mention_count: usize,
     pub entity_fingerprint_count: usize,
@@ -346,6 +373,64 @@ pub fn install_corpus_reconciliation_schema(
     Ok(())
 }
 
+fn load_reconciliation_stage_receipt(
+    client: &mut Client,
+    source_revision_ref: &str,
+    parser_run_ref: &str,
+) -> Result<Option<CorpusReconciliationReceipt>, CorpusReconciliationError> {
+    let Some(row) = client.query_opt(
+        r#"
+        SELECT statement_count, entity_mention_count, entity_fingerprint_count,
+               named_entity_mention_count, named_entity_fingerprint_count,
+               temporal_mention_count, proposition_occurrence_count,
+               proposition_fingerprint_count, event_occurrence_count,
+               event_fingerprint_count, polarity_conflict_candidate_count,
+               review_pressure_candidate_count, candidate_only,
+               creates_semantic_authority, creates_entity_identity,
+               creates_proposition_identity, creates_event_identity,
+               claim_truth_promoted
+        FROM semantic.corpus_reconciliation_stage_receipt
+        WHERE source_revision_ref=$1 AND parser_run_ref=$2 AND detector_ref=$3
+        "#,
+        &[&source_revision_ref, &parser_run_ref, &DETECTOR_REF],
+    )? else {
+        return Ok(None);
+    };
+    let count = |idx: usize| row.get::<_, i64>(idx).max(0) as usize;
+    let receipt = CorpusReconciliationReceipt {
+        source_revision_ref: source_revision_ref.to_owned(),
+        stage_reused: true,
+        statement_count: count(0),
+        entity_mention_count: count(1),
+        entity_fingerprint_count: count(2),
+        named_entity_mention_count: count(3),
+        named_entity_fingerprint_count: count(4),
+        temporal_mention_count: count(5),
+        proposition_occurrence_count: count(6),
+        proposition_fingerprint_count: count(7),
+        event_occurrence_count: count(8),
+        event_fingerprint_count: count(9),
+        polarity_conflict_candidate_count: count(10),
+        review_pressure_candidate_count: count(11),
+        candidate_only: row.get(12),
+        creates_semantic_authority: row.get(13),
+        creates_entity_identity: row.get(14),
+        creates_proposition_identity: row.get(15),
+        creates_event_identity: row.get(16),
+        claim_truth_promoted: row.get(17),
+    };
+    if !receipt.candidate_only
+        || receipt.creates_semantic_authority
+        || receipt.creates_entity_identity
+        || receipt.creates_proposition_identity
+        || receipt.creates_event_identity
+        || receipt.claim_truth_promoted
+    {
+        return Err(CorpusReconciliationError::PromotionBoundary);
+    }
+    Ok(Some(receipt))
+}
+
 pub fn reconcile_source_candidate_semantics(
     config: &DatabaseConfig,
     source_revision_ref: &str,
@@ -353,6 +438,11 @@ pub fn reconcile_source_candidate_semantics(
 ) -> Result<CorpusReconciliationReceipt, CorpusReconciliationError> {
     let mut client = Client::connect(config.database_url(), NoTls)?;
     client.batch_execute(CORPUS_RECONCILIATION_SCHEMA_SQL)?;
+    if let Some(receipt) =
+        load_reconciliation_stage_receipt(&mut client, source_revision_ref, parser_run_ref)?
+    {
+        return Ok(receipt);
+    }
     let batches = load_statement_batches(&mut client, source_revision_ref)?;
 
     let mut tx = client.transaction()?;
@@ -697,10 +787,9 @@ pub fn reconcile_source_candidate_semantics(
         review_pressure_candidate_count += 1;
     }
 
-    tx.commit()?;
-
-    Ok(CorpusReconciliationReceipt {
+    let receipt = CorpusReconciliationReceipt {
         source_revision_ref: source_revision_ref.to_owned(),
+        stage_reused: false,
         statement_count: batches.len(),
         entity_mention_count,
         entity_fingerprint_count: entity_fingerprints.len(),
@@ -719,7 +808,47 @@ pub fn reconcile_source_candidate_semantics(
         creates_proposition_identity: false,
         creates_event_identity: false,
         claim_truth_promoted: false,
-    })
+    };
+
+    tx.execute(
+        r#"
+        INSERT INTO semantic.corpus_reconciliation_stage_receipt
+        (source_revision_ref, parser_run_ref, detector_ref, statement_count,
+         entity_mention_count, entity_fingerprint_count,
+         named_entity_mention_count, named_entity_fingerprint_count,
+         temporal_mention_count, proposition_occurrence_count,
+         proposition_fingerprint_count, event_occurrence_count,
+         event_fingerprint_count, polarity_conflict_candidate_count,
+         review_pressure_candidate_count, candidate_only,
+         creates_semantic_authority, creates_entity_identity,
+         creates_proposition_identity, creates_event_identity,
+         claim_truth_promoted)
+        VALUES
+        ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,
+         TRUE,FALSE,FALSE,FALSE,FALSE,FALSE)
+        ON CONFLICT (source_revision_ref, parser_run_ref, detector_ref) DO NOTHING
+        "#,
+        &[
+            &source_revision_ref,
+            &parser_run_ref,
+            &DETECTOR_REF,
+            &(receipt.statement_count as i64),
+            &(receipt.entity_mention_count as i64),
+            &(receipt.entity_fingerprint_count as i64),
+            &(receipt.named_entity_mention_count as i64),
+            &(receipt.named_entity_fingerprint_count as i64),
+            &(receipt.temporal_mention_count as i64),
+            &(receipt.proposition_occurrence_count as i64),
+            &(receipt.proposition_fingerprint_count as i64),
+            &(receipt.event_occurrence_count as i64),
+            &(receipt.event_fingerprint_count as i64),
+            &(receipt.polarity_conflict_candidate_count as i64),
+            &(receipt.review_pressure_candidate_count as i64),
+        ],
+    )?;
+    tx.commit()?;
+
+    Ok(receipt)
 }
 
 #[cfg(test)]
