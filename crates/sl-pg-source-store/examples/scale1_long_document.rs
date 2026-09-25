@@ -1015,7 +1015,11 @@ fn ingest_book_values(
     let parser_jobs = worker.parser_job_ns.len();
     let total_job_ns: u128 = worker.parser_job_ns.iter().copied().sum();
     let tokens = worker.token_count;
-    let token_denominator = tokens.max(1) as u128;
+    // A replay can correctly reuse every durable parser job.  In that case
+    // there is no parser-token work in this run, so a made-up denominator of
+    // one would falsely report the whole replay wall time as ns/token.
+    let wall_ns_per_token = (tokens != 0).then(|| total_ns / tokens as u128);
+    let worker_ns_per_token = (tokens != 0).then(|| worker_ns / tokens as u128);
     let runtime_head = std::env::var("SENSIBLAW_RUNTIME_HEAD").ok();
 
     println!(
@@ -1112,8 +1116,9 @@ fn ingest_book_values(
                 "parser_job_max_ns": worker.parser_job_ns.iter().copied().max().unwrap_or(0),
                 "parser_job_c1": concentration_ratio(&worker.parser_job_ns, 1),
                 "parser_job_c10": concentration_ratio(&worker.parser_job_ns, 10),
-                "wall_ns_per_token": total_ns / token_denominator,
-                "worker_ns_per_token": worker_ns / token_denominator,
+                "token_normalized_metrics_available": tokens != 0,
+                "wall_ns_per_token": wall_ns_per_token,
+                "worker_ns_per_token": worker_ns_per_token,
                 "db_native_reuse_ratio": if prepared.semantic_region_count == 0 {
                     1.0
                 } else {
