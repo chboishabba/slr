@@ -160,6 +160,11 @@ pub struct ClaimedParserJob {
     pub end_char: u64,
     pub attempt_count: u32,
     pub lease_owner: String,
+    pub parser_family: String,
+    pub parser_version: String,
+    pub model_ref: String,
+    pub config_digest_ref: String,
+    pub config_json: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -460,19 +465,30 @@ pub fn claim_parser_jobs(
             ORDER BY region_ref
             FOR UPDATE SKIP LOCKED
             LIMIT $3
+         ),
+         updated AS (
+            UPDATE ingest.parser_job j
+            SET status = 'leased',
+                lease_owner = $2,
+                lease_expires_at = NOW() + INTERVAL '15 minutes',
+                attempt_count = attempt_count + 1,
+                error_ref = NULL
+            FROM selected
+            WHERE j.compilation_key = selected.compilation_key
+            RETURNING
+              j.compilation_key, j.parser_run_ref, j.source_revision_ref,
+              j.region_ref, j.region_start_char, j.region_end_char,
+              j.attempt_count, j.lease_owner
          )
-         UPDATE ingest.parser_job j
-         SET status = 'leased',
-             lease_owner = $2,
-             lease_expires_at = NOW() + INTERVAL '15 minutes',
-             attempt_count = attempt_count + 1,
-             error_ref = NULL
-         FROM selected
-         WHERE j.compilation_key = selected.compilation_key
-         RETURNING
-           j.compilation_key, j.parser_run_ref, j.source_revision_ref,
-           j.region_ref, j.region_start_char, j.region_end_char,
-           j.attempt_count, j.lease_owner",
+         SELECT
+           u.compilation_key, u.parser_run_ref, u.source_revision_ref,
+           u.region_ref, u.region_start_char, u.region_end_char,
+           u.attempt_count, u.lease_owner,
+           r.parser_family, r.parser_version, r.model_ref,
+           r.config_digest_ref, r.config_json
+         FROM updated u
+         JOIN ingest.parser_run r ON r.parser_run_ref = u.parser_run_ref
+         ORDER BY u.region_ref",
         &[&parser_run_ref, &worker_ref, &(limit as i64)],
     )?;
 
@@ -493,6 +509,11 @@ pub fn claim_parser_jobs(
                 end_char: end as u64,
                 attempt_count: attempts as u32,
                 lease_owner: row.get(7),
+                parser_family: row.get(8),
+                parser_version: row.get(9),
+                model_ref: row.get(10),
+                config_digest_ref: row.get(11),
+                config_json: row.get(12),
             })
         })
         .collect()
@@ -980,6 +1001,11 @@ mod tests {
             end_char: 30,
             attempt_count: 1,
             lease_owner: "worker".into(),
+            parser_family: "spacy".into(),
+            parser_version: "fixture".into(),
+            model_ref: "fixture-model".into(),
+            config_digest_ref: "sha256:fixture".into(),
+            config_json: "{}".into(),
         };
         let valid = vec![
             ParserTokenRecord {
