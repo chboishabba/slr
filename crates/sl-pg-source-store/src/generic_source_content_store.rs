@@ -83,6 +83,29 @@ fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
+
+pub fn canonical_generic_source_revision_ref(
+    source_ref: &str,
+    provider_ref: &str,
+    acquisition_receipt_ref: &str,
+    content_digest_ref: &str,
+    media_type_ref: &str,
+) -> String {
+    let mut hasher = Sha256::new();
+    for part in [
+        "generic-source-revision:v1",
+        source_ref,
+        provider_ref,
+        acquisition_receipt_ref,
+        content_digest_ref,
+        media_type_ref,
+    ] {
+        hasher.update((part.len() as u64).to_be_bytes());
+        hasher.update(part.as_bytes());
+    }
+    format!("source-revision:sha256:{:x}", hasher.finalize())
+}
+
 fn family_db(family: SourceFamily) -> &'static str {
     match family {
         SourceFamily::Document => "document",
