@@ -6,6 +6,7 @@ mod chronology_contestation_store;
 mod candidate_pnf;
 mod candidate_pnf_store;
 mod corpus_reconciliation_store;
+mod reconciliation_review_store;
 mod context_federation;
 mod discovery_identity_baseline;
 mod event_discovery_store;
@@ -68,6 +69,10 @@ pub use corpus_reconciliation_store::{
     install_corpus_reconciliation_schema, reconcile_source_candidate_semantics,
     CorpusReconciliationError, CorpusReconciliationReceipt,
     CORPUS_RECONCILIATION_SCHEMA_SQL,
+};
+pub use reconciliation_review_store::{
+    enqueue_reconciliation_review_items, ReconciliationReviewError,
+    ReconciliationReviewReceipt,
 };
 pub use context_federation::{
     bounded_wikidata_relation_type, mabo_wikidata_property_ref,
