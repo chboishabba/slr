@@ -11,6 +11,7 @@ use thiserror::Error;
 use crate::digital_esd_coordinates::{
     materialize_study_coordinate_candidates, CANONICAL_19_COORDINATES,
 };
+use crate::digital_esd_genealogy::ingest_study_family_hypotheses;
 
 use sensiblaw_world_store::{
     active_frontier_gap_sql, active_frontier_obligation_sql, latest_iteration_sql,
@@ -44,6 +45,7 @@ CREATE TABLE IF NOT EXISTS digital_esd.world_revision (
     candidate_observation_count BIGINT NOT NULL,
     candidate_study_coordinate_count BIGINT NOT NULL DEFAULT 0,
     reviewed_world_record_count BIGINT NOT NULL,
+    study_family_hypothesis_count BIGINT NOT NULL DEFAULT 0,
     active_gap_count BIGINT NOT NULL,
     active_obligation_count BIGINT NOT NULL,
     candidate_only BOOLEAN NOT NULL CHECK (candidate_only),
@@ -55,6 +57,8 @@ CREATE TABLE IF NOT EXISTS digital_esd.world_revision (
 
 ALTER TABLE digital_esd.world_revision
 ADD COLUMN IF NOT EXISTS candidate_study_coordinate_count BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE digital_esd.world_revision
+ADD COLUMN IF NOT EXISTS study_family_hypothesis_count BIGINT NOT NULL DEFAULT 0;
 
 CREATE INDEX IF NOT EXISTS digital_esd_world_revision_created_idx
 ON digital_esd.world_revision(created_at DESC);
@@ -74,6 +78,8 @@ pub enum DigitalEsdWorldError {
     MissingSourceIdentity,
     #[error("Digital-ESD coordinate materialization failed: {0}")]
     Coordinate(String),
+    #[error("Digital-ESD genealogy materialization failed: {0}")]
+    Genealogy(String),
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -92,6 +98,7 @@ pub struct DigitalEsdWorldCounts {
     pub substrate_candidate_observations: i64,
     pub candidate_study_coordinate_nominations: i64,
     pub substrate_review_records: i64,
+    pub study_family_hypotheses: i64,
     pub active_gaps: i64,
     pub active_obligations: i64,
 }
@@ -254,6 +261,7 @@ pub fn ingest_processing_denominator(
         substrate_candidate_observations: 0,
         candidate_study_coordinate_nominations: 0,
         substrate_review_records: 0,
+        study_family_hypotheses: 0,
         active_gaps: 0,
         active_obligations: 0,
     }))
@@ -399,6 +407,7 @@ pub fn materialize_digital_esd_world(
     corpus_ref: &str,
     compiler_ref: &str,
     inspection_limit: usize,
+    study_family_hypotheses_path: Option<&Path>,
 ) -> Result<DigitalEsdWorldReceipt, DigitalEsdWorldError> {
     let processing_ledger_sha256 = sha256_file(processing_ledger)?;
 
@@ -411,6 +420,9 @@ pub fn materialize_digital_esd_world(
     let coordinate_receipt =
         materialize_study_coordinate_candidates(config, corpus_ref)
             .map_err(|error| DigitalEsdWorldError::Coordinate(error.to_string()))?;
+    let genealogy_receipt =
+        ingest_study_family_hypotheses(config, corpus_ref, study_family_hypotheses_path)
+            .map_err(|error| DigitalEsdWorldError::Genealogy(error.to_string()))?;
 
     let (active_gaps, active_obligations, inspection) =
         active_frontier(&mut client, inspection_limit)?;
@@ -444,6 +456,7 @@ pub fn materialize_digital_esd_world(
     );
     counts.substrate_review_records =
         table_count(&mut client, "slr_world_v2_review")?;
+    counts.study_family_hypotheses = genealogy_receipt.persisted_hypotheses;
     counts.active_gaps = active_gaps;
     counts.active_obligations = active_obligations;
 
@@ -456,11 +469,11 @@ pub fn materialize_digital_esd_world(
             metadata_source_count, canonical_source_revision_count, exact_region_count,
             statement_count, candidate_pnf_batch_count, candidate_observation_count,
             candidate_study_coordinate_count, reviewed_world_record_count,
-            active_gap_count, active_obligation_count,
+            study_family_hypothesis_count, active_gap_count, active_obligation_count,
             candidate_only, creates_semantic_authority, applicability_promoted,
             claim_truth_promoted
         ) VALUES (
-            $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,
+            $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,
             TRUE,FALSE,FALSE,FALSE
         ) ON CONFLICT (world_revision_ref) DO NOTHING"#,
         &[
@@ -476,6 +489,7 @@ pub fn materialize_digital_esd_world(
             &counts.substrate_candidate_observations,
             &counts.candidate_study_coordinate_nominations,
             &counts.substrate_review_records,
+            &counts.study_family_hypotheses,
             &counts.active_gaps,
             &counts.active_obligations,
         ],
@@ -524,6 +538,7 @@ mod tests {
             substrate_candidate_observations: 1_000,
             candidate_study_coordinate_nominations: 500,
             substrate_review_records: 0,
+            study_family_hypotheses: 420,
             active_gaps: 5,
             active_obligations: 5,
         };
