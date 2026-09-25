@@ -13,15 +13,35 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.metadata
 import json
 from pathlib import Path
 import subprocess
 import sys
+import platform
 import time
 
 from gwb_tranche import project_source, sha256_bytes, sha256_text
 
 SCHEMA = "sensiblaw.gwb-scale1-book-baseline.v0_1"
+
+
+def projector_runtime_identity(projector: str) -> str:
+    if projector == "pypdf":
+        try:
+            version = importlib.metadata.version("pypdf")
+        except importlib.metadata.PackageNotFoundError:
+            version = "unknown"
+        return f"pypdf:{version}"
+    if projector == "pdfminer.six":
+        try:
+            version = importlib.metadata.version("pdfminer.six")
+        except importlib.metadata.PackageNotFoundError:
+            version = "unknown"
+        return f"pdfminer.six:{version}"
+    if projector.startswith("epub-") or projector.startswith("html."):
+        return f"{projector}:python-{platform.python_version()}"
+    return f"{projector}:python-{platform.python_version()}"
 
 
 def acquisition_ref(
@@ -77,13 +97,14 @@ def main() -> int:
     projection_ns = time.perf_counter_ns() - projection_started
     projected_sha256 = sha256_text(text)
     projected_bytes = len(text.encode("utf-8"))
+    projector_identity = projector_runtime_identity(projector)
 
     source_ref = f"source:gwb:raw-sha256:{raw_sha256}"
-    provider_ref = f"gwb-source-projection:{projector}"
+    provider_ref = f"gwb-source-projection:{projector_identity}"
     acquisition_receipt_ref = acquisition_ref(
         raw_sha256,
         len(raw),
-        projector,
+        projector_identity,
         projected_sha256,
     )
 
@@ -167,6 +188,8 @@ def main() -> int:
             "raw_sha256": raw_sha256,
             "raw_bytes": len(raw),
             "projector": projector,
+            "projector_identity": projector_identity,
+            "python_version": platform.python_version(),
             "projection_ns": projection_ns,
             "projected_sha256": projected_sha256,
             "projected_bytes": projected_bytes,
