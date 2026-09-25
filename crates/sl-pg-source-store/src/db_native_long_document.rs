@@ -20,12 +20,14 @@ use crate::{
     compile_long_document_lossless_for_document_ref,
     complete_parser_run, enqueue_parser_regions, install_candidate_pnf_schema,
     install_statement_trace_schema, load_candidate_pnf_batch,
+    reconcile_source_candidate_semantics,
     load_generic_source_envelope,
     load_generic_text_source, load_long_document_regions,
     load_long_document_structure, persist_generic_text_source,
     persist_long_document_compilation, persist_long_document_structure,
     persist_source_statement, persist_statement_candidate_pnf,
     start_parser_run, CandidatePnfError, CandidatePnfStoreError,
+    CorpusReconciliationError, CorpusReconciliationReceipt,
     DatabaseConfig, DbNativeParserError,
     DbNativeParserSnapshot, GenericSourceCompilerError,
     GenericSourceContentStoreError, LongDocumentIngestStoreError,
@@ -54,6 +56,8 @@ pub enum DbNativeLongDocumentError {
     StatementStore(#[from] StatementTraceStoreError),
     #[error("candidate PNF persistence error: {0}")]
     CandidatePnfStore(#[from] CandidatePnfStoreError),
+    #[error("corpus reconciliation error: {0}")]
+    Reconciliation(#[from] CorpusReconciliationError),
     #[error("persisted source is not a document content source")]
     NotDocumentContentSource,
     #[error("parser run did not attempt every semantic-eligible region")]
@@ -95,6 +99,7 @@ pub struct DbNativeLongDocumentReceipt {
     pub persisted_candidate_batch_count: usize,
     pub persisted_candidate_factor_count: usize,
     pub candidate_pnf_reopen_complete: bool,
+    pub reconciliation: CorpusReconciliationReceipt,
     pub structural_only_regions: usize,
     pub source_region_loss_count: usize,
     pub reloaded_regions: Vec<PersistedLongDocumentRegion>,
@@ -314,6 +319,9 @@ pub fn finalize_db_native_long_document(
         return Err(DbNativeLongDocumentError::IncompleteDurablePartition);
     }
 
+    let reconciliation =
+        reconcile_source_candidate_semantics(config, &source_revision_ref)?;
+
     let persisted_compilation =
         persist_long_document_compilation(config, &document, &compilation)?;
 
@@ -348,6 +356,7 @@ pub fn finalize_db_native_long_document(
         persisted_candidate_batch_count,
         persisted_candidate_factor_count,
         candidate_pnf_reopen_complete,
+        reconciliation,
         structural_only_regions: compilation.transport_or_nonsemantic_region_count,
         source_region_loss_count: compilation.source_region_loss_count,
         reloaded_regions,
