@@ -130,6 +130,15 @@ pub struct InspectionCoordinateCandidate {
 }
 
 #[derive(Debug, Clone, Serialize)]
+pub struct InspectionStudyFamilyHypothesis {
+    pub hypothesis_ref: String,
+    pub left_source_ref: String,
+    pub right_source_ref: String,
+    pub relation_ref: String,
+    pub evidence_json: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct DigitalEsdWorldReceipt {
     pub schema: &'static str,
     pub world_revision_ref: String,
@@ -141,6 +150,7 @@ pub struct DigitalEsdWorldReceipt {
     pub inspection: Vec<InspectionResidual>,
     pub coordinate_coverage: Vec<CoordinateCoverage>,
     pub coordinate_inspection: Vec<InspectionCoordinateCandidate>,
+    pub genealogy_inspection: Vec<InspectionStudyFamilyHypothesis>,
     pub inspection_is_bounded: bool,
     pub postgres_is_canonical_runtime_state: bool,
     pub json_is_canonical_runtime_state: bool,
@@ -390,6 +400,41 @@ fn coordinate_inspection(
     Ok((coverage, candidates))
 }
 
+
+fn genealogy_inspection(
+    client: &mut Client,
+    corpus_ref: &str,
+    limit: usize,
+) -> Result<Vec<InspectionStudyFamilyHypothesis>, postgres::Error> {
+    client
+        .query(
+            r#"
+            SELECT hypothesis_ref, left_source_ref, right_source_ref,
+                   relation_ref, evidence_json
+            FROM digital_esd.study_family_hypothesis
+            WHERE corpus_ref=$1
+              AND candidate_only AND review_required
+              AND NOT creates_duplicate_decision
+              AND NOT creates_same_empirical_study
+              AND NOT creates_evidence_independence
+              AND NOT creates_semantic_authority
+              AND NOT claim_truth_promoted
+            ORDER BY relation_ref, left_source_ref, right_source_ref, hypothesis_ref
+            LIMIT $2
+            "#,
+            &[&corpus_ref, &(limit as i64)],
+        )?
+        .into_iter()
+        .map(|row| InspectionStudyFamilyHypothesis {
+            hypothesis_ref: row.get(0),
+            left_source_ref: row.get(1),
+            right_source_ref: row.get(2),
+            relation_ref: row.get(3),
+            evidence_json: row.get(4),
+        })
+        .collect()
+}
+
 fn world_revision_ref(
     corpus_ref: &str,
     compiler_ref: &str,
@@ -428,6 +473,8 @@ pub fn materialize_digital_esd_world(
         active_frontier(&mut client, inspection_limit)?;
     let (coordinate_coverage, coordinate_inspection) =
         coordinate_inspection(&mut client, corpus_ref, inspection_limit)?;
+    let genealogy_inspection =
+        genealogy_inspection(&mut client, corpus_ref, inspection_limit)?;
 
     counts.substrate_source_revisions =
         table_count(&mut client, "ingest.generic_source_revision")?;
@@ -506,6 +553,7 @@ pub fn materialize_digital_esd_world(
         inspection,
         coordinate_coverage,
         coordinate_inspection,
+        genealogy_inspection,
         inspection_is_bounded: true,
         postgres_is_canonical_runtime_state: true,
         json_is_canonical_runtime_state: false,
