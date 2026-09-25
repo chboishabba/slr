@@ -32,12 +32,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let env_file = arg_value(&args, "--env-file").map(PathBuf::from);
     let config = load_database_config(env_file.as_deref())?;
 
+    let study_family_hypotheses = arg_value(&args, "--study-family-hypotheses")
+        .map(PathBuf::from)
+        .or_else(|| {
+            let path = artifact_root.join("study_family_hypotheses.jsonl");
+            path.exists().then_some(path)
+        });
+
     let receipt = materialize_digital_esd_world(
         &config,
         &processing_ledger,
         &corpus_ref,
         &compiler_ref,
         limit,
+        study_family_hypotheses.as_deref(),
     )?;
 
     println!("{}", serde_json::to_string_pretty(&receipt)?);
