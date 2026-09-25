@@ -125,7 +125,79 @@ fn normalize(value: &str) -> String {
         .to_lowercase()
 }
 
+fn month_number(value: &str) -> Option<u8> {
+    Some(match value {
+        "january" | "jan" => 1,
+        "february" | "feb" => 2,
+        "march" | "mar" => 3,
+        "april" | "apr" => 4,
+        "may" => 5,
+        "june" | "jun" => 6,
+        "july" | "jul" => 7,
+        "august" | "aug" => 8,
+        "september" | "sep" | "sept" => 9,
+        "october" | "oct" => 10,
+        "november" | "nov" => 11,
+        "december" | "dec" => 12,
+        _ => return None,
+    })
+}
+
+fn parse_day(value: &str) -> Option<u8> {
+    let trimmed = value
+        .trim_end_matches(|c: char| c.is_ascii_punctuation())
+        .trim_end_matches("st")
+        .trim_end_matches("nd")
+        .trim_end_matches("rd")
+        .trim_end_matches("th");
+    let day = trimmed.parse::<u8>().ok()?;
+    (1..=31).contains(&day).then_some(day)
+}
+
+fn parse_year(value: &str) -> Option<u16> {
+    let year = value
+        .trim_matches(|c: char| c.is_ascii_punctuation())
+        .parse::<u16>()
+        .ok()?;
+    (1000..=2999).contains(&year).then_some(year)
+}
+
+fn canonical_date_bucket(surface: &str) -> Option<String> {
+    let lowered = surface.to_lowercase().replace(',', " ").replace('.', " ");
+    let parts = lowered
+        .split_whitespace()
+        .map(|value| value.to_owned())
+        .collect::<Vec<_>>();
+
+    match parts.as_slice() {
+        [year] => parse_year(year).map(|year| format!("{year:04}")),
+        [month, year] => {
+            let month = month_number(month)?;
+            let year = parse_year(year)?;
+            Some(format!("{year:04}-{month:02}"))
+        }
+        [month, day, year] => {
+            let month = month_number(month)?;
+            let day = parse_day(day)?;
+            let year = parse_year(year)?;
+            Some(format!("{year:04}-{month:02}-{day:02}"))
+        }
+        [day, month, year] => {
+            let day = parse_day(day)?;
+            let month = month_number(month)?;
+            let year = parse_year(year)?;
+            Some(format!("{year:04}-{month:02}-{day:02}"))
+        }
+        _ => None,
+    }
+}
+
 fn temporal_bucket_ref(label_ref: &str, surface: &str) -> String {
+    if label_ref.eq_ignore_ascii_case("DATE") {
+        if let Some(canonical) = canonical_date_bucket(surface) {
+            return format!("temporal-bucket:date:{canonical}");
+        }
+    }
     let normalized = normalize(surface);
     format!(
         "temporal-bucket:{}",
@@ -475,7 +547,19 @@ mod tests {
     fn temporal_bucket_is_detector_identity_not_temporal_assertion() {
         assert_eq!(
             temporal_bucket_ref("DATE", " January  1, 1997 "),
-            temporal_bucket_ref("DATE", "january 1, 1997")
+            temporal_bucket_ref("DATE", "1 Jan 1997")
+        );
+        assert_eq!(
+            temporal_bucket_ref("DATE", "January 1st, 1997"),
+            "temporal-bucket:date:1997-01-01"
+        );
+        assert_eq!(
+            temporal_bucket_ref("DATE", "Jan. 1997"),
+            "temporal-bucket:date:1997-01"
+        );
+        assert_eq!(
+            temporal_bucket_ref("DATE", "1997"),
+            "temporal-bucket:date:1997"
         );
     }
 
