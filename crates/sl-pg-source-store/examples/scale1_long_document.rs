@@ -928,9 +928,10 @@ fn worker(args: &[String]) -> Result<(), Box<dyn Error>> {
 
 
 #[allow(clippy::too_many_arguments)]
-fn ingest_book_values(
+fn compile_source_values(
     canonical_text: String,
     title: Option<String>,
+    source_family: SourceFamily,
     source_ref: &str,
     provider_ref: &str,
     acquisition_receipt_ref: &str,
@@ -960,12 +961,13 @@ fn ingest_book_values(
     let config = load_database_config(None)?;
 
     let prepare_started = Instant::now();
-    let prepared = prepare_db_native_long_document(
+    let prepared = prepare_db_native_long_source(
         &config,
         source_ref,
         &source_revision_ref,
         provider_ref,
         acquisition_receipt_ref,
+        source_family,
         title,
         None,
         &canonical_text,
@@ -1025,7 +1027,8 @@ fn ingest_book_values(
     println!(
         "{}",
         serde_json::to_string_pretty(&json!({
-            "schema": "sensiblaw.scale1.book-ingest-baseline.v0_1",
+            "schema": "sensiblaw.scale1.source-compile-baseline.v0_1",
+            "source_family": source_family_ref(source_family),
             "authority": "execution_and_measurement_receipt_only",
             "runtime_head": runtime_head,
             "input_transport": input_transport,
@@ -1152,11 +1155,12 @@ fn ingest_book(args: &[String]) -> Result<(), Box<dyn Error>> {
     }
     let text_file = &args[2];
     let canonical_text = fs::read_to_string(text_file)?;
-    ingest_book_values(
+    compile_source_values(
         canonical_text,
         Path::new(text_file)
             .file_name()
             .map(|value| value.to_string_lossy().into_owned()),
+        SourceFamily::Document,
         &args[3],
         &args[4],
         &args[5],
@@ -1182,9 +1186,10 @@ fn ingest_book_stdin(args: &[String]) -> Result<(), Box<dyn Error>> {
     }
     let mut canonical_text = String::new();
     std::io::stdin().read_to_string(&mut canonical_text)?;
-    ingest_book_values(
+    compile_source_values(
         canonical_text,
         (!args[5].is_empty()).then(|| args[5].clone()),
+        SourceFamily::Document,
         &args[2],
         &args[3],
         &args[4],
@@ -1194,6 +1199,69 @@ fn ingest_book_stdin(args: &[String]) -> Result<(), Box<dyn Error>> {
             .map(String::as_str)
             .unwrap_or("scripts/scale1_spacy_json_parser.py"),
         args.get(9)
+            .map(|value| value.parse::<usize>())
+            .transpose()?
+            .unwrap_or(32),
+        "stdin",
+    )
+}
+
+
+fn compile_source(args: &[String]) -> Result<(), Box<dyn Error>> {
+    if args.len() < 8 {
+        return Err(
+            "compile-source <source-family> <text-file> <source-ref> <provider-ref> <acquisition-receipt-ref> <model-ref> [config-json] [parser-script] [batch-size]"
+                .into(),
+        );
+    }
+    let family = parse_source_family(&args[2])?;
+    let text_file = &args[3];
+    let canonical_text = fs::read_to_string(text_file)?;
+    compile_source_values(
+        canonical_text,
+        Path::new(text_file)
+            .file_name()
+            .map(|value| value.to_string_lossy().into_owned()),
+        family,
+        &args[4],
+        &args[5],
+        &args[6],
+        &args[7],
+        args.get(8).map(String::as_str).unwrap_or("{}"),
+        args.get(9)
+            .map(String::as_str)
+            .unwrap_or("scripts/scale1_spacy_json_parser.py"),
+        args.get(10)
+            .map(|value| value.parse::<usize>())
+            .transpose()?
+            .unwrap_or(32),
+        "file",
+    )
+}
+
+fn compile_source_stdin(args: &[String]) -> Result<(), Box<dyn Error>> {
+    if args.len() < 8 {
+        return Err(
+            "compile-source-stdin <source-family> <source-ref> <provider-ref> <acquisition-receipt-ref> <title> <model-ref> [config-json] [parser-script] [batch-size]"
+                .into(),
+        );
+    }
+    let family = parse_source_family(&args[2])?;
+    let mut canonical_text = String::new();
+    std::io::stdin().read_to_string(&mut canonical_text)?;
+    compile_source_values(
+        canonical_text,
+        (!args[6].is_empty()).then(|| args[6].clone()),
+        family,
+        &args[3],
+        &args[4],
+        &args[5],
+        &args[7],
+        args.get(8).map(String::as_str).unwrap_or("{}"),
+        args.get(9)
+            .map(String::as_str)
+            .unwrap_or("scripts/scale1_spacy_json_parser.py"),
+        args.get(10)
             .map(|value| value.parse::<usize>())
             .transpose()?
             .unwrap_or(32),
@@ -1459,6 +1527,8 @@ fn materialize_proposition(args: &[String]) -> Result<(), Box<dyn Error>> {
 fn usage() {
     eprintln!(
         "usage:\n  \
+         scale1_long_document compile-source <source-family> <text-file> <source-ref> <provider-ref> <acquisition-receipt-ref> <model-ref> [config-json] [parser-script] [batch-size]\n  \
+         scale1_long_document compile-source-stdin <source-family> <source-ref> <provider-ref> <acquisition-receipt-ref> <title> <model-ref> [config-json] [parser-script] [batch-size]\n  \
          scale1_long_document ingest-book <text-file> <source-ref> <provider-ref> <acquisition-receipt-ref> <model-ref> [config-json] [parser-script] [batch-size]\n  \
          scale1_long_document ingest-book-stdin <source-ref> <provider-ref> <acquisition-receipt-ref> <title> <model-ref> [config-json] [parser-script] [batch-size]\n  \
          scale1_long_document prepare-spacy <text-file> <source-ref> <provider-ref> <acquisition-receipt-ref> <model-ref> [config-json] [parser-script]\n  \
@@ -1482,6 +1552,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
 
     match command {
+        "compile-source" => compile_source(&args),
+        "compile-source-stdin" => compile_source_stdin(&args),
         "ingest-book" => ingest_book(&args),
         "ingest-book-stdin" => ingest_book_stdin(&args),
         "prepare-spacy" => prepare_spacy(&args),
