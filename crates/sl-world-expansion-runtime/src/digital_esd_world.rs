@@ -17,6 +17,16 @@ use sensiblaw_world_store::{
 const WORLD_SCHEMA_SQL: &str = r#"
 CREATE SCHEMA IF NOT EXISTS digital_esd;
 
+CREATE TABLE IF NOT EXISTS digital_esd.corpus_source (
+    corpus_ref TEXT NOT NULL,
+    source_ref TEXT NOT NULL,
+    metadata_revision_ref TEXT NULL,
+    candidate_only BOOLEAN NOT NULL CHECK (candidate_only),
+    creates_semantic_authority BOOLEAN NOT NULL CHECK (NOT creates_semantic_authority),
+    first_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (corpus_ref, source_ref)
+);
+
 CREATE TABLE IF NOT EXISTS digital_esd.world_revision (
     world_revision_ref TEXT PRIMARY KEY,
     corpus_ref TEXT NOT NULL,
@@ -59,12 +69,18 @@ pub enum DigitalEsdWorldError {
 #[derive(Debug, Clone, Serialize)]
 pub struct DigitalEsdWorldCounts {
     pub metadata_sources: i64,
-    pub canonical_source_revisions: i64,
-    pub exact_regions: i64,
-    pub statements: i64,
-    pub candidate_pnf_batches: i64,
-    pub candidate_observations: i64,
-    pub reviewed_world_records: i64,
+    pub screened_sources: i64,
+    pub retained_sources: i64,
+    pub verified_fulltext_sources: i64,
+    pub parsed_sources: i64,
+    pub reviewed_sources: i64,
+    pub admitted_sources: i64,
+    pub substrate_source_revisions: i64,
+    pub substrate_exact_regions: i64,
+    pub substrate_statements: i64,
+    pub substrate_candidate_pnf_batches: i64,
+    pub substrate_candidate_observations: i64,
+    pub substrate_review_records: i64,
     pub active_gaps: i64,
     pub active_obligations: i64,
 }
@@ -118,10 +134,18 @@ fn source_ref(row: &Value) -> Option<&str> {
 pub fn ingest_processing_denominator(
     config: &DatabaseConfig,
     processing_ledger: &Path,
-) -> Result<usize, DigitalEsdWorldError> {
+    corpus_ref: &str,
+) -> Result<(usize, DigitalEsdWorldCounts), DigitalEsdWorldError> {
     let file = BufReader::new(File::open(processing_ledger)?);
     let mut wire = Vec::new();
     let mut count = 0usize;
+    let mut screened = 0i64;
+    let mut retained = 0i64;
+    let mut verified = 0i64;
+    let mut parsed = 0i64;
+    let mut reviewed = 0i64;
+    let mut admitted = 0i64;
+    let mut memberships: Vec<(String, Option<String>)> = Vec::new();
 
     for line in file.lines() {
         let line = line?;
@@ -131,22 +155,76 @@ pub fn ingest_processing_denominator(
             .filter(|value| !value.trim().is_empty())
             .ok_or(DigitalEsdWorldError::MissingSourceIdentity)?
             .to_owned();
+        let metadata_revision = row
+            .get("metadata_revision_reference")
+            .and_then(Value::as_str)
+            .map(str::to_owned);
+        let manifestation_payload = serde_json::json!({
+            "schema": "digital-esd-metadata-manifestation-v1",
+            "source_identity_reference": id,
+            "metadata_revision_reference": metadata_revision,
+            "candidate_only": true,
+            "creates_semantic_authority": false,
+            "claim_truth_promoted": false
+        });
         encode_record(
             &mut wire,
             &WireRecord {
                 kind: WorldRecordKind::SourceManifestation,
-                id,
+                id: id.clone(),
                 iteration_index: None,
                 aux1: None,
-                payload: serde_json::to_vec(&row)?,
+                payload: serde_json::to_vec(&manifestation_payload)?,
             },
         )?;
+        memberships.push((id, metadata_revision));
+        screened += i64::from(row.get("screened").and_then(Value::as_bool).unwrap_or(false));
+        retained += i64::from(row.get("retained").and_then(Value::as_bool).unwrap_or(false));
+        verified += i64::from(row.get("verified").and_then(Value::as_bool).unwrap_or(false));
+        parsed += i64::from(row.get("parsed").and_then(Value::as_bool).unwrap_or(false));
+        reviewed += i64::from(row.get("reviewed").and_then(Value::as_bool).unwrap_or(false));
+        admitted += i64::from(row.get("admitted").and_then(Value::as_bool).unwrap_or(false));
         count += 1;
     }
 
     let mut store = WorldStore::connect(config)?;
     store.ingest_wire(Cursor::new(wire))?;
-    Ok(count)
+
+    let mut client = Client::connect(config.database_url(), NoTls)?;
+    client.batch_execute(WORLD_SCHEMA_SQL)?;
+    let mut tx = client.transaction()?;
+    for (source_ref, metadata_revision_ref) in memberships {
+        tx.execute(
+            r#"INSERT INTO digital_esd.corpus_source (
+                corpus_ref, source_ref, metadata_revision_ref,
+                candidate_only, creates_semantic_authority
+            ) VALUES ($1,$2,$3,TRUE,FALSE)
+            ON CONFLICT (corpus_ref, source_ref) DO UPDATE SET
+                metadata_revision_ref = EXCLUDED.metadata_revision_ref,
+                candidate_only = TRUE,
+                creates_semantic_authority = FALSE"#,
+            &[&corpus_ref, &source_ref, &metadata_revision_ref],
+        )?;
+    }
+    tx.commit()?;
+
+    Ok((count, DigitalEsdWorldCounts {
+        metadata_sources: count as i64,
+        screened_sources: screened,
+        retained_sources: retained,
+        verified_fulltext_sources: verified,
+        parsed_sources: parsed,
+        reviewed_sources: reviewed,
+        admitted_sources: admitted,
+        substrate_source_revisions: 0,
+        substrate_exact_regions: 0,
+        substrate_statements: 0,
+        substrate_candidate_pnf_batches: 0,
+        substrate_candidate_observations: 0,
+        substrate_review_records: 0,
+        active_gaps: 0,
+        active_obligations: 0,
+    }))
 }
 
 fn table_count(client: &mut Client, table: &str) -> Result<i64, postgres::Error> {
@@ -218,29 +296,31 @@ pub fn materialize_digital_esd_world(
     compiler_ref: &str,
     inspection_limit: usize,
 ) -> Result<DigitalEsdWorldReceipt, DigitalEsdWorldError> {
-    let denominator_rows_ingested = ingest_processing_denominator(config, processing_ledger)?;
     let processing_ledger_sha256 = sha256_file(processing_ledger)?;
 
     let mut client = Client::connect(config.database_url(), NoTls)?;
     client.batch_execute(WORLD_SCHEMA_SQL)?;
 
+    let (denominator_rows_ingested, mut counts) =
+        ingest_processing_denominator(config, processing_ledger, corpus_ref)?;
+
     let (active_gaps, active_obligations, inspection) =
         active_frontier(&mut client, inspection_limit)?;
 
-    let counts = DigitalEsdWorldCounts {
-        metadata_sources: table_count(&mut client, "slr_world_v2_source_manifestation")?,
-        canonical_source_revisions: table_count(&mut client, "ingest.generic_source_revision")?,
-        exact_regions: table_count(&mut client, "ingest.long_document_region")?,
-        statements: table_count(&mut client, "corpus.source_statement")?,
-        candidate_pnf_batches: table_count(&mut client, "pnf.statement_candidate_batch")?,
-        candidate_observations: table_count(
-            &mut client,
-            "semantic.scale1_auto_observation_candidate",
-        )?,
-        reviewed_world_records: table_count(&mut client, "slr_world_v2_review")?,
-        active_gaps,
-        active_obligations,
-    };
+    counts.substrate_source_revisions =
+        table_count(&mut client, "ingest.generic_source_revision")?;
+    counts.substrate_exact_regions =
+        table_count(&mut client, "ingest.long_document_region")?;
+    counts.substrate_statements =
+        table_count(&mut client, "corpus.source_statement")?;
+    counts.substrate_candidate_pnf_batches =
+        table_count(&mut client, "pnf.statement_candidate_batch")?;
+    counts.substrate_candidate_observations =
+        table_count(&mut client, "semantic.scale1_auto_observation_candidate")?;
+    counts.substrate_review_records =
+        table_count(&mut client, "slr_world_v2_review")?;
+    counts.active_gaps = active_gaps;
+    counts.active_obligations = active_obligations;
 
     let world_revision_ref =
         world_revision_ref(corpus_ref, compiler_ref, &processing_ledger_sha256, &counts);
@@ -263,12 +343,12 @@ pub fn materialize_digital_esd_world(
             &compiler_ref,
             &processing_ledger_sha256,
             &counts.metadata_sources,
-            &counts.canonical_source_revisions,
-            &counts.exact_regions,
-            &counts.statements,
-            &counts.candidate_pnf_batches,
-            &counts.candidate_observations,
-            &counts.reviewed_world_records,
+            &counts.substrate_source_revisions,
+            &counts.substrate_exact_regions,
+            &counts.substrate_statements,
+            &counts.substrate_candidate_pnf_batches,
+            &counts.substrate_candidate_observations,
+            &counts.substrate_review_records,
             &counts.active_gaps,
             &counts.active_obligations,
         ],
