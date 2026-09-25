@@ -51,7 +51,7 @@ pub use cache_first::{
 };
 pub use candidate_pnf::{
     CandidatePnfBatch, CandidatePnfError, CandidatePnfFactor, CandidatePnfProducer,
-    CandidatePnfRole, ExactSourceSpan, SpacyTsvAdapter,
+    CandidatePnfRole, ExactSourceSpan, IndexedSpacyTsvAdapter, SpacyTsvAdapter,
 };
 pub use context_federation::{
     bounded_wikidata_relation_type, mabo_wikidata_property_ref,
