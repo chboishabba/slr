@@ -25,6 +25,8 @@ pub enum PlainTextDocumentAdapterError {
     EmptyAcquisitionReceipt,
     #[error("document text is empty")]
     EmptyText,
+    #[error("source family is not eligible for generic long-text compilation")]
+    UnsupportedLongTextFamily,
     #[error("generated source structure failed validation: {0:?}")]
     InvalidSource(sensiblaw_core::source_ingest::SourceIngestError),
 }
@@ -255,6 +257,18 @@ pub fn build_plain_text_long_source_with_family(
     if text.is_empty() {
         return Err(PlainTextDocumentAdapterError::EmptyText);
     }
+    if !matches!(
+        family,
+        SourceFamily::Document
+            | SourceFamily::Web
+            | SourceFamily::Wiki
+            | SourceFamily::Transcript
+            | SourceFamily::ImageOcr
+            | SourceFamily::LegalAuthority
+            | SourceFamily::NoteResearch
+    ) {
+        return Err(PlainTextDocumentAdapterError::UnsupportedLongTextFamily);
+    }
 
     let chapter_candidates = chapter_ranges(text);
     let mut regions = Vec::new();
@@ -415,6 +429,24 @@ mod tests {
             .unwrap();
         assert_eq!(first_sentence.start_char, 0);
         assert_eq!(first_sentence.end_char, 4);
+    }
+
+    #[test]
+    fn operational_family_cannot_enter_generic_long_text_compiler() {
+        let result = build_plain_text_long_source_with_family(
+            "calendar:fixture",
+            "revision:calendar",
+            "calendar-provider",
+            "receipt:calendar",
+            SourceFamily::Calendar,
+            None,
+            None,
+            "Meeting with Alice on Monday.",
+        );
+        assert!(matches!(
+            result,
+            Err(PlainTextDocumentAdapterError::UnsupportedLongTextFamily)
+        ));
     }
 
     #[test]
