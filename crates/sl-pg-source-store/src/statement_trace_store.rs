@@ -431,6 +431,118 @@ pub(crate) fn persist_statement_observation_link_with_client(
     Ok(persisted)
 }
 
+pub(crate) fn persist_statement_observation_links_with_client(
+    client: &mut Client,
+    links: &[StatementObservationLink],
+) -> Result<Vec<StatementObservationLink>, StatementTraceStoreError> {
+    if links.is_empty() {
+        return Ok(vec![]);
+    }
+
+    for link in links {
+        link.validate()?;
+        let expected = canonical_statement_observation_link_ref(
+            &link.statement_ref,
+            &link.candidate_pnf_ref,
+            &link.observation_ref,
+        );
+        if link.link_ref != expected {
+            return Err(StatementTraceStoreError::ExistingLinkConflict);
+        }
+    }
+
+    let link_refs = links.iter().map(|link| link.link_ref.clone()).collect::<Vec<_>>();
+    let statement_refs = links
+        .iter()
+        .map(|link| link.statement_ref.clone())
+        .collect::<Vec<_>>();
+    let candidate_refs = links
+        .iter()
+        .map(|link| link.candidate_pnf_ref.clone())
+        .collect::<Vec<_>>();
+    let observation_refs = links
+        .iter()
+        .map(|link| link.observation_ref.clone())
+        .collect::<Vec<_>>();
+    let parser_receipt_refs = links
+        .iter()
+        .map(|link| link.parser_receipt_ref.clone())
+        .collect::<Vec<_>>();
+    let parse_review_refs = links
+        .iter()
+        .map(|link| link.parse_review_ref.clone())
+        .collect::<Vec<_>>();
+    let admission_receipt_refs = links
+        .iter()
+        .map(|link| link.admission_receipt_ref.clone())
+        .collect::<Vec<_>>();
+    let disposition_refs = links
+        .iter()
+        .map(|link| link.disposition.as_db().to_owned())
+        .collect::<Vec<_>>();
+    let qualification_refs = links
+        .iter()
+        .map(|link| link.qualification_ref.clone())
+        .collect::<Vec<_>>();
+
+    client.execute(
+        r#"
+        INSERT INTO pnf.statement_observation_link
+          (link_ref, statement_ref, candidate_pnf_ref, observation_ref,
+           parser_receipt_ref, parse_review_ref, admission_receipt_ref,
+           disposition_ref, qualification_ref, candidate_only,
+           creates_semantic_authority, applicability_promoted, claim_truth_promoted)
+        SELECT link_ref, statement_ref, candidate_pnf_ref, observation_ref,
+               parser_receipt_ref, parse_review_ref, admission_receipt_ref,
+               disposition_ref, qualification_ref, TRUE,FALSE,FALSE,FALSE
+        FROM UNNEST(
+          $1::TEXT[], $2::TEXT[], $3::TEXT[], $4::TEXT[],
+          $5::TEXT[], $6::TEXT[], $7::TEXT[], $8::TEXT[], $9::TEXT[]
+        ) AS u(
+          link_ref, statement_ref, candidate_pnf_ref, observation_ref,
+          parser_receipt_ref, parse_review_ref, admission_receipt_ref,
+          disposition_ref, qualification_ref
+        )
+        ON CONFLICT (link_ref) DO NOTHING
+        "#,
+        &[
+            &link_refs,
+            &statement_refs,
+            &candidate_refs,
+            &observation_refs,
+            &parser_receipt_refs,
+            &parse_review_refs,
+            &admission_receipt_refs,
+            &disposition_refs,
+            &qualification_refs,
+        ],
+    )?;
+
+    let rows = client.query(
+        r#"
+        SELECT link_ref, statement_ref, candidate_pnf_ref, observation_ref,
+               parser_receipt_ref, parse_review_ref, admission_receipt_ref,
+               disposition_ref, qualification_ref, candidate_only,
+               creates_semantic_authority, applicability_promoted, claim_truth_promoted
+        FROM pnf.statement_observation_link
+        WHERE link_ref = ANY($1)
+        ORDER BY link_ref
+        "#,
+        &[&link_refs],
+    )?;
+    let mut persisted = rows
+        .into_iter()
+        .map(row_to_statement_observation_link)
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut expected = links.to_vec();
+    expected.sort_by(|left, right| left.link_ref.cmp(&right.link_ref));
+    persisted.sort_by(|left, right| left.link_ref.cmp(&right.link_ref));
+    if persisted != expected {
+        return Err(StatementTraceStoreError::ExistingLinkConflict);
+    }
+    Ok(persisted)
+}
+
 pub fn persist_observation_event_link(
     config: &DatabaseConfig,
     link: &ObservationEventLink,
