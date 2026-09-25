@@ -247,6 +247,12 @@ fn sha256_ref(parts: &[&str]) -> String {
     format!("sha256:{:x}", hasher.finalize())
 }
 
+fn sha256_content_ref(bytes: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    format!("sha256:{:x}", hasher.finalize())
+}
+
 fn canonical_json_value(value: &Value, out: &mut String) {
     match value {
         Value::Null => out.push_str("null"),
@@ -592,6 +598,9 @@ pub fn persist_parser_success(
         require(&artifact.content_digest_ref)?;
         if let Some(json) = artifact.artifact_json.as_deref() {
             let _: Value = serde_json::from_str(json)?;
+            if sha256_content_ref(json.as_bytes()) != artifact.content_digest_ref {
+                return Err(DbNativeParserError::SourceRevisionMismatch);
+            }
         }
         if artifact.artifact_json.is_none() && artifact.object_locator.is_none() {
             return Err(DbNativeParserError::EmptyCoordinate);
@@ -657,11 +666,7 @@ pub fn persist_parser_success(
         &[&job.compilation_key],
     )?;
     if let Some(artifact) = artifact {
-        let artifact_json = artifact
-            .artifact_json
-            .as_deref()
-            .map(canonical_json_text)
-            .transpose()?;
+        let artifact_json = artifact.artifact_json.clone();
         tx.execute(
             "INSERT INTO ingest.parser_artifact (
                 compilation_key, format_ref, content_digest_ref,
