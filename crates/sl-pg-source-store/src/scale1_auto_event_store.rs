@@ -22,10 +22,11 @@ use sensiblaw_core::event_discovery::{
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
+use crate::statement_trace_store::persist_statement_observation_links_with_client;
 use crate::{
     canonical_statement_observation_link_ref, install_event_discovery_schema,
     install_statement_trace_schema, persist_event_join_proposal_with_review,
-    persist_statement_observation_links_with_client, DatabaseConfig, EventDiscoveryStoreError,
+    DatabaseConfig, EventDiscoveryStoreError,
     StatementObservationDisposition, StatementObservationLink,
     StatementTraceStoreError,
 };
