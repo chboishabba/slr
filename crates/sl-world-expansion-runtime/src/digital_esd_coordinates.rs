@@ -308,6 +308,30 @@ pub fn materialize_study_coordinate_candidates(
     let mut client = Client::connect(config.database_url(), NoTls)?;
     client.batch_execute(DIGITAL_ESD_COORDINATE_SCHEMA_SQL)?;
 
+    let substrate_ready: bool = client
+        .query_one(
+            "SELECT
+               to_regclass('ingest.generic_source_revision') IS NOT NULL
+               AND to_regclass('corpus.source_statement') IS NOT NULL
+               AND to_regclass('pnf.statement_candidate_batch') IS NOT NULL
+               AND to_regclass('pnf.statement_candidate_factor') IS NOT NULL",
+            &[],
+        )?
+        .get(0);
+    if !substrate_ready {
+        return Ok(CoordinateNominationReceipt {
+            corpus_ref: corpus_ref.to_owned(),
+            source_level_candidates: 0,
+            statement_level_candidates: 0,
+            total_candidates: 0,
+            coordinate_paid: false,
+            review_required: true,
+            automatic_absence_inference: false,
+            creates_semantic_authority: false,
+            claim_truth_promoted: false,
+        });
+    }
+
     let source_rows = client.query(
         r#"
         SELECT cs.source_ref, r.source_revision_ref, r.source_family_ref,
