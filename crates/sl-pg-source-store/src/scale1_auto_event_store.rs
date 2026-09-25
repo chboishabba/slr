@@ -287,7 +287,10 @@ fn materialize_source_observations(
         &[&source_revision_ref],
     )?;
 
-    let mut count = 0usize;
+    let mut observation_refs = Vec::with_capacity(rows.len());
+    let mut batch_refs = Vec::with_capacity(rows.len());
+    let mut statement_refs = Vec::with_capacity(rows.len());
+    let mut parser_receipt_refs = Vec::with_capacity(rows.len());
     for row in rows {
         let batch_ref: String = row.get(0);
         let statement_ref: String = row.get(1);
@@ -299,80 +302,161 @@ fn materialize_source_observations(
                 &[&statement_ref, &batch_ref, parser_run_ref],
             )
         );
+        observation_refs.push(observation_ref);
+        batch_refs.push(batch_ref);
+        statement_refs.push(statement_ref);
+        parser_receipt_refs.push(parser_receipt_ref);
+    }
 
+    if !observation_refs.is_empty() {
+        let parser_runs = vec![parser_run_ref.to_owned(); observation_refs.len()];
+        let source_revisions = vec![source_revision_ref.to_owned(); observation_refs.len()];
+        let source_families = vec![source_family_ref.clone(); observation_refs.len()];
         client.execute(
-            r#"INSERT INTO semantic.scale1_auto_observation_candidate
-               (observation_ref, statement_ref, batch_ref, parser_run_ref,
-                source_revision_ref, source_family_ref, candidate_only,
-                creates_observation_identity, creates_event_identity,
-                creates_semantic_authority, applicability_promoted,
-                claim_truth_promoted)
-               VALUES ($1,$2,$3,$4,$5,$6,TRUE,FALSE,FALSE,FALSE,FALSE,FALSE)
-               ON CONFLICT (observation_ref) DO NOTHING"#,
+            r#"
+            INSERT INTO semantic.scale1_auto_observation_candidate
+              (observation_ref, statement_ref, batch_ref, parser_run_ref,
+               source_revision_ref, source_family_ref, candidate_only,
+               creates_observation_identity, creates_event_identity,
+               creates_semantic_authority, applicability_promoted,
+               claim_truth_promoted)
+            SELECT observation_ref, statement_ref, batch_ref, parser_run_ref,
+                   source_revision_ref, source_family_ref,
+                   TRUE,FALSE,FALSE,FALSE,FALSE,FALSE
+            FROM UNNEST(
+              $1::TEXT[], $2::TEXT[], $3::TEXT[], $4::TEXT[],
+              $5::TEXT[], $6::TEXT[]
+            ) AS u(
+              observation_ref, statement_ref, batch_ref, parser_run_ref,
+              source_revision_ref, source_family_ref
+            )
+            ON CONFLICT (observation_ref) DO NOTHING
+            "#,
             &[
-                &observation_ref,
-                &statement_ref,
-                &batch_ref,
-                &parser_run_ref,
-                &source_revision_ref,
-                &source_family_ref,
+                &observation_refs,
+                &statement_refs,
+                &batch_refs,
+                &parser_runs,
+                &source_revisions,
+                &source_families,
             ],
         )?;
+    }
 
-        for entity in client.query(
-            r#"
-            SELECT entity_fingerprint_ref
-            FROM semantic.named_entity_candidate
-            WHERE statement_ref=$1 AND parser_run_ref=$2
-            UNION
-            SELECT entity_fingerprint_ref
-            FROM semantic.entity_mention_candidate
-            WHERE statement_ref=$1
-            ORDER BY 1
-            "#,
-            &[&statement_ref, &parser_run_ref],
-        )? {
-            let reference: String = entity.get(0);
-            persist_signal(&mut client, &observation_ref, "entity", &reference)?;
-        }
+    // Entity signals are already deterministic fingerprints. Project all of
+    // them for this source/parser run in two set-wise statements.
+    client.execute(
+        r#"
+        INSERT INTO semantic.scale1_auto_observation_signal
+          (observation_ref, signal_kind_ref, signal_ref, detector_ref,
+           candidate_only, creates_event_identity,
+           creates_semantic_authority, claim_truth_promoted)
+        SELECT DISTINCT o.observation_ref, 'entity',
+               n.entity_fingerprint_ref, $3, TRUE,FALSE,FALSE,FALSE
+        FROM semantic.scale1_auto_observation_candidate o
+        JOIN semantic.named_entity_candidate n
+          ON n.statement_ref=o.statement_ref
+         AND n.parser_run_ref=o.parser_run_ref
+        WHERE o.source_revision_ref=$1 AND o.parser_run_ref=$2
+        ON CONFLICT DO NOTHING
+        "#,
+        &[&source_revision_ref, &parser_run_ref, &DETECTOR_REF],
+    )?;
+    client.execute(
+        r#"
+        INSERT INTO semantic.scale1_auto_observation_signal
+          (observation_ref, signal_kind_ref, signal_ref, detector_ref,
+           candidate_only, creates_event_identity,
+           creates_semantic_authority, claim_truth_promoted)
+        SELECT DISTINCT o.observation_ref, 'entity',
+               e.entity_fingerprint_ref, $3, TRUE,FALSE,FALSE,FALSE
+        FROM semantic.scale1_auto_observation_candidate o
+        JOIN semantic.entity_mention_candidate e
+          ON e.statement_ref=o.statement_ref
+        WHERE o.source_revision_ref=$1 AND o.parser_run_ref=$2
+        ON CONFLICT DO NOTHING
+        "#,
+        &[&source_revision_ref, &parser_run_ref, &DETECTOR_REF],
+    )?;
 
-        for temporal in client.query(
-            r#"
-            SELECT label_ref, surface
-            FROM semantic.temporal_mention_candidate
-            WHERE statement_ref=$1 AND parser_run_ref=$2
-            ORDER BY start_char, end_char, temporal_mention_ref
-            "#,
-            &[&statement_ref, &parser_run_ref],
-        )? {
-            let label_ref: String = temporal.get(0);
-            let surface: String = temporal.get(1);
-            let reference = temporal_bucket_ref(&label_ref, &surface);
-            persist_signal(&mut client, &observation_ref, "temporal", &reference)?;
-        }
+    // Event fingerprints are likewise already normalized; project them set-wise.
+    client.execute(
+        r#"
+        INSERT INTO semantic.scale1_auto_observation_signal
+          (observation_ref, signal_kind_ref, signal_ref, detector_ref,
+           candidate_only, creates_event_identity,
+           creates_semantic_authority, claim_truth_promoted)
+        SELECT DISTINCT o.observation_ref, 'fingerprint',
+               e.event_fingerprint_ref, $3, TRUE,FALSE,FALSE,FALSE
+        FROM semantic.scale1_auto_observation_candidate o
+        JOIN semantic.event_candidate_occurrence e
+          ON e.statement_ref=o.statement_ref
+         AND e.source_revision_ref=o.source_revision_ref
+        WHERE o.source_revision_ref=$1 AND o.parser_run_ref=$2
+        ON CONFLICT DO NOTHING
+        "#,
+        &[&source_revision_ref, &parser_run_ref, &DETECTOR_REF],
+    )?;
 
-        for fingerprint in client.query(
-            r#"
-            SELECT event_fingerprint_ref
-            FROM semantic.event_candidate_occurrence
-            WHERE statement_ref=$1 AND source_revision_ref=$2
-            ORDER BY event_fingerprint_ref
-            "#,
-            &[&statement_ref, &source_revision_ref],
-        )? {
-            let reference: String = fingerprint.get(0);
-            persist_signal(&mut client, &observation_ref, "fingerprint", &reference)?;
+    // Date/time bucketing deliberately remains Rust-owned; load all mentions in
+    // one query and bulk persist the normalized detector signals.
+    let temporal_rows = client.query(
+        r#"
+        SELECT o.observation_ref, t.label_ref, t.surface
+        FROM semantic.scale1_auto_observation_candidate o
+        JOIN semantic.temporal_mention_candidate t
+          ON t.statement_ref=o.statement_ref
+         AND t.parser_run_ref=o.parser_run_ref
+        WHERE o.source_revision_ref=$1 AND o.parser_run_ref=$2
+        ORDER BY o.observation_ref, t.start_char, t.end_char, t.temporal_mention_ref
+        "#,
+        &[&source_revision_ref, &parser_run_ref],
+    )?;
+    if !temporal_rows.is_empty() {
+        let mut temporal_observations = Vec::with_capacity(temporal_rows.len());
+        let mut temporal_refs = Vec::with_capacity(temporal_rows.len());
+        for row in temporal_rows {
+            let observation_ref: String = row.get(0);
+            let label_ref: String = row.get(1);
+            let surface: String = row.get(2);
+            temporal_observations.push(observation_ref);
+            temporal_refs.push(temporal_bucket_ref(&label_ref, &surface));
         }
+        client.execute(
+            r#"
+            INSERT INTO semantic.scale1_auto_observation_signal
+              (observation_ref, signal_kind_ref, signal_ref, detector_ref,
+               candidate_only, creates_event_identity,
+               creates_semantic_authority, claim_truth_promoted)
+            SELECT observation_ref, 'temporal', signal_ref, $3,
+                   TRUE,FALSE,FALSE,FALSE
+            FROM UNNEST($1::TEXT[], $2::TEXT[]) AS u(observation_ref, signal_ref)
+            ON CONFLICT DO NOTHING
+            "#,
+            &[&temporal_observations, &temporal_refs, &DETECTOR_REF],
+        )?;
+    }
+
+    // Trace links retain their existing exact structural verifier. They reuse
+    // the same PG session; a later tranche can batch this without weakening the
+    // statement/candidate/observation identity checks.
+    for (((observation_ref, batch_ref), statement_ref), parser_receipt_ref) in
+        observation_refs
+            .iter()
+            .zip(batch_refs.iter())
+            .zip(statement_refs.iter())
+            .zip(parser_receipt_refs.iter())
+    {
         let link = StatementObservationLink {
             link_ref: canonical_statement_observation_link_ref(
-                &statement_ref,
-                &batch_ref,
-                &observation_ref,
+                statement_ref,
+                batch_ref,
+                observation_ref,
             ),
-            statement_ref,
-            candidate_pnf_ref: batch_ref,
-            observation_ref,
-            parser_receipt_ref: Some(parser_receipt_ref),
+            statement_ref: statement_ref.clone(),
+            candidate_pnf_ref: batch_ref.clone(),
+            observation_ref: observation_ref.clone(),
+            parser_receipt_ref: Some(parser_receipt_ref.clone()),
             parse_review_ref: None,
             admission_receipt_ref: None,
             disposition: StatementObservationDisposition::Candidate,
@@ -383,9 +467,9 @@ fn materialize_source_observations(
             claim_truth_promoted: false,
         };
         persist_statement_observation_link_with_client(&mut client, &link)?;
-        count += 1;
     }
-    Ok(count)
+
+    Ok(observation_refs.len())
 }
 
 fn bounded_pair_refs(
