@@ -9,6 +9,8 @@ use thiserror::Error;
 
 use crate::{CandidatePnfFactor, CandidatePnfRole, DatabaseConfig, StatementCandidatePnf};
 
+pub const CANDIDATE_PNF_COMPILER_REF: &str = "scale1:m12-candidate-pnf:v1";
+
 pub const CANDIDATE_PNF_SCHEMA_SQL: &str = r#"
 CREATE SCHEMA IF NOT EXISTS pnf;
 
@@ -42,6 +44,22 @@ CREATE TABLE IF NOT EXISTS pnf.statement_candidate_factor (
 
 CREATE INDEX IF NOT EXISTS statement_candidate_factor_batch_idx
 ON pnf.statement_candidate_factor(batch_ref, source_start_char, candidate_ref);
+
+CREATE TABLE IF NOT EXISTS pnf.candidate_persistence_stage_receipt (
+    source_revision_ref TEXT NOT NULL,
+    parser_run_ref TEXT NOT NULL,
+    compiler_ref TEXT NOT NULL,
+    statement_count BIGINT NOT NULL,
+    batch_count BIGINT NOT NULL,
+    factor_count BIGINT NOT NULL,
+    exact_reopen_validated BOOLEAN NOT NULL CHECK (exact_reopen_validated),
+    candidate_only BOOLEAN NOT NULL CHECK (candidate_only),
+    creates_semantic_authority BOOLEAN NOT NULL CHECK (NOT creates_semantic_authority),
+    applicability_promoted BOOLEAN NOT NULL CHECK (NOT applicability_promoted),
+    claim_truth_promoted BOOLEAN NOT NULL CHECK (NOT claim_truth_promoted),
+    PRIMARY KEY (source_revision_ref, parser_run_ref, compiler_ref)
+);
+
 "#;
 
 #[derive(Debug, Error)]
@@ -58,6 +76,21 @@ pub enum CandidatePnfStoreError {
     ExistingFactorConflict,
     #[error("unknown candidate PNF role {0}")]
     UnknownRole(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CandidatePersistenceStageReceipt {
+    pub source_revision_ref: String,
+    pub parser_run_ref: String,
+    pub compiler_ref: String,
+    pub statement_count: usize,
+    pub batch_count: usize,
+    pub factor_count: usize,
+    pub exact_reopen_validated: bool,
+    pub candidate_only: bool,
+    pub creates_semantic_authority: bool,
+    pub applicability_promoted: bool,
+    pub claim_truth_promoted: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -116,6 +149,84 @@ fn role_from_db(value: &str) -> Result<CandidatePnfRole, CandidatePnfStoreError>
         "other" => Ok(CandidatePnfRole::Other),
         _ => Err(CandidatePnfStoreError::UnknownRole(value.to_owned())),
     }
+}
+
+pub(crate) fn load_candidate_persistence_stage_receipt_with_client(
+    client: &mut Client,
+    source_revision_ref: &str,
+    parser_run_ref: &str,
+) -> Result<Option<CandidatePersistenceStageReceipt>, CandidatePnfStoreError> {
+    let Some(row) = client.query_opt(
+        r#"
+        SELECT compiler_ref, statement_count, batch_count, factor_count,
+               exact_reopen_validated, candidate_only,
+               creates_semantic_authority, applicability_promoted,
+               claim_truth_promoted
+        FROM pnf.candidate_persistence_stage_receipt
+        WHERE source_revision_ref=$1 AND parser_run_ref=$2 AND compiler_ref=$3
+        "#,
+        &[&source_revision_ref, &parser_run_ref, &CANDIDATE_PNF_COMPILER_REF],
+    )? else {
+        return Ok(None);
+    };
+    let receipt = CandidatePersistenceStageReceipt {
+        source_revision_ref: source_revision_ref.to_owned(),
+        parser_run_ref: parser_run_ref.to_owned(),
+        compiler_ref: row.get(0),
+        statement_count: row.get::<_, i64>(1).max(0) as usize,
+        batch_count: row.get::<_, i64>(2).max(0) as usize,
+        factor_count: row.get::<_, i64>(3).max(0) as usize,
+        exact_reopen_validated: row.get(4),
+        candidate_only: row.get(5),
+        creates_semantic_authority: row.get(6),
+        applicability_promoted: row.get(7),
+        claim_truth_promoted: row.get(8),
+    };
+    if receipt.compiler_ref != CANDIDATE_PNF_COMPILER_REF
+        || !receipt.exact_reopen_validated
+        || !receipt.candidate_only
+        || receipt.creates_semantic_authority
+        || receipt.applicability_promoted
+        || receipt.claim_truth_promoted
+    {
+        return Err(CandidatePnfStoreError::ExistingBatchConflict);
+    }
+    Ok(Some(receipt))
+}
+
+pub(crate) fn persist_candidate_persistence_stage_receipt_with_client(
+    client: &mut Client,
+    source_revision_ref: &str,
+    parser_run_ref: &str,
+    statement_count: usize,
+    batch_count: usize,
+    factor_count: usize,
+) -> Result<CandidatePersistenceStageReceipt, CandidatePnfStoreError> {
+    client.execute(
+        r#"
+        INSERT INTO pnf.candidate_persistence_stage_receipt
+        (source_revision_ref, parser_run_ref, compiler_ref,
+         statement_count, batch_count, factor_count,
+         exact_reopen_validated, candidate_only,
+         creates_semantic_authority, applicability_promoted, claim_truth_promoted)
+        VALUES ($1,$2,$3,$4,$5,$6,TRUE,TRUE,FALSE,FALSE,FALSE)
+        ON CONFLICT (source_revision_ref, parser_run_ref, compiler_ref) DO NOTHING
+        "#,
+        &[
+            &source_revision_ref,
+            &parser_run_ref,
+            &CANDIDATE_PNF_COMPILER_REF,
+            &(statement_count as i64),
+            &(batch_count as i64),
+            &(factor_count as i64),
+        ],
+    )?;
+    load_candidate_persistence_stage_receipt_with_client(
+        client,
+        source_revision_ref,
+        parser_run_ref,
+    )?
+    .ok_or(CandidatePnfStoreError::ExistingBatchConflict)
 }
 
 pub fn install_candidate_pnf_schema(config: &DatabaseConfig) -> Result<(), CandidatePnfStoreError> {
