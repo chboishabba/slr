@@ -10,13 +10,13 @@ set -euo pipefail
 
 MODEL_REF="${MODEL_REF:-en_core_web_sm}"
 PARSER_SCRIPT="${PARSER_SCRIPT:-scripts/scale1_spacy_json_parser.py}"
-SCALE1_BIN="${SCALE1_BIN:-target/release/examples/scale1_long_document}"
+SCALE1_BIN="${SCALE1_BIN:-target/release/examples/scale1_source_compiler}"
 BATCH_SIZE="${BATCH_SIZE:-64}"
 CONFIG_JSON="${CONFIG_JSON:-{}}"
 WARMUP_OUTPUT="${WARMUP_OUTPUT:-/tmp/scale1-source-replay-warmup.json}"
 REPLAY_OUTPUT="${REPLAY_OUTPUT:-/tmp/scale1-source-replay-economy.json}"
 
-cargo build --release -p sensiblaw-pg-source-store --example scale1_long_document
+cargo build --release -p sensiblaw-pg-source-store --example scale1_source_compiler
 export SENSIBLAW_RUNTIME_HEAD="${SENSIBLAW_RUNTIME_HEAD:-$(git rev-parse HEAD)}"
 
 run_compile() {
