@@ -1,5 +1,5 @@
 use std::env;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use sensiblaw_world_expansion_runtime::digital_esd_world::materialize_digital_esd_world;
 use sensiblaw_world_store::load_database_config;
@@ -30,7 +30,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap_or(100);
 
     let env_file = arg_value(&args, "--env-file").map(PathBuf::from);
-    let config = load_database_config(env_file.as_deref().map(Path::new))?;
+    let config = load_database_config(env_file.as_deref())?;
 
     let receipt = materialize_digital_esd_world(
         &config,
