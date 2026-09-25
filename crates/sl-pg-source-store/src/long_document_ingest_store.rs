@@ -207,19 +207,22 @@ pub fn install_long_document_ingest_schema(
     Ok(())
 }
 
-pub fn persist_long_document_compilation(
+
+pub fn persist_long_document_structure(
     config: &DatabaseConfig,
     document: &LongDocumentSource,
-    compilation: &LosslessBulkSourceCompilation,
-) -> Result<PersistedLongDocumentIngestReceipt, LongDocumentIngestStoreError> {
-    validate_partition(document, compilation)?;
+) -> Result<usize, LongDocumentIngestStoreError> {
+    document
+        .validate()
+        .map_err(LongDocumentIngestStoreError::InvalidDocument)?;
 
     let mut client = Client::connect(config.database_url(), NoTls)?;
     let mut tx = client.transaction()?;
     tx.batch_execute(LONG_DOCUMENT_INGEST_SCHEMA_SQL)?;
 
+    let mut persisted = 0usize;
     for region in &document.regions {
-        tx.execute(
+        persisted += tx.execute(
             "INSERT INTO ingest.long_document_region (
                 source_revision_ref, source_ref, region_ref, parent_region_ref,
                 region_kind, start_char, end_char, candidate_only,
@@ -230,7 +233,10 @@ pub fn persist_long_document_compilation(
                 parent_region_ref = EXCLUDED.parent_region_ref,
                 region_kind = EXCLUDED.region_kind,
                 start_char = EXCLUDED.start_char,
-                end_char = EXCLUDED.end_char",
+                end_char = EXCLUDED.end_char,
+                candidate_only = TRUE,
+                creates_semantic_authority = FALSE,
+                claim_truth_promoted = FALSE",
             &[
                 &document.ingest.source_revision_ref,
                 &document.ingest.source_ref,
@@ -240,8 +246,24 @@ pub fn persist_long_document_compilation(
                 &(region.start_char as i64),
                 &(region.end_char as i64),
             ],
-        )?;
+        )? as usize;
     }
+    tx.commit()?;
+    Ok(persisted)
+}
+
+pub fn persist_long_document_compilation(
+    config: &DatabaseConfig,
+    document: &LongDocumentSource,
+    compilation: &LosslessBulkSourceCompilation,
+) -> Result<PersistedLongDocumentIngestReceipt, LongDocumentIngestStoreError> {
+    validate_partition(document, compilation)?;
+
+    persist_long_document_structure(config, document)?;
+
+    let mut client = Client::connect(config.database_url(), NoTls)?;
+    let mut tx = client.transaction()?;
+    tx.batch_execute(LONG_DOCUMENT_INGEST_SCHEMA_SQL)?;
 
     for assignment in &compilation.assignments {
         let (disposition, statement_ref, parser_receipt_ref, error_ref) =
