@@ -21,6 +21,12 @@ cargo check -p sensiblaw-proof-search-loop --example cullen_source_grounded_revi
 cargo check -p sensiblaw-proof-search-loop --example cullen_premise_split_audit
 cargo check -p sensiblaw-pg-source-store --example scale1_long_document
 
+echo '== SCALE-1 source-neutral script syntax =='
+bash -n scripts/check_scale1_db_native_ingest.sh
+bash -n scripts/run_gwb_scale1_book_baseline.sh
+bash -n scripts/check_scale1_exact_replay_economy.sh
+bash -n scripts/check_scale1_source_exact_replay_economy.sh
+
 echo '== pre-existing source contracts =='
 python3 scripts/verify_source_contract.py
 python3 scripts/verify_semantic_status_contract.py
