@@ -275,7 +275,7 @@ pub fn materialize_accepted_reconciliation_proposition(
         )
     );
 
-    let mut claim_refs = Vec::with_capacity(source_refs.len());
+    let mut claim_pairs = Vec::with_capacity(source_refs.len());
     for statement_ref in &source_refs {
         let claim_ref = format!(
             "claim:reconciliation:{}",
@@ -301,10 +301,8 @@ pub fn materialize_accepted_reconciliation_proposition(
             claim_truth_promoted: false,
         };
         persist_claim_leaf(config, &claim)?;
-        claim_refs.push(claim_ref);
+        claim_pairs.push((statement_ref.clone(), claim_ref));
     }
-    claim_refs.sort();
-    claim_refs.dedup();
 
     let mut tx = client.transaction()?;
     tx.execute(
@@ -328,7 +326,7 @@ pub fn materialize_accepted_reconciliation_proposition(
         ],
     )?;
 
-    for (statement_ref, claim_ref) in source_refs.iter().zip(claim_refs.iter()) {
+    for (statement_ref, claim_ref) in &claim_pairs {
         tx.execute(
             r#"
             INSERT INTO semantic.reconciliation_claim_materialization
@@ -373,6 +371,13 @@ pub fn materialize_accepted_reconciliation_proposition(
     {
         return Err(ReconciliationMaterializationError::ExistingMaterializationConflict);
     }
+
+    let mut claim_refs = claim_pairs
+        .into_iter()
+        .map(|(_, claim_ref)| claim_ref)
+        .collect::<Vec<_>>();
+    claim_refs.sort();
+    claim_refs.dedup();
 
     Ok(ReviewedReconciliationPropositionReceipt {
         materialization_ref,
