@@ -381,6 +381,27 @@ impl LongDocumentSource {
         self.validate()?;
         self.regions.iter().map(DocumentRegion::as_span).collect()
     }
+
+    pub fn canonical_compiled_source(&self) -> Result<CanonicalCompiledSource, SourceIngestError> {
+        self.validate()?;
+        CanonicalCompiledSource::from_ingest(self.ingest.clone())
+    }
+
+    pub fn canonical_regions(&self) -> Result<Vec<CanonicalSourceRegion>, SourceIngestError> {
+        let source = self.canonical_compiled_source()?;
+        self.regions
+            .iter()
+            .map(|region| {
+                let eligibility = match region.kind {
+                    DocumentRegionKind::Sentence => SemanticRegionEligibility::SemanticCandidate,
+                    _ => SemanticRegionEligibility::StructuralOnly,
+                };
+                source
+                    .weld_span(region.as_span()?)
+                    .map(|region| region.with_eligibility(eligibility))
+            })
+            .collect()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -754,6 +775,50 @@ mod tests {
             document.ingest.role_class = IngestRoleClass::ContentSource;
             assert!(document.validate().is_ok());
         }
+    }
+
+
+    #[test]
+    fn long_document_regions_are_welded_to_canonical_spans_before_semantics() {
+        let document = LongDocumentSource {
+            ingest: ingest(SourceFamily::Document, IngestRoleClass::ContentSource),
+            title: Some("Book".into()),
+            edition_ref: None,
+            regions: vec![
+                DocumentRegion {
+                    region_ref: "chapter:1".into(),
+                    source_revision_ref: "revision:1".into(),
+                    parent_region_ref: None,
+                    kind: DocumentRegionKind::Chapter,
+                    start_char: 0,
+                    end_char: 100,
+                },
+                DocumentRegion {
+                    region_ref: "sentence:1".into(),
+                    source_revision_ref: "revision:1".into(),
+                    parent_region_ref: Some("chapter:1".into()),
+                    kind: DocumentRegionKind::Sentence,
+                    start_char: 0,
+                    end_char: 20,
+                },
+            ],
+        };
+
+        let canonical = document.canonical_regions().unwrap();
+        assert_eq!(canonical.len(), 2);
+        assert_eq!(
+            canonical[0].eligibility,
+            SemanticRegionEligibility::StructuralOnly
+        );
+        assert_eq!(
+            canonical[1].eligibility,
+            SemanticRegionEligibility::SemanticCandidate
+        );
+        assert!(canonical.iter().all(|region| {
+            region.span.source_revision_ref == "revision:1"
+                && !region.structure_creates_semantic_observation
+                && !region.structure_creates_claim_truth
+        }));
     }
 
     #[test]
