@@ -122,6 +122,8 @@ pub enum DbNativeParserError {
     MissingJob(String),
     #[error("parser job/source revision mismatch")]
     SourceRevisionMismatch,
+    #[error("parser artifact digest does not match exact JSON bytes")]
+    ArtifactDigestMismatch,
     #[error("persisted parser output violates candidate-only boundary")]
     PromotionBoundary,
     #[error("parser run cannot complete while queued or leased work remains")]
@@ -599,7 +601,7 @@ pub fn persist_parser_success(
         if let Some(json) = artifact.artifact_json.as_deref() {
             let _: Value = serde_json::from_str(json)?;
             if sha256_content_ref(json.as_bytes()) != artifact.content_digest_ref {
-                return Err(DbNativeParserError::SourceRevisionMismatch);
+                return Err(DbNativeParserError::ArtifactDigestMismatch);
             }
         }
         if artifact.artifact_json.is_none() && artifact.object_locator.is_none() {
