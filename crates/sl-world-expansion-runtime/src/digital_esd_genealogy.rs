@@ -31,6 +31,26 @@ CREATE TABLE IF NOT EXISTS digital_esd.study_family_hypothesis (
     CHECK (left_source_ref <> right_source_ref)
 );
 
+DO $
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM pg_constraint c
+        JOIN pg_class t ON t.oid = c.conrelid
+        JOIN pg_namespace n ON n.oid = t.relnamespace
+        WHERE n.nspname = 'digital_esd'
+          AND t.relname = 'study_family_hypothesis'
+          AND c.contype = 'p'
+          AND pg_get_constraintdef(c.oid) = 'PRIMARY KEY (hypothesis_ref)'
+    ) THEN
+        ALTER TABLE digital_esd.study_family_hypothesis
+          DROP CONSTRAINT study_family_hypothesis_pkey;
+        ALTER TABLE digital_esd.study_family_hypothesis
+          ADD PRIMARY KEY (corpus_ref, hypothesis_ref);
+    END IF;
+END
+$;
+
 CREATE INDEX IF NOT EXISTS digital_esd_study_family_left_idx
 ON digital_esd.study_family_hypothesis(corpus_ref, left_source_ref, relation_ref);
 
