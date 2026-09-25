@@ -258,6 +258,235 @@ pub fn compile_mail_message<P: CandidatePnfProducer>(
     })
 }
 
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RegionCompilationResidual {
+    pub region_ref: String,
+    pub source_revision_ref: String,
+    pub parser_receipt_ref: String,
+    pub error_ref: String,
+    pub source_region_preserved: bool,
+    pub semantic_authority_created: bool,
+    pub claim_truth_promoted: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LosslessBulkSourceCompilation {
+    pub source_ref: String,
+    pub source_revision_ref: String,
+    pub exact_region_count: usize,
+    pub semantic_candidate_region_count: usize,
+    pub compiled_statement_count: usize,
+    pub candidate_pnf_count: usize,
+    pub residuals: Vec<RegionCompilationResidual>,
+    pub transport_or_nonsemantic_region_count: usize,
+    pub source_region_accounted_count: usize,
+    pub source_region_loss_count: usize,
+    pub candidate_only: bool,
+    pub creates_semantic_authority: bool,
+    pub applicability_promoted: bool,
+    pub claim_truth_promoted: bool,
+    pub parse_failure_deletes_source: bool,
+}
+
+impl LosslessBulkSourceCompilation {
+    #[must_use]
+    pub fn source_coverage_complete(&self) -> bool {
+        self.source_region_accounted_count == self.exact_region_count
+            && self.source_region_loss_count == 0
+    }
+
+    #[must_use]
+    pub fn semantic_parse_success_count(&self) -> usize {
+        self.compiled_statement_count
+    }
+
+    #[must_use]
+    pub fn semantic_parse_failure_count(&self) -> usize {
+        self.residuals.len()
+    }
+}
+
+fn residual_for(
+    region_ref: &str,
+    source_revision_ref: &str,
+    parser_receipt_ref: String,
+    error: &GenericSourceCompilerError,
+) -> RegionCompilationResidual {
+    RegionCompilationResidual {
+        region_ref: region_ref.to_owned(),
+        source_revision_ref: source_revision_ref.to_owned(),
+        parser_receipt_ref,
+        error_ref: format!("{error}"),
+        source_region_preserved: true,
+        semantic_authority_created: false,
+        claim_truth_promoted: false,
+    }
+}
+
+pub fn compile_long_document_lossless<P: CandidatePnfProducer>(
+    producer: &P,
+    document: &LongDocumentSource,
+    canonical_text: &str,
+    parser_receipt_prefix: &str,
+) -> Result<LosslessBulkSourceCompilation, GenericSourceCompilerError> {
+    document.validate()?;
+
+    let sentence_regions = document
+        .regions
+        .iter()
+        .filter(|region| region.kind == DocumentRegionKind::Sentence)
+        .collect::<Vec<_>>();
+
+    let mut compiled = Vec::new();
+    let mut residuals = Vec::new();
+
+    for region in &sentence_regions {
+        let parser_receipt_ref = format!("{parser_receipt_prefix}:{}", region.region_ref);
+        let result = text_by_char_range(
+            canonical_text,
+            &region.region_ref,
+            region.start_char,
+            region.end_char,
+        )
+        .and_then(|literal| {
+            compile_region(
+                producer,
+                &document.ingest.source_ref,
+                &document.ingest.source_revision_ref,
+                &region.region_ref,
+                region.start_char,
+                region.end_char,
+                literal,
+                parser_receipt_ref.clone(),
+            )
+        });
+
+        match result {
+            Ok(value) => compiled.push(value),
+            Err(error) => residuals.push(residual_for(
+                &region.region_ref,
+                &document.ingest.source_revision_ref,
+                parser_receipt_ref,
+                &error,
+            )),
+        }
+    }
+
+    let candidate_pnf_count = compiled
+        .iter()
+        .map(|statement| statement.pnf.candidates.len())
+        .sum::<usize>();
+    let transport_or_nonsemantic_region_count =
+        document.regions.len().saturating_sub(sentence_regions.len());
+    let source_region_accounted_count = transport_or_nonsemantic_region_count
+        + compiled.len()
+        + residuals.len();
+
+    Ok(LosslessBulkSourceCompilation {
+        source_ref: document.ingest.source_ref.clone(),
+        source_revision_ref: document.ingest.source_revision_ref.clone(),
+        exact_region_count: document.regions.len(),
+        semantic_candidate_region_count: sentence_regions.len(),
+        compiled_statement_count: compiled.len(),
+        candidate_pnf_count,
+        residuals,
+        transport_or_nonsemantic_region_count,
+        source_region_accounted_count,
+        source_region_loss_count: document
+            .regions
+            .len()
+            .saturating_sub(source_region_accounted_count),
+        candidate_only: true,
+        creates_semantic_authority: false,
+        applicability_promoted: false,
+        claim_truth_promoted: false,
+        parse_failure_deletes_source: false,
+    })
+}
+
+pub fn compile_mail_message_lossless<P: CandidatePnfProducer>(
+    producer: &P,
+    message: &MailMessageSource,
+    canonical_body_text: &str,
+    parser_receipt_prefix: &str,
+) -> Result<LosslessBulkSourceCompilation, GenericSourceCompilerError> {
+    message.validate()?;
+
+    let semantic_segments = message
+        .segments
+        .iter()
+        .filter(|segment| segment.is_independent_authorship_candidate())
+        .collect::<Vec<_>>();
+
+    let mut compiled = Vec::new();
+    let mut residuals = Vec::new();
+
+    for segment in &semantic_segments {
+        let parser_receipt_ref =
+            format!("{parser_receipt_prefix}:{}", segment.segment_ref);
+        let result = text_by_char_range(
+            canonical_body_text,
+            &segment.segment_ref,
+            segment.start_char,
+            segment.end_char,
+        )
+        .and_then(|literal| {
+            compile_region(
+                producer,
+                &message.message_ref,
+                &message.body_revision_ref,
+                &segment.segment_ref,
+                segment.start_char,
+                segment.end_char,
+                literal,
+                parser_receipt_ref.clone(),
+            )
+        });
+
+        match result {
+            Ok(value) => compiled.push(value),
+            Err(error) => residuals.push(residual_for(
+                &segment.segment_ref,
+                &message.body_revision_ref,
+                parser_receipt_ref,
+                &error,
+            )),
+        }
+    }
+
+    let candidate_pnf_count = compiled
+        .iter()
+        .map(|statement| statement.pnf.candidates.len())
+        .sum::<usize>();
+    let transport_or_nonsemantic_region_count =
+        message.segments.len().saturating_sub(semantic_segments.len());
+    let source_region_accounted_count = transport_or_nonsemantic_region_count
+        + compiled.len()
+        + residuals.len();
+
+    Ok(LosslessBulkSourceCompilation {
+        source_ref: message.message_ref.clone(),
+        source_revision_ref: message.body_revision_ref.clone(),
+        exact_region_count: message.segments.len(),
+        semantic_candidate_region_count: semantic_segments.len(),
+        compiled_statement_count: compiled.len(),
+        candidate_pnf_count,
+        residuals,
+        transport_or_nonsemantic_region_count,
+        source_region_accounted_count,
+        source_region_loss_count: message
+            .segments
+            .len()
+            .saturating_sub(source_region_accounted_count),
+        candidate_only: true,
+        creates_semantic_authority: false,
+        applicability_promoted: false,
+        claim_truth_promoted: false,
+        parse_failure_deletes_source: false,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -422,6 +651,80 @@ mod tests {
         assert_eq!(receipt.skipped_transport_or_nonsemantic_count, 2);
         assert_eq!(receipt.compiled[0].statement.literal_text, "New claim.");
         assert!(!receipt.source_omitted_when_parse_fails);
+    }
+
+
+    struct FailSecondProducer;
+
+    impl CandidatePnfProducer for FailSecondProducer {
+        fn produce(
+            &self,
+            source: &ExactSourceSpan,
+        ) -> Result<CandidatePnfBatch, CandidatePnfError> {
+            if source.span_ref == "sentence:2" {
+                return Err(CandidatePnfError::MalformedRow {
+                    line: 1,
+                    detail: "fixture parser failure".into(),
+                });
+            }
+            EchoProducer.produce(source)
+        }
+    }
+
+    #[test]
+    fn long_document_lossless_compiler_preserves_source_after_parse_failure() {
+        let text = "One sentence. Two sentence. Three sentence.";
+        let document = LongDocumentSource {
+            ingest: ingest(SourceFamily::Document),
+            title: Some("Fixture book".into()),
+            edition_ref: Some("edition:fixture".into()),
+            regions: vec![
+                DocumentRegion {
+                    region_ref: "sentence:1".into(),
+                    source_revision_ref: "revision:fixture".into(),
+                    parent_region_ref: None,
+                    kind: DocumentRegionKind::Sentence,
+                    start_char: 0,
+                    end_char: 13,
+                },
+                DocumentRegion {
+                    region_ref: "sentence:2".into(),
+                    source_revision_ref: "revision:fixture".into(),
+                    parent_region_ref: None,
+                    kind: DocumentRegionKind::Sentence,
+                    start_char: 14,
+                    end_char: 27,
+                },
+                DocumentRegion {
+                    region_ref: "sentence:3".into(),
+                    source_revision_ref: "revision:fixture".into(),
+                    parent_region_ref: None,
+                    kind: DocumentRegionKind::Sentence,
+                    start_char: 28,
+                    end_char: 43,
+                },
+            ],
+        };
+
+        let receipt = compile_long_document_lossless(
+            &FailSecondProducer,
+            &document,
+            text,
+            "parse:book",
+        )
+        .unwrap();
+
+        assert_eq!(receipt.exact_region_count, 3);
+        assert_eq!(receipt.semantic_candidate_region_count, 3);
+        assert_eq!(receipt.compiled_statement_count, 2);
+        assert_eq!(receipt.semantic_parse_failure_count(), 1);
+        assert_eq!(receipt.residuals[0].region_ref, "sentence:2");
+        assert!(receipt.residuals[0].source_region_preserved);
+        assert_eq!(receipt.source_region_accounted_count, 3);
+        assert_eq!(receipt.source_region_loss_count, 0);
+        assert!(receipt.source_coverage_complete());
+        assert!(!receipt.parse_failure_deletes_source);
+        assert!(!receipt.claim_truth_promoted);
     }
 
     #[test]
