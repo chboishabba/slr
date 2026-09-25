@@ -64,8 +64,9 @@ pub use candidate_pnf::{
 pub use candidate_pnf_store::{
     canonical_candidate_pnf_batch_ref, install_candidate_pnf_schema,
     load_candidate_pnf_batch, load_candidate_pnf_batches_for_statement,
-    persist_statement_candidate_pnf, CandidatePnfStoreError,
-    PersistedCandidatePnfBatch, CANDIDATE_PNF_SCHEMA_SQL,
+    persist_statement_candidate_pnf, CandidatePersistenceStageReceipt,
+    CandidatePnfStoreError, PersistedCandidatePnfBatch,
+    CANDIDATE_PNF_COMPILER_REF, CANDIDATE_PNF_SCHEMA_SQL,
 };
 pub use corpus_reconciliation_store::{
     install_corpus_reconciliation_schema, reconcile_source_candidate_semantics,
