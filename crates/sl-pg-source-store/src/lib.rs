@@ -195,7 +195,8 @@ pub use long_document_ingest_store::{
     LONG_DOCUMENT_INGEST_SCHEMA_SQL,
 };
 pub use generic_source_content_store::{
-    install_generic_source_revision_schema, load_generic_source_envelope,
+    canonical_generic_source_revision_ref, install_generic_source_revision_schema,
+    load_generic_source_envelope,
     load_generic_text_source, persist_generic_text_source,
     GenericSourceContentStoreError,
     PersistedGenericSourceContent, GENERIC_SOURCE_REVISION_SCHEMA_SQL,
