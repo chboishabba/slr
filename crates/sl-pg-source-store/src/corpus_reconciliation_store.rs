@@ -38,6 +38,44 @@ CREATE TABLE IF NOT EXISTS semantic.entity_mention_candidate (
 CREATE INDEX IF NOT EXISTS entity_mention_fingerprint_idx
 ON semantic.entity_mention_candidate(entity_fingerprint_ref, statement_ref);
 
+CREATE TABLE IF NOT EXISTS semantic.named_entity_candidate (
+    mention_ref TEXT PRIMARY KEY,
+    entity_fingerprint_ref TEXT NOT NULL,
+    parser_run_ref TEXT NOT NULL,
+    statement_ref TEXT NOT NULL REFERENCES corpus.source_statement(statement_ref) ON DELETE CASCADE,
+    exact_span_ref TEXT NOT NULL,
+    start_char BIGINT NOT NULL,
+    end_char BIGINT NOT NULL,
+    surface TEXT NOT NULL,
+    label_ref TEXT NOT NULL,
+    detector_ref TEXT NOT NULL,
+    candidate_only BOOLEAN NOT NULL CHECK (candidate_only),
+    creates_entity_identity BOOLEAN NOT NULL CHECK (NOT creates_entity_identity),
+    creates_semantic_authority BOOLEAN NOT NULL CHECK (NOT creates_semantic_authority),
+    claim_truth_promoted BOOLEAN NOT NULL CHECK (NOT claim_truth_promoted),
+    UNIQUE (parser_run_ref, statement_ref, start_char, end_char, label_ref)
+);
+
+CREATE INDEX IF NOT EXISTS named_entity_fingerprint_idx
+ON semantic.named_entity_candidate(entity_fingerprint_ref, statement_ref);
+
+CREATE TABLE IF NOT EXISTS semantic.temporal_mention_candidate (
+    temporal_mention_ref TEXT PRIMARY KEY,
+    parser_run_ref TEXT NOT NULL,
+    statement_ref TEXT NOT NULL REFERENCES corpus.source_statement(statement_ref) ON DELETE CASCADE,
+    exact_span_ref TEXT NOT NULL,
+    start_char BIGINT NOT NULL,
+    end_char BIGINT NOT NULL,
+    surface TEXT NOT NULL,
+    label_ref TEXT NOT NULL,
+    detector_ref TEXT NOT NULL,
+    candidate_only BOOLEAN NOT NULL CHECK (candidate_only),
+    creates_temporal_assertion BOOLEAN NOT NULL CHECK (NOT creates_temporal_assertion),
+    creates_semantic_authority BOOLEAN NOT NULL CHECK (NOT creates_semantic_authority),
+    claim_truth_promoted BOOLEAN NOT NULL CHECK (NOT claim_truth_promoted),
+    UNIQUE (parser_run_ref, statement_ref, start_char, end_char, label_ref)
+);
+
 CREATE TABLE IF NOT EXISTS semantic.proposition_fingerprint_candidate (
     proposition_fingerprint_ref TEXT PRIMARY KEY,
     base_signature_ref TEXT NOT NULL,
@@ -140,6 +178,9 @@ pub struct CorpusReconciliationReceipt {
     pub statement_count: usize,
     pub entity_mention_count: usize,
     pub entity_fingerprint_count: usize,
+    pub named_entity_mention_count: usize,
+    pub named_entity_fingerprint_count: usize,
+    pub temporal_mention_count: usize,
     pub proposition_occurrence_count: usize,
     pub proposition_fingerprint_count: usize,
     pub event_occurrence_count: usize,
@@ -308,6 +349,7 @@ pub fn install_corpus_reconciliation_schema(
 pub fn reconcile_source_candidate_semantics(
     config: &DatabaseConfig,
     source_revision_ref: &str,
+    parser_run_ref: &str,
 ) -> Result<CorpusReconciliationReceipt, CorpusReconciliationError> {
     let mut client = Client::connect(config.database_url(), NoTls)?;
     client.batch_execute(CORPUS_RECONCILIATION_SCHEMA_SQL)?;
@@ -320,6 +362,9 @@ pub fn reconcile_source_candidate_semantics(
     let mut touched_base_signatures = BTreeSet::new();
 
     let mut entity_mention_count = 0usize;
+    let mut named_entity_mention_count = 0usize;
+    let mut temporal_mention_count = 0usize;
+    let mut named_entity_fingerprints = BTreeSet::new();
     let mut proposition_occurrence_count = 0usize;
     let mut event_occurrence_count = 0usize;
 
@@ -441,6 +486,117 @@ pub fn reconcile_source_candidate_semantics(
         }
     }
 
+
+    let entity_rows = tx.query(
+        r#"
+        SELECT e.entity_ordinal, e.start_char, e.end_char, e.surface, e.label_ref,
+               j.region_ref, s.statement_ref
+        FROM ingest.parser_entity e
+        JOIN ingest.parser_job j ON j.compilation_key=e.compilation_key
+        JOIN corpus.source_statement s
+          ON s.source_revision_ref=j.source_revision_ref
+         AND s.exact_span_ref=j.region_ref
+        WHERE j.parser_run_ref=$1
+          AND j.source_revision_ref=$2
+          AND j.status='succeeded'
+        ORDER BY j.region_ref, e.entity_ordinal
+        "#,
+        &[&parser_run_ref, &source_revision_ref],
+    )?;
+    for row in entity_rows {
+        let start_char = row.get::<_, i64>(1);
+        let end_char = row.get::<_, i64>(2);
+        if start_char < 0 || end_char <= start_char {
+            return Err(CorpusReconciliationError::PromotionBoundary);
+        }
+        let surface: String = row.get(3);
+        let label_ref: String = row.get(4);
+        let exact_span_ref: String = row.get(5);
+        let statement_ref: String = row.get(6);
+        let normalized = normalize(&surface);
+        if normalized.is_empty() || label_ref.trim().is_empty() {
+            continue;
+        }
+        let entity_fingerprint_ref = format!(
+            "named-entity-fingerprint:{}",
+            digest_ref("named-entity:v1", &[&label_ref, &normalized])
+        );
+        let mention_ref = format!(
+            "named-entity-mention:{}",
+            digest_ref(
+                "named-entity-mention:v1",
+                &[
+                    parser_run_ref,
+                    &statement_ref,
+                    &start_char.to_string(),
+                    &end_char.to_string(),
+                    &label_ref,
+                ],
+            )
+        );
+        tx.execute(
+            r#"INSERT INTO semantic.named_entity_candidate
+               (mention_ref, entity_fingerprint_ref, parser_run_ref,
+                statement_ref, exact_span_ref, start_char, end_char,
+                surface, label_ref, detector_ref, candidate_only,
+                creates_entity_identity, creates_semantic_authority,
+                claim_truth_promoted)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,
+                       'scale1:parser-ner:v1',TRUE,FALSE,FALSE,FALSE)
+               ON CONFLICT (mention_ref) DO NOTHING"#,
+            &[
+                &mention_ref,
+                &entity_fingerprint_ref,
+                &parser_run_ref,
+                &statement_ref,
+                &exact_span_ref,
+                &start_char,
+                &end_char,
+                &surface,
+                &label_ref,
+            ],
+        )?;
+        named_entity_mention_count += 1;
+        named_entity_fingerprints.insert(entity_fingerprint_ref);
+
+        if matches!(label_ref.as_str(), "DATE" | "TIME") {
+            let temporal_mention_ref = format!(
+                "temporal-mention:{}",
+                digest_ref(
+                    "temporal-mention:v1",
+                    &[
+                        parser_run_ref,
+                        &statement_ref,
+                        &start_char.to_string(),
+                        &end_char.to_string(),
+                        &label_ref,
+                    ],
+                )
+            );
+            tx.execute(
+                r#"INSERT INTO semantic.temporal_mention_candidate
+                   (temporal_mention_ref, parser_run_ref, statement_ref,
+                    exact_span_ref, start_char, end_char, surface, label_ref,
+                    detector_ref, candidate_only, creates_temporal_assertion,
+                    creates_semantic_authority, claim_truth_promoted)
+                   VALUES ($1,$2,$3,$4,$5,$6,$7,$8,
+                           'scale1:parser-ner:v1',TRUE,FALSE,FALSE,FALSE)
+                   ON CONFLICT (temporal_mention_ref) DO NOTHING"#,
+                &[
+                    &temporal_mention_ref,
+                    &parser_run_ref,
+                    &statement_ref,
+                    &exact_span_ref,
+                    &start_char,
+                    &end_char,
+                    &surface,
+                    &label_ref,
+                ],
+            )?;
+            temporal_mention_count += 1;
+        }
+    }
+
     let mut polarity_conflict_candidate_count = 0usize;
     for base in &touched_base_signatures {
         let rows = tx.query(
@@ -548,6 +704,9 @@ pub fn reconcile_source_candidate_semantics(
         statement_count: batches.len(),
         entity_mention_count,
         entity_fingerprint_count: entity_fingerprints.len(),
+        named_entity_mention_count,
+        named_entity_fingerprint_count: named_entity_fingerprints.len(),
+        temporal_mention_count,
         proposition_occurrence_count,
         proposition_fingerprint_count: proposition_fingerprints.len(),
         event_occurrence_count,
