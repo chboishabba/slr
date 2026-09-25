@@ -700,6 +700,7 @@ fn finalize(args: &[String]) -> Result<(), Box<dyn Error>> {
             "polarity_conflict_candidates": receipt.reconciliation.polarity_conflict_candidate_count,
             "review_pressure_candidates": receipt.reconciliation.review_pressure_candidate_count,
             "reconciliation_review_items": receipt.reconciliation_review.review_item_refs.len(),
+            "reconciliation_review_item_refs": receipt.reconciliation_review.review_item_refs,
             "reconciliation_cluster_review_items": receipt.reconciliation_review.cluster_review_items,
             "reconciliation_contestation_review_items": receipt.reconciliation_review.contestation_review_items,
             "reconciliation_review_creates_event_identity": receipt.reconciliation_review.creates_event_identity,
