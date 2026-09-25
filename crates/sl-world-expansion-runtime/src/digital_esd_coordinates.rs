@@ -210,10 +210,20 @@ fn normalize(value: &str) -> String {
 }
 
 fn matched_terms<'a>(text: &str, terms: &'a [&'a str]) -> Vec<&'a str> {
+    let tokens = text
+        .split(|ch: char| !ch.is_alphanumeric() && ch != '-')
+        .filter(|token| !token.is_empty())
+        .collect::<BTreeSet<_>>();
     let mut matched = terms
         .iter()
         .copied()
-        .filter(|term| text.contains(term))
+        .filter(|term| {
+            if term.contains(' ') {
+                text.contains(term)
+            } else {
+                tokens.contains(term)
+            }
+        })
         .collect::<Vec<_>>();
     matched.sort_unstable();
     matched.dedup();
@@ -303,7 +313,7 @@ pub fn materialize_study_coordinate_candidates(
         let role: String = row.get(3);
         let digest: String = row.get(4);
 
-        source_level += usize::from(persist_candidate(
+        source_level += if persist_candidate(
             &mut tx,
             corpus_ref,
             &source_ref,
@@ -313,8 +323,8 @@ pub fn materialize_study_coordinate_candidates(
             None,
             "source_identity",
             &format!("source-revision:{source_revision_ref}"),
-        )?);
-        source_level += usize::from(persist_candidate(
+        )? { 1 } else { 0 };
+        source_level += if persist_candidate(
             &mut tx,
             corpus_ref,
             &source_ref,
@@ -324,8 +334,8 @@ pub fn materialize_study_coordinate_candidates(
             None,
             "source_kind_and_role",
             &format!("family:{family}|role:{role}"),
-        )?);
-        source_level += usize::from(persist_candidate(
+        )? { 1 } else { 0 };
+        source_level += if persist_candidate(
             &mut tx,
             corpus_ref,
             &source_ref,
@@ -335,7 +345,7 @@ pub fn materialize_study_coordinate_candidates(
             None,
             "same_object_status",
             &format!("revision:{source_revision_ref}|digest:{digest}"),
-        )?);
+        )? { 1 } else { 0 };
     }
 
     let statement_rows = tx.query(
@@ -400,7 +410,7 @@ pub fn materialize_study_coordinate_candidates(
                 hits.join(","),
                 factor_refs.iter().cloned().collect::<Vec<_>>().join(",")
             );
-            statement_level += usize::from(persist_candidate(
+            statement_level += if persist_candidate(
                 &mut tx,
                 corpus_ref,
                 &source_ref,
@@ -410,7 +420,7 @@ pub fn materialize_study_coordinate_candidates(
                 Some(&exact_span_ref),
                 rule.coordinate_ref,
                 &evidence_basis_ref,
-            )?);
+            )? { 1 } else { 0 };
         }
     }
 
