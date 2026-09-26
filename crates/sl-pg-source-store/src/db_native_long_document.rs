@@ -17,8 +17,7 @@ use sensiblaw_core::source_ingest::{DocumentRegionKind, SourceFamily};
 use thiserror::Error;
 
 use crate::candidate_pnf_store::{
-    load_candidate_persistence_stage_receipt_with_client,
-    load_candidate_pnf_batch_with_client,
+    load_candidate_persistence_stage_receipt_with_client, load_candidate_pnf_batch_with_client,
     persist_candidate_persistence_stage_receipt_with_client,
     persist_statement_candidate_pnf_with_client,
 };
@@ -75,6 +74,8 @@ pub enum DbNativeLongDocumentError {
     LiteralReloadMismatch,
     #[error("final durable region partition is incomplete")]
     IncompleteDurablePartition,
+    #[error("final durable region partition is incomplete: {0}")]
+    IncompleteDurablePartitionDetail(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -268,7 +269,13 @@ pub fn finalize_db_native_long_document(
 
     let persisted_structure = load_long_document_structure(config, &source_revision_ref)?;
     if persisted_structure.len() != document.regions.len() {
-        return Err(DbNativeLongDocumentError::IncompleteDurablePartition);
+        return Err(DbNativeLongDocumentError::IncompleteDurablePartitionDetail(
+            format!(
+                "structural regions persisted={} reconstructed={}",
+                persisted_structure.len(),
+                document.regions.len()
+            ),
+        ));
     }
 
     let attempted_regions = parser_state.succeeded + parser_state.residual;
@@ -300,12 +307,11 @@ pub fn finalize_db_native_long_document(
     let mut persistence_client =
         Client::connect(config.database_url(), NoTls).map_err(CandidatePnfStoreError::from)?;
 
-    let existing_stage =
-        load_candidate_persistence_stage_receipt_with_client(
-            &mut persistence_client,
-            &source_revision_ref,
-            parser_run_ref,
-        )?;
+    let existing_stage = load_candidate_persistence_stage_receipt_with_client(
+        &mut persistence_client,
+        &source_revision_ref,
+        parser_run_ref,
+    )?;
     let candidate_persistence_reused = existing_stage.as_ref().is_some_and(|receipt| {
         receipt.statement_count == parser_state.succeeded
             && receipt.batch_count == parser_state.succeeded
@@ -341,87 +347,96 @@ pub fn finalize_db_native_long_document(
     } else {
         0
     };
-    let mut candidate_pnf_reopen_complete = candidate_persistence_reused;
+    // A materialisation pass proves reopenability batch by batch.  It must
+    // start from the identity of conjunction; starting at `false` makes a
+    // cold pass fail even when every reopened batch matches exactly.
+    let mut candidate_pnf_reopen_complete = true;
 
     if !candidate_persistence_reused {
-    for region in document
-        .regions
-        .iter()
-        .filter(|region| region.kind == DocumentRegionKind::Sentence)
-    {
-        let start = usize::try_from(region.start_char)
-            .map_err(|_| DbNativeLongDocumentError::IncompleteDurablePartition)?;
-        let end = usize::try_from(region.end_char)
-            .map_err(|_| DbNativeLongDocumentError::IncompleteDurablePartition)?;
-        let literal_text = canonical_text
-            .chars()
-            .skip(start)
-            .take(end.saturating_sub(start))
-            .collect::<String>();
-        let start_char = u32::try_from(region.start_char)
-            .map_err(|_| DbNativeLongDocumentError::IncompleteDurablePartition)?;
-        let end_char = u32::try_from(region.end_char)
-            .map_err(|_| DbNativeLongDocumentError::IncompleteDurablePartition)?;
+        for region in document
+            .regions
+            .iter()
+            .filter(|region| region.kind == DocumentRegionKind::Sentence)
+        {
+            let start = usize::try_from(region.start_char)
+                .map_err(|_| DbNativeLongDocumentError::IncompleteDurablePartition)?;
+            let end = usize::try_from(region.end_char)
+                .map_err(|_| DbNativeLongDocumentError::IncompleteDurablePartition)?;
+            let literal_text = canonical_text
+                .chars()
+                .skip(start)
+                .take(end.saturating_sub(start))
+                .collect::<String>();
+            let start_char = u32::try_from(region.start_char)
+                .map_err(|_| DbNativeLongDocumentError::IncompleteDurablePartition)?;
+            let end_char = u32::try_from(region.end_char)
+                .map_err(|_| DbNativeLongDocumentError::IncompleteDurablePartition)?;
 
-        let mut statement = SourceStatementEnvelope {
-            statement_ref: String::new(),
-            document_ref: source.document_ref.clone(),
-            source_revision_ref: source_revision_ref.clone(),
-            span: ExactSourceSpan {
-                span_ref: region.region_ref.clone(),
-                start_char,
-                end_char,
-            },
-            literal_text,
-            origin: StatementOrigin::InitialIntake,
-            candidate_only: true,
-            creates_semantic_authority: false,
-            applicability_promoted: false,
-            claim_truth_promoted: false,
-        };
-        statement.statement_ref = canonical_statement_ref(&statement);
+            let mut statement = SourceStatementEnvelope {
+                statement_ref: String::new(),
+                document_ref: source.document_ref.clone(),
+                source_revision_ref: source_revision_ref.clone(),
+                span: ExactSourceSpan {
+                    span_ref: region.region_ref.clone(),
+                    start_char,
+                    end_char,
+                },
+                literal_text,
+                origin: StatementOrigin::InitialIntake,
+                candidate_only: true,
+                creates_semantic_authority: false,
+                applicability_promoted: false,
+                claim_truth_promoted: false,
+            };
+            statement.statement_ref = canonical_statement_ref(&statement);
 
-        let parser_receipt_ref = format!("db-parser:{parser_run_ref}:{}", region.region_ref);
-        match compile_initial_intake_statement(&snapshot, statement, parser_receipt_ref) {
-            Ok(candidate) => {
-                persist_source_statement_with_client(
-                    &mut persistence_client,
-                    &candidate.statement,
-                )?;
-                persisted_statement_count += 1;
+            let parser_receipt_ref = format!("db-parser:{parser_run_ref}:{}", region.region_ref);
+            match compile_initial_intake_statement(&snapshot, statement, parser_receipt_ref) {
+                Ok(candidate) => {
+                    persist_source_statement_with_client(
+                        &mut persistence_client,
+                        &candidate.statement,
+                    )?;
+                    persisted_statement_count += 1;
 
-                let expected_batch_ref = canonical_candidate_pnf_batch_ref(&candidate);
-                let persisted = persist_statement_candidate_pnf_with_client(
-                    &mut persistence_client,
-                    &candidate,
-                )?;
-                persisted_candidate_batch_count += 1;
-                persisted_candidate_factor_count += persisted.factors.len();
+                    let expected_batch_ref = canonical_candidate_pnf_batch_ref(&candidate);
+                    let persisted = persist_statement_candidate_pnf_with_client(
+                        &mut persistence_client,
+                        &candidate,
+                    )?;
+                    persisted_candidate_batch_count += 1;
+                    persisted_candidate_factor_count += persisted.factors.len();
 
-                let reopened = load_candidate_pnf_batch_with_client(
-                    &mut persistence_client,
-                    &expected_batch_ref,
-                )?;
-                candidate_pnf_reopen_complete &=
-                    reopened.as_ref().is_some_and(|batch| batch == &persisted);
+                    let reopened = load_candidate_pnf_batch_with_client(
+                        &mut persistence_client,
+                        &expected_batch_ref,
+                    )?;
+                    candidate_pnf_reopen_complete &=
+                        reopened.as_ref().is_some_and(|batch| batch == &persisted);
+                }
+                Err(StatementPnfSpineError::CandidatePnf(
+                    CandidatePnfError::PersistedParserResidual { .. },
+                )) => {
+                    // Attempted parser residuals remain durable in parser_job and
+                    // intentionally do not manufacture empty statement/PNF rows.
+                }
+                Err(error) => return Err(error.into()),
             }
-            Err(StatementPnfSpineError::CandidatePnf(
-                CandidatePnfError::PersistedParserResidual { .. },
-            )) => {
-                // Attempted parser residuals remain durable in parser_job and
-                // intentionally do not manufacture empty statement/PNF rows.
-            }
-            Err(error) => return Err(error.into()),
         }
     }
-
-    }
-        if persisted_statement_count != parser_state.succeeded
+    if persisted_statement_count != parser_state.succeeded
         || persisted_candidate_batch_count != parser_state.succeeded
         || persisted_candidate_factor_count != compilation.candidate_pnf_count
         || !candidate_pnf_reopen_complete
     {
-        return Err(DbNativeLongDocumentError::IncompleteDurablePartition);
+        return Err(DbNativeLongDocumentError::IncompleteDurablePartitionDetail(
+            format!(
+                "candidate persistence statements={persisted_statement_count}/{} batches={persisted_candidate_batch_count}/{} factors={persisted_candidate_factor_count}/{} exact_reopen={candidate_pnf_reopen_complete}",
+                parser_state.succeeded,
+                parser_state.succeeded,
+                compilation.candidate_pnf_count,
+            ),
+        ));
     }
 
     if !candidate_persistence_reused {
