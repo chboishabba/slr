@@ -159,6 +159,50 @@ CREATE TABLE IF NOT EXISTS semantic.reconciliation_pressure_candidate (
     claim_truth_promoted BOOLEAN NOT NULL CHECK (NOT claim_truth_promoted)
 );
 
+CREATE TABLE IF NOT EXISTS semantic.l2_candidate_product_summary (
+    product_ref TEXT NOT NULL
+      REFERENCES pnf.candidate_semantic_product(product_ref) ON DELETE CASCADE,
+    detector_ref TEXT NOT NULL,
+    factor_count BIGINT NOT NULL,
+    base_signature_ref TEXT NULL,
+    polarity_ref TEXT NULL CHECK (
+      polarity_ref IS NULL OR polarity_ref IN ('positive','negative')
+    ),
+    creates_event_candidate BOOLEAN NOT NULL,
+    candidate_only BOOLEAN NOT NULL CHECK (candidate_only),
+    creates_entity_identity BOOLEAN NOT NULL CHECK (NOT creates_entity_identity),
+    creates_proposition_identity BOOLEAN NOT NULL CHECK (NOT creates_proposition_identity),
+    creates_event_identity BOOLEAN NOT NULL CHECK (NOT creates_event_identity),
+    creates_semantic_authority BOOLEAN NOT NULL CHECK (NOT creates_semantic_authority),
+    applicability_promoted BOOLEAN NOT NULL CHECK (NOT applicability_promoted),
+    claim_truth_promoted BOOLEAN NOT NULL CHECK (NOT claim_truth_promoted),
+    PRIMARY KEY (product_ref, detector_ref)
+);
+
+CREATE TABLE IF NOT EXISTS semantic.l2_candidate_product_entity_factor (
+    product_ref TEXT NOT NULL,
+    detector_ref TEXT NOT NULL,
+    factor_ordinal INTEGER NOT NULL,
+    token_ordinal INTEGER NOT NULL,
+    start_offset BIGINT NOT NULL,
+    end_offset BIGINT NOT NULL,
+    entity_fingerprint_ref TEXT NOT NULL,
+    role_ref TEXT NOT NULL,
+    surface TEXT NOT NULL,
+    lemma TEXT NOT NULL,
+    candidate_only BOOLEAN NOT NULL CHECK (candidate_only),
+    creates_entity_identity BOOLEAN NOT NULL CHECK (NOT creates_entity_identity),
+    creates_semantic_authority BOOLEAN NOT NULL CHECK (NOT creates_semantic_authority),
+    claim_truth_promoted BOOLEAN NOT NULL CHECK (NOT claim_truth_promoted),
+    PRIMARY KEY (product_ref, detector_ref, factor_ordinal),
+    FOREIGN KEY (product_ref, detector_ref)
+      REFERENCES semantic.l2_candidate_product_summary(product_ref, detector_ref)
+      ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS l2_candidate_product_entity_fingerprint_idx
+ON semantic.l2_candidate_product_entity_factor(entity_fingerprint_ref, product_ref);
+
 CREATE TABLE IF NOT EXISTS semantic.corpus_reconciliation_stage_receipt (
     source_revision_ref TEXT NOT NULL,
     parser_run_ref TEXT NOT NULL,
@@ -201,6 +245,8 @@ pub enum CorpusReconciliationError {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct CorpusReconciliationWork {
     pub factor_rows_scanned: usize,
+    pub product_summary_reuse_hits: usize,
+    pub product_summaries_created: usize,
     pub entity_mention_rows_inserted: usize,
     pub named_entity_rows_inserted: usize,
     pub temporal_rows_inserted: usize,
@@ -311,6 +357,204 @@ fn base_signature(batch: &StatementBatch) -> Option<String> {
     ))
 }
 
+#[derive(Debug, Clone)]
+struct ProductFactorRow {
+    factor_ordinal: i32,
+    token_ordinal: i32,
+    start_offset: i64,
+    end_offset: i64,
+    role_ref: String,
+    surface: String,
+    lemma: String,
+    dependency_ref: String,
+}
+
+fn ensure_l2_product_summaries(
+    client: &mut Client,
+    source_revision_ref: &str,
+    work: &mut CorpusReconciliationWork,
+) -> Result<(), CorpusReconciliationError> {
+    let products = client.query(
+        r#"
+        SELECT DISTINCT b.candidate_product_ref
+        FROM pnf.statement_candidate_batch b
+        JOIN corpus.source_statement s ON s.statement_ref=b.statement_ref
+        WHERE s.source_revision_ref=$1
+          AND b.candidate_product_ref IS NOT NULL
+        ORDER BY b.candidate_product_ref
+        "#,
+        &[&source_revision_ref],
+    )?;
+
+    for row in products {
+        let product_ref: String = row.get::<_, Option<String>>(0)
+            .ok_or(CorpusReconciliationError::ExistingRowConflict)?;
+        let existing = client.query_opt(
+            r#"
+            SELECT factor_count, candidate_only, creates_entity_identity,
+                   creates_proposition_identity, creates_event_identity,
+                   creates_semantic_authority, applicability_promoted,
+                   claim_truth_promoted
+            FROM semantic.l2_candidate_product_summary
+            WHERE product_ref=$1 AND detector_ref=$2
+            "#,
+            &[&product_ref, &DETECTOR_REF],
+        )?;
+        if let Some(existing) = existing {
+            if !existing.get::<_, bool>(1)
+                || existing.get::<_, bool>(2)
+                || existing.get::<_, bool>(3)
+                || existing.get::<_, bool>(4)
+                || existing.get::<_, bool>(5)
+                || existing.get::<_, bool>(6)
+                || existing.get::<_, bool>(7)
+            {
+                return Err(CorpusReconciliationError::PromotionBoundary);
+            }
+            work.product_summary_reuse_hits += 1;
+            continue;
+        }
+
+        let factor_rows = client.query(
+            r#"
+            SELECT factor_ordinal, token_ordinal, start_offset, end_offset,
+                   role_ref, surface, lemma, dependency_ref, candidate_only
+            FROM pnf.candidate_semantic_product_factor
+            WHERE product_ref=$1
+            ORDER BY factor_ordinal
+            "#,
+            &[&product_ref],
+        )?;
+        let mut factors = Vec::with_capacity(factor_rows.len());
+        for row in factor_rows {
+            if !row.get::<_, bool>(8) {
+                return Err(CorpusReconciliationError::PromotionBoundary);
+            }
+            let factor = ProductFactorRow {
+                factor_ordinal: row.get(0),
+                token_ordinal: row.get(1),
+                start_offset: row.get(2),
+                end_offset: row.get(3),
+                role_ref: row.get(4),
+                surface: row.get(5),
+                lemma: row.get(6),
+                dependency_ref: row.get(7),
+            };
+            if factor.factor_ordinal < 0
+                || factor.token_ordinal < 0
+                || factor.start_offset < 0
+                || factor.end_offset <= factor.start_offset
+            {
+                return Err(CorpusReconciliationError::ExistingRowConflict);
+            }
+            factors.push(factor);
+        }
+        work.factor_rows_scanned += factors.len();
+
+        let mut actors = Vec::new();
+        let mut predicates = Vec::new();
+        let mut patients = Vec::new();
+        let mut entity_factors = Vec::new();
+        let mut is_negative = false;
+        for factor in &factors {
+            let normalized = normalize(&factor.lemma);
+            match factor.role_ref.as_str() {
+                "actor" => {
+                    if !normalized.is_empty() {
+                        actors.push(normalized.clone());
+                        entity_factors.push(factor.clone());
+                    }
+                }
+                "predicate" => {
+                    if !normalized.is_empty() {
+                        predicates.push(normalized.clone());
+                    }
+                }
+                "patient" => {
+                    if !normalized.is_empty() {
+                        patients.push(normalized.clone());
+                        entity_factors.push(factor.clone());
+                    }
+                }
+                _ => {}
+            }
+            is_negative |= factor.dependency_ref.eq_ignore_ascii_case("neg")
+                || matches!(normalized.as_str(), "not" | "never" | "n't");
+        }
+        for values in [&mut actors, &mut predicates, &mut patients] {
+            values.sort_unstable();
+            values.dedup();
+        }
+        let base_signature = (!predicates.is_empty()).then(|| {
+            format!(
+                "a=[{}]|p=[{}]|o=[{}]",
+                actors.join(","),
+                predicates.join(","),
+                patients.join(",")
+            )
+        });
+        let polarity = base_signature
+            .as_ref()
+            .map(|_| if is_negative { "negative" } else { "positive" }.to_owned());
+        let creates_event_candidate =
+            base_signature.is_some() && (!actors.is_empty() || !patients.is_empty());
+
+        let mut tx = client.transaction()?;
+        tx.execute(
+            r#"
+            INSERT INTO semantic.l2_candidate_product_summary
+              (product_ref, detector_ref, factor_count, base_signature_ref,
+               polarity_ref, creates_event_candidate, candidate_only,
+               creates_entity_identity, creates_proposition_identity,
+               creates_event_identity, creates_semantic_authority,
+               applicability_promoted, claim_truth_promoted)
+            VALUES ($1,$2,$3,$4,$5,$6,TRUE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE)
+            ON CONFLICT (product_ref, detector_ref) DO NOTHING
+            "#,
+            &[
+                &product_ref,
+                &DETECTOR_REF,
+                &(factors.len() as i64),
+                &base_signature,
+                &polarity,
+                &creates_event_candidate,
+            ],
+        )?;
+
+        for factor in entity_factors {
+            let normalized = normalize(&factor.lemma);
+            let entity_fingerprint_ref =
+                format!("entity-fingerprint:{}", digest_ref("entity:v1", &[&normalized]));
+            tx.execute(
+                r#"
+                INSERT INTO semantic.l2_candidate_product_entity_factor
+                  (product_ref, detector_ref, factor_ordinal, token_ordinal,
+                   start_offset, end_offset, entity_fingerprint_ref, role_ref,
+                   surface, lemma, candidate_only, creates_entity_identity,
+                   creates_semantic_authority, claim_truth_promoted)
+                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,TRUE,FALSE,FALSE,FALSE)
+                ON CONFLICT (product_ref, detector_ref, factor_ordinal) DO NOTHING
+                "#,
+                &[
+                    &product_ref,
+                    &DETECTOR_REF,
+                    &factor.factor_ordinal,
+                    &factor.token_ordinal,
+                    &factor.start_offset,
+                    &factor.end_offset,
+                    &entity_fingerprint_ref,
+                    &factor.role_ref,
+                    &factor.surface,
+                    &factor.lemma,
+                ],
+            )?;
+        }
+        tx.commit()?;
+        work.product_summaries_created += 1;
+    }
+    Ok(())
+}
+
 fn load_statement_batches(
     client: &mut Client,
     source_revision_ref: &str,
@@ -325,6 +569,7 @@ fn load_statement_batches(
         FROM pnf.statement_candidate_batch b
         JOIN corpus.source_statement s ON s.statement_ref=b.statement_ref
         WHERE s.source_revision_ref=$1
+          AND b.candidate_product_ref IS NULL
         ORDER BY s.exact_span_ref, b.batch_ref
         "#,
         &[&source_revision_ref],
