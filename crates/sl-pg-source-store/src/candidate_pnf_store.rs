@@ -20,12 +20,17 @@ CREATE TABLE IF NOT EXISTS pnf.candidate_semantic_product (
     parser_product_key TEXT NOT NULL,
     compiler_ref TEXT NOT NULL,
     factor_count BIGINT NOT NULL,
+    exact_reopen_validated BOOLEAN NOT NULL CHECK (exact_reopen_validated),
     candidate_only BOOLEAN NOT NULL CHECK (candidate_only),
     creates_semantic_authority BOOLEAN NOT NULL CHECK (NOT creates_semantic_authority),
     applicability_promoted BOOLEAN NOT NULL CHECK (NOT applicability_promoted),
     claim_truth_promoted BOOLEAN NOT NULL CHECK (NOT claim_truth_promoted),
     UNIQUE (parser_product_key, compiler_ref)
 );
+
+ALTER TABLE pnf.candidate_semantic_product
+  ADD COLUMN IF NOT EXISTS exact_reopen_validated BOOLEAN NOT NULL DEFAULT TRUE
+  CHECK (exact_reopen_validated);
 
 CREATE TABLE IF NOT EXISTS pnf.candidate_semantic_product_factor (
     product_ref TEXT NOT NULL
@@ -334,6 +339,31 @@ fn persist_candidate_semantic_product_with_client(
     candidate: &StatementCandidatePnf,
     context: &CandidateProductContext,
 ) -> Result<(), CandidatePnfStoreError> {
+    if let Some(stored) = client.query_opt(
+        r#"
+        SELECT parser_product_key, compiler_ref, factor_count,
+               exact_reopen_validated, candidate_only,
+               creates_semantic_authority, applicability_promoted,
+               claim_truth_promoted
+        FROM pnf.candidate_semantic_product
+        WHERE product_ref=$1
+        "#,
+        &[&context.product_ref],
+    )? {
+        if stored.get::<_, String>(0) != context.parser_product_key
+            || stored.get::<_, String>(1) != CANDIDATE_PNF_COMPILER_REF
+            || stored.get::<_, i64>(2) != candidate.pnf.candidates.len() as i64
+            || !stored.get::<_, bool>(3)
+            || !stored.get::<_, bool>(4)
+            || stored.get::<_, bool>(5)
+            || stored.get::<_, bool>(6)
+            || stored.get::<_, bool>(7)
+        {
+            return Err(CandidatePnfStoreError::ExistingBatchConflict);
+        }
+        return Ok(());
+    }
+
     let token_rows = client.query(
         r#"
         SELECT token_ordinal, start_char, end_char
@@ -354,24 +384,57 @@ fn persist_candidate_semantic_product_with_client(
         let token_ordinal: i32 = row.get(0);
         let token_start: i64 = row.get(1);
         let token_end: i64 = row.get(2);
+        let start_offset = token_start - context.region_start_char;
+        let end_offset = token_end - context.region_start_char;
         if token_ordinal < 0
             || token_start != factor.source_start_char as i64
             || token_end != factor.source_end_char as i64
+            || start_offset < 0
+            || end_offset <= start_offset
         {
             return Err(CandidatePnfStoreError::ExistingFactorConflict);
         }
         token_ordinals.push(token_ordinal);
-        starts.push(token_start - context.region_start_char);
-        ends.push(token_end - context.region_start_char);
+        starts.push(start_offset);
+        ends.push(end_offset);
     }
 
-    client.execute(
+    let ordinals = (0..candidate.pnf.candidates.len())
+        .map(|value| value as i32)
+        .collect::<Vec<_>>();
+    let roles = candidate
+        .pnf
+        .candidates
+        .iter()
+        .map(|factor| role_db(factor.role).to_owned())
+        .collect::<Vec<_>>();
+    let surfaces = candidate
+        .pnf
+        .candidates
+        .iter()
+        .map(|factor| factor.surface.clone())
+        .collect::<Vec<_>>();
+    let lemmas = candidate
+        .pnf
+        .candidates
+        .iter()
+        .map(|factor| factor.lemma.clone())
+        .collect::<Vec<_>>();
+    let dependencies = candidate
+        .pnf
+        .candidates
+        .iter()
+        .map(|factor| factor.dependency_ref.clone())
+        .collect::<Vec<_>>();
+
+    let mut tx = client.transaction()?;
+    tx.execute(
         r#"
         INSERT INTO pnf.candidate_semantic_product
           (product_ref, parser_product_key, compiler_ref, factor_count,
-           candidate_only, creates_semantic_authority,
+           exact_reopen_validated, candidate_only, creates_semantic_authority,
            applicability_promoted, claim_truth_promoted)
-        VALUES ($1,$2,$3,$4,TRUE,FALSE,FALSE,FALSE)
+        VALUES ($1,$2,$3,$4,TRUE,TRUE,FALSE,FALSE,FALSE)
         ON CONFLICT (product_ref) DO NOTHING
         "#,
         &[
@@ -383,35 +446,8 @@ fn persist_candidate_semantic_product_with_client(
     )?;
 
     if !candidate.pnf.candidates.is_empty() {
-        let ordinals = (0..candidate.pnf.candidates.len())
-            .map(|value| value as i32)
-            .collect::<Vec<_>>();
         let product_refs = vec![context.product_ref.clone(); ordinals.len()];
-        let roles = candidate
-            .pnf
-            .candidates
-            .iter()
-            .map(|factor| role_db(factor.role).to_owned())
-            .collect::<Vec<_>>();
-        let surfaces = candidate
-            .pnf
-            .candidates
-            .iter()
-            .map(|factor| factor.surface.clone())
-            .collect::<Vec<_>>();
-        let lemmas = candidate
-            .pnf
-            .candidates
-            .iter()
-            .map(|factor| factor.lemma.clone())
-            .collect::<Vec<_>>();
-        let dependencies = candidate
-            .pnf
-            .candidates
-            .iter()
-            .map(|factor| factor.dependency_ref.clone())
-            .collect::<Vec<_>>();
-        client.execute(
+        tx.execute(
             r#"
             INSERT INTO pnf.candidate_semantic_product_factor
               (product_ref, factor_ordinal, token_ordinal,
@@ -445,11 +481,12 @@ fn persist_candidate_semantic_product_with_client(
         )?;
     }
 
-    let stored = client.query_one(
+    let stored = tx.query_one(
         r#"
         SELECT parser_product_key, compiler_ref, factor_count,
-               candidate_only, creates_semantic_authority,
-               applicability_promoted, claim_truth_promoted
+               exact_reopen_validated, candidate_only,
+               creates_semantic_authority, applicability_promoted,
+               claim_truth_promoted
         FROM pnf.candidate_semantic_product
         WHERE product_ref=$1
         "#,
@@ -459,12 +496,47 @@ fn persist_candidate_semantic_product_with_client(
         || stored.get::<_, String>(1) != CANDIDATE_PNF_COMPILER_REF
         || stored.get::<_, i64>(2) != candidate.pnf.candidates.len() as i64
         || !stored.get::<_, bool>(3)
-        || stored.get::<_, bool>(4)
+        || !stored.get::<_, bool>(4)
         || stored.get::<_, bool>(5)
         || stored.get::<_, bool>(6)
+        || stored.get::<_, bool>(7)
     {
         return Err(CandidatePnfStoreError::ExistingBatchConflict);
     }
+
+    let factor_rows = tx.query(
+        r#"
+        SELECT factor_ordinal, token_ordinal, start_offset, end_offset,
+               role_ref, surface, lemma, dependency_ref, candidate_only
+        FROM pnf.candidate_semantic_product_factor
+        WHERE product_ref=$1
+        ORDER BY factor_ordinal
+        "#,
+        &[&context.product_ref],
+    )?;
+    if factor_rows.len() != candidate.pnf.candidates.len() {
+        return Err(CandidatePnfStoreError::ExistingFactorConflict);
+    }
+    for (index, (row, factor)) in factor_rows
+        .iter()
+        .zip(candidate.pnf.candidates.iter())
+        .enumerate()
+    {
+        if row.get::<_, i32>(0) != index as i32
+            || row.get::<_, i32>(1) != token_ordinals[index]
+            || row.get::<_, i64>(2) != starts[index]
+            || row.get::<_, i64>(3) != ends[index]
+            || row.get::<_, String>(4) != role_db(factor.role)
+            || row.get::<_, String>(5) != factor.surface
+            || row.get::<_, String>(6) != factor.lemma
+            || row.get::<_, String>(7) != factor.dependency_ref
+            || !row.get::<_, bool>(8)
+        {
+            return Err(CandidatePnfStoreError::ExistingFactorConflict);
+        }
+    }
+
+    tx.commit()?;
     Ok(())
 }
 
