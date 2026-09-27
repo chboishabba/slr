@@ -152,6 +152,7 @@ pub(crate) struct CandidateProductPersistenceOutcome {
     pub product_backed: bool,
     pub reused_product: bool,
     pub product_factor_rows_inserted: usize,
+    pub batch_row_inserted: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -372,6 +373,7 @@ fn persist_candidate_semantic_product_with_client(
             product_backed: true,
             reused_product: true,
             product_factor_rows_inserted: 0,
+            batch_row_inserted: false,
         });
     }
 
@@ -553,6 +555,7 @@ fn persist_candidate_semantic_product_with_client(
         product_backed: true,
         reused_product: product_inserted == 0,
         product_factor_rows_inserted,
+        batch_row_inserted: false,
     })
 }
 
@@ -598,6 +601,7 @@ pub(crate) fn persist_statement_candidate_pnf_with_client_detailed(
             product_backed: false,
             reused_product: false,
             product_factor_rows_inserted: 0,
+            batch_row_inserted: false,
         }
     };
     let candidate_product_ref = product_context
@@ -617,7 +621,7 @@ pub(crate) fn persist_statement_candidate_pnf_with_client_detailed(
     }
 
     let mut tx = client.transaction()?;
-    tx.execute(
+    let batch_inserted = tx.execute(
         r#"INSERT INTO pnf.statement_candidate_batch
            (batch_ref, statement_ref, exact_span_ref, parser_receipt_ref,
             factor_count, candidate_product_ref, candidate_only,
@@ -774,6 +778,8 @@ pub(crate) fn persist_statement_candidate_pnf_with_client_detailed(
     {
         return Err(CandidatePnfStoreError::ExistingBatchConflict);
     }
+    let mut product_outcome = product_outcome;
+    product_outcome.batch_row_inserted = batch_inserted == 1;
     Ok((persisted, product_outcome))
 }
 
