@@ -9,7 +9,8 @@ use thiserror::Error;
 
 use crate::{CandidatePnfFactor, CandidatePnfRole, DatabaseConfig, StatementCandidatePnf};
 
-pub const CANDIDATE_PNF_COMPILER_REF: &str = "scale1:m12-candidate-pnf:v1";
+pub const CANDIDATE_PNF_COMPILER_REF: &str =
+    "scale1:m12-candidate-pnf:v2-productized";
 
 pub const CANDIDATE_PNF_SCHEMA_SQL: &str = r#"
 CREATE SCHEMA IF NOT EXISTS pnf;
