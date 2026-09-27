@@ -151,8 +151,28 @@ def main():
         semantic_product_locality = None
         semantic_product_locality_status = "indeterminate_parser_residuals"
 
+    cardinality = receipt.get("candidate_cardinality", {})
+    l2_factor_scan = int(cardinality.get("l2_factor_rows_scanned_this_run", 0))
+    l2_prop_occurrence_writes = int(
+        cardinality.get("l2_proposition_occurrence_rows_inserted_this_run", 0)
+    )
+    l2_event_occurrence_writes = int(
+        cardinality.get("l2_event_occurrence_rows_inserted_this_run", 0)
+    )
+    l2_pressure_upserts = int(
+        cardinality.get("l2_pressure_rows_upserted_this_run", 0)
+    )
+
+    # L2 is diagnostic in this tranche.  A scan much larger than the affected
+    # sentence surface indicates semantic reconciliation is still corpus-linear
+    # even though parser and candidate-product recomputation are local.
+    l2_scan_local = l2_factor_scan <= max(
+        product_factor_writes,
+        len(affected_after) * 64,
+    )
+
     result = {
-        "schema": "sensiblaw.scale1.small-edit-locality-audit.v0_1",
+        "schema": "sensiblaw.scale1.small-edit-locality-audit.v0_2",
         "edit_transport": {
             "old_start_char": old_start,
             "old_end_char": old_end,
@@ -191,6 +211,14 @@ def main():
                 statement_writes > len(affected_after)
                 or batch_writes > len(affected_after)
             ),
+        },
+        "l2_reconciliation": {
+            "status": "green" if l2_scan_local else "corpus_linear_scan_observed",
+            "factor_rows_scanned_this_run": l2_factor_scan,
+            "proposition_occurrence_rows_inserted_this_run": l2_prop_occurrence_writes,
+            "event_occurrence_rows_inserted_this_run": l2_event_occurrence_writes,
+            "pressure_rows_upserted_this_run": l2_pressure_upserts,
+            "locality_enforced": False,
         },
         "boundary": {
             "transport_uses_source_coordinates": True,
