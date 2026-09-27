@@ -75,6 +75,12 @@ def measurement(kind, path):
             "product_factor_rows_inserted": integrity.get(
                 "candidate_product_factor_rows_inserted_this_run"
             ),
+            "source_statement_rows_inserted": integrity.get(
+                "source_statement_rows_inserted_this_run"
+            ),
+            "candidate_batch_rows_inserted": integrity.get(
+                "candidate_batch_rows_inserted_this_run"
+            ),
         },
         "downstream_reuse": {
             "l2": integrity.get("l2_reconciliation_reused"),
