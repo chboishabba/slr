@@ -26,7 +26,7 @@ use crate::{
     build_plain_text_long_source_with_family, canonical_candidate_pnf_batch_ref,
     canonical_statement_ref, compile_initial_intake_statement,
     compile_long_document_lossless_for_document_ref, complete_parser_run,
-    discover_scale1_auto_event_proposals, enqueue_parser_regions,
+    discover_scale1_auto_event_proposals, enqueue_parser_regions_with_content_reuse,
     enqueue_reconciliation_review_items, install_candidate_pnf_schema,
     install_statement_trace_schema, load_generic_source_envelope, load_generic_text_source,
     load_long_document_regions, load_long_document_structure, persist_generic_text_source,
@@ -87,6 +87,8 @@ pub struct PreparedDbNativeLongDocument {
     pub structural_region_count: usize,
     pub newly_enqueued_job_count: usize,
     pub reused_existing_job_count: usize,
+    pub same_revision_reused_job_count: usize,
+    pub cross_revision_reused_job_count: usize,
     pub candidate_only: bool,
     pub creates_semantic_authority: bool,
     pub applicability_promoted: bool,
@@ -222,8 +224,14 @@ pub fn prepare_db_native_long_source(
         })
         .collect::<Vec<_>>();
 
-    let newly_enqueued_job_count = enqueue_parser_regions(config, &parser_run, &semantic_jobs)?;
-    let reused_existing_job_count = semantic_jobs.len().saturating_sub(newly_enqueued_job_count);
+    let enqueue = enqueue_parser_regions_with_content_reuse(
+        config,
+        &parser_run,
+        &semantic_jobs,
+        canonical_text,
+    )?;
+    let newly_enqueued_job_count = enqueue.queued_new_job_count;
+    let reused_existing_job_count = enqueue.reused_job_count();
 
     Ok(PreparedDbNativeLongDocument {
         structural,
@@ -233,6 +241,8 @@ pub fn prepare_db_native_long_source(
         structural_region_count: document.regions.len().saturating_sub(semantic_jobs.len()),
         newly_enqueued_job_count,
         reused_existing_job_count,
+        same_revision_reused_job_count: enqueue.same_revision_reused_job_count,
+        cross_revision_reused_job_count: enqueue.cross_revision_reused_job_count,
         candidate_only: true,
         creates_semantic_authority: false,
         applicability_promoted: false,
