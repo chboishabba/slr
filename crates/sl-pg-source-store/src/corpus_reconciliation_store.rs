@@ -399,13 +399,18 @@ fn ensure_l2_product_summaries(
             .ok_or(CorpusReconciliationError::ExistingRowConflict)?;
         let existing = client.query_opt(
             r#"
-            SELECT factor_count, entity_factor_count, exact_reopen_validated,
-                   candidate_only, creates_entity_identity,
-                   creates_proposition_identity, creates_event_identity,
-                   creates_semantic_authority, applicability_promoted,
-                   claim_truth_promoted
-            FROM semantic.l2_candidate_product_summary
-            WHERE product_ref=$1 AND detector_ref=$2
+            SELECT s.factor_count, s.entity_factor_count, s.exact_reopen_validated,
+                   s.candidate_only, s.creates_entity_identity,
+                   s.creates_proposition_identity, s.creates_event_identity,
+                   s.creates_semantic_authority, s.applicability_promoted,
+                   s.claim_truth_promoted,
+                   p.factor_count, p.exact_reopen_validated, p.candidate_only,
+                   p.creates_semantic_authority, p.applicability_promoted,
+                   p.claim_truth_promoted
+            FROM semantic.l2_candidate_product_summary s
+            JOIN pnf.candidate_semantic_product p
+              ON p.product_ref=s.product_ref
+            WHERE s.product_ref=$1 AND s.detector_ref=$2
             "#,
             &[&product_ref, &DETECTOR_REF],
         )?;
@@ -418,8 +423,16 @@ fn ensure_l2_product_summaries(
                 || existing.get::<_, bool>(7)
                 || existing.get::<_, bool>(8)
                 || existing.get::<_, bool>(9)
+                || !existing.get::<_, bool>(11)
+                || !existing.get::<_, bool>(12)
+                || existing.get::<_, bool>(13)
+                || existing.get::<_, bool>(14)
+                || existing.get::<_, bool>(15)
             {
                 return Err(CorpusReconciliationError::PromotionBoundary);
+            }
+            if existing.get::<_, i64>(0) != existing.get::<_, i64>(10) {
+                return Err(CorpusReconciliationError::ExistingRowConflict);
             }
             let entity_factor_count = existing.get::<_, i64>(1);
             if entity_factor_count < 0 {
@@ -438,6 +451,25 @@ fn ensure_l2_product_summaries(
             }
             work.product_summary_reuse_hits += 1;
             continue;
+        }
+
+        let product = client.query_one(
+            r#"
+            SELECT factor_count, exact_reopen_validated, candidate_only,
+                   creates_semantic_authority, applicability_promoted,
+                   claim_truth_promoted
+            FROM pnf.candidate_semantic_product
+            WHERE product_ref=$1
+            "#,
+            &[&product_ref],
+        )?;
+        if !product.get::<_, bool>(1)
+            || !product.get::<_, bool>(2)
+            || product.get::<_, bool>(3)
+            || product.get::<_, bool>(4)
+            || product.get::<_, bool>(5)
+        {
+            return Err(CorpusReconciliationError::PromotionBoundary);
         }
 
         let factor_rows = client.query(
@@ -473,6 +505,11 @@ fn ensure_l2_product_summaries(
                 return Err(CorpusReconciliationError::ExistingRowConflict);
             }
             factors.push(factor);
+        }
+        if product.get::<_, i64>(0) < 0
+            || product.get::<_, i64>(0) as usize != factors.len()
+        {
+            return Err(CorpusReconciliationError::ExistingRowConflict);
         }
         work.factor_rows_scanned += factors.len();
 
