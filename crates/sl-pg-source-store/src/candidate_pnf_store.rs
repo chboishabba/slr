@@ -149,6 +149,7 @@ pub struct PersistedCandidatePnfBatch {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct CandidateProductPersistenceOutcome {
+    pub product_backed: bool,
     pub reused_product: bool,
     pub product_factor_rows_inserted: usize,
 }
@@ -368,6 +369,7 @@ fn persist_candidate_semantic_product_with_client(
             return Err(CandidatePnfStoreError::ExistingBatchConflict);
         }
         return Ok(CandidateProductPersistenceOutcome {
+            product_backed: true,
             reused_product: true,
             product_factor_rows_inserted: 0,
         });
@@ -548,6 +550,7 @@ fn persist_candidate_semantic_product_with_client(
 
     tx.commit()?;
     Ok(CandidateProductPersistenceOutcome {
+        product_backed: true,
         reused_product: product_inserted == 0,
         product_factor_rows_inserted,
     })
@@ -592,6 +595,7 @@ pub(crate) fn persist_statement_candidate_pnf_with_client_detailed(
         persist_candidate_semantic_product_with_client(client, candidate, context)?
     } else {
         CandidateProductPersistenceOutcome {
+            product_backed: false,
             reused_product: false,
             product_factor_rows_inserted: 0,
         }
