@@ -31,6 +31,7 @@ def measurement(kind, path):
     parser = compiler.get("parser", {})
     perf = compiler.get("performance", {})
     integrity = compiler.get("integrity", {})
+    cardinality = compiler.get("candidate_cardinality", {})
     source = compiler.get("source", {})
     return {
         "benchmark_class": kind,
@@ -80,6 +81,36 @@ def measurement(kind, path):
             ),
             "candidate_batch_rows_inserted": integrity.get(
                 "candidate_batch_rows_inserted_this_run"
+            ),
+        },
+        "l2_work": {
+            "factor_rows_scanned": cardinality.get("l2_factor_rows_scanned_this_run"),
+            "entity_mention_rows_inserted": cardinality.get(
+                "l2_entity_mention_rows_inserted_this_run"
+            ),
+            "named_entity_rows_inserted": cardinality.get(
+                "l2_named_entity_rows_inserted_this_run"
+            ),
+            "temporal_rows_inserted": cardinality.get(
+                "l2_temporal_rows_inserted_this_run"
+            ),
+            "proposition_fingerprint_rows_inserted": cardinality.get(
+                "l2_proposition_fingerprint_rows_inserted_this_run"
+            ),
+            "proposition_occurrence_rows_inserted": cardinality.get(
+                "l2_proposition_occurrence_rows_inserted_this_run"
+            ),
+            "event_fingerprint_rows_inserted": cardinality.get(
+                "l2_event_fingerprint_rows_inserted_this_run"
+            ),
+            "event_occurrence_rows_inserted": cardinality.get(
+                "l2_event_occurrence_rows_inserted_this_run"
+            ),
+            "contestation_rows_inserted": cardinality.get(
+                "l2_contestation_rows_inserted_this_run"
+            ),
+            "pressure_rows_upserted": cardinality.get(
+                "l2_pressure_rows_upserted_this_run"
             ),
         },
         "downstream_reuse": {
