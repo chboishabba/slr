@@ -64,11 +64,24 @@ CREATE TABLE IF NOT EXISTS ingest.parser_job (
     creates_semantic_authority BOOLEAN NOT NULL,
     applicability_promoted BOOLEAN NOT NULL,
     claim_truth_promoted BOOLEAN NOT NULL,
+    parser_product_key TEXT NULL,
+    product_reused BOOLEAN NOT NULL DEFAULT FALSE,
+    reused_from_compilation_key TEXT NULL,
     UNIQUE (parser_run_ref, region_ref)
 );
 
+ALTER TABLE ingest.parser_job
+  ADD COLUMN IF NOT EXISTS parser_product_key TEXT NULL;
+ALTER TABLE ingest.parser_job
+  ADD COLUMN IF NOT EXISTS product_reused BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE ingest.parser_job
+  ADD COLUMN IF NOT EXISTS reused_from_compilation_key TEXT NULL;
+
 CREATE INDEX IF NOT EXISTS parser_job_claim_idx
 ON ingest.parser_job(parser_run_ref, status, lease_expires_at, region_ref);
+
+CREATE INDEX IF NOT EXISTS parser_job_product_idx
+ON ingest.parser_job(parser_product_key, status, completed_at);
 
 CREATE TABLE IF NOT EXISTS ingest.parser_token (
     compilation_key TEXT NOT NULL REFERENCES ingest.parser_job(compilation_key) ON DELETE CASCADE,
@@ -135,6 +148,8 @@ pub enum DbNativeParserError {
     MissingJob(String),
     #[error("parser job/source revision mismatch")]
     SourceRevisionMismatch,
+    #[error("parser product identity conflicts with persisted job state")]
+    ParserProductIdentityConflict,
     #[error("parser artifact digest does not match exact JSON bytes")]
     ArtifactDigestMismatch,
     #[error("persisted parser output violates candidate-only boundary")]
@@ -163,6 +178,21 @@ pub struct ParserRegionJobSpec {
     pub region_ref: String,
     pub start_char: u64,
     pub end_char: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParserEnqueueReceipt {
+    pub semantic_region_count: usize,
+    pub queued_new_job_count: usize,
+    pub same_revision_reused_job_count: usize,
+    pub cross_revision_reused_job_count: usize,
+}
+
+impl ParserEnqueueReceipt {
+    #[must_use]
+    pub fn reused_job_count(&self) -> usize {
+        self.same_revision_reused_job_count + self.cross_revision_reused_job_count
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -382,6 +412,41 @@ pub fn compilation_key(
     ])
 }
 
+pub fn parser_product_key(
+    region_text: &str,
+    parser_family: &str,
+    parser_version: &str,
+    model_ref: &str,
+    config_digest_ref: &str,
+) -> String {
+    let region_digest_ref = sha256_content_ref(region_text.as_bytes());
+    format!(
+        "parser-product:{}",
+        sha256_ref(&[
+            &region_digest_ref,
+            parser_family,
+            parser_version,
+            model_ref,
+            config_digest_ref,
+        ])
+    )
+}
+
+fn region_text<'a>(
+    canonical_text: &'a str,
+    region: &ParserRegionJobSpec,
+) -> Result<String, DbNativeParserError> {
+    let text_len = canonical_text.chars().count() as u64;
+    if region.start_char >= region.end_char || region.end_char > text_len {
+        return Err(DbNativeParserError::InvalidRegionSpan);
+    }
+    Ok(canonical_text
+        .chars()
+        .skip(region.start_char as usize)
+        .take((region.end_char - region.start_char) as usize)
+        .collect())
+}
+
 pub fn install_db_native_parser_schema(
     config: &DatabaseConfig,
 ) -> Result<(), DbNativeParserError> {
@@ -497,6 +562,217 @@ pub fn enqueue_parser_regions(
 
     tx.commit()?;
     Ok(inserted)
+}
+
+
+pub fn enqueue_parser_regions_with_content_reuse(
+    config: &DatabaseConfig,
+    run: &ParserRunReceipt,
+    regions: &[ParserRegionJobSpec],
+    canonical_text: &str,
+) -> Result<ParserEnqueueReceipt, DbNativeParserError> {
+    let mut client = Client::connect(config.database_url(), NoTls)?;
+    client.batch_execute(DB_NATIVE_PARSER_SCHEMA_SQL)?;
+    let mut tx = client.transaction()?;
+
+    let mut queued_new_job_count = 0usize;
+    let mut same_revision_reused_job_count = 0usize;
+    let mut cross_revision_reused_job_count = 0usize;
+
+    for region in regions {
+        require(&region.region_ref)?;
+        let text = region_text(canonical_text, region)?;
+        let product_key = parser_product_key(
+            &text,
+            &run.parser_family,
+            &run.parser_version,
+            &run.model_ref,
+            &run.config_digest_ref,
+        );
+        let key = compilation_key(
+            &run.source_revision_ref,
+            &region.region_ref,
+            &run.parser_family,
+            &run.parser_version,
+            &run.model_ref,
+            &run.config_digest_ref,
+        );
+
+        if let Some(existing) = tx.query_opt(
+            r#"
+            SELECT status, parser_product_key, candidate_only,
+                   creates_semantic_authority, applicability_promoted,
+                   claim_truth_promoted
+            FROM ingest.parser_job
+            WHERE compilation_key=$1
+            FOR UPDATE
+            "#,
+            &[&key],
+        )? {
+            let existing_product: Option<String> = existing.get(1);
+            if existing_product
+                .as_deref()
+                .is_some_and(|value| value != product_key)
+            {
+                return Err(DbNativeParserError::ParserProductIdentityConflict);
+            }
+            if existing_product.is_none() {
+                tx.execute(
+                    "UPDATE ingest.parser_job
+                     SET parser_product_key=$2
+                     WHERE compilation_key=$1 AND parser_product_key IS NULL",
+                    &[&key, &product_key],
+                )?;
+            }
+            let status: String = existing.get(0);
+            let boundary_ok = existing.get::<_, bool>(2)
+                && !existing.get::<_, bool>(3)
+                && !existing.get::<_, bool>(4)
+                && !existing.get::<_, bool>(5);
+            if !boundary_ok {
+                return Err(DbNativeParserError::PromotionBoundary);
+            }
+            if status == "succeeded" {
+                same_revision_reused_job_count += 1;
+            } else if matches!(status.as_str(), "queued" | "leased") {
+                queued_new_job_count += 1;
+            }
+            continue;
+        }
+
+        let reusable = tx.query_opt(
+            r#"
+            SELECT compilation_key, region_start_char, region_end_char
+            FROM ingest.parser_job
+            WHERE parser_product_key=$1
+              AND status='succeeded'
+              AND candidate_only
+              AND NOT creates_semantic_authority
+              AND NOT applicability_promoted
+              AND NOT claim_truth_promoted
+            ORDER BY completed_at DESC NULLS LAST, compilation_key
+            LIMIT 1
+            "#,
+            &[&product_key],
+        )?;
+
+        if let Some(reusable) = reusable {
+            let prior_key: String = reusable.get(0);
+            let prior_start: i64 = reusable.get(1);
+            let prior_end: i64 = reusable.get(2);
+            if prior_start < 0
+                || prior_end <= prior_start
+                || (prior_end - prior_start) as u64 != region.end_char - region.start_char
+            {
+                return Err(DbNativeParserError::ParserProductIdentityConflict);
+            }
+
+            tx.execute(
+                r#"
+                INSERT INTO ingest.parser_job (
+                    compilation_key, parser_run_ref, source_revision_ref, region_ref,
+                    region_start_char, region_end_char, status,
+                    lease_owner, lease_expires_at, attempt_count, error_ref,
+                    completed_at, candidate_only, creates_semantic_authority,
+                    applicability_promoted, claim_truth_promoted,
+                    parser_product_key, product_reused, reused_from_compilation_key
+                ) VALUES (
+                    $1,$2,$3,$4,$5,$6,'succeeded',
+                    NULL,NULL,0,NULL,NOW(),TRUE,FALSE,FALSE,FALSE,$7,TRUE,$8
+                )
+                "#,
+                &[
+                    &key,
+                    &run.parser_run_ref,
+                    &run.source_revision_ref,
+                    &region.region_ref,
+                    &(region.start_char as i64),
+                    &(region.end_char as i64),
+                    &product_key,
+                    &prior_key,
+                ],
+            )?;
+
+            tx.execute(
+                r#"
+                INSERT INTO ingest.parser_token (
+                    compilation_key, token_ordinal, start_char, end_char,
+                    surface, lemma, pos, morph_json, head_ordinal, dependency_ref
+                )
+                SELECT $1, token_ordinal,
+                       start_char - $2 + $3,
+                       end_char - $2 + $3,
+                       surface, lemma, pos, morph_json, head_ordinal, dependency_ref
+                FROM ingest.parser_token
+                WHERE compilation_key=$4
+                ORDER BY token_ordinal
+                "#,
+                &[
+                    &key,
+                    &prior_start,
+                    &(region.start_char as i64),
+                    &prior_key,
+                ],
+            )?;
+
+            tx.execute(
+                r#"
+                INSERT INTO ingest.parser_entity (
+                    compilation_key, entity_ordinal, start_char, end_char,
+                    surface, label_ref
+                )
+                SELECT $1, entity_ordinal,
+                       start_char - $2 + $3,
+                       end_char - $2 + $3,
+                       surface, label_ref
+                FROM ingest.parser_entity
+                WHERE compilation_key=$4
+                ORDER BY entity_ordinal
+                "#,
+                &[
+                    &key,
+                    &prior_start,
+                    &(region.start_char as i64),
+                    &prior_key,
+                ],
+            )?;
+
+            cross_revision_reused_job_count += 1;
+        } else {
+            tx.execute(
+                r#"
+                INSERT INTO ingest.parser_job (
+                    compilation_key, parser_run_ref, source_revision_ref, region_ref,
+                    region_start_char, region_end_char, status,
+                    candidate_only, creates_semantic_authority,
+                    applicability_promoted, claim_truth_promoted,
+                    parser_product_key, product_reused, reused_from_compilation_key
+                ) VALUES (
+                    $1,$2,$3,$4,$5,$6,'queued',
+                    TRUE,FALSE,FALSE,FALSE,$7,FALSE,NULL
+                )
+                "#,
+                &[
+                    &key,
+                    &run.parser_run_ref,
+                    &run.source_revision_ref,
+                    &region.region_ref,
+                    &(region.start_char as i64),
+                    &(region.end_char as i64),
+                    &product_key,
+                ],
+            )?;
+            queued_new_job_count += 1;
+        }
+    }
+
+    tx.commit()?;
+    Ok(ParserEnqueueReceipt {
+        semantic_region_count: regions.len(),
+        queued_new_job_count,
+        same_revision_reused_job_count,
+        cross_revision_reused_job_count,
+    })
 }
 
 pub fn claim_parser_jobs(
