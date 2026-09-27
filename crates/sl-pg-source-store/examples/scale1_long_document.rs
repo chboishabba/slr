@@ -1100,6 +1100,8 @@ fn compile_source_values(
                 "event_occurrences": receipt.reconciliation.event_occurrence_count,
                 "event_fingerprints": receipt.reconciliation.event_fingerprint_count,
                 "l2_factor_rows_scanned_this_run": receipt.reconciliation.work.factor_rows_scanned,
+                "l2_product_summary_reuse_hits_this_run": receipt.reconciliation.work.product_summary_reuse_hits,
+                "l2_product_summaries_created_this_run": receipt.reconciliation.work.product_summaries_created,
                 "l2_entity_mention_rows_inserted_this_run": receipt.reconciliation.work.entity_mention_rows_inserted,
                 "l2_named_entity_rows_inserted_this_run": receipt.reconciliation.work.named_entity_rows_inserted,
                 "l2_temporal_rows_inserted_this_run": receipt.reconciliation.work.temporal_rows_inserted,
