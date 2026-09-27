@@ -147,6 +147,12 @@ pub struct PersistedCandidatePnfBatch {
     pub claim_truth_paid: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct CandidateProductPersistenceOutcome {
+    pub reused_product: bool,
+    pub product_factor_rows_inserted: usize,
+}
+
 #[derive(Debug, Clone)]
 struct CandidateProductContext {
     product_ref: String,
@@ -338,7 +344,7 @@ fn persist_candidate_semantic_product_with_client(
     client: &mut Client,
     candidate: &StatementCandidatePnf,
     context: &CandidateProductContext,
-) -> Result<(), CandidatePnfStoreError> {
+) -> Result<CandidateProductPersistenceOutcome, CandidatePnfStoreError> {
     if let Some(stored) = client.query_opt(
         r#"
         SELECT parser_product_key, compiler_ref, factor_count,
@@ -361,7 +367,10 @@ fn persist_candidate_semantic_product_with_client(
         {
             return Err(CandidatePnfStoreError::ExistingBatchConflict);
         }
-        return Ok(());
+        return Ok(CandidateProductPersistenceOutcome {
+            reused_product: true,
+            product_factor_rows_inserted: 0,
+        });
     }
 
     let token_rows = client.query(
@@ -428,7 +437,7 @@ fn persist_candidate_semantic_product_with_client(
         .collect::<Vec<_>>();
 
     let mut tx = client.transaction()?;
-    tx.execute(
+    let product_inserted = tx.execute(
         r#"
         INSERT INTO pnf.candidate_semantic_product
           (product_ref, parser_product_key, compiler_ref, factor_count,
@@ -445,9 +454,10 @@ fn persist_candidate_semantic_product_with_client(
         ],
     )?;
 
+    let mut product_factor_rows_inserted = 0usize;
     if !candidate.pnf.candidates.is_empty() {
         let product_refs = vec![context.product_ref.clone(); ordinals.len()];
-        tx.execute(
+        product_factor_rows_inserted = tx.execute(
             r#"
             INSERT INTO pnf.candidate_semantic_product_factor
               (product_ref, factor_ordinal, token_ordinal,
@@ -478,7 +488,7 @@ fn persist_candidate_semantic_product_with_client(
                 &lemmas,
                 &dependencies,
             ],
-        )?;
+        )? as usize;
     }
 
     let stored = tx.query_one(
@@ -537,7 +547,10 @@ fn persist_candidate_semantic_product_with_client(
     }
 
     tx.commit()?;
-    Ok(())
+    Ok(CandidateProductPersistenceOutcome {
+        reused_product: product_inserted == 0,
+        product_factor_rows_inserted,
+    })
 }
 
 pub fn persist_statement_candidate_pnf(
@@ -558,15 +571,31 @@ pub(crate) fn persist_statement_candidate_pnf_with_client(
     client: &mut Client,
     candidate: &StatementCandidatePnf,
 ) -> Result<PersistedCandidatePnfBatch, CandidatePnfStoreError> {
+    persist_statement_candidate_pnf_with_client_detailed(client, candidate)
+        .map(|(batch, _)| batch)
+}
+
+pub(crate) fn persist_statement_candidate_pnf_with_client_detailed(
+    client: &mut Client,
+    candidate: &StatementCandidatePnf,
+) -> Result<
+    (PersistedCandidatePnfBatch, CandidateProductPersistenceOutcome),
+    CandidatePnfStoreError,
+> {
     candidate
         .validate()
         .map_err(|_| CandidatePnfStoreError::InvalidCandidate)?;
 
     let batch_ref = canonical_candidate_pnf_batch_ref(candidate);
     let product_context = candidate_product_context(client, candidate)?;
-    if let Some(context) = product_context.as_ref() {
-        persist_candidate_semantic_product_with_client(client, candidate, context)?;
-    }
+    let product_outcome = if let Some(context) = product_context.as_ref() {
+        persist_candidate_semantic_product_with_client(client, candidate, context)?
+    } else {
+        CandidateProductPersistenceOutcome {
+            reused_product: false,
+            product_factor_rows_inserted: 0,
+        }
+    };
     let candidate_product_ref = product_context
         .as_ref()
         .map(|context| context.product_ref.clone());
@@ -741,7 +770,7 @@ pub(crate) fn persist_statement_candidate_pnf_with_client(
     {
         return Err(CandidatePnfStoreError::ExistingBatchConflict);
     }
-    Ok(persisted)
+    Ok((persisted, product_outcome))
 }
 
 pub fn load_candidate_pnf_batch(
