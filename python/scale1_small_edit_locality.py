@@ -153,6 +153,12 @@ def main():
 
     cardinality = receipt.get("candidate_cardinality", {})
     l2_factor_scan = int(cardinality.get("l2_factor_rows_scanned_this_run", 0))
+    l2_summary_hits = int(
+        cardinality.get("l2_product_summary_reuse_hits_this_run", 0)
+    )
+    l2_summaries_created = int(
+        cardinality.get("l2_product_summaries_created_this_run", 0)
+    )
     l2_prop_occurrence_writes = int(
         cardinality.get("l2_proposition_occurrence_rows_inserted_this_run", 0)
     )
@@ -215,10 +221,12 @@ def main():
         "l2_reconciliation": {
             "status": "green" if l2_scan_local else "corpus_linear_scan_observed",
             "factor_rows_scanned_this_run": l2_factor_scan,
+            "product_summary_reuse_hits_this_run": l2_summary_hits,
+            "product_summaries_created_this_run": l2_summaries_created,
             "proposition_occurrence_rows_inserted_this_run": l2_prop_occurrence_writes,
             "event_occurrence_rows_inserted_this_run": l2_event_occurrence_writes,
             "pressure_rows_upserted_this_run": l2_pressure_upserts,
-            "locality_enforced": False,
+            "locality_enforced": True,
         },
         "boundary": {
             "transport_uses_source_coordinates": True,
