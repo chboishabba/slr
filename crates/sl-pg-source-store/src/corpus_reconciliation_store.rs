@@ -164,6 +164,8 @@ CREATE TABLE IF NOT EXISTS semantic.l2_candidate_product_summary (
       REFERENCES pnf.candidate_semantic_product(product_ref) ON DELETE CASCADE,
     detector_ref TEXT NOT NULL,
     factor_count BIGINT NOT NULL,
+    entity_factor_count BIGINT NOT NULL,
+    exact_reopen_validated BOOLEAN NOT NULL CHECK (exact_reopen_validated),
     base_signature_ref TEXT NULL,
     polarity_ref TEXT NULL CHECK (
       polarity_ref IS NULL OR polarity_ref IN ('positive','negative')
@@ -178,6 +180,12 @@ CREATE TABLE IF NOT EXISTS semantic.l2_candidate_product_summary (
     claim_truth_promoted BOOLEAN NOT NULL CHECK (NOT claim_truth_promoted),
     PRIMARY KEY (product_ref, detector_ref)
 );
+
+ALTER TABLE semantic.l2_candidate_product_summary
+  ADD COLUMN IF NOT EXISTS entity_factor_count BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE semantic.l2_candidate_product_summary
+  ADD COLUMN IF NOT EXISTS exact_reopen_validated BOOLEAN NOT NULL DEFAULT TRUE
+  CHECK (exact_reopen_validated);
 
 CREATE TABLE IF NOT EXISTS semantic.l2_candidate_product_entity_factor (
     product_ref TEXT NOT NULL,
@@ -391,7 +399,8 @@ fn ensure_l2_product_summaries(
             .ok_or(CorpusReconciliationError::ExistingRowConflict)?;
         let existing = client.query_opt(
             r#"
-            SELECT factor_count, candidate_only, creates_entity_identity,
+            SELECT factor_count, entity_factor_count, exact_reopen_validated,
+                   candidate_only, creates_entity_identity,
                    creates_proposition_identity, creates_event_identity,
                    creates_semantic_authority, applicability_promoted,
                    claim_truth_promoted
@@ -401,15 +410,31 @@ fn ensure_l2_product_summaries(
             &[&product_ref, &DETECTOR_REF],
         )?;
         if let Some(existing) = existing {
-            if !existing.get::<_, bool>(1)
-                || existing.get::<_, bool>(2)
-                || existing.get::<_, bool>(3)
+            if !existing.get::<_, bool>(2)
+                || !existing.get::<_, bool>(3)
                 || existing.get::<_, bool>(4)
                 || existing.get::<_, bool>(5)
                 || existing.get::<_, bool>(6)
                 || existing.get::<_, bool>(7)
+                || existing.get::<_, bool>(8)
+                || existing.get::<_, bool>(9)
             {
                 return Err(CorpusReconciliationError::PromotionBoundary);
+            }
+            let entity_factor_count = existing.get::<_, i64>(1);
+            if entity_factor_count < 0 {
+                return Err(CorpusReconciliationError::ExistingRowConflict);
+            }
+            let cached_entities: i64 = client
+                .query_one(
+                    "SELECT COUNT(*)::BIGINT
+                     FROM semantic.l2_candidate_product_entity_factor
+                     WHERE product_ref=$1 AND detector_ref=$2",
+                    &[&product_ref, &DETECTOR_REF],
+                )?
+                .get(0);
+            if cached_entities != entity_factor_count {
+                return Err(CorpusReconciliationError::ExistingRowConflict);
             }
             work.product_summary_reuse_hits += 1;
             continue;
@@ -503,18 +528,21 @@ fn ensure_l2_product_summaries(
         tx.execute(
             r#"
             INSERT INTO semantic.l2_candidate_product_summary
-              (product_ref, detector_ref, factor_count, base_signature_ref,
+              (product_ref, detector_ref, factor_count, entity_factor_count,
+               exact_reopen_validated, base_signature_ref,
                polarity_ref, creates_event_candidate, candidate_only,
                creates_entity_identity, creates_proposition_identity,
                creates_event_identity, creates_semantic_authority,
                applicability_promoted, claim_truth_promoted)
-            VALUES ($1,$2,$3,$4,$5,$6,TRUE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,TRUE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE)
             ON CONFLICT (product_ref, detector_ref) DO NOTHING
             "#,
             &[
                 &product_ref,
                 &DETECTOR_REF,
                 &(factors.len() as i64),
+                &(entity_factors.len() as i64),
+                &true,
                 &base_signature,
                 &polarity,
                 &creates_event_candidate,
@@ -550,6 +578,17 @@ fn ensure_l2_product_summaries(
             )?;
         }
         tx.commit()?;
+        let cached_entities: i64 = client
+            .query_one(
+                "SELECT COUNT(*)::BIGINT
+                 FROM semantic.l2_candidate_product_entity_factor
+                 WHERE product_ref=$1 AND detector_ref=$2",
+                &[&product_ref, &DETECTOR_REF],
+            )?
+            .get(0);
+        if cached_entities != entity_factors.len() as i64 {
+            return Err(CorpusReconciliationError::ExistingRowConflict);
+        }
         work.product_summaries_created += 1;
     }
     Ok(())
