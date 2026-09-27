@@ -524,6 +524,7 @@ fn ensure_l2_product_summaries(
         let creates_event_candidate =
             base_signature.is_some() && (!actors.is_empty() || !patients.is_empty());
 
+        let entity_factor_count = entity_factors.len();
         let mut tx = client.transaction()?;
         tx.execute(
             r#"
@@ -541,7 +542,7 @@ fn ensure_l2_product_summaries(
                 &product_ref,
                 &DETECTOR_REF,
                 &(factors.len() as i64),
-                &(entity_factors.len() as i64),
+                &(entity_factor_count as i64),
                 &true,
                 &base_signature,
                 &polarity,
@@ -549,7 +550,7 @@ fn ensure_l2_product_summaries(
             ],
         )?;
 
-        for factor in entity_factors {
+        for factor in &entity_factors {
             let normalized = normalize(&factor.lemma);
             let entity_fingerprint_ref =
                 format!("entity-fingerprint:{}", digest_ref("entity:v1", &[&normalized]));
@@ -586,7 +587,7 @@ fn ensure_l2_product_summaries(
                 &[&product_ref, &DETECTOR_REF],
             )?
             .get(0);
-        if cached_entities != entity_factors.len() as i64 {
+        if cached_entities != entity_factor_count as i64 {
             return Err(CorpusReconciliationError::ExistingRowConflict);
         }
         work.product_summaries_created += 1;
