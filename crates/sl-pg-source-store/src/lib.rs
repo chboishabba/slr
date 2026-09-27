@@ -71,7 +71,7 @@ pub use candidate_pnf_store::{
 pub use corpus_reconciliation_store::{
     install_corpus_reconciliation_schema, reconcile_source_candidate_semantics,
     CorpusReconciliationError, CorpusReconciliationReceipt,
-    CORPUS_RECONCILIATION_SCHEMA_SQL,
+    CorpusReconciliationWork, CORPUS_RECONCILIATION_SCHEMA_SQL,
 };
 pub use reconciliation_review_store::{
     enqueue_reconciliation_review_items, ReconciliationReviewError,
