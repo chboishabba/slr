@@ -1052,6 +1052,8 @@ fn compile_source_values(
                 "batch_size": batch_size,
                 "new_jobs": prepared.newly_enqueued_job_count,
                 "reused_jobs": prepared.reused_existing_job_count,
+                "same_revision_reused_jobs": prepared.same_revision_reused_job_count,
+                "cross_revision_reused_jobs": prepared.cross_revision_reused_job_count,
                 "jobs_observed_this_run": parser_jobs,
                 "succeeded_this_run": worker.succeeded,
                 "residual_this_run": worker.residual,
@@ -1125,6 +1127,12 @@ fn compile_source_values(
                 "token_normalized_metrics_available": tokens != 0,
                 "wall_ns_per_token": wall_ns_per_token,
                 "worker_ns_per_token": worker_ns_per_token,
+                "cross_revision_reuse_ratio": if prepared.semantic_region_count == 0 {
+                    0.0
+                } else {
+                    prepared.cross_revision_reused_job_count as f64
+                        / prepared.semantic_region_count as f64
+                },
                 "db_native_reuse_ratio": if prepared.semantic_region_count == 0 {
                     1.0
                 } else {
