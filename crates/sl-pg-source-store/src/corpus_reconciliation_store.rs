@@ -968,24 +968,25 @@ pub fn reconcile_source_candidate_semantics(
     {
         return Ok(receipt);
     }
+    let mut work = CorpusReconciliationWork::default();
+    ensure_l2_product_summaries(&mut client, source_revision_ref, &mut work)?;
     let batches = load_statement_batches(&mut client, source_revision_ref)?;
-    let mut work = CorpusReconciliationWork {
-        factor_rows_scanned: batches.iter().map(|batch| batch.factors.len()).sum(),
-        ..CorpusReconciliationWork::default()
-    };
+    work.factor_rows_scanned += batches.iter().map(|batch| batch.factors.len()).sum::<usize>();
 
     let mut tx = client.transaction()?;
-    let mut entity_fingerprints = BTreeSet::new();
-    let mut proposition_fingerprints = BTreeSet::new();
-    let mut event_fingerprints = BTreeSet::new();
-    let mut touched_base_signatures = BTreeSet::new();
+    let product_binding =
+        bind_l2_product_occurrences(&mut tx, source_revision_ref, &mut work)?;
+    let mut entity_fingerprints = product_binding.entity_fingerprints;
+    let mut proposition_fingerprints = product_binding.proposition_fingerprints;
+    let mut event_fingerprints = product_binding.event_fingerprints;
+    let mut touched_base_signatures = product_binding.touched_base_signatures;
 
-    let mut entity_mention_count = 0usize;
+    let mut entity_mention_count = product_binding.entity_mention_count;
     let mut named_entity_mention_count = 0usize;
     let mut temporal_mention_count = 0usize;
     let mut named_entity_fingerprints = BTreeSet::new();
-    let mut proposition_occurrence_count = 0usize;
-    let mut event_occurrence_count = 0usize;
+    let mut proposition_occurrence_count = product_binding.proposition_occurrence_count;
+    let mut event_occurrence_count = product_binding.event_occurrence_count;
 
     for batch in &batches {
         for factor in batch
@@ -1320,7 +1321,7 @@ pub fn reconcile_source_candidate_semantics(
         source_revision_ref: source_revision_ref.to_owned(),
         stage_reused: false,
         work,
-        statement_count: batches.len(),
+        statement_count: product_binding.statement_count + batches.len(),
         entity_mention_count,
         entity_fingerprint_count: entity_fingerprints.len(),
         named_entity_mention_count,
