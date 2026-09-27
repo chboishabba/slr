@@ -85,6 +85,12 @@ def measurement(kind, path):
         },
         "l2_work": {
             "factor_rows_scanned": cardinality.get("l2_factor_rows_scanned_this_run"),
+            "product_summary_reuse_hits": cardinality.get(
+                "l2_product_summary_reuse_hits_this_run"
+            ),
+            "product_summaries_created": cardinality.get(
+                "l2_product_summaries_created_this_run"
+            ),
             "entity_mention_rows_inserted": cardinality.get(
                 "l2_entity_mention_rows_inserted_this_run"
             ),
