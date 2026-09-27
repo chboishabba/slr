@@ -632,7 +632,7 @@ pub fn enqueue_parser_regions_with_content_reuse(
             if !boundary_ok {
                 return Err(DbNativeParserError::PromotionBoundary);
             }
-            if status == "succeeded" {
+            if matches!(status.as_str(), "succeeded" | "residual") {
                 same_revision_reused_job_count += 1;
             } else if matches!(status.as_str(), "queued" | "leased") {
                 queued_new_job_count += 1;
@@ -642,10 +642,11 @@ pub fn enqueue_parser_regions_with_content_reuse(
 
         let reusable = tx.query_opt(
             r#"
-            SELECT compilation_key, region_start_char, region_end_char
+            SELECT compilation_key, region_start_char, region_end_char,
+                   status, error_ref
             FROM ingest.parser_job
             WHERE parser_product_key=$1
-              AND status='succeeded'
+              AND status IN ('succeeded','residual')
               AND candidate_only
               AND NOT creates_semantic_authority
               AND NOT applicability_promoted
@@ -660,9 +661,13 @@ pub fn enqueue_parser_regions_with_content_reuse(
             let prior_key: String = reusable.get(0);
             let prior_start: i64 = reusable.get(1);
             let prior_end: i64 = reusable.get(2);
+            let prior_status: String = reusable.get(3);
+            let prior_error_ref: Option<String> = reusable.get(4);
             if prior_start < 0
                 || prior_end <= prior_start
                 || (prior_end - prior_start) as u64 != region.end_char - region.start_char
+                || !matches!(prior_status.as_str(), "succeeded" | "residual")
+                || (prior_status == "residual" && prior_error_ref.is_none())
             {
                 return Err(DbNativeParserError::ParserProductIdentityConflict);
             }
@@ -677,8 +682,8 @@ pub fn enqueue_parser_regions_with_content_reuse(
                     applicability_promoted, claim_truth_promoted,
                     parser_product_key, product_reused, reused_from_compilation_key
                 ) VALUES (
-                    $1,$2,$3,$4,$5,$6,'succeeded',
-                    NULL,NULL,0,NULL,NOW(),TRUE,FALSE,FALSE,FALSE,$7,TRUE,$8
+                    $1,$2,$3,$4,$5,$6,$7,
+                    NULL,NULL,0,$8,NOW(),TRUE,FALSE,FALSE,FALSE,$9,TRUE,$10
                 )
                 "#,
                 &[
@@ -688,54 +693,58 @@ pub fn enqueue_parser_regions_with_content_reuse(
                     &region.region_ref,
                     &(region.start_char as i64),
                     &(region.end_char as i64),
+                    &prior_status,
+                    &prior_error_ref,
                     &product_key,
                     &prior_key,
                 ],
             )?;
 
-            tx.execute(
-                r#"
-                INSERT INTO ingest.parser_token (
-                    compilation_key, token_ordinal, start_char, end_char,
-                    surface, lemma, pos, morph_json, head_ordinal, dependency_ref
-                )
-                SELECT $1, token_ordinal,
-                       start_char - $2 + $3,
-                       end_char - $2 + $3,
-                       surface, lemma, pos, morph_json, head_ordinal, dependency_ref
-                FROM ingest.parser_token
-                WHERE compilation_key=$4
-                ORDER BY token_ordinal
-                "#,
-                &[
-                    &key,
-                    &prior_start,
-                    &(region.start_char as i64),
-                    &prior_key,
-                ],
-            )?;
+            if prior_status == "succeeded" {
+                tx.execute(
+                    r#"
+                    INSERT INTO ingest.parser_token (
+                        compilation_key, token_ordinal, start_char, end_char,
+                        surface, lemma, pos, morph_json, head_ordinal, dependency_ref
+                    )
+                    SELECT $1, token_ordinal,
+                           start_char - $2 + $3,
+                           end_char - $2 + $3,
+                           surface, lemma, pos, morph_json, head_ordinal, dependency_ref
+                    FROM ingest.parser_token
+                    WHERE compilation_key=$4
+                    ORDER BY token_ordinal
+                    "#,
+                    &[
+                        &key,
+                        &prior_start,
+                        &(region.start_char as i64),
+                        &prior_key,
+                    ],
+                )?;
 
-            tx.execute(
-                r#"
-                INSERT INTO ingest.parser_entity (
-                    compilation_key, entity_ordinal, start_char, end_char,
-                    surface, label_ref
-                )
-                SELECT $1, entity_ordinal,
-                       start_char - $2 + $3,
-                       end_char - $2 + $3,
-                       surface, label_ref
-                FROM ingest.parser_entity
-                WHERE compilation_key=$4
-                ORDER BY entity_ordinal
-                "#,
-                &[
-                    &key,
-                    &prior_start,
-                    &(region.start_char as i64),
-                    &prior_key,
-                ],
-            )?;
+                tx.execute(
+                    r#"
+                    INSERT INTO ingest.parser_entity (
+                        compilation_key, entity_ordinal, start_char, end_char,
+                        surface, label_ref
+                    )
+                    SELECT $1, entity_ordinal,
+                           start_char - $2 + $3,
+                           end_char - $2 + $3,
+                           surface, label_ref
+                    FROM ingest.parser_entity
+                    WHERE compilation_key=$4
+                    ORDER BY entity_ordinal
+                    "#,
+                    &[
+                        &key,
+                        &prior_start,
+                        &(region.start_char as i64),
+                        &prior_key,
+                    ],
+                )?;
+            }
 
             cross_revision_reused_job_count += 1;
         } else {
