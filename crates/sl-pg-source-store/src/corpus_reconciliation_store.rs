@@ -198,10 +198,25 @@ pub enum CorpusReconciliationError {
     ExistingRowConflict,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct CorpusReconciliationWork {
+    pub factor_rows_scanned: usize,
+    pub entity_mention_rows_inserted: usize,
+    pub named_entity_rows_inserted: usize,
+    pub temporal_rows_inserted: usize,
+    pub proposition_fingerprint_rows_inserted: usize,
+    pub proposition_occurrence_rows_inserted: usize,
+    pub event_fingerprint_rows_inserted: usize,
+    pub event_occurrence_rows_inserted: usize,
+    pub contestation_rows_inserted: usize,
+    pub pressure_rows_upserted: usize,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CorpusReconciliationReceipt {
     pub source_revision_ref: String,
     pub stage_reused: bool,
+    pub work: CorpusReconciliationWork,
     pub statement_count: usize,
     pub entity_mention_count: usize,
     pub entity_fingerprint_count: usize,
@@ -465,6 +480,7 @@ fn load_reconciliation_stage_receipt(
     let receipt = CorpusReconciliationReceipt {
         source_revision_ref: source_revision_ref.to_owned(),
         stage_reused: true,
+        work: CorpusReconciliationWork::default(),
         statement_count: count(0),
         entity_mention_count: count(1),
         entity_fingerprint_count: count(2),
@@ -509,6 +525,10 @@ pub fn reconcile_source_candidate_semantics(
         return Ok(receipt);
     }
     let batches = load_statement_batches(&mut client, source_revision_ref)?;
+    let mut work = CorpusReconciliationWork {
+        factor_rows_scanned: batches.iter().map(|batch| batch.factors.len()).sum(),
+        ..CorpusReconciliationWork::default()
+    };
 
     let mut tx = client.transaction()?;
     let mut entity_fingerprints = BTreeSet::new();
@@ -542,7 +562,7 @@ pub fn reconcile_source_candidate_semantics(
                     &[&batch.statement_ref, &batch.batch_ref, &factor.candidate_ref],
                 )
             );
-            tx.execute(
+            work.entity_mention_rows_inserted += tx.execute(
                 r#"INSERT INTO semantic.entity_mention_candidate
                    (mention_ref, entity_fingerprint_ref, statement_ref, candidate_ref,
                     role_ref, surface, lemma, source_start_char, source_end_char,
@@ -562,7 +582,7 @@ pub fn reconcile_source_candidate_semantics(
                     &factor.end_char,
                     &DETECTOR_REF,
                 ],
-            )?;
+            )? as usize;
             entity_mention_count += 1;
             entity_fingerprints.insert(entity_fingerprint_ref);
         }
@@ -575,7 +595,7 @@ pub fn reconcile_source_candidate_semantics(
             "proposition-fingerprint:{}",
             digest_ref("proposition-fingerprint:v1", &[&base, polarity])
         );
-        tx.execute(
+        work.proposition_fingerprint_rows_inserted += tx.execute(
             r#"INSERT INTO semantic.proposition_fingerprint_candidate
                (proposition_fingerprint_ref, base_signature_ref, polarity_ref,
                 detector_ref, candidate_only, creates_proposition_identity,
@@ -583,8 +603,8 @@ pub fn reconcile_source_candidate_semantics(
                VALUES ($1,$2,$3,$4,TRUE,FALSE,FALSE,FALSE,FALSE)
                ON CONFLICT (proposition_fingerprint_ref) DO NOTHING"#,
             &[&proposition_fingerprint_ref, &base, &polarity, &DETECTOR_REF],
-        )?;
-        tx.execute(
+        )? as usize;
+        work.proposition_occurrence_rows_inserted += tx.execute(
             r#"INSERT INTO semantic.proposition_candidate_occurrence
                (proposition_fingerprint_ref, statement_ref, batch_ref,
                 source_revision_ref, exact_span_ref, literal_text,
@@ -599,7 +619,7 @@ pub fn reconcile_source_candidate_semantics(
                 &batch.exact_span_ref,
                 &batch.literal_text,
             ],
-        )?;
+        )? as usize;
         proposition_occurrence_count += 1;
         proposition_fingerprints.insert(proposition_fingerprint_ref.clone());
         touched_base_signatures.insert(base.clone());
@@ -611,7 +631,7 @@ pub fn reconcile_source_candidate_semantics(
                 "event-fingerprint:{}",
                 digest_ref("event-fingerprint:v1", &[&base, polarity])
             );
-            tx.execute(
+            work.event_fingerprint_rows_inserted += tx.execute(
                 r#"INSERT INTO semantic.event_fingerprint_candidate
                    (event_fingerprint_ref, base_signature_ref, polarity_ref,
                     detector_ref, candidate_only, creates_event_identity,
@@ -619,8 +639,8 @@ pub fn reconcile_source_candidate_semantics(
                    VALUES ($1,$2,$3,$4,TRUE,FALSE,FALSE,FALSE)
                    ON CONFLICT (event_fingerprint_ref) DO NOTHING"#,
                 &[&event_fingerprint_ref, &base, &polarity, &DETECTOR_REF],
-            )?;
-            tx.execute(
+            )? as usize;
+            work.event_occurrence_rows_inserted += tx.execute(
                 r#"INSERT INTO semantic.event_candidate_occurrence
                    (event_fingerprint_ref, statement_ref, batch_ref,
                     source_revision_ref, exact_span_ref, candidate_only,
@@ -635,7 +655,7 @@ pub fn reconcile_source_candidate_semantics(
                     &batch.source_revision_ref,
                     &batch.exact_span_ref,
                 ],
-            )?;
+            )? as usize;
             event_occurrence_count += 1;
             event_fingerprints.insert(event_fingerprint_ref);
         }
@@ -689,7 +709,7 @@ pub fn reconcile_source_candidate_semantics(
                 ],
             )
         );
-        tx.execute(
+        work.named_entity_rows_inserted += tx.execute(
             r#"INSERT INTO semantic.named_entity_candidate
                (mention_ref, entity_fingerprint_ref, parser_run_ref,
                 statement_ref, exact_span_ref, start_char, end_char,
@@ -710,7 +730,7 @@ pub fn reconcile_source_candidate_semantics(
                 &surface,
                 &label_ref,
             ],
-        )?;
+        )? as usize;
         named_entity_mention_count += 1;
         named_entity_fingerprints.insert(entity_fingerprint_ref);
 
@@ -728,7 +748,7 @@ pub fn reconcile_source_candidate_semantics(
                     ],
                 )
             );
-            tx.execute(
+            work.temporal_rows_inserted += tx.execute(
                 r#"INSERT INTO semantic.temporal_mention_candidate
                    (temporal_mention_ref, parser_run_ref, statement_ref,
                     exact_span_ref, start_char, end_char, surface, label_ref,
@@ -747,7 +767,7 @@ pub fn reconcile_source_candidate_semantics(
                     &surface,
                     &label_ref,
                 ],
-            )?;
+            )? as usize;
             temporal_mention_count += 1;
         }
     }
@@ -772,7 +792,7 @@ pub fn reconcile_source_candidate_semantics(
                 "contestation-candidate:{}",
                 digest_ref("polarity-conflict:v1", &[base, positive, negative])
             );
-            tx.execute(
+            work.contestation_rows_inserted += tx.execute(
                 r#"INSERT INTO semantic.contestation_candidate
                    (relation_ref, base_signature_ref,
                     positive_proposition_fingerprint_ref,
@@ -783,7 +803,7 @@ pub fn reconcile_source_candidate_semantics(
                            TRUE,TRUE,FALSE,FALSE,FALSE)
                    ON CONFLICT (relation_ref) DO NOTHING"#,
                 &[&relation_ref, base, positive, negative, &DETECTOR_REF],
-            )?;
+            )? as usize;
             polarity_conflict_candidate_count += 1;
         }
     }
@@ -830,7 +850,7 @@ pub fn reconcile_source_candidate_semantics(
             "reconciliation-pressure:{}",
             digest_ref("reconciliation-pressure:v1", &[&kind, &fingerprint])
         );
-        tx.execute(
+        work.pressure_rows_upserted += tx.execute(
             r#"INSERT INTO semantic.reconciliation_pressure_candidate
                (pressure_ref, semantic_kind_ref, semantic_fingerprint_ref,
                 occurrence_count, source_revision_count, reason_ref,
@@ -848,13 +868,14 @@ pub fn reconcile_source_candidate_semantics(
                 &occurrence_count,
                 &source_revision_count,
             ],
-        )?;
+        )? as usize;
         review_pressure_candidate_count += 1;
     }
 
     let receipt = CorpusReconciliationReceipt {
         source_revision_ref: source_revision_ref.to_owned(),
         stage_reused: false,
+        work,
         statement_count: batches.len(),
         entity_mention_count,
         entity_fingerprint_count: entity_fingerprints.len(),
