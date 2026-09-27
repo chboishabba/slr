@@ -19,7 +19,7 @@ use thiserror::Error;
 use crate::candidate_pnf_store::{
     load_candidate_persistence_stage_receipt_with_client, load_candidate_pnf_batch_with_client,
     persist_candidate_persistence_stage_receipt_with_client,
-    persist_statement_candidate_pnf_with_client,
+    persist_statement_candidate_pnf_with_client_detailed,
 };
 use crate::statement_trace_store::persist_source_statement_with_client;
 use crate::{
@@ -126,6 +126,9 @@ pub struct DbNativeLongDocumentReceipt {
     pub persisted_candidate_factor_count: usize,
     pub candidate_pnf_reopen_complete: bool,
     pub candidate_persistence_reused: bool,
+    pub candidate_product_reuse_hits_this_run: usize,
+    pub candidate_product_new_this_run: usize,
+    pub candidate_product_factor_rows_inserted_this_run: usize,
     pub reconciliation: CorpusReconciliationReceipt,
     pub reconciliation_review: ReconciliationReviewReceipt,
     pub auto_event: Scale1AutoEventReceipt,
@@ -362,6 +365,10 @@ pub fn finalize_db_native_long_document(
     // cold pass fail even when every reopened batch matches exactly.
     let mut candidate_pnf_reopen_complete = true;
 
+    let mut candidate_product_reuse_hits_this_run = 0usize;
+    let mut candidate_product_new_this_run = 0usize;
+    let mut candidate_product_factor_rows_inserted_this_run = 0usize;
+
     if !candidate_persistence_reused {
         for region in document
             .regions
@@ -410,10 +417,20 @@ pub fn finalize_db_native_long_document(
                     persisted_statement_count += 1;
 
                     let expected_batch_ref = canonical_candidate_pnf_batch_ref(&candidate);
-                    let persisted = persist_statement_candidate_pnf_with_client(
-                        &mut persistence_client,
-                        &candidate,
-                    )?;
+                    let (persisted, product_work) =
+                        persist_statement_candidate_pnf_with_client_detailed(
+                            &mut persistence_client,
+                            &candidate,
+                        )?;
+                    if product_work.product_backed {
+                        if product_work.reused_product {
+                            candidate_product_reuse_hits_this_run += 1;
+                        } else {
+                            candidate_product_new_this_run += 1;
+                        }
+                        candidate_product_factor_rows_inserted_this_run +=
+                            product_work.product_factor_rows_inserted;
+                    }
                     persisted_candidate_batch_count += 1;
                     persisted_candidate_factor_count += persisted.factors.len();
 
@@ -534,6 +551,9 @@ pub fn finalize_db_native_long_document(
         persisted_candidate_factor_count,
         candidate_pnf_reopen_complete,
         candidate_persistence_reused,
+        candidate_product_reuse_hits_this_run,
+        candidate_product_new_this_run,
+        candidate_product_factor_rows_inserted_this_run,
         reconciliation,
         reconciliation_review,
         auto_event,
