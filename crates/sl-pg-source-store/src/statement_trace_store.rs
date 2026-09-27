@@ -313,6 +313,14 @@ pub(crate) fn persist_source_statement_with_client(
     client: &mut Client,
     statement: &SourceStatementEnvelope,
 ) -> Result<PersistedSourceStatement, StatementTraceStoreError> {
+    persist_source_statement_with_client_detailed(client, statement)
+        .map(|(persisted, _)| persisted)
+}
+
+pub(crate) fn persist_source_statement_with_client_detailed(
+    client: &mut Client,
+    statement: &SourceStatementEnvelope,
+) -> Result<(PersistedSourceStatement, bool), StatementTraceStoreError> {
     statement
         .validate()
         .map_err(|_| StatementTraceStoreError::PromotionNotAllowed)?;
@@ -325,7 +333,7 @@ pub(crate) fn persist_source_statement_with_client(
     require_source_ancestry(client, statement)?;
 
     let digest = statement_digest(statement);
-    client.execute(
+    let statement_inserted = client.execute(
         r#"
         INSERT INTO corpus.source_statement
           (statement_ref, document_ref, source_revision_ref, exact_span_ref,
@@ -365,7 +373,7 @@ pub(crate) fn persist_source_statement_with_client(
     {
         return Err(StatementTraceStoreError::ExistingStatementConflict);
     }
-    Ok(persisted)
+    Ok((persisted, statement_inserted == 1))
 }
 
 pub fn persist_statement_observation_link(
