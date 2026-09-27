@@ -243,6 +243,8 @@ def main():
         raise SystemExit(2)
     if semantic_product_locality is False:
         raise SystemExit(3)
+    if not l2_scan_local:
+        raise SystemExit(4)
 
 
 if __name__ == "__main__":
