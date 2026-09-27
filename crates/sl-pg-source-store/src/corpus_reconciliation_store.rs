@@ -303,9 +303,10 @@ fn load_statement_batches(
     let rows = client.query(
         r#"
         SELECT b.batch_ref, b.statement_ref, s.source_revision_ref,
-               s.exact_span_ref, s.literal_text,
-               b.candidate_only, b.semantic_admission_paid,
-               b.proposition_support_paid, b.applicability_paid, b.claim_truth_paid
+               s.exact_span_ref, s.literal_text, b.parser_receipt_ref,
+               b.candidate_product_ref, b.candidate_only,
+               b.semantic_admission_paid, b.proposition_support_paid,
+               b.applicability_paid, b.claim_truth_paid
         FROM pnf.statement_candidate_batch b
         JOIN corpus.source_statement s ON s.statement_ref=b.statement_ref
         WHERE s.source_revision_ref=$1
@@ -316,38 +317,102 @@ fn load_statement_batches(
 
     let mut out = Vec::with_capacity(rows.len());
     for row in rows {
-        if !row.get::<_, bool>(5)
-            || row.get::<_, bool>(6)
-            || row.get::<_, bool>(7)
+        if !row.get::<_, bool>(7)
             || row.get::<_, bool>(8)
             || row.get::<_, bool>(9)
+            || row.get::<_, bool>(10)
+            || row.get::<_, bool>(11)
         {
             return Err(CorpusReconciliationError::PromotionBoundary);
         }
         let batch_ref: String = row.get(0);
-        let factor_rows = client.query(
-            r#"
-            SELECT candidate_ref, role_ref, source_start_char, source_end_char,
-                   surface, lemma, dependency_ref, candidate_only
-            FROM pnf.statement_candidate_factor
-            WHERE batch_ref=$1
-            ORDER BY source_start_char, source_end_char, candidate_ref
-            "#,
-            &[&batch_ref],
-        )?;
-        let factors = factor_rows
-            .into_iter()
-            .map(|factor| FactorRow {
-                candidate_ref: factor.get(0),
-                role_ref: factor.get(1),
-                start_char: factor.get(2),
-                end_char: factor.get(3),
-                surface: factor.get(4),
-                lemma: factor.get(5),
-                dependency_ref: factor.get(6),
-                candidate_only: factor.get(7),
-            })
-            .collect::<Vec<_>>();
+        let exact_span_ref: String = row.get(3);
+        let parser_receipt_ref: String = row.get(5);
+        let candidate_product_ref: Option<String> = row.get(6);
+
+        let factors = if let Some(product_ref) = candidate_product_ref {
+            let parser_job = client.query_opt(
+                r#"
+                SELECT parser_run_ref, region_start_char,
+                       candidate_only, creates_semantic_authority,
+                       applicability_promoted, claim_truth_promoted
+                FROM ingest.parser_job
+                WHERE source_revision_ref=$1
+                  AND region_ref=$2
+                  AND ('db-parser:' || parser_run_ref || ':' || region_ref)=$3
+                  AND status='succeeded'
+                "#,
+                &[&source_revision_ref, &exact_span_ref, &parser_receipt_ref],
+            )?;
+            let Some(parser_job) = parser_job else {
+                return Err(CorpusReconciliationError::ExistingRowConflict);
+            };
+            if !parser_job.get::<_, bool>(2)
+                || parser_job.get::<_, bool>(3)
+                || parser_job.get::<_, bool>(4)
+                || parser_job.get::<_, bool>(5)
+            {
+                return Err(CorpusReconciliationError::PromotionBoundary);
+            }
+            let parser_run_ref: String = parser_job.get(0);
+            let region_start: i64 = parser_job.get(1);
+            let factor_rows = client.query(
+                r#"
+                SELECT token_ordinal, start_offset, end_offset,
+                       role_ref, surface, lemma, dependency_ref, candidate_only
+                FROM pnf.candidate_semantic_product_factor
+                WHERE product_ref=$1
+                ORDER BY factor_ordinal
+                "#,
+                &[&product_ref],
+            )?;
+            factor_rows
+                .into_iter()
+                .map(|factor| {
+                    let token_ordinal: i32 = factor.get(0);
+                    let start = region_start + factor.get::<_, i64>(1);
+                    let end = region_start + factor.get::<_, i64>(2);
+                    FactorRow {
+                        candidate_ref: format!(
+                            "candidate-pnf-db:{}:{}:{}:{}:{}",
+                            parser_run_ref, exact_span_ref, token_ordinal, start, end
+                        ),
+                        role_ref: factor.get(3),
+                        start_char: start,
+                        end_char: end,
+                        surface: factor.get(4),
+                        lemma: factor.get(5),
+                        dependency_ref: factor.get(6),
+                        candidate_only: factor.get(7),
+                    }
+                })
+                .collect::<Vec<_>>()
+        } else {
+            let factor_rows = client.query(
+                r#"
+                SELECT candidate_ref, role_ref, source_start_char, source_end_char,
+                       surface, lemma, dependency_ref, candidate_only
+                FROM pnf.statement_candidate_factor
+                WHERE batch_ref=$1
+                ORDER BY source_start_char, source_end_char, candidate_ref
+                "#,
+                &[&batch_ref],
+            )?;
+            factor_rows
+                .into_iter()
+                .map(|factor| FactorRow {
+                    candidate_ref: factor.get(0),
+                    role_ref: factor.get(1),
+                    start_char: factor.get(2),
+                    end_char: factor.get(3),
+                    surface: factor.get(4),
+                    lemma: factor.get(5),
+                    dependency_ref: factor.get(6),
+                    candidate_only: factor.get(7),
+                })
+                .collect::<Vec<_>>()
+        };
+
         if factors.iter().any(|factor| {
             !factor.candidate_only || factor.start_char < 0 || factor.end_char <= factor.start_char
         }) {
@@ -357,7 +422,7 @@ fn load_statement_batches(
             batch_ref,
             statement_ref: row.get(1),
             source_revision_ref: row.get(2),
-            exact_span_ref: row.get(3),
+            exact_span_ref,
             literal_text: row.get(4),
             factors,
         });
