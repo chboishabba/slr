@@ -690,6 +690,205 @@ fn load_statement_batches(
     Ok(out)
 }
 
+#[derive(Debug, Default)]
+struct ProductBindingResult {
+    statement_count: usize,
+    entity_mention_count: usize,
+    proposition_occurrence_count: usize,
+    event_occurrence_count: usize,
+    entity_fingerprints: BTreeSet<String>,
+    proposition_fingerprints: BTreeSet<String>,
+    event_fingerprints: BTreeSet<String>,
+    touched_base_signatures: BTreeSet<String>,
+}
+
+fn bind_l2_product_occurrences(
+    tx: &mut postgres::Transaction<'_>,
+    source_revision_ref: &str,
+    work: &mut CorpusReconciliationWork,
+) -> Result<ProductBindingResult, CorpusReconciliationError> {
+    let mut out = ProductBindingResult::default();
+
+    let entity_rows = tx.query(
+        r#"
+        SELECT b.batch_ref, b.statement_ref, s.exact_span_ref,
+               j.parser_run_ref, j.region_start_char,
+               f.token_ordinal, f.start_offset, f.end_offset,
+               f.entity_fingerprint_ref, f.role_ref, f.surface, f.lemma
+        FROM pnf.statement_candidate_batch b
+        JOIN corpus.source_statement s ON s.statement_ref=b.statement_ref
+        JOIN ingest.parser_job j
+          ON j.source_revision_ref=s.source_revision_ref
+         AND j.region_ref=s.exact_span_ref
+         AND ('db-parser:' || j.parser_run_ref || ':' || j.region_ref)=b.parser_receipt_ref
+         AND j.status='succeeded'
+        JOIN semantic.l2_candidate_product_entity_factor f
+          ON f.product_ref=b.candidate_product_ref
+         AND f.detector_ref=$2
+        WHERE s.source_revision_ref=$1
+          AND b.candidate_product_ref IS NOT NULL
+        ORDER BY b.batch_ref, f.factor_ordinal
+        "#,
+        &[&source_revision_ref, &DETECTOR_REF],
+    )?;
+    for row in entity_rows {
+        let batch_ref: String = row.get(0);
+        let statement_ref: String = row.get(1);
+        let exact_span_ref: String = row.get(2);
+        let parser_run_ref: String = row.get(3);
+        let region_start: i64 = row.get(4);
+        let token_ordinal: i32 = row.get(5);
+        let start = region_start + row.get::<_, i64>(6);
+        let end = region_start + row.get::<_, i64>(7);
+        if region_start < 0 || token_ordinal < 0 || start < 0 || end <= start {
+            return Err(CorpusReconciliationError::ExistingRowConflict);
+        }
+        let entity_fingerprint_ref: String = row.get(8);
+        let candidate_ref = format!(
+            "candidate-pnf-db:{}:{}:{}:{}:{}",
+            parser_run_ref, exact_span_ref, token_ordinal, start, end
+        );
+        let mention_ref = format!(
+            "entity-mention:{}",
+            digest_ref(
+                "entity-mention:v1",
+                &[&statement_ref, &batch_ref, &candidate_ref],
+            )
+        );
+        work.entity_mention_rows_inserted += tx.execute(
+            r#"
+            INSERT INTO semantic.entity_mention_candidate
+              (mention_ref, entity_fingerprint_ref, statement_ref, candidate_ref,
+               role_ref, surface, lemma, source_start_char, source_end_char,
+               detector_ref, candidate_only, creates_entity_identity,
+               creates_semantic_authority, claim_truth_promoted)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,TRUE,FALSE,FALSE,FALSE)
+            ON CONFLICT (mention_ref) DO NOTHING
+            "#,
+            &[
+                &mention_ref,
+                &entity_fingerprint_ref,
+                &statement_ref,
+                &candidate_ref,
+                &row.get::<_, String>(9),
+                &row.get::<_, String>(10),
+                &row.get::<_, String>(11),
+                &start,
+                &end,
+                &DETECTOR_REF,
+            ],
+        )? as usize;
+        out.entity_mention_count += 1;
+        out.entity_fingerprints.insert(entity_fingerprint_ref);
+    }
+
+    let batch_rows = tx.query(
+        r#"
+        SELECT b.batch_ref, b.statement_ref, s.exact_span_ref, s.literal_text,
+               p.base_signature_ref, p.polarity_ref, p.creates_event_candidate
+        FROM pnf.statement_candidate_batch b
+        JOIN corpus.source_statement s ON s.statement_ref=b.statement_ref
+        JOIN semantic.l2_candidate_product_summary p
+          ON p.product_ref=b.candidate_product_ref
+         AND p.detector_ref=$2
+        WHERE s.source_revision_ref=$1
+          AND b.candidate_product_ref IS NOT NULL
+        ORDER BY s.exact_span_ref, b.batch_ref
+        "#,
+        &[&source_revision_ref, &DETECTOR_REF],
+    )?;
+    out.statement_count = batch_rows.len();
+    for row in batch_rows {
+        let batch_ref: String = row.get(0);
+        let statement_ref: String = row.get(1);
+        let exact_span_ref: String = row.get(2);
+        let literal_text: String = row.get(3);
+        let base: Option<String> = row.get(4);
+        let polarity: Option<String> = row.get(5);
+        let creates_event_candidate: bool = row.get(6);
+        let (Some(base), Some(polarity)) = (base, polarity) else {
+            continue;
+        };
+        let proposition_fingerprint_ref = format!(
+            "proposition-fingerprint:{}",
+            digest_ref("proposition-fingerprint:v1", &[&base, &polarity])
+        );
+        work.proposition_fingerprint_rows_inserted += tx.execute(
+            r#"
+            INSERT INTO semantic.proposition_fingerprint_candidate
+              (proposition_fingerprint_ref, base_signature_ref, polarity_ref,
+               detector_ref, candidate_only, creates_proposition_identity,
+               creates_semantic_authority, applicability_promoted, claim_truth_promoted)
+            VALUES ($1,$2,$3,$4,TRUE,FALSE,FALSE,FALSE,FALSE)
+            ON CONFLICT (proposition_fingerprint_ref) DO NOTHING
+            "#,
+            &[&proposition_fingerprint_ref, &base, &polarity, &DETECTOR_REF],
+        )? as usize;
+        work.proposition_occurrence_rows_inserted += tx.execute(
+            r#"
+            INSERT INTO semantic.proposition_candidate_occurrence
+              (proposition_fingerprint_ref, statement_ref, batch_ref,
+               source_revision_ref, exact_span_ref, literal_text,
+               candidate_only, creates_semantic_authority, claim_truth_promoted)
+            VALUES ($1,$2,$3,$4,$5,$6,TRUE,FALSE,FALSE)
+            ON CONFLICT DO NOTHING
+            "#,
+            &[
+                &proposition_fingerprint_ref,
+                &statement_ref,
+                &batch_ref,
+                &source_revision_ref,
+                &exact_span_ref,
+                &literal_text,
+            ],
+        )? as usize;
+        out.proposition_occurrence_count += 1;
+        out.proposition_fingerprints
+            .insert(proposition_fingerprint_ref.clone());
+        out.touched_base_signatures.insert(base.clone());
+
+        if creates_event_candidate {
+            let event_fingerprint_ref = format!(
+                "event-fingerprint:{}",
+                digest_ref("event-fingerprint:v1", &[&base, &polarity])
+            );
+            work.event_fingerprint_rows_inserted += tx.execute(
+                r#"
+                INSERT INTO semantic.event_fingerprint_candidate
+                  (event_fingerprint_ref, base_signature_ref, polarity_ref,
+                   detector_ref, candidate_only, creates_event_identity,
+                   creates_semantic_authority, claim_truth_promoted)
+                VALUES ($1,$2,$3,$4,TRUE,FALSE,FALSE,FALSE)
+                ON CONFLICT (event_fingerprint_ref) DO NOTHING
+                "#,
+                &[&event_fingerprint_ref, &base, &polarity, &DETECTOR_REF],
+            )? as usize;
+            work.event_occurrence_rows_inserted += tx.execute(
+                r#"
+                INSERT INTO semantic.event_candidate_occurrence
+                  (event_fingerprint_ref, statement_ref, batch_ref,
+                   source_revision_ref, exact_span_ref, candidate_only,
+                   creates_event_identity, creates_semantic_authority,
+                   claim_truth_promoted)
+                VALUES ($1,$2,$3,$4,$5,TRUE,FALSE,FALSE,FALSE)
+                ON CONFLICT DO NOTHING
+                "#,
+                &[
+                    &event_fingerprint_ref,
+                    &statement_ref,
+                    &batch_ref,
+                    &source_revision_ref,
+                    &exact_span_ref,
+                ],
+            )? as usize;
+            out.event_occurrence_count += 1;
+            out.event_fingerprints.insert(event_fingerprint_ref);
+        }
+    }
+
+    Ok(out)
+}
+
 pub fn install_corpus_reconciliation_schema(
     config: &DatabaseConfig,
 ) -> Result<(), CorpusReconciliationError> {
