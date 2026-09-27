@@ -490,6 +490,13 @@ pub(crate) fn persist_statement_candidate_pnf_with_client(
         .map_err(|_| CandidatePnfStoreError::InvalidCandidate)?;
 
     let batch_ref = canonical_candidate_pnf_batch_ref(candidate);
+    let product_context = candidate_product_context(client, candidate)?;
+    if let Some(context) = product_context.as_ref() {
+        persist_candidate_semantic_product_with_client(client, candidate, context)?;
+    }
+    let candidate_product_ref = product_context
+        .as_ref()
+        .map(|context| context.product_ref.clone());
 
     let statement_exists: bool = client
         .query_one(
@@ -507,9 +514,10 @@ pub(crate) fn persist_statement_candidate_pnf_with_client(
     tx.execute(
         r#"INSERT INTO pnf.statement_candidate_batch
            (batch_ref, statement_ref, exact_span_ref, parser_receipt_ref,
-            factor_count, candidate_only, semantic_admission_paid,
-            proposition_support_paid, applicability_paid, claim_truth_paid)
-           VALUES ($1,$2,$3,$4,$5,TRUE,FALSE,FALSE,FALSE,FALSE)
+            factor_count, candidate_product_ref, candidate_only,
+            semantic_admission_paid, proposition_support_paid,
+            applicability_paid, claim_truth_paid)
+           VALUES ($1,$2,$3,$4,$5,$6,TRUE,FALSE,FALSE,FALSE,FALSE)
            ON CONFLICT (batch_ref) DO NOTHING"#,
         &[
             &batch_ref,
@@ -517,13 +525,22 @@ pub(crate) fn persist_statement_candidate_pnf_with_client(
             &candidate.statement.span.span_ref,
             &candidate.parser_receipt_ref,
             &(candidate.pnf.candidates.len() as i64),
+            &candidate_product_ref,
         ],
     )?;
+    if let Some(product_ref) = candidate_product_ref.as_ref() {
+        tx.execute(
+            "UPDATE pnf.statement_candidate_batch
+             SET candidate_product_ref=$2
+             WHERE batch_ref=$1 AND candidate_product_ref IS NULL",
+            &[&batch_ref, product_ref],
+        )?;
+    }
 
     let batch = tx.query_one(
         "SELECT statement_ref, exact_span_ref, parser_receipt_ref, factor_count,
-                candidate_only, semantic_admission_paid, proposition_support_paid,
-                applicability_paid, claim_truth_paid
+                candidate_product_ref, candidate_only, semantic_admission_paid,
+                proposition_support_paid, applicability_paid, claim_truth_paid
          FROM pnf.statement_candidate_batch WHERE batch_ref=$1",
         &[&batch_ref],
     )?;
@@ -531,16 +548,17 @@ pub(crate) fn persist_statement_candidate_pnf_with_client(
         || batch.get::<_, String>(1) != candidate.statement.span.span_ref
         || batch.get::<_, String>(2) != candidate.parser_receipt_ref
         || batch.get::<_, i64>(3) != candidate.pnf.candidates.len() as i64
-        || !batch.get::<_, bool>(4)
-        || batch.get::<_, bool>(5)
+        || batch.get::<_, Option<String>>(4) != candidate_product_ref
+        || !batch.get::<_, bool>(5)
         || batch.get::<_, bool>(6)
         || batch.get::<_, bool>(7)
         || batch.get::<_, bool>(8)
+        || batch.get::<_, bool>(9)
     {
         return Err(CandidatePnfStoreError::ExistingBatchConflict);
     }
 
-    if !candidate.pnf.candidates.is_empty() {
+    if candidate_product_ref.is_none() && !candidate.pnf.candidates.is_empty() {
         let candidate_refs = candidate
             .pnf
             .candidates
