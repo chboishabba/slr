@@ -11,10 +11,10 @@ use std::time::Instant;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
-use sensiblaw_core::source_ingest::SourceFamily;
+use sensiblaw_core::source_ingest::{DocumentRegionKind, SourceFamily};
 
 use sensiblaw_pg_source_store::{
-    canonical_generic_source_revision_ref, claim_parser_jobs,
+    build_plain_text_long_source_with_family, canonical_generic_source_revision_ref, claim_parser_jobs,
     defer_parser_job_retry, finalize_db_native_long_document,
     load_claimed_job_text,
     load_database_config, materialize_accepted_event_join,
@@ -1215,6 +1215,55 @@ fn ingest_book_stdin(args: &[String]) -> Result<(), Box<dyn Error>> {
 }
 
 
+fn segment_source(args: &[String]) -> Result<(), Box<dyn Error>> {
+    if args.len() != 4 {
+        return Err("segment-source <source-family> <text-file>".into());
+    }
+    let family = parse_source_family(&args[2])?;
+    let text = fs::read_to_string(&args[3])?;
+    let revision_ref = format!("segment-only:{}", digest_ref(text.as_bytes()));
+    let (source, receipt) = build_plain_text_long_source_with_family(
+        "source:segment-only",
+        &revision_ref,
+        "provider:segment-only",
+        "acquisition:segment-only",
+        family,
+        None,
+        None,
+        &text,
+    )?;
+    let chars = text.chars().collect::<Vec<_>>();
+    let sentences = source
+        .regions
+        .iter()
+        .filter(|region| region.kind == DocumentRegionKind::Sentence)
+        .map(|region| {
+            let start = region.start_char as usize;
+            let end = region.end_char as usize;
+            let literal = chars[start..end].iter().collect::<String>();
+            json!({
+                "start_char": region.start_char,
+                "end_char": region.end_char,
+                "content_digest_ref": digest_ref(literal.as_bytes())
+            })
+        })
+        .collect::<Vec<_>>();
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&json!({
+            "schema": "sensiblaw.scale1.source-segmentation.v0_1",
+            "source_family": source_family_ref(family),
+            "char_count": receipt.char_count,
+            "sentence_count": receipt.sentence_count,
+            "sentences": sentences,
+            "candidate_only": true,
+            "creates_semantic_authority": false,
+            "claim_truth_promoted": false
+        }))?
+    );
+    Ok(())
+}
+
 fn compile_source(args: &[String]) -> Result<(), Box<dyn Error>> {
     if args.len() < 8 {
         return Err(
@@ -1535,6 +1584,7 @@ fn materialize_proposition(args: &[String]) -> Result<(), Box<dyn Error>> {
 fn usage() {
     eprintln!(
         "usage:\n  \
+         scale1_long_document segment-source <source-family> <text-file>\n  \
          scale1_long_document compile-source <source-family> <text-file> <source-ref> <provider-ref> <acquisition-receipt-ref> <model-ref> [config-json] [parser-script] [batch-size]\n  \
          scale1_long_document compile-source-stdin <source-family> <source-ref> <provider-ref> <acquisition-receipt-ref> <title> <model-ref> [config-json] [parser-script] [batch-size]\n  \
          scale1_long_document ingest-book <text-file> <source-ref> <provider-ref> <acquisition-receipt-ref> <model-ref> [config-json] [parser-script] [batch-size]\n  \
@@ -1560,6 +1610,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
 
     match command {
+        "segment-source" => segment_source(&args),
         "compile-source" => compile_source(&args),
         "compile-source-stdin" => compile_source_stdin(&args),
         "ingest-book" => ingest_book(&args),
