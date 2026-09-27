@@ -685,42 +685,128 @@ pub(crate) fn load_candidate_pnf_batch_with_client(
     batch_ref: &str,
 ) -> Result<Option<PersistedCandidatePnfBatch>, CandidatePnfStoreError> {
     let Some(batch) = client.query_opt(
-        "SELECT statement_ref, exact_span_ref, parser_receipt_ref, factor_count,
-                candidate_only, semantic_admission_paid, proposition_support_paid,
-                applicability_paid, claim_truth_paid
-         FROM pnf.statement_candidate_batch
-         WHERE batch_ref=$1",
+        r#"
+        SELECT b.statement_ref, b.exact_span_ref, b.parser_receipt_ref,
+               b.factor_count, b.candidate_product_ref,
+               b.candidate_only, b.semantic_admission_paid,
+               b.proposition_support_paid, b.applicability_paid,
+               b.claim_truth_paid, s.source_revision_ref
+        FROM pnf.statement_candidate_batch b
+        JOIN corpus.source_statement s ON s.statement_ref=b.statement_ref
+        WHERE b.batch_ref=$1
+        "#,
         &[&batch_ref],
-    )?
-    else {
+    )? else {
         return Ok(None);
     };
 
-    let rows = client.query(
-        "SELECT candidate_ref, role_ref, source_start_char, source_end_char,
-                surface, lemma, dependency_ref, candidate_only
-         FROM pnf.statement_candidate_factor
-         WHERE batch_ref=$1
-         ORDER BY source_start_char, source_end_char, candidate_ref",
-        &[&batch_ref],
-    )?;
-    let mut factors = Vec::with_capacity(rows.len());
-    for row in rows {
-        let start = row.get::<_, i64>(2);
-        let end = row.get::<_, i64>(3);
-        if start < 0 || end < 0 {
+    let statement_ref: String = batch.get(0);
+    let exact_span_ref: String = batch.get(1);
+    let parser_receipt_ref: String = batch.get(2);
+    let candidate_product_ref: Option<String> = batch.get(4);
+    let source_revision_ref: String = batch.get(10);
+
+    let mut factors = Vec::new();
+    if let Some(product_ref) = candidate_product_ref.as_ref() {
+        let parser_job = client.query_opt(
+            r#"
+            SELECT parser_run_ref, region_start_char,
+                   candidate_only, creates_semantic_authority,
+                   applicability_promoted, claim_truth_promoted
+            FROM ingest.parser_job
+            WHERE source_revision_ref=$1
+              AND region_ref=$2
+              AND ('db-parser:' || parser_run_ref || ':' || region_ref)=$3
+              AND status='succeeded'
+            "#,
+            &[&source_revision_ref, &exact_span_ref, &parser_receipt_ref],
+        )?;
+        let Some(parser_job) = parser_job else {
+            return Err(CandidatePnfStoreError::ExistingBatchConflict);
+        };
+        if !parser_job.get::<_, bool>(2)
+            || parser_job.get::<_, bool>(3)
+            || parser_job.get::<_, bool>(4)
+            || parser_job.get::<_, bool>(5)
+        {
+            return Err(CandidatePnfStoreError::ExistingBatchConflict);
+        }
+        let parser_run_ref: String = parser_job.get(0);
+        let region_start: i64 = parser_job.get(1);
+        if region_start < 0 {
             return Err(CandidatePnfStoreError::ExistingFactorConflict);
         }
-        factors.push(CandidatePnfFactor {
-            candidate_ref: row.get(0),
-            role: role_from_db(&row.get::<_, String>(1))?,
-            source_start_char: start as u32,
-            source_end_char: end as u32,
-            surface: row.get(4),
-            lemma: row.get(5),
-            dependency_ref: row.get(6),
-            candidate_only: row.get(7),
-        });
+
+        let rows = client.query(
+            r#"
+            SELECT factor_ordinal, token_ordinal, start_offset, end_offset,
+                   role_ref, surface, lemma, dependency_ref, candidate_only
+            FROM pnf.candidate_semantic_product_factor
+            WHERE product_ref=$1
+            ORDER BY factor_ordinal
+            "#,
+            &[product_ref],
+        )?;
+        factors.reserve(rows.len());
+        for row in rows {
+            let token_ordinal: i32 = row.get(1);
+            let start_offset: i64 = row.get(2);
+            let end_offset: i64 = row.get(3);
+            let start = region_start + start_offset;
+            let end = region_start + end_offset;
+            if token_ordinal < 0
+                || start_offset < 0
+                || end_offset <= start_offset
+                || start < 0
+                || end < 0
+            {
+                return Err(CandidatePnfStoreError::ExistingFactorConflict);
+            }
+            factors.push(CandidatePnfFactor {
+                candidate_ref: format!(
+                    "candidate-pnf-db:{}:{}:{}:{}:{}",
+                    parser_run_ref,
+                    exact_span_ref,
+                    token_ordinal,
+                    start,
+                    end
+                ),
+                role: role_from_db(&row.get::<_, String>(4))?,
+                source_start_char: start as u32,
+                source_end_char: end as u32,
+                surface: row.get(5),
+                lemma: row.get(6),
+                dependency_ref: row.get(7),
+                candidate_only: row.get(8),
+            });
+        }
+    } else {
+        let rows = client.query(
+            "SELECT candidate_ref, role_ref, source_start_char, source_end_char,
+                    surface, lemma, dependency_ref, candidate_only
+             FROM pnf.statement_candidate_factor
+             WHERE batch_ref=$1
+             ORDER BY source_start_char, source_end_char, candidate_ref",
+            &[&batch_ref],
+        )?;
+        factors.reserve(rows.len());
+        for row in rows {
+            let start = row.get::<_, i64>(2);
+            let end = row.get::<_, i64>(3);
+            if start < 0 || end < 0 {
+                return Err(CandidatePnfStoreError::ExistingFactorConflict);
+            }
+            factors.push(CandidatePnfFactor {
+                candidate_ref: row.get(0),
+                role: role_from_db(&row.get::<_, String>(1))?,
+                source_start_char: start as u32,
+                source_end_char: end as u32,
+                surface: row.get(4),
+                lemma: row.get(5),
+                dependency_ref: row.get(6),
+                candidate_only: row.get(7),
+            });
+        }
     }
 
     let expected_factor_count = batch.get::<_, i64>(3);
@@ -730,15 +816,15 @@ pub(crate) fn load_candidate_pnf_batch_with_client(
 
     Ok(Some(PersistedCandidatePnfBatch {
         batch_ref: batch_ref.to_owned(),
-        statement_ref: batch.get(0),
-        exact_span_ref: batch.get(1),
-        parser_receipt_ref: batch.get(2),
+        statement_ref,
+        exact_span_ref,
+        parser_receipt_ref,
         factors,
-        candidate_only: batch.get(4),
-        semantic_admission_paid: batch.get(5),
-        proposition_support_paid: batch.get(6),
-        applicability_paid: batch.get(7),
-        claim_truth_paid: batch.get(8),
+        candidate_only: batch.get(5),
+        semantic_admission_paid: batch.get(6),
+        proposition_support_paid: batch.get(7),
+        applicability_paid: batch.get(8),
+        claim_truth_paid: batch.get(9),
     }))
 }
 
