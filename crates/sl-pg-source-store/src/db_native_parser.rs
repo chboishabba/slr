@@ -1511,6 +1511,19 @@ mod tests {
     }
 
     #[test]
+    fn parser_product_identity_is_payload_not_revision_identity() {
+        let a = parser_product_key("Alice called Bob.", "spacy", "3.8", "en_core", "cfg:1");
+        let same = parser_product_key("Alice called Bob.", "spacy", "3.8", "en_core", "cfg:1");
+        let changed_text =
+            parser_product_key("Alice phoned Bob.", "spacy", "3.8", "en_core", "cfg:1");
+        let changed_config =
+            parser_product_key("Alice called Bob.", "spacy", "3.8", "en_core", "cfg:2");
+        assert_eq!(a, same);
+        assert_ne!(a, changed_text);
+        assert_ne!(a, changed_config);
+    }
+
+    #[test]
     fn compilation_key_changes_only_with_declared_compilation_inputs() {
         let a = compilation_key("rev:1", "region:1", "spacy", "3.8", "en_core", "cfg:1");
         let same = compilation_key("rev:1", "region:1", "spacy", "3.8", "en_core", "cfg:1");
