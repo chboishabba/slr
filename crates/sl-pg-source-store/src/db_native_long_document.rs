@@ -21,7 +21,7 @@ use crate::candidate_pnf_store::{
     persist_candidate_persistence_stage_receipt_with_client,
     persist_statement_candidate_pnf_with_client_detailed,
 };
-use crate::statement_trace_store::persist_source_statement_with_client;
+use crate::statement_trace_store::persist_source_statement_with_client_detailed;
 use crate::{
     build_plain_text_long_source_with_family, canonical_candidate_pnf_batch_ref,
     canonical_statement_ref, compile_initial_intake_statement,
@@ -129,6 +129,8 @@ pub struct DbNativeLongDocumentReceipt {
     pub candidate_product_reuse_hits_this_run: usize,
     pub candidate_product_new_this_run: usize,
     pub candidate_product_factor_rows_inserted_this_run: usize,
+    pub source_statement_rows_inserted_this_run: usize,
+    pub candidate_batch_rows_inserted_this_run: usize,
     pub reconciliation: CorpusReconciliationReceipt,
     pub reconciliation_review: ReconciliationReviewReceipt,
     pub auto_event: Scale1AutoEventReceipt,
@@ -368,6 +370,8 @@ pub fn finalize_db_native_long_document(
     let mut candidate_product_reuse_hits_this_run = 0usize;
     let mut candidate_product_new_this_run = 0usize;
     let mut candidate_product_factor_rows_inserted_this_run = 0usize;
+    let mut source_statement_rows_inserted_this_run = 0usize;
+    let mut candidate_batch_rows_inserted_this_run = 0usize;
 
     if !candidate_persistence_reused {
         for region in document
@@ -410,10 +414,13 @@ pub fn finalize_db_native_long_document(
             let parser_receipt_ref = format!("db-parser:{parser_run_ref}:{}", region.region_ref);
             match compile_initial_intake_statement(&snapshot, statement, parser_receipt_ref) {
                 Ok(candidate) => {
-                    persist_source_statement_with_client(
-                        &mut persistence_client,
-                        &candidate.statement,
-                    )?;
+                    let (_, statement_inserted) =
+                        persist_source_statement_with_client_detailed(
+                            &mut persistence_client,
+                            &candidate.statement,
+                        )?;
+                    source_statement_rows_inserted_this_run +=
+                        usize::from(statement_inserted);
                     persisted_statement_count += 1;
 
                     let expected_batch_ref = canonical_candidate_pnf_batch_ref(&candidate);
@@ -431,6 +438,8 @@ pub fn finalize_db_native_long_document(
                         candidate_product_factor_rows_inserted_this_run +=
                             product_work.product_factor_rows_inserted;
                     }
+                    candidate_batch_rows_inserted_this_run +=
+                        usize::from(product_work.batch_row_inserted);
                     persisted_candidate_batch_count += 1;
                     persisted_candidate_factor_count += persisted.factors.len();
 
@@ -554,6 +563,8 @@ pub fn finalize_db_native_long_document(
         candidate_product_reuse_hits_this_run,
         candidate_product_new_this_run,
         candidate_product_factor_rows_inserted_this_run,
+        source_statement_rows_inserted_this_run,
+        candidate_batch_rows_inserted_this_run,
         reconciliation,
         reconciliation_review,
         auto_event,
