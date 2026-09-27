@@ -27,6 +27,11 @@ bash -n scripts/check_scale1_db_native_ingest.sh
 bash -n scripts/run_gwb_scale1_book_baseline.sh
 bash -n scripts/check_scale1_exact_replay_economy.sh
 bash -n scripts/check_scale1_source_exact_replay_economy.sh
+bash -n scripts/check_scale1_cold_source_baseline.sh
+bash -n scripts/check_scale1_small_edit_locality.sh
+bash -n scripts/check_scale1_same_domain_new_source.sh
+python3 -m py_compile python/scale1_small_edit_locality.py
+python3 -m py_compile python/scale1_performance_series.py
 
 echo '== pre-existing source contracts =='
 python3 scripts/verify_source_contract.py
