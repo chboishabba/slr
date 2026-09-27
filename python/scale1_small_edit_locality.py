@@ -120,6 +120,37 @@ def main():
         and cross_reused + same_reused + new_jobs == semantic_regions
     )
 
+    integrity = receipt["integrity"]
+    residual_regions = int(integrity.get("parser_residual_regions", 0))
+    product_hits = int(integrity.get("candidate_product_reuse_hits_this_run", 0))
+    new_products = int(integrity.get("candidate_product_new_this_run", 0))
+    product_factor_writes = int(
+        integrity.get("candidate_product_factor_rows_inserted_this_run", 0)
+    )
+    statement_writes = int(
+        integrity.get("source_statement_rows_inserted_this_run", 0)
+    )
+    batch_writes = int(
+        integrity.get("candidate_batch_rows_inserted_this_run", 0)
+    )
+
+    # With no parser residuals, every transported semantic-eligible sentence
+    # should bind an already exact-reopened candidate semantic product.  When
+    # residuals exist we preserve parser-locality evidence but report semantic
+    # product locality as indeterminate rather than manufacturing a mapping
+    # from aggregate residual counts to individual transported occurrences.
+    if residual_regions == 0:
+        semantic_product_locality = (
+            product_hits >= transported_unaffected
+            and new_products <= len(affected_after)
+        )
+        semantic_product_locality_status = (
+            "green" if semantic_product_locality else "failed"
+        )
+    else:
+        semantic_product_locality = None
+        semantic_product_locality_status = "indeterminate_parser_residuals"
+
     result = {
         "schema": "sensiblaw.scale1.small-edit-locality-audit.v0_1",
         "edit_transport": {
@@ -146,6 +177,21 @@ def main():
             "new_jobs": new_jobs,
             "parser_locality_green": parser_locality_green,
         },
+        "semantic_product": {
+            "status": semantic_product_locality_status,
+            "locality_green": semantic_product_locality,
+            "reuse_hits_this_run": product_hits,
+            "new_products_this_run": new_products,
+            "product_factor_rows_inserted_this_run": product_factor_writes,
+        },
+        "occurrence_binding": {
+            "source_statement_rows_inserted_this_run": statement_writes,
+            "candidate_batch_rows_inserted_this_run": batch_writes,
+            "corpus_linear_binding_observed": (
+                statement_writes > len(affected_after)
+                or batch_writes > len(affected_after)
+            ),
+        },
         "boundary": {
             "transport_uses_source_coordinates": True,
             "semantic_value_used_as_occurrence_identity": False,
@@ -159,6 +205,8 @@ def main():
     print(json.dumps(result, indent=2))
     if not parser_locality_green:
         raise SystemExit(2)
+    if semantic_product_locality is False:
+        raise SystemExit(3)
 
 
 if __name__ == "__main__":
