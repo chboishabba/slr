@@ -37,6 +37,9 @@ jq -e --argjson min_reuse "$MIN_REUSE_HITS" '
       <= .performance.candidate_product_new_this_run
   and .candidate_cardinality.l2_factor_rows_scanned_this_run
       <= .performance.candidate_product_factor_rows_inserted_this_run
+  and .candidate_cardinality.review_delta_fibre_input_used == true
+  and .candidate_cardinality.review_delta_fibre_count
+      == .candidate_cardinality.review_target_fibre_count
   and .candidate_cardinality.review_occurrence_lookup_count <= 1
   and .candidate_cardinality.review_pressure_rows_scanned
       <= .candidate_cardinality.review_target_fibre_count
@@ -83,6 +86,8 @@ jq '{
     pressure_rows_upserted: .candidate_cardinality.l2_pressure_rows_upserted_this_run
   },
   review_work: {
+    delta_fibre_input_used: .candidate_cardinality.review_delta_fibre_input_used,
+    delta_fibre_count: .candidate_cardinality.review_delta_fibre_count,
     target_fibre_count: .candidate_cardinality.review_target_fibre_count,
     pressure_rows_scanned: .candidate_cardinality.review_pressure_rows_scanned,
     contestation_rows_scanned: .candidate_cardinality.review_contestation_rows_scanned,
