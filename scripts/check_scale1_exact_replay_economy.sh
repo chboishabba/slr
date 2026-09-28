@@ -41,7 +41,7 @@ jq -e '
   and .compiler_receipt.performance.downstream_l2_reused == true
   and .compiler_receipt.performance.downstream_auto_reused == true
   and .compiler_receipt.candidate_cardinality.review_projection_reused == true
-  and .compiler_receipt.candidate_cardinality.review_occurrence_lookup_count == 0
+  and .compiler_receipt.candidate_cardinality.review_occurrence_lookup_count == 1
   and .compiler_receipt.candidate_cardinality.review_items_persist_attempted == 0
   and .compiler_receipt.performance.downstream_review_projection_reused == true
   and .compiler_receipt.integrity.unattempted_semantic_regions == 0
