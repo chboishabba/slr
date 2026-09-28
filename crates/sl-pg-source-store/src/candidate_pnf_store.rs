@@ -3,7 +3,7 @@
 //! Parser output and M12 candidate factors are persistent compilation products,
 //! not transient counters. Review/admission remains a separate payment.
 
-use postgres::{Client, NoTls};
+use postgres::{Client, GenericClient, NoTls};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
@@ -164,8 +164,8 @@ struct CandidateProductContext {
     region_start_char: i64,
 }
 
-fn candidate_product_context(
-    client: &mut Client,
+fn candidate_product_context<C: GenericClient>(
+    client: &mut C,
     candidate: &StatementCandidatePnf,
 ) -> Result<Option<CandidateProductContext>, CandidatePnfStoreError> {
     let row = client.query_opt(
@@ -342,8 +342,8 @@ pub fn install_candidate_pnf_schema(config: &DatabaseConfig) -> Result<(), Candi
     Ok(())
 }
 
-fn persist_candidate_semantic_product_with_client(
-    client: &mut Client,
+fn persist_candidate_semantic_product_in_scope<C: GenericClient>(
+    client: &mut C,
     candidate: &StatementCandidatePnf,
     context: &CandidateProductContext,
 ) -> Result<CandidateProductPersistenceOutcome, CandidatePnfStoreError> {
@@ -440,8 +440,7 @@ fn persist_candidate_semantic_product_with_client(
         .map(|factor| factor.dependency_ref.clone())
         .collect::<Vec<_>>();
 
-    let mut tx = client.transaction()?;
-    let product_inserted = tx.execute(
+    let product_inserted = client.execute(
         r#"
         INSERT INTO pnf.candidate_semantic_product
           (product_ref, parser_product_key, compiler_ref, factor_count,
@@ -461,7 +460,7 @@ fn persist_candidate_semantic_product_with_client(
     let mut product_factor_rows_inserted = 0usize;
     if !candidate.pnf.candidates.is_empty() {
         let product_refs = vec![context.product_ref.clone(); ordinals.len()];
-        product_factor_rows_inserted = tx.execute(
+        product_factor_rows_inserted = client.execute(
             r#"
             INSERT INTO pnf.candidate_semantic_product_factor
               (product_ref, factor_ordinal, token_ordinal,
@@ -495,7 +494,7 @@ fn persist_candidate_semantic_product_with_client(
         )? as usize;
     }
 
-    let stored = tx.query_one(
+    let stored = client.query_one(
         r#"
         SELECT parser_product_key, compiler_ref, factor_count,
                exact_reopen_validated, candidate_only,
@@ -518,7 +517,7 @@ fn persist_candidate_semantic_product_with_client(
         return Err(CandidatePnfStoreError::ExistingBatchConflict);
     }
 
-    let factor_rows = tx.query(
+    let factor_rows = client.query(
         r#"
         SELECT factor_ordinal, token_ordinal, start_offset, end_offset,
                role_ref, surface, lemma, dependency_ref, candidate_only
@@ -550,7 +549,6 @@ fn persist_candidate_semantic_product_with_client(
         }
     }
 
-    tx.commit()?;
     Ok(CandidateProductPersistenceOutcome {
         product_backed: true,
         reused_product: product_inserted == 0,
@@ -559,35 +557,10 @@ fn persist_candidate_semantic_product_with_client(
     })
 }
 
-pub fn persist_statement_candidate_pnf(
-    config: &DatabaseConfig,
+pub(crate) fn persist_statement_candidate_pnf_in_scope<C: GenericClient>(
+    client: &mut C,
     candidate: &StatementCandidatePnf,
-) -> Result<PersistedCandidatePnfBatch, CandidatePnfStoreError> {
-    let mut client = Client::connect(config.database_url(), NoTls)?;
-    client.batch_execute(CANDIDATE_PNF_SCHEMA_SQL)?;
-    persist_statement_candidate_pnf_with_client(&mut client, candidate)
-}
-
-/// Persist one immutable candidate batch using an existing client.
-///
-/// This is intentionally crate-private: the public API keeps the ordinary
-/// single-item connection lifecycle, while the book-scale compiler can reuse
-/// one client without relaxing any row-level integrity or reopen checks.
-pub(crate) fn persist_statement_candidate_pnf_with_client(
-    client: &mut Client,
-    candidate: &StatementCandidatePnf,
-) -> Result<PersistedCandidatePnfBatch, CandidatePnfStoreError> {
-    persist_statement_candidate_pnf_with_client_detailed(client, candidate)
-        .map(|(batch, _)| batch)
-}
-
-pub(crate) fn persist_statement_candidate_pnf_with_client_detailed(
-    client: &mut Client,
-    candidate: &StatementCandidatePnf,
-) -> Result<
-    (PersistedCandidatePnfBatch, CandidateProductPersistenceOutcome),
-    CandidatePnfStoreError,
-> {
+) -> Result<(String, CandidateProductPersistenceOutcome), CandidatePnfStoreError> {
     candidate
         .validate()
         .map_err(|_| CandidatePnfStoreError::InvalidCandidate)?;
@@ -595,7 +568,7 @@ pub(crate) fn persist_statement_candidate_pnf_with_client_detailed(
     let batch_ref = canonical_candidate_pnf_batch_ref(candidate);
     let product_context = candidate_product_context(client, candidate)?;
     let product_outcome = if let Some(context) = product_context.as_ref() {
-        persist_candidate_semantic_product_with_client(client, candidate, context)?
+        persist_candidate_semantic_product_in_scope(client, candidate, context)?
     } else {
         CandidateProductPersistenceOutcome {
             product_backed: false,
@@ -620,8 +593,7 @@ pub(crate) fn persist_statement_candidate_pnf_with_client_detailed(
         return Err(CandidatePnfStoreError::MissingStatement);
     }
 
-    let mut tx = client.transaction()?;
-    let batch_inserted = tx.execute(
+    let batch_inserted = client.execute(
         r#"INSERT INTO pnf.statement_candidate_batch
            (batch_ref, statement_ref, exact_span_ref, parser_receipt_ref,
             factor_count, candidate_product_ref, candidate_only,
@@ -639,7 +611,7 @@ pub(crate) fn persist_statement_candidate_pnf_with_client_detailed(
         ],
     )?;
     if let Some(product_ref) = candidate_product_ref.as_ref() {
-        tx.execute(
+        client.execute(
             "UPDATE pnf.statement_candidate_batch
              SET candidate_product_ref=$2
              WHERE batch_ref=$1 AND candidate_product_ref IS NULL",
@@ -647,7 +619,7 @@ pub(crate) fn persist_statement_candidate_pnf_with_client_detailed(
         )?;
     }
 
-    let batch = tx.query_one(
+    let batch = client.query_one(
         "SELECT statement_ref, exact_span_ref, parser_receipt_ref, factor_count,
                 candidate_product_ref, candidate_only, semantic_admission_paid,
                 proposition_support_paid, applicability_paid, claim_truth_paid
@@ -717,7 +689,7 @@ pub(crate) fn persist_statement_candidate_pnf_with_client_detailed(
             .map(|factor| factor.dependency_ref.clone())
             .collect::<Vec<_>>();
 
-        tx.execute(
+        client.execute(
             r#"
             INSERT INTO pnf.statement_candidate_factor
               (candidate_ref, batch_ref, statement_ref, role_ref,
@@ -749,6 +721,46 @@ pub(crate) fn persist_statement_candidate_pnf_with_client_detailed(
         )?;
     }
 
+    let mut outcome = product_outcome;
+    outcome.batch_row_inserted = batch_inserted == 1;
+    Ok((batch_ref, outcome))
+}
+
+pub fn persist_statement_candidate_pnf(
+    config: &DatabaseConfig,
+    candidate: &StatementCandidatePnf,
+) -> Result<PersistedCandidatePnfBatch, CandidatePnfStoreError> {
+    let mut client = Client::connect(config.database_url(), NoTls)?;
+    client.batch_execute(CANDIDATE_PNF_SCHEMA_SQL)?;
+    persist_statement_candidate_pnf_with_client(&mut client, candidate)
+}
+
+/// Persist one immutable candidate batch using an existing client.
+///
+/// This is intentionally crate-private: the public API keeps the ordinary
+/// single-item connection lifecycle, while the book-scale compiler can reuse
+/// one client without relaxing any row-level integrity or reopen checks.
+pub(crate) fn persist_statement_candidate_pnf_with_client(
+    client: &mut Client,
+    candidate: &StatementCandidatePnf,
+) -> Result<PersistedCandidatePnfBatch, CandidatePnfStoreError> {
+    persist_statement_candidate_pnf_with_client_detailed(client, candidate)
+        .map(|(batch, _)| batch)
+}
+
+pub(crate) fn persist_statement_candidate_pnf_with_client_detailed(
+    client: &mut Client,
+    candidate: &StatementCandidatePnf,
+) -> Result<
+    (PersistedCandidatePnfBatch, CandidateProductPersistenceOutcome),
+    CandidatePnfStoreError,
+> {
+    candidate
+        .validate()
+        .map_err(|_| CandidatePnfStoreError::InvalidCandidate)?;
+    let mut tx = client.transaction()?;
+    let (batch_ref, outcome) =
+        persist_statement_candidate_pnf_in_scope(&mut tx, candidate)?;
     tx.commit()?;
 
     let persisted = load_candidate_pnf_batch_with_client(client, &batch_ref)?
@@ -778,9 +790,7 @@ pub(crate) fn persist_statement_candidate_pnf_with_client_detailed(
     {
         return Err(CandidatePnfStoreError::ExistingBatchConflict);
     }
-    let mut product_outcome = product_outcome;
-    product_outcome.batch_row_inserted = batch_inserted == 1;
-    Ok((persisted, product_outcome))
+    Ok((persisted, outcome))
 }
 
 pub fn load_candidate_pnf_batch(
