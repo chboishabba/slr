@@ -169,12 +169,13 @@ def main():
         cardinality.get("l2_pressure_rows_upserted_this_run", 0)
     )
 
-    # L2 is diagnostic in this tranche.  A scan much larger than the affected
-    # sentence surface indicates semantic reconciliation is still corpus-linear
-    # even though parser and candidate-product recomputation are local.
-    l2_scan_local = l2_factor_scan <= max(
-        product_factor_writes,
-        len(affected_after) * 64,
+    # The pre-edit compile warms historical summaries.  On the edited run,
+    # L2 may interpret only factors belonging to semantic products newly
+    # materialised in that same run.  Reused products must not be rescanned.
+    l2_scan_local = l2_factor_scan <= product_factor_writes
+    l2_summary_creation_local = (
+        l2_summaries_created <= new_products
+        and l2_summary_hits >= product_hits
     )
 
     review_target_fibres = int(cardinality.get("review_target_fibre_count", 0))
@@ -193,8 +194,8 @@ def main():
     )
     review_fibre_bound = (
         review_occurrence_lookups <= 1
-        and review_target_fibres
-        <= review_pressure_rows + 2 * review_contestation_rows
+        and review_pressure_rows <= review_target_fibres
+        and review_contestation_rows <= max(1, 2 * review_target_fibres)
         and (review_target_fibres != 0 or review_occurrence_rows == 0)
     )
 
@@ -247,6 +248,7 @@ def main():
             "proposition_occurrence_rows_inserted_this_run": l2_prop_occurrence_writes,
             "event_occurrence_rows_inserted_this_run": l2_event_occurrence_writes,
             "pressure_rows_upserted_this_run": l2_pressure_upserts,
+            "summary_creation_local": l2_summary_creation_local,
             "locality_enforced": True,
         },
         "review_projection": {
@@ -274,7 +276,7 @@ def main():
         raise SystemExit(2)
     if semantic_product_locality is False:
         raise SystemExit(3)
-    if not l2_scan_local:
+    if not l2_scan_local or not l2_summary_creation_local:
         raise SystemExit(4)
     if not review_fibre_bound:
         raise SystemExit(5)
