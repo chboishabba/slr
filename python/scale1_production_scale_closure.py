@@ -49,6 +49,41 @@ def main():
     require(None not in heads and len(heads) == 1,
             "production-scale receipts are not from one runtime head")
 
+    # Closure must recompute acceptance from raw measurements. A green
+    # revalidator flag or a claimed speedup is not independent evidence.
+    worker_points = workers.get("points", [])
+    require(len(worker_points) >= 2,
+            "worker scaling series has fewer than two points")
+    worker_counts = [int(p.get("worker_count", 0)) for p in worker_points]
+    require(len(set(worker_counts)) == len(worker_counts)
+            and all(count > 0 for count in worker_counts),
+            "worker scaling worker-count series is invalid")
+    baselines = [p for p in worker_points if int(p["worker_count"]) == 1]
+    require(len(baselines) == 1, "worker scaling needs one baseline")
+    base = baselines[0]
+    baseline_ns = int(base.get("worker_wall_ns", 0))
+    require(baseline_ns > 0, "worker baseline has invalid wall time")
+    parallel_points = [p for p in worker_points if int(p["worker_count"]) > 1]
+    require(parallel_points, "worker scaling lacks a parallel measurement")
+    require(all(int(p.get("worker_wall_ns", 0)) > 0 for p in worker_points),
+            "worker scaling contains a nonpositive measured duration")
+    require(all(
+        int(p.get("tokens", -1)) == int(base.get("tokens", -2))
+        and int(p.get("semantic_regions", -1))
+        == int(base.get("semantic_regions", -2))
+        for p in worker_points
+    ), "worker scaling does not represent one workload")
+    measured_speedup = max(
+        baseline_ns / int(p["worker_wall_ns"]) for p in parallel_points
+    )
+    max_workers = max(worker_counts)
+    max_worker_point = next(
+        p for p in worker_points if int(p["worker_count"]) == max_workers
+    )
+    measured_efficiency = (
+        baseline_ns / int(max_worker_point["worker_wall_ns"]) / max_workers
+    )
+
     worker_acceptance = workers.get("acceptance", {})
     require(worker_acceptance.get("green") is True,
             "worker scaling receipt is not accepted")
@@ -61,17 +96,17 @@ def main():
         "worker scaling declared efficiency threshold is not positive",
     )
     require(
-        float(worker_acceptance.get("observed_best_parallel_speedup", 0.0))
+        measured_speedup
         >= float(worker_acceptance.get("min_best_parallel_speedup", float("inf"))),
         "worker scaling best parallel speedup is below declared threshold",
     )
     require(
-        float(worker_acceptance.get("observed_max_worker_efficiency", 0.0))
+        measured_efficiency
         >= float(worker_acceptance.get("min_max_worker_efficiency", float("inf"))),
         "worker scaling max-worker efficiency is below declared threshold",
     )
 
-    points = workers.get("points", [])
+    points = worker_points
     require(len(points) >= 2, "worker scaling series has fewer than two points")
     require(any(int(p.get("worker_count", 0)) == 1 for p in points),
             "worker scaling has no one-worker baseline")
@@ -137,21 +172,12 @@ def main():
             "min_best_parallel_speedup": worker_acceptance[
                 "min_best_parallel_speedup"
             ],
-            "observed_best_parallel_speedup": worker_acceptance[
-                "observed_best_parallel_speedup"
-            ],
+            "observed_best_parallel_speedup": measured_speedup,
             "min_max_worker_efficiency": worker_acceptance[
                 "min_max_worker_efficiency"
             ],
-            "best_speedup_vs_one_worker": max(
-                float(p["speedup_vs_one_worker"]) for p in points
-            ),
-            "max_worker_parallel_efficiency": next(
-                float(p["parallel_efficiency"])
-                for p in points
-                if int(p["worker_count"])
-                == max(int(q["worker_count"]) for q in points)
-            ),
+            "best_speedup_vs_one_worker": measured_speedup,
+            "max_worker_parallel_efficiency": measured_efficiency,
         },
         "archive_scale": {
             "green": True,
