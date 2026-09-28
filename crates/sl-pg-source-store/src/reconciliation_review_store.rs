@@ -19,6 +19,7 @@ use sensiblaw_core::review_workstation::{
 };
 use thiserror::Error;
 
+use crate::corpus_reconciliation_store::CORPUS_RECONCILIATION_DETECTOR_REF;
 use crate::review_workstation_store::persist_review_projection_item_with_client;
 use crate::{
     install_review_workstation_schema, DatabaseConfig, ReviewWorkstationStoreError,
@@ -44,6 +45,27 @@ CREATE TABLE IF NOT EXISTS semantic.reconciliation_review_projection_stage_recei
       source_revision_ref, algorithm_ref, input_fingerprint_ref, consumer_scope_ref
     )
 );
+
+CREATE TABLE IF NOT EXISTS semantic.reconciliation_review_projection_stage_receipt_v2 (
+    source_revision_ref TEXT NOT NULL,
+    parser_run_ref TEXT NOT NULL,
+    reconciliation_detector_ref TEXT NOT NULL,
+    algorithm_ref TEXT NOT NULL,
+    consumer_scope_ref TEXT NOT NULL,
+    cluster_review_items BIGINT NOT NULL,
+    contestation_review_items BIGINT NOT NULL,
+    review_item_refs TEXT[] NOT NULL,
+    candidate_only BOOLEAN NOT NULL CHECK (candidate_only),
+    creates_semantic_authority BOOLEAN NOT NULL CHECK (NOT creates_semantic_authority),
+    creates_event_identity BOOLEAN NOT NULL CHECK (NOT creates_event_identity),
+    applicability_promoted BOOLEAN NOT NULL CHECK (NOT applicability_promoted),
+    claim_truth_promoted BOOLEAN NOT NULL CHECK (NOT claim_truth_promoted),
+    PRIMARY KEY (
+      source_revision_ref, parser_run_ref, reconciliation_detector_ref,
+      algorithm_ref, consumer_scope_ref
+    )
+);
+
 "#;
 
 #[derive(Debug, Error)]
@@ -127,6 +149,137 @@ fn review_input_fingerprint(
     );
     let borrowed = parts.iter().map(String::as_str).collect::<Vec<_>>();
     digest_ref("reconciliation-review-input:v2", &borrowed)
+}
+
+fn upstream_review_projection_ref(
+    source_revision_ref: &str,
+    parser_run_ref: &str,
+) -> String {
+    digest_ref(
+        "reconciliation-review-upstream:v1",
+        &[
+            source_revision_ref,
+            parser_run_ref,
+            CORPUS_RECONCILIATION_DETECTOR_REF,
+            REVIEW_PROJECTION_ALGORITHM_REF,
+        ],
+    )
+}
+
+fn load_fast_reusable_projection_receipt(
+    client: &mut Client,
+    source_revision_ref: &str,
+    parser_run_ref: &str,
+    consumer_scope_ref: &str,
+    input_identity_ns: u128,
+) -> Result<Option<ReconciliationReviewReceipt>, ReconciliationReviewError> {
+    let upstream = client.query_opt(
+        r#"
+        SELECT candidate_only, creates_semantic_authority,
+               creates_entity_identity, creates_proposition_identity,
+               creates_event_identity, claim_truth_promoted
+        FROM semantic.corpus_reconciliation_stage_receipt
+        WHERE source_revision_ref=$1
+          AND parser_run_ref=$2
+          AND detector_ref=$3
+        "#,
+        &[
+            &source_revision_ref,
+            &parser_run_ref,
+            &CORPUS_RECONCILIATION_DETECTOR_REF,
+        ],
+    )?;
+    let Some(upstream) = upstream else {
+        return Ok(None);
+    };
+    if !upstream.get::<_, bool>(0)
+        || upstream.get::<_, bool>(1)
+        || upstream.get::<_, bool>(2)
+        || upstream.get::<_, bool>(3)
+        || upstream.get::<_, bool>(4)
+        || upstream.get::<_, bool>(5)
+    {
+        return Err(ReconciliationReviewError::PromotionBoundary);
+    }
+
+    let Some(row) = client.query_opt(
+        r#"
+        SELECT cluster_review_items, contestation_review_items, review_item_refs,
+               candidate_only, creates_semantic_authority, creates_event_identity,
+               applicability_promoted, claim_truth_promoted
+        FROM semantic.reconciliation_review_projection_stage_receipt_v2
+        WHERE source_revision_ref=$1
+          AND parser_run_ref=$2
+          AND reconciliation_detector_ref=$3
+          AND algorithm_ref=$4
+          AND consumer_scope_ref=$5
+        "#,
+        &[
+            &source_revision_ref,
+            &parser_run_ref,
+            &CORPUS_RECONCILIATION_DETECTOR_REF,
+            &REVIEW_PROJECTION_ALGORITHM_REF,
+            &consumer_scope_ref,
+        ],
+    )? else {
+        return Ok(None);
+    };
+
+    let review_item_refs: Vec<String> = row.get(2);
+    let boundaries = client.query_one(
+        r#"
+        SELECT COUNT(*)::BIGINT,
+               COALESCE(BOOL_AND(
+                 candidate_only
+                 AND NOT creates_semantic_authority
+                 AND NOT applicability_promoted
+                 AND NOT claim_truth_promoted
+               ), TRUE)
+        FROM semantic.review_item
+        WHERE review_item_ref = ANY($1)
+        "#,
+        &[&review_item_refs],
+    )?;
+    if boundaries.get::<_, i64>(0) != review_item_refs.len() as i64
+        || !boundaries.get::<_, bool>(1)
+    {
+        return Ok(None);
+    }
+
+    let receipt = ReconciliationReviewReceipt {
+        source_revision_ref: source_revision_ref.to_owned(),
+        stage_reused: true,
+        input_fingerprint_ref: upstream_review_projection_ref(
+            source_revision_ref,
+            parser_run_ref,
+        ),
+        pressure_rows_scanned: 0,
+        contestation_rows_scanned: 0,
+        occurrence_rows_scanned: 0,
+        occurrence_lookup_count: 0,
+        review_items_persist_attempted: 0,
+        persisted_refs_verified: review_item_refs.len(),
+        input_identity_ns,
+        materialize_ns: 0,
+        stage_receipt_ns: 0,
+        cluster_review_items: row.get::<_, i64>(0).max(0) as usize,
+        contestation_review_items: row.get::<_, i64>(1).max(0) as usize,
+        review_item_refs,
+        candidate_only: row.get(3),
+        creates_semantic_authority: row.get(4),
+        creates_event_identity: row.get(5),
+        applicability_promoted: row.get(6),
+        claim_truth_promoted: row.get(7),
+    };
+    if !receipt.candidate_only
+        || receipt.creates_semantic_authority
+        || receipt.creates_event_identity
+        || receipt.applicability_promoted
+        || receipt.claim_truth_promoted
+    {
+        return Err(ReconciliationReviewError::PromotionBoundary);
+    }
+    Ok(Some(receipt))
 }
 
 fn load_reusable_projection_receipt(
@@ -225,15 +378,27 @@ fn common_actions() -> Vec<ReviewAction> {
     ]
 }
 
-pub fn enqueue_reconciliation_review_items(
+pub fn enqueue_reconciliation_review_items_for_parser_run(
     config: &DatabaseConfig,
     source_revision_ref: &str,
+    parser_run_ref: &str,
     affected_consumer_refs: Vec<String>,
 ) -> Result<ReconciliationReviewReceipt, ReconciliationReviewError> {
     install_review_workstation_schema(config)?;
     let mut client = Client::connect(config.database_url(), NoTls)?;
     let input_identity_started = Instant::now();
     client.batch_execute(REVIEW_PROJECTION_STAGE_SQL)?;
+    let consumer_scope_ref = canonical_scope_ref(&affected_consumer_refs);
+
+    if let Some(receipt) = load_fast_reusable_projection_receipt(
+        &mut client,
+        source_revision_ref,
+        parser_run_ref,
+        &consumer_scope_ref,
+        input_identity_started.elapsed().as_nanos(),
+    )? {
+        return Ok(receipt);
+    }
 
     let pressure_rows = client.query(
         r#"
@@ -350,7 +515,6 @@ pub fn enqueue_reconciliation_review_items(
         &contestation_components,
         &occurrence_components,
     );
-    let consumer_scope_ref = canonical_scope_ref(&affected_consumer_refs);
     let pressure_rows_scanned = pressure_rows.len();
     let contestation_rows_scanned = conflict_rows.len();
     let input_identity_ns = input_identity_started.elapsed().as_nanos();
@@ -537,9 +701,64 @@ pub fn enqueue_reconciliation_review_items(
             &receipt.review_item_refs,
         ],
     )?;
+    client.execute(
+        r#"
+        INSERT INTO semantic.reconciliation_review_projection_stage_receipt_v2
+        (source_revision_ref, parser_run_ref, reconciliation_detector_ref,
+         algorithm_ref, consumer_scope_ref, cluster_review_items,
+         contestation_review_items, review_item_refs, candidate_only,
+         creates_semantic_authority, creates_event_identity,
+         applicability_promoted, claim_truth_promoted)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,TRUE,FALSE,FALSE,FALSE,FALSE)
+        ON CONFLICT (
+          source_revision_ref, parser_run_ref, reconciliation_detector_ref,
+          algorithm_ref, consumer_scope_ref
+        ) DO NOTHING
+        "#,
+        &[
+            &source_revision_ref,
+            &parser_run_ref,
+            &CORPUS_RECONCILIATION_DETECTOR_REF,
+            &REVIEW_PROJECTION_ALGORITHM_REF,
+            &consumer_scope_ref,
+            &(receipt.cluster_review_items as i64),
+            &(receipt.contestation_review_items as i64),
+            &receipt.review_item_refs,
+        ],
+    )?;
     receipt.stage_receipt_ns = stage_receipt_started.elapsed().as_nanos();
 
     Ok(receipt)
+}
+
+pub fn enqueue_reconciliation_review_items(
+    config: &DatabaseConfig,
+    source_revision_ref: &str,
+    affected_consumer_refs: Vec<String>,
+) -> Result<ReconciliationReviewReceipt, ReconciliationReviewError> {
+    let mut client = Client::connect(config.database_url(), NoTls)?;
+    client.batch_execute(REVIEW_PROJECTION_STAGE_SQL)?;
+    let row = client.query_opt(
+        r#"
+        SELECT parser_run_ref
+        FROM semantic.corpus_reconciliation_stage_receipt
+        WHERE source_revision_ref=$1
+          AND detector_ref=$2
+        ORDER BY parser_run_ref DESC
+        LIMIT 1
+        "#,
+        &[&source_revision_ref, &CORPUS_RECONCILIATION_DETECTOR_REF],
+    )?;
+    let Some(row) = row else {
+        return Err(ReconciliationReviewError::PromotionBoundary);
+    };
+    let parser_run_ref: String = row.get(0);
+    enqueue_reconciliation_review_items_for_parser_run(
+        config,
+        source_revision_ref,
+        &parser_run_ref,
+        affected_consumer_refs,
+    )
 }
 
 #[cfg(test)]
