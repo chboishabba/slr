@@ -19,9 +19,11 @@ use thiserror::Error;
 use crate::candidate_pnf_store::{
     load_candidate_persistence_stage_receipt_with_client, load_candidate_pnf_batch_with_client,
     persist_candidate_persistence_stage_receipt_with_client,
-    persist_statement_candidate_pnf_with_client_detailed,
+    persist_statement_candidate_pnf_in_scope,
 };
 use crate::statement_trace_store::persist_source_statement_with_client_detailed;
+pub const DEFAULT_CANDIDATE_COMMIT_BATCH_SIZE: usize = 128;
+
 use crate::{
     build_plain_text_long_source_with_family, canonical_candidate_pnf_batch_ref,
     canonical_statement_ref, compile_initial_intake_statement,
@@ -131,6 +133,8 @@ pub struct DbNativeLongDocumentReceipt {
     pub candidate_product_factor_rows_inserted_this_run: usize,
     pub source_statement_rows_inserted_this_run: usize,
     pub candidate_batch_rows_inserted_this_run: usize,
+    pub candidate_commit_batch_size: usize,
+    pub candidate_commit_count: usize,
     pub reconciliation: CorpusReconciliationReceipt,
     pub reconciliation_review: ReconciliationReviewReceipt,
     pub auto_event: Scale1AutoEventReceipt,
@@ -373,7 +377,10 @@ pub fn finalize_db_native_long_document(
     let mut source_statement_rows_inserted_this_run = 0usize;
     let mut candidate_batch_rows_inserted_this_run = 0usize;
 
+    let mut candidate_commit_count = 0usize;
+
     if !candidate_persistence_reused {
+        let mut candidates = Vec::with_capacity(parser_state.succeeded);
         for region in document
             .regions
             .iter()
@@ -413,43 +420,7 @@ pub fn finalize_db_native_long_document(
 
             let parser_receipt_ref = format!("db-parser:{parser_run_ref}:{}", region.region_ref);
             match compile_initial_intake_statement(&snapshot, statement, parser_receipt_ref) {
-                Ok(candidate) => {
-                    let (_, statement_inserted) =
-                        persist_source_statement_with_client_detailed(
-                            &mut persistence_client,
-                            &candidate.statement,
-                        )?;
-                    source_statement_rows_inserted_this_run +=
-                        usize::from(statement_inserted);
-                    persisted_statement_count += 1;
-
-                    let expected_batch_ref = canonical_candidate_pnf_batch_ref(&candidate);
-                    let (persisted, product_work) =
-                        persist_statement_candidate_pnf_with_client_detailed(
-                            &mut persistence_client,
-                            &candidate,
-                        )?;
-                    if product_work.product_backed {
-                        if product_work.reused_product {
-                            candidate_product_reuse_hits_this_run += 1;
-                        } else {
-                            candidate_product_new_this_run += 1;
-                        }
-                        candidate_product_factor_rows_inserted_this_run +=
-                            product_work.product_factor_rows_inserted;
-                    }
-                    candidate_batch_rows_inserted_this_run +=
-                        usize::from(product_work.batch_row_inserted);
-                    persisted_candidate_batch_count += 1;
-                    persisted_candidate_factor_count += persisted.factors.len();
-
-                    let reopened = load_candidate_pnf_batch_with_client(
-                        &mut persistence_client,
-                        &expected_batch_ref,
-                    )?;
-                    candidate_pnf_reopen_complete &=
-                        reopened.as_ref().is_some_and(|batch| batch == &persisted);
-                }
+                Ok(candidate) => candidates.push(candidate),
                 Err(StatementPnfSpineError::CandidatePnf(
                     CandidatePnfError::PersistedParserResidual { .. },
                 )) => {
@@ -459,7 +430,116 @@ pub fn finalize_db_native_long_document(
                 Err(error) => return Err(error.into()),
             }
         }
+
+        for chunk in candidates.chunks(DEFAULT_CANDIDATE_COMMIT_BATCH_SIZE) {
+            for candidate in chunk {
+                candidate
+                    .validate()
+                    .map_err(|_| CandidatePnfStoreError::InvalidCandidate)?;
+            }
+
+            let mut tx = persistence_client.transaction()?;
+            let mut committed = Vec::with_capacity(chunk.len());
+            let mut chunk_source_statement_rows_inserted = 0usize;
+            let mut chunk_candidate_product_reuse_hits = 0usize;
+            let mut chunk_candidate_product_new = 0usize;
+            let mut chunk_candidate_product_factor_rows_inserted = 0usize;
+            let mut chunk_candidate_batch_rows_inserted = 0usize;
+
+            for candidate in chunk {
+                let (_, statement_inserted) =
+                    persist_source_statement_with_client_detailed(
+                        &mut tx,
+                        &candidate.statement,
+                    )?;
+                chunk_source_statement_rows_inserted += usize::from(statement_inserted);
+
+                let (batch_ref, product_work) =
+                    persist_statement_candidate_pnf_in_scope(&mut tx, candidate)?;
+                if product_work.product_backed {
+                    if product_work.reused_product {
+                        chunk_candidate_product_reuse_hits += 1;
+                    } else {
+                        chunk_candidate_product_new += 1;
+                    }
+                    chunk_candidate_product_factor_rows_inserted +=
+                        product_work.product_factor_rows_inserted;
+                }
+                chunk_candidate_batch_rows_inserted +=
+                    usize::from(product_work.batch_row_inserted);
+                committed.push((batch_ref, candidate));
+            }
+
+            tx.commit()?;
+
+            // A batch only counts as durably committed after every individual
+            // product reopens and equals its exact expected candidate.
+            for (batch_ref, candidate) in &committed {
+                let reopened = load_candidate_pnf_batch_with_client(
+                    &mut persistence_client,
+                    batch_ref,
+                )?
+                .ok_or(CandidatePnfStoreError::ExistingBatchConflict)?;
+
+                let mut expected_factors = candidate.pnf.candidates.clone();
+                expected_factors.sort_by(|left, right| {
+                    (
+                        left.source_start_char,
+                        left.source_end_char,
+                        left.candidate_ref.as_str(),
+                    )
+                        .cmp(&(
+                            right.source_start_char,
+                            right.source_end_char,
+                            right.candidate_ref.as_str(),
+                        ))
+                });
+                let mut reopened_factors = reopened.factors.clone();
+                reopened_factors.sort_by(|left, right| {
+                    (
+                        left.source_start_char,
+                        left.source_end_char,
+                        left.candidate_ref.as_str(),
+                    )
+                        .cmp(&(
+                            right.source_start_char,
+                            right.source_end_char,
+                            right.candidate_ref.as_str(),
+                        ))
+                });
+
+                let exact_match =
+                    reopened.statement_ref == candidate.statement.statement_ref
+                        && reopened.exact_span_ref == candidate.statement.span.span_ref
+                        && reopened.parser_receipt_ref == candidate.parser_receipt_ref
+                        && reopened_factors == expected_factors
+                        && reopened.candidate_only
+                        && !reopened.semantic_admission_paid
+                        && !reopened.proposition_support_paid
+                        && !reopened.applicability_paid
+                        && !reopened.claim_truth_paid;
+                if !exact_match {
+                    return Err(CandidatePnfStoreError::ExistingBatchConflict.into());
+                }
+
+                persisted_statement_count += 1;
+                persisted_candidate_batch_count += 1;
+                persisted_candidate_factor_count += reopened.factors.len();
+            }
+
+            source_statement_rows_inserted_this_run +=
+                chunk_source_statement_rows_inserted;
+            candidate_product_reuse_hits_this_run +=
+                chunk_candidate_product_reuse_hits;
+            candidate_product_new_this_run += chunk_candidate_product_new;
+            candidate_product_factor_rows_inserted_this_run +=
+                chunk_candidate_product_factor_rows_inserted;
+            candidate_batch_rows_inserted_this_run +=
+                chunk_candidate_batch_rows_inserted;
+            candidate_commit_count += 1;
+        }
     }
+
     if persisted_statement_count != parser_state.succeeded
         || persisted_candidate_batch_count != parser_state.succeeded
         || persisted_candidate_factor_count != compilation.candidate_pnf_count
@@ -565,6 +645,8 @@ pub fn finalize_db_native_long_document(
         candidate_product_factor_rows_inserted_this_run,
         source_statement_rows_inserted_this_run,
         candidate_batch_rows_inserted_this_run,
+        candidate_commit_batch_size: DEFAULT_CANDIDATE_COMMIT_BATCH_SIZE,
+        candidate_commit_count,
         reconciliation,
         reconciliation_review,
         auto_event,
