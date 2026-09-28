@@ -1,4 +1,4 @@
-use postgres::{Client, NoTls};
+use postgres::{Client, GenericClient, NoTls};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
@@ -309,16 +309,16 @@ pub fn persist_source_statement(
 /// statement/candidate/reopen loop does not create a new database connection
 /// for every sentence.  It retains the same ancestry and immutable-row checks
 /// as the public single-statement entry point.
-pub(crate) fn persist_source_statement_with_client(
-    client: &mut Client,
+pub(crate) fn persist_source_statement_with_client<C: GenericClient>(
+    client: &mut C,
     statement: &SourceStatementEnvelope,
 ) -> Result<PersistedSourceStatement, StatementTraceStoreError> {
     persist_source_statement_with_client_detailed(client, statement)
         .map(|(persisted, _)| persisted)
 }
 
-pub(crate) fn persist_source_statement_with_client_detailed(
-    client: &mut Client,
+pub(crate) fn persist_source_statement_with_client_detailed<C: GenericClient>(
+    client: &mut C,
     statement: &SourceStatementEnvelope,
 ) -> Result<(PersistedSourceStatement, bool), StatementTraceStoreError> {
     statement
@@ -692,8 +692,8 @@ fn observation_event_select(coordinate: &str) -> String {
     )
 }
 
-fn load_source_statement_with_client(
-    client: &mut Client,
+fn load_source_statement_with_client<C: GenericClient>(
+    client: &mut C,
     statement_ref: &str,
 ) -> Result<Option<PersistedSourceStatement>, StatementTraceStoreError> {
     let row = client.query_opt(
@@ -816,8 +816,8 @@ fn row_to_observation_event_link(
     Ok(link)
 }
 
-fn require_source_ancestry(
-    client: &mut Client,
+fn require_source_ancestry<C: GenericClient>(
+    client: &mut C,
     statement: &SourceStatementEnvelope,
 ) -> Result<(), StatementTraceStoreError> {
     // SCALE-1 generic long-document ancestry uses character coordinates over
