@@ -1127,6 +1127,14 @@ fn compile_source_values(
                 "finalize_load_and_validate_ns": receipt.timings.load_and_validate_ns,
                 "m12_compile_ns": receipt.timings.m12_compile_ns,
                 "candidate_persist_ns": receipt.timings.candidate_persist_ns,
+                "candidate_precommit_write_ns": receipt.timings.candidate_precommit_write_ns,
+                "candidate_commit_wait_ns": receipt.timings.candidate_commit_wait_ns,
+                "candidate_postcommit_reopen_ns": receipt.timings.candidate_postcommit_reopen_ns,
+                "candidate_mean_commit_wait_ns": if receipt.candidate_commit_count == 0 {
+                    None
+                } else {
+                    Some(receipt.timings.candidate_commit_wait_ns / receipt.candidate_commit_count as u128)
+                },
                 "l2_reconciliation_ns": receipt.timings.reconciliation_ns,
                 "review_projection_ns": receipt.timings.review_projection_ns,
                 "auto_event_ns": receipt.timings.auto_event_ns,
@@ -1426,6 +1434,14 @@ fn finalize(args: &[String]) -> Result<(), Box<dyn Error>> {
             "timing_load_and_validate_ns": receipt.timings.load_and_validate_ns,
             "timing_m12_compile_ns": receipt.timings.m12_compile_ns,
             "timing_candidate_persist_ns": receipt.timings.candidate_persist_ns,
+            "timing_candidate_precommit_write_ns": receipt.timings.candidate_precommit_write_ns,
+            "timing_candidate_commit_wait_ns": receipt.timings.candidate_commit_wait_ns,
+            "timing_candidate_postcommit_reopen_ns": receipt.timings.candidate_postcommit_reopen_ns,
+            "timing_candidate_mean_commit_wait_ns": if receipt.candidate_commit_count == 0 {
+                None
+            } else {
+                Some(receipt.timings.candidate_commit_wait_ns / receipt.candidate_commit_count as u128)
+            },
             "timing_l2_reconciliation_ns": receipt.timings.reconciliation_ns,
             "timing_review_projection_ns": receipt.timings.review_projection_ns,
             "timing_auto_event_ns": receipt.timings.auto_event_ns,
