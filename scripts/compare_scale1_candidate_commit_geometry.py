@@ -34,6 +34,7 @@ def load(path: str) -> tuple[str, dict]:
         "candidate_persistence_reused": integrity.get("candidate_persistence_reused"),
         "candidate_commit_batch_size": integrity.get("candidate_commit_batch_size"),
         "candidate_commit_count": integrity.get("candidate_commit_count"),
+        "candidate_postcommit_reopen_query_count": integrity.get("candidate_postcommit_reopen_query_count"),
         "candidate_persist_ns": performance.get("candidate_persist_ns"),
         "candidate_precommit_write_ns": performance.get("candidate_precommit_write_ns"),
         "candidate_commit_wait_ns": performance.get("candidate_commit_wait_ns"),
@@ -75,6 +76,12 @@ def main(argv: list[str]) -> int:
         require(row["claim_truth_promoted"] is False, f"{path}: claim truth promoted")
         require((row["candidate_commit_batch_size"] or 0) > 0, f"{path}: invalid commit batch size")
         require((row["candidate_commit_count"] or 0) > 0, f"{path}: invalid commit count")
+        reopen_queries = row["candidate_postcommit_reopen_query_count"]
+        require(isinstance(reopen_queries, int) and reopen_queries >= 0, f"{path}: invalid reopen query count")
+        require(
+            reopen_queries <= 3 * row["candidate_commit_count"],
+            f"{path}: reopen query geometry is not bounded by 3x commit count",
+        )
         for key in (
             "candidate_persist_ns",
             "candidate_precommit_write_ns",
@@ -94,6 +101,8 @@ def main(argv: list[str]) -> int:
                 "commit_wait_ns",
                 "mean_commit_wait_ns",
                 "postcommit_reopen_ns",
+                "postcommit_reopen_queries",
+                "reopen_queries_per_commit",
                 "commit_wait_fraction",
             ]
         )
@@ -102,6 +111,11 @@ def main(argv: list[str]) -> int:
         total = row["candidate_persist_ns"]
         commit_wait = row["candidate_commit_wait_ns"]
         fraction = (commit_wait / total) if total else 0.0
+        reopen_per_commit = (
+            row["candidate_postcommit_reopen_query_count"] / row["candidate_commit_count"]
+            if row["candidate_commit_count"]
+            else 0.0
+        )
         print(
             "\t".join(
                 [
@@ -113,6 +127,8 @@ def main(argv: list[str]) -> int:
                     str(commit_wait),
                     str(row["candidate_mean_commit_wait_ns"]),
                     str(row["candidate_postcommit_reopen_ns"]),
+                    str(row["candidate_postcommit_reopen_query_count"]),
+                    f"{reopen_per_commit:.6f}",
                     f"{fraction:.6f}",
                 ]
             )
