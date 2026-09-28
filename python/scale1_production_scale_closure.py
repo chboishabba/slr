@@ -3,6 +3,7 @@
 
 import argparse
 import json
+import math
 from pathlib import Path
 
 
@@ -123,6 +124,27 @@ def main():
         "worker scaling series contains non-fresh or incomplete parser work",
     )
 
+    # Measured archive points, not a self-reported fitted envelope, decide
+    # whether the declared budget and span requirements were actually met.
+    archive_points = archive.get("points", [])
+    require(len(archive_points) >= 2,
+            "archive scale series has fewer than two observations")
+    token_sizes = [int(p.get("represented_tokens", 0)) for p in archive_points]
+    work_sizes = [
+        int(p.get("measured_post_parser_work_units", -1))
+        for p in archive_points
+    ]
+    require(
+        all(t > 0 for t in token_sizes)
+        and all(w >= 0 for w in work_sizes)
+        and len(set(token_sizes)) == len(token_sizes),
+        "archive scale points have invalid measured tokens/work",
+    )
+    measured_slope = max(
+        math.ceil(w / t) for w, t in zip(work_sizes, token_sizes)
+    )
+    measured_span = max(token_sizes) / min(token_sizes)
+
     archive_acceptance = archive.get("acceptance", {})
     require(archive_acceptance.get("green") is True,
             "archive scale receipt is not accepted")
@@ -135,20 +157,17 @@ def main():
         "archive scale declared span requirement is not nontrivial",
     )
     require(
-        float(archive_acceptance.get("observed_slope_work_units_per_token", float("inf")))
+        measured_slope
         <= float(archive_acceptance.get("max_work_units_per_token", -1.0)),
         "archive scale observed slope exceeds declared budget",
     )
     require(
-        float(archive_acceptance.get("observed_token_span_ratio", 0.0))
+        measured_span
         >= float(archive_acceptance.get("min_token_span_ratio", float("inf"))),
         "archive scale token span is below declared minimum",
     )
 
     envelope = archive.get("observed_affine_envelope", {})
-    archive_points = archive.get("points", [])
-    require(len(archive_points) >= 2,
-            "archive scale series has fewer than two observations")
     require(envelope.get("all_points_within") is True,
             "archive scale series violates its declared observed work envelope")
     require(archive.get("represented_carrier") == "parser_tokens",
@@ -188,21 +207,15 @@ def main():
             "max_work_units_per_token": archive_acceptance[
                 "max_work_units_per_token"
             ],
-            "observed_slope_work_units_per_token": archive_acceptance[
-                "observed_slope_work_units_per_token"
-            ],
+            "observed_slope_work_units_per_token": measured_slope,
             "min_token_span_ratio": archive_acceptance[
                 "min_token_span_ratio"
             ],
-            "observed_token_span_ratio": archive_acceptance[
-                "observed_token_span_ratio"
-            ],
+            "observed_token_span_ratio": measured_span,
             "observation_count": len(archive_points),
             "min_tokens": min(int(p["represented_tokens"]) for p in archive_points),
             "max_tokens": max(int(p["represented_tokens"]) for p in archive_points),
-            "observed_work_slope_per_token": envelope[
-                "slope_work_units_per_token"
-            ],
+            "observed_work_slope_per_token": measured_slope,
             "scope": envelope["scope"],
         },
         "boundary": {
