@@ -798,10 +798,11 @@ pub(crate) fn persist_statement_candidate_pnf_with_client_detailed(
 pub(crate) fn load_candidate_pnf_batches_with_client(
     client: &mut Client,
     batch_refs: &[String],
-) -> Result<BTreeMap<String, PersistedCandidatePnfBatch>, CandidatePnfStoreError> {
+) -> Result<(BTreeMap<String, PersistedCandidatePnfBatch>, usize), CandidatePnfStoreError> {
     if batch_refs.is_empty() {
-        return Ok(BTreeMap::new());
+        return Ok((BTreeMap::new(), 0));
     }
+    let mut query_count = 0usize;
 
     #[derive(Debug)]
     struct BatchMeta {
@@ -835,6 +836,7 @@ pub(crate) fn load_candidate_pnf_batches_with_client(
         candidate_only: bool,
     }
 
+    query_count += 1;
     let rows = client.query(
         r#"
         SELECT b.batch_ref, b.statement_ref, b.exact_span_ref,
@@ -903,6 +905,7 @@ pub(crate) fn load_candidate_pnf_batches_with_client(
     product_refs.dedup();
     let mut product_factors = BTreeMap::<String, Vec<ProductFactorRow>>::new();
     if !product_refs.is_empty() {
+        query_count += 1;
         for row in client.query(
             r#"
             SELECT product_ref, factor_ordinal, token_ordinal,
@@ -940,6 +943,7 @@ pub(crate) fn load_candidate_pnf_batches_with_client(
 
     let mut legacy_factors = BTreeMap::<String, Vec<CandidatePnfFactor>>::new();
     if !legacy_batch_refs.is_empty() {
+        query_count += 1;
         for row in client.query(
             r#"
             SELECT batch_ref, candidate_ref, role_ref,
@@ -1051,7 +1055,7 @@ pub(crate) fn load_candidate_pnf_batches_with_client(
             },
         );
     }
-    Ok(out)
+    Ok((out, query_count))
 }
 
 pub fn load_candidate_pnf_batch(
