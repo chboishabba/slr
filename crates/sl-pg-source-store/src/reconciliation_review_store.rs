@@ -171,7 +171,6 @@ fn load_fast_reusable_projection_receipt(
     source_revision_ref: &str,
     parser_run_ref: &str,
     consumer_scope_ref: &str,
-    input_identity_ns: u128,
 ) -> Result<Option<ReconciliationReviewReceipt>, ReconciliationReviewError> {
     let upstream = client.query_opt(
         r#"
@@ -259,7 +258,7 @@ fn load_fast_reusable_projection_receipt(
         occurrence_lookup_count: 0,
         review_items_persist_attempted: 0,
         persisted_refs_verified: review_item_refs.len(),
-        input_identity_ns,
+        input_identity_ns: 0,
         materialize_ns: 0,
         stage_receipt_ns: 0,
         cluster_review_items: row.get::<_, i64>(0).max(0) as usize,
@@ -390,13 +389,13 @@ pub fn enqueue_reconciliation_review_items_for_parser_run(
     client.batch_execute(REVIEW_PROJECTION_STAGE_SQL)?;
     let consumer_scope_ref = canonical_scope_ref(&affected_consumer_refs);
 
-    if let Some(receipt) = load_fast_reusable_projection_receipt(
+    if let Some(mut receipt) = load_fast_reusable_projection_receipt(
         &mut client,
         source_revision_ref,
         parser_run_ref,
         &consumer_scope_ref,
-        input_identity_started.elapsed().as_nanos(),
     )? {
+        receipt.input_identity_ns = input_identity_started.elapsed().as_nanos();
         return Ok(receipt);
     }
 
