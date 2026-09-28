@@ -122,6 +122,11 @@ def main():
     ap.add_argument("--output", required=True)
     args = ap.parse_args()
 
+    require(args.max_work_units_per_token > 0,
+            "archive work-unit budget must be positive")
+    require(args.min_token_span_ratio > 1.0,
+            "archive minimum token span ratio must be greater than 1.0")
+
     points = [point(path) for path in args.receipt]
     require(len(points) >= 2, "archive scaling requires at least two observations")
 
@@ -131,6 +136,12 @@ def main():
     models = {p["parser_model_ref"] for p in points}
     require(None not in models and len(models) == 1,
             "archive points must use one parser model")
+    configs = {p["parser_config_digest_ref"] for p in points}
+    require(None not in configs and len(configs) == 1,
+            "archive points must use one parser configuration")
+    families = {p["source_family"] for p in points}
+    require(None not in families and len(families) == 1,
+            "archive points must use one source family")
 
     points.sort(key=lambda p: p["represented_tokens"])
     token_counts = [p["represented_tokens"] for p in points]
@@ -171,6 +182,8 @@ def main():
         "schema": "sensiblaw.scale1.archive-scale-series.v0_2",
         "runtime_head": next(iter(heads)),
         "parser_model_ref": next(iter(models)),
+        "parser_config_digest_ref": next(iter(configs)),
+        "source_family": next(iter(families)),
         "represented_carrier": "parser_tokens",
         "work_unit_definition": (
             "candidate product writes + statement/batch writes + L2 factor scans/"
