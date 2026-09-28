@@ -13,7 +13,8 @@ use sensiblaw_core::source_ingest::{DocumentRegionKind, SourceFamily};
 
 use sensiblaw_pg_source_store::{
     build_plain_text_long_source_with_family, canonical_generic_source_revision_ref, claim_parser_jobs,
-    defer_parser_job_retry, finalize_db_native_long_document,
+    defer_parser_job_retry,
+    finalize_db_native_long_document_with_candidate_commit_batch_size,
     load_claimed_job_text,
     load_database_config, materialize_accepted_event_join,
     materialize_accepted_reconciliation_proposition, parser_run_state,
@@ -97,6 +98,16 @@ fn digest_ref(bytes: &[u8]) -> String {
 
 fn parser_python_bin() -> String {
     std::env::var("PYTHON_BIN").unwrap_or_else(|_| "python3".to_owned())
+}
+
+fn candidate_commit_batch_size() -> Result<usize, Box<dyn Error>> {
+    let value = std::env::var("SENSIBLAW_CANDIDATE_COMMIT_BATCH_SIZE")
+        .unwrap_or_else(|_| "128".to_owned())
+        .parse::<usize>()?;
+    if value == 0 {
+        return Err("SENSIBLAW_CANDIDATE_COMMIT_BATCH_SIZE must be positive".into());
+    }
+    Ok(value)
 }
 
 fn parser_description(
@@ -1006,9 +1017,14 @@ fn compile_source_values(
         .into());
     }
 
+    let candidate_commit_batch_size = candidate_commit_batch_size()?;
     let finalize_started = Instant::now();
     let receipt =
-        finalize_db_native_long_document(&config, &prepared.parser_run.parser_run_ref)?;
+        finalize_db_native_long_document_with_candidate_commit_batch_size(
+            &config,
+            &prepared.parser_run.parser_run_ref,
+            candidate_commit_batch_size,
+        )?;
     let finalize_ns = finalize_started.elapsed().as_nanos();
     let total_ns = total_started.elapsed().as_nanos();
 
@@ -1363,7 +1379,12 @@ fn finalize(args: &[String]) -> Result<(), Box<dyn Error>> {
         return Err("finalize <parser-run-ref>".into());
     }
     let config = load_database_config(None)?;
-    let receipt = finalize_db_native_long_document(&config, &args[2])?;
+    let candidate_commit_batch_size = candidate_commit_batch_size()?;
+    let receipt = finalize_db_native_long_document_with_candidate_commit_batch_size(
+        &config,
+        &args[2],
+        candidate_commit_batch_size,
+    )?;
     println!(
         "{}",
         serde_json::to_string_pretty(&json!({
