@@ -179,6 +179,8 @@ def main():
     )
 
     review_target_fibres = int(cardinality.get("review_target_fibre_count", 0))
+    review_delta_used = bool(cardinality.get("review_delta_fibre_input_used", False))
+    review_delta_fibres = int(cardinality.get("review_delta_fibre_count", 0))
     review_pressure_rows = int(cardinality.get("review_pressure_rows_scanned", 0))
     review_contestation_rows = int(
         cardinality.get("review_contestation_rows_scanned", 0)
@@ -193,7 +195,9 @@ def main():
         cardinality.get("review_projection_reused", False)
     )
     review_fibre_bound = (
-        review_occurrence_lookups <= 1
+        review_delta_used
+        and review_delta_fibres == review_target_fibres
+        and review_occurrence_lookups <= 1
         and review_pressure_rows <= review_target_fibres
         and review_contestation_rows <= max(1, 2 * review_target_fibres)
         and (review_target_fibres != 0 or review_occurrence_rows == 0)
@@ -254,6 +258,8 @@ def main():
         "review_projection": {
             "status": "green" if review_fibre_bound else "nonlocal_review_scan_observed",
             "stage_reused": review_projection_reused,
+            "delta_fibre_input_used": review_delta_used,
+            "delta_fibre_count": review_delta_fibres,
             "target_fibre_count": review_target_fibres,
             "pressure_rows_scanned": review_pressure_rows,
             "contestation_rows_scanned": review_contestation_rows,
