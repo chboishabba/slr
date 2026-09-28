@@ -204,7 +204,10 @@ def main():
     )
 
     result = {
-        "schema": "sensiblaw.scale1.small-edit-locality-audit.v0_2",
+        "schema": "sensiblaw.scale1.small-edit-locality-audit.v0_3",
+        "runtime_head": receipt.get("runtime_head"),
+        "source_family": receipt.get("source_family"),
+        "source_revision_ref": receipt.get("source", {}).get("source_revision_ref"),
         "edit_transport": {
             "old_start_char": old_start,
             "old_end_char": old_end,
