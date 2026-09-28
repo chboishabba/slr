@@ -163,9 +163,7 @@ fn load_reusable_projection_receipt(
         return Ok(None);
     }
 
-    let materialize_ns = materialize_started.elapsed().as_nanos();
-    let stage_receipt_started = Instant::now();
-    let mut receipt = ReconciliationReviewReceipt {
+    let receipt = ReconciliationReviewReceipt {
         source_revision_ref: source_revision_ref.to_owned(),
         stage_reused: true,
         input_fingerprint_ref: input_fingerprint_ref.to_owned(),
@@ -452,7 +450,9 @@ pub fn enqueue_reconciliation_review_items(
         contestation_review_items += 1;
     }
 
-    let receipt = ReconciliationReviewReceipt {
+    let materialize_ns = materialize_started.elapsed().as_nanos();
+    let stage_receipt_started = Instant::now();
+    let mut receipt = ReconciliationReviewReceipt {
         source_revision_ref: source_revision_ref.to_owned(),
         stage_reused: false,
         input_fingerprint_ref: input_fingerprint_ref.clone(),
