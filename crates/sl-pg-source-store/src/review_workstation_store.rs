@@ -202,6 +202,88 @@ pub fn install_review_workstation_schema(
     Ok(())
 }
 
+fn same_review_projection_shape(expected: &ReviewItem, loaded: &ReviewItem) -> bool {
+    expected.review_item_ref == loaded.review_item_ref
+        && expected.semantic_ref == loaded.semantic_ref
+        && expected.item_kind == loaded.item_kind
+        && expected.reason == loaded.reason
+        && expected.provenance_refs == loaded.provenance_refs
+        && expected.source_refs == loaded.source_refs
+        && expected.available_actions == loaded.available_actions
+        && expected.affected_consumer_refs == loaded.affected_consumer_refs
+        && expected.candidate_only == loaded.candidate_only
+        && expected.creates_semantic_authority == loaded.creates_semantic_authority
+        && expected.applicability_promoted == loaded.applicability_promoted
+        && expected.claim_truth_promoted == loaded.claim_truth_promoted
+}
+
+pub(crate) fn persist_review_projection_item_with_client(
+    client: &mut Client,
+    item: &ReviewItem,
+) -> Result<ReviewItem, ReviewWorkstationStoreError> {
+    let item = canonical_review_item_for_persistence(item.clone());
+    item.validate()
+        .map_err(|_| ReviewWorkstationStoreError::InvalidDomainObject)?;
+    let mut tx = client.transaction()?;
+    tx.execute(
+        r#"
+        INSERT INTO semantic.review_item
+          (review_item_ref, semantic_ref, item_kind_ref, reason, current_status_ref,
+           candidate_only, creates_semantic_authority, applicability_promoted, claim_truth_promoted)
+        VALUES ($1,$2,$3,$4,$5,true,false,false,false)
+        ON CONFLICT (review_item_ref) DO NOTHING
+        "#,
+        &[
+            &item.review_item_ref,
+            &item.semantic_ref,
+            &kind_db(item.item_kind),
+            &item.reason,
+            &status_db(item.current_status),
+        ],
+    )?;
+    persist_refs(
+        &mut tx,
+        "semantic.review_item_provenance",
+        "provenance_ref",
+        &item.review_item_ref,
+        &item.provenance_refs,
+    )?;
+    persist_refs(
+        &mut tx,
+        "semantic.review_item_source",
+        "source_ref",
+        &item.review_item_ref,
+        &item.source_refs,
+    )?;
+    let action_refs = item
+        .available_actions
+        .iter()
+        .map(|action| action_db(*action).to_owned())
+        .collect::<Vec<_>>();
+    persist_refs(
+        &mut tx,
+        "semantic.review_item_action",
+        "action_ref",
+        &item.review_item_ref,
+        &action_refs,
+    )?;
+    persist_refs(
+        &mut tx,
+        "semantic.review_item_consumer",
+        "consumer_ref",
+        &item.review_item_ref,
+        &item.affected_consumer_refs,
+    )?;
+    tx.commit()?;
+
+    let loaded = load_review_item_with_client(client, &item.review_item_ref)?
+        .ok_or(ReviewWorkstationStoreError::ExistingRowConflict)?;
+    if !same_review_projection_shape(&item, &loaded) {
+        return Err(ReviewWorkstationStoreError::ExistingRowConflict);
+    }
+    Ok(loaded)
+}
+
 pub fn persist_review_item(
     config: &DatabaseConfig,
     item: &ReviewItem,
