@@ -39,7 +39,7 @@ use crate::{
     canonical_statement_ref, compile_initial_intake_statement,
     compile_long_document_lossless_for_document_ref, complete_parser_run,
     discover_scale1_auto_event_proposals, enqueue_parser_regions_with_content_reuse,
-    enqueue_reconciliation_review_items, install_candidate_pnf_schema,
+    enqueue_reconciliation_review_items_for_parser_run, install_candidate_pnf_schema,
     install_statement_trace_schema, load_generic_source_envelope, load_generic_text_source,
     load_long_document_regions, load_long_document_structure, persist_generic_text_source,
     persist_long_document_compilation, persist_long_document_structure,
@@ -671,7 +671,12 @@ pub fn finalize_db_native_long_document_with_candidate_commit_batch_size(
 
     let review_projection_started = Instant::now();
     let reconciliation_review =
-        enqueue_reconciliation_review_items(config, &source_revision_ref, vec![])?;
+        enqueue_reconciliation_review_items_for_parser_run(
+            config,
+            &source_revision_ref,
+            parser_run_ref,
+            vec![],
+        )?;
     let review_projection_ns = review_projection_started.elapsed().as_nanos();
 
     let auto_event_started = Instant::now();
