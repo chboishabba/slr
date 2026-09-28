@@ -36,6 +36,7 @@ bash -n scripts/check_scale1_economy_closure.sh
 bash -n scripts/check_scale1_worker_scaling.sh
 bash -n scripts/check_scale1_archive_scale_series.sh
 bash -n scripts/check_scale1_production_scale_closure.sh
+bash -n scripts/revalidate_scale1_production_receipts.sh
 python3 -m py_compile python/scale1_small_edit_locality.py
 python3 -m py_compile python/scale1_economy_closure.py
 python3 -m py_compile python/scale1_performance_series.py
