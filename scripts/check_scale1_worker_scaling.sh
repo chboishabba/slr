@@ -15,7 +15,7 @@ BATCH_SIZE="${BATCH_SIZE:-64}"
 CONFIG_JSON="${CONFIG_JSON:-{}}"
 BENCHMARK_REF="${BENCHMARK_REF:-scale1-worker-scaling}"
 WORKERS="${WORKERS:-1,2,4}"
-MIN_BEST_SPEEDUP="${MIN_BEST_SPEEDUP:-1.0}"
+MIN_BEST_PARALLEL_SPEEDUP="${MIN_BEST_PARALLEL_SPEEDUP:-1.05}"
 MIN_MAX_WORKER_EFFICIENCY="${MIN_MAX_WORKER_EFFICIENCY:-0.20}"
 OUTPUT="${OUTPUT:-/tmp/scale1-worker-scaling.json}"
 
@@ -28,15 +28,17 @@ for count in "${worker_counts[@]}"; do
   worker_args+=(--workers "$count")
 done
 
-python3 python/scale1_worker_scaling.py   --scale1-bin "$SCALE1_BIN"   --source-family "$SOURCE_FAMILY"   --source-text "$SOURCE_TEXT"   --source-ref-prefix "$SOURCE_REF_PREFIX"   --provider-ref "$PROVIDER_REF"   --acquisition-ref-prefix "$ACQUISITION_REF_PREFIX"   --benchmark-ref "$BENCHMARK_REF"   --model "$MODEL_REF"   --config-json "$CONFIG_JSON"   --parser-script "$PARSER_SCRIPT"   --batch-size "$BATCH_SIZE"   --runtime-head "$RUNTIME_HEAD"   "${worker_args[@]}"   --output "$OUTPUT" >/dev/null
+python3 python/scale1_worker_scaling.py   --scale1-bin "$SCALE1_BIN"   --source-family "$SOURCE_FAMILY"   --source-text "$SOURCE_TEXT"   --source-ref-prefix "$SOURCE_REF_PREFIX"   --provider-ref "$PROVIDER_REF"   --acquisition-ref-prefix "$ACQUISITION_REF_PREFIX"   --benchmark-ref "$BENCHMARK_REF"   --model "$MODEL_REF"   --config-json "$CONFIG_JSON"   --parser-script "$PARSER_SCRIPT"   --batch-size "$BATCH_SIZE"   --runtime-head "$RUNTIME_HEAD"   --min-best-parallel-speedup "$MIN_BEST_PARALLEL_SPEEDUP"   --min-max-worker-efficiency "$MIN_MAX_WORKER_EFFICIENCY"   "${worker_args[@]}"   --output "$OUTPUT" >/dev/null
 
-jq -e   --arg head "$RUNTIME_HEAD"   --argjson min_speedup "$MIN_BEST_SPEEDUP"   --argjson min_eff "$MIN_MAX_WORKER_EFFICIENCY" '
-  . as $root
-  | ($root.points | map(.worker_count) | max) as $max_workers
-  | .schema == "sensiblaw.scale1.worker-scaling-series.v0_1"
+jq -e   --arg head "$RUNTIME_HEAD" '
+  .schema == "sensiblaw.scale1.worker-scaling-series.v0_2"
   and .runtime_head == $head
+  and .acceptance.green == true
+  and .acceptance.observed_best_parallel_speedup >= .acceptance.min_best_parallel_speedup
+  and .acceptance.observed_max_worker_efficiency >= .acceptance.min_max_worker_efficiency
   and (.points | length) >= 2
   and any(.points[]; .worker_count == 1)
+  and any(.points[]; .worker_count > 1)
   and all(.points[];
       .new_jobs == .semantic_regions
       and .reused_jobs == 0
@@ -47,11 +49,6 @@ jq -e   --arg head "$RUNTIME_HEAD"   --argjson min_speedup "$MIN_BEST_SPEEDUP"  
       and .finalize_integrity.unattempted_semantic_regions == 0
       and .finalize_integrity.source_region_loss_count == 0
       and .finalize_integrity.candidate_pnf_reopen_complete == true)
-  and ([.points[].speedup_vs_one_worker] | max) >= $min_speedup
-  and (
-      [.points[] | select(.worker_count == $max_workers) | .parallel_efficiency]
-      | first
-    ) >= $min_eff
   and .boundary.candidate_only == true
   and .boundary.creates_semantic_authority == false
   and .boundary.applicability_promoted == false
@@ -63,6 +60,7 @@ jq '{
   runtime_head,
   benchmark_ref,
   represented_workload,
+  acceptance,
   points: [
     .points[] | {
       worker_count,
