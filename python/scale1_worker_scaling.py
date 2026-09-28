@@ -249,6 +249,11 @@ def main():
     ap.add_argument("--output", required=True)
     args = ap.parse_args()
 
+    if args.min_best_parallel_speedup <= 1.0:
+        raise SystemExit("minimum best parallel speedup must be greater than 1.0")
+    if args.min_max_worker_efficiency <= 0.0:
+        raise SystemExit("minimum max-worker efficiency must be positive")
+
     worker_counts = []
     for value in args.workers:
         if value <= 0:
