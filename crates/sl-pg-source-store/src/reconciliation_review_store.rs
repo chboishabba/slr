@@ -225,34 +225,6 @@ fn common_actions() -> Vec<ReviewAction> {
     ]
 }
 
-fn load_occurrence_statement_refs(
-    client: &mut Client,
-    kind: &str,
-    fingerprint_ref: &str,
-    source_revision_ref: &str,
-) -> Result<Vec<String>, postgres::Error> {
-    let sql = match kind {
-        "proposition" => {
-            "SELECT DISTINCT statement_ref
-             FROM semantic.proposition_candidate_occurrence
-             WHERE proposition_fingerprint_ref=$1 AND source_revision_ref=$2
-             ORDER BY statement_ref"
-        }
-        "event" => {
-            "SELECT DISTINCT statement_ref
-             FROM semantic.event_candidate_occurrence
-             WHERE event_fingerprint_ref=$1 AND source_revision_ref=$2
-             ORDER BY statement_ref"
-        }
-        _ => unreachable!("fixed reconciliation semantic kind"),
-    };
-    Ok(client
-        .query(sql, &[&fingerprint_ref, &source_revision_ref])?
-        .into_iter()
-        .map(|row| row.get::<_, String>(0))
-        .collect())
-}
-
 pub fn enqueue_reconciliation_review_items(
     config: &DatabaseConfig,
     source_revision_ref: &str,
