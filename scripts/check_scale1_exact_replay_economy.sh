@@ -33,6 +33,8 @@ jq -e '
   and .compiler_receipt.parser.reused_jobs
       == .compiler_receipt.integrity.semantic_eligible_regions
   and .compiler_receipt.integrity.candidate_persistence_reused == true
+  and .compiler_receipt.integrity.candidate_commit_count == 0
+  and .compiler_receipt.integrity.candidate_postcommit_reopen_query_count == 0
   and .compiler_receipt.integrity.l2_reconciliation_reused == true
   and .compiler_receipt.integrity.auto_event_projection_reused == true
   and .compiler_receipt.performance.downstream_candidate_persistence_reused == true
@@ -57,7 +59,9 @@ jq '{
   downstream_reuse: {
     candidate_persistence: .compiler_receipt.integrity.candidate_persistence_reused,
     l2_reconciliation: .compiler_receipt.integrity.l2_reconciliation_reused,
-    auto_event_projection: .compiler_receipt.integrity.auto_event_projection_reused
+    auto_event_projection: .compiler_receipt.integrity.auto_event_projection_reused,
+    candidate_commit_count: .compiler_receipt.integrity.candidate_commit_count,
+    candidate_postcommit_reopen_query_count: .compiler_receipt.integrity.candidate_postcommit_reopen_query_count
   },
   performance: {
     total_ns: .compiler_receipt.performance.total_ns,
