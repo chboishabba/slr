@@ -740,11 +740,12 @@ pub fn enqueue_reconciliation_review_items(
     client.batch_execute(REVIEW_PROJECTION_STAGE_SQL)?;
     let row = client.query_opt(
         r#"
-        SELECT parser_run_ref
-        FROM semantic.corpus_reconciliation_stage_receipt
-        WHERE source_revision_ref=$1
-          AND detector_ref=$2
-        ORDER BY parser_run_ref DESC
+        SELECT s.parser_run_ref
+        FROM semantic.corpus_reconciliation_stage_receipt s
+        JOIN ingest.parser_run r ON r.parser_run_ref=s.parser_run_ref
+        WHERE s.source_revision_ref=$1
+          AND s.detector_ref=$2
+        ORDER BY r.completed_at DESC NULLS LAST, r.created_at DESC, s.parser_run_ref
         LIMIT 1
         "#,
         &[&source_revision_ref, &CORPUS_RECONCILIATION_DETECTOR_REF],
