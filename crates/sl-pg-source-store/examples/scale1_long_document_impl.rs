@@ -1036,6 +1036,22 @@ fn compile_source_values(
     // one would falsely report the whole replay wall time as ns/token.
     let wall_ns_per_token = (tokens != 0).then(|| total_ns / tokens as u128);
     let worker_ns_per_token = (tokens != 0).then(|| worker_ns / tokens as u128);
+    let semantic_post_parser_ns = receipt.timings.finalize_total_ns;
+    let full_post_spacy_ns = worker
+        .parser_persist_ns
+        .saturating_add(semantic_post_parser_ns);
+    let same_run_parser_relative_metrics_available = worker.parser_process_ns != 0;
+    let semantic_post_parser_to_spacy_ratio =
+        (worker.parser_process_ns != 0).then(|| {
+            semantic_post_parser_ns as f64 / worker.parser_process_ns as f64
+        });
+    let full_post_spacy_to_spacy_ratio =
+        (worker.parser_process_ns != 0).then(|| {
+            full_post_spacy_ns as f64 / worker.parser_process_ns as f64
+        });
+    let post_spacy_target_ratio = 0.1f64;
+    let post_spacy_target_met = full_post_spacy_to_spacy_ratio
+        .map(|ratio| ratio <= post_spacy_target_ratio);
     let runtime_head = std::env::var("SENSIBLAW_RUNTIME_HEAD").ok();
 
     println!(
@@ -1148,6 +1164,13 @@ fn compile_source_values(
                 "worker_ns": worker_ns,
                 "parser_process_ns": worker.parser_process_ns,
                 "parser_persist_ns": worker.parser_persist_ns,
+                "same_run_parser_relative_metrics_available": same_run_parser_relative_metrics_available,
+                "semantic_post_parser_ns": semantic_post_parser_ns,
+                "full_post_spacy_ns": full_post_spacy_ns,
+                "semantic_post_parser_to_spacy_ratio": semantic_post_parser_to_spacy_ratio,
+                "full_post_spacy_to_spacy_ratio": full_post_spacy_to_spacy_ratio,
+                "post_spacy_target_ratio": post_spacy_target_ratio,
+                "post_spacy_target_met": post_spacy_target_met,
                 "finalize_ns": finalize_ns,
                 "finalize_load_and_validate_ns": receipt.timings.load_and_validate_ns,
                 "m12_compile_ns": receipt.timings.m12_compile_ns,
@@ -1199,7 +1222,6 @@ fn compile_source_values(
                 "candidate_batch_rows_inserted_this_run": receipt.candidate_batch_rows_inserted_this_run,
                 "candidate_commit_batch_size": receipt.candidate_commit_batch_size,
                 "candidate_commit_count": receipt.candidate_commit_count,
-            "candidate_postcommit_reopen_query_count": receipt.candidate_postcommit_reopen_query_count,
                 "candidate_postcommit_reopen_query_count": receipt.candidate_postcommit_reopen_query_count,
                 "downstream_candidate_persistence_reused": receipt.candidate_persistence_reused,
                 "downstream_l2_reused": receipt.reconciliation.stage_reused,
