@@ -53,6 +53,14 @@ def main():
     require(worker_acceptance.get("green") is True,
             "worker scaling receipt is not accepted")
     require(
+        float(worker_acceptance.get("min_best_parallel_speedup", 0.0)) > 1.0,
+        "worker scaling declared speedup threshold is not super-baseline",
+    )
+    require(
+        float(worker_acceptance.get("min_max_worker_efficiency", 0.0)) > 0.0,
+        "worker scaling declared efficiency threshold is not positive",
+    )
+    require(
         float(worker_acceptance.get("observed_best_parallel_speedup", 0.0))
         >= float(worker_acceptance.get("min_best_parallel_speedup", float("inf"))),
         "worker scaling best parallel speedup is below declared threshold",
@@ -83,6 +91,14 @@ def main():
     archive_acceptance = archive.get("acceptance", {})
     require(archive_acceptance.get("green") is True,
             "archive scale receipt is not accepted")
+    require(
+        float(archive_acceptance.get("max_work_units_per_token", 0.0)) > 0.0,
+        "archive scale declared work budget is not positive",
+    )
+    require(
+        float(archive_acceptance.get("min_token_span_ratio", 0.0)) > 1.0,
+        "archive scale declared span requirement is not nontrivial",
+    )
     require(
         float(archive_acceptance.get("observed_slope_work_units_per_token", float("inf")))
         <= float(archive_acceptance.get("max_work_units_per_token", -1.0)),
@@ -140,6 +156,9 @@ def main():
         "archive_scale": {
             "green": True,
             "represented_carrier": "parser_tokens",
+            "source_family": archive["source_family"],
+            "parser_model_ref": archive["parser_model_ref"],
+            "parser_config_digest_ref": archive["parser_config_digest_ref"],
             "max_work_units_per_token": archive_acceptance[
                 "max_work_units_per_token"
             ],
