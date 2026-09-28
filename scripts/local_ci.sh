@@ -42,6 +42,7 @@ python3 -m py_compile python/scale1_performance_series.py
 python3 -m py_compile python/scale1_worker_scaling.py
 python3 -m py_compile python/scale1_archive_scale_series.py
 python3 -m py_compile python/scale1_production_scale_closure.py
+python3 -m py_compile python/scale1_revalidate_scale_receipt.py
 
 echo '== pre-existing source contracts =='
 python3 scripts/verify_source_contract.py
