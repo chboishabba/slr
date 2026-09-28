@@ -372,6 +372,76 @@ fn load_reusable_projection_receipt(
     Ok(Some(receipt))
 }
 
+fn load_reconciliation_review_delta_fibres(
+    client: &mut Client,
+    source_revision_ref: &str,
+    parser_run_ref: &str,
+) -> Result<Option<BTreeSet<(String, String)>>, ReconciliationReviewError> {
+    let Some(receipt) = client.query_opt(
+        r#"
+        SELECT changed_fibre_count, complete, candidate_only,
+               creates_semantic_authority, claim_truth_promoted
+        FROM semantic.corpus_reconciliation_review_delta_receipt
+        WHERE source_revision_ref=$1
+          AND parser_run_ref=$2
+          AND detector_ref=$3
+        "#,
+        &[
+            &source_revision_ref,
+            &parser_run_ref,
+            &CORPUS_RECONCILIATION_DETECTOR_REF,
+        ],
+    )? else {
+        return Ok(None);
+    };
+    if !receipt.get::<_, bool>(1)
+        || !receipt.get::<_, bool>(2)
+        || receipt.get::<_, bool>(3)
+        || receipt.get::<_, bool>(4)
+    {
+        return Err(ReconciliationReviewError::PromotionBoundary);
+    }
+    let expected = receipt.get::<_, i64>(0);
+    if expected < 0 {
+        return Err(ReconciliationReviewError::PromotionBoundary);
+    }
+
+    let rows = client.query(
+        r#"
+        SELECT semantic_kind_ref, semantic_fingerprint_ref,
+               candidate_only, creates_semantic_authority, claim_truth_promoted
+        FROM semantic.corpus_reconciliation_review_delta_fibre
+        WHERE source_revision_ref=$1
+          AND parser_run_ref=$2
+          AND detector_ref=$3
+        ORDER BY semantic_kind_ref, semantic_fingerprint_ref
+        "#,
+        &[
+            &source_revision_ref,
+            &parser_run_ref,
+            &CORPUS_RECONCILIATION_DETECTOR_REF,
+        ],
+    )?;
+    if rows.len() as i64 != expected {
+        return Err(ReconciliationReviewError::PromotionBoundary);
+    }
+    let mut fibres = BTreeSet::new();
+    for row in rows {
+        if !row.get::<_, bool>(2)
+            || row.get::<_, bool>(3)
+            || row.get::<_, bool>(4)
+        {
+            return Err(ReconciliationReviewError::PromotionBoundary);
+        }
+        let kind: String = row.get(0);
+        if !matches!(kind.as_str(), "proposition" | "event") {
+            return Err(ReconciliationReviewError::PromotionBoundary);
+        }
+        fibres.insert((kind, row.get::<_, String>(1)));
+    }
+    Ok(Some(fibres))
+}
+
 fn common_actions() -> Vec<ReviewAction> {
     vec![
         ReviewAction::Accept,
@@ -405,54 +475,116 @@ pub fn enqueue_reconciliation_review_items_for_parser_run(
         return Ok(receipt);
     }
 
-    let pressure_rows = client.query(
-        r#"
-        WITH touched AS (
-          SELECT DISTINCT 'proposition'::TEXT AS semantic_kind_ref,
-                          proposition_fingerprint_ref AS semantic_fingerprint_ref
-          FROM semantic.proposition_candidate_occurrence
-          WHERE source_revision_ref=$1
-          UNION
-          SELECT DISTINCT 'event'::TEXT,
-                          event_fingerprint_ref
-          FROM semantic.event_candidate_occurrence
-          WHERE source_revision_ref=$1
-        )
-        SELECT p.pressure_ref, p.semantic_kind_ref, p.semantic_fingerprint_ref,
-               p.occurrence_count, p.source_revision_count,
-               p.reason_ref, p.candidate_only, p.requires_review,
-               p.creates_semantic_authority, p.claim_truth_promoted
-        FROM semantic.reconciliation_pressure_candidate p
-        JOIN touched t
-          ON t.semantic_kind_ref=p.semantic_kind_ref
-         AND t.semantic_fingerprint_ref=p.semantic_fingerprint_ref
-        ORDER BY p.semantic_kind_ref, p.semantic_fingerprint_ref
-        "#,
-        &[&source_revision_ref],
-    )?;
+    let review_delta =
+        load_reconciliation_review_delta_fibres(
+            &mut client,
+            source_revision_ref,
+            parser_run_ref,
+        )?;
 
-    let conflict_rows = client.query(
-        r#"
-        WITH touched_proposition AS (
-          SELECT DISTINCT proposition_fingerprint_ref
-          FROM semantic.proposition_candidate_occurrence
-          WHERE source_revision_ref=$1
-        )
-        SELECT c.relation_ref, c.base_signature_ref,
-               c.positive_proposition_fingerprint_ref,
-               c.negative_proposition_fingerprint_ref,
-               c.detector_ref, c.candidate_only, c.requires_review,
-               c.creates_contestation_identity,
-               c.creates_semantic_authority, c.claim_truth_promoted
-        FROM semantic.contestation_candidate c
-        WHERE c.positive_proposition_fingerprint_ref IN
-                (SELECT proposition_fingerprint_ref FROM touched_proposition)
-           OR c.negative_proposition_fingerprint_ref IN
-                (SELECT proposition_fingerprint_ref FROM touched_proposition)
-        ORDER BY c.relation_ref
-        "#,
-        &[&source_revision_ref],
-    )?;
+    let (pressure_rows, conflict_rows) = if let Some(delta) = review_delta.as_ref() {
+        let proposition_delta = delta
+            .iter()
+            .filter(|(kind, _)| kind == "proposition")
+            .map(|(_, fingerprint)| fingerprint.clone())
+            .collect::<Vec<_>>();
+        let event_delta = delta
+            .iter()
+            .filter(|(kind, _)| kind == "event")
+            .map(|(_, fingerprint)| fingerprint.clone())
+            .collect::<Vec<_>>();
+
+        let pressure_rows = if delta.is_empty() {
+            vec![]
+        } else {
+            client.query(
+                r#"
+                SELECT p.pressure_ref, p.semantic_kind_ref, p.semantic_fingerprint_ref,
+                       p.occurrence_count, p.source_revision_count,
+                       p.reason_ref, p.candidate_only, p.requires_review,
+                       p.creates_semantic_authority, p.claim_truth_promoted
+                FROM semantic.reconciliation_pressure_candidate p
+                WHERE (p.semantic_kind_ref='proposition'
+                       AND p.semantic_fingerprint_ref = ANY($1))
+                   OR (p.semantic_kind_ref='event'
+                       AND p.semantic_fingerprint_ref = ANY($2))
+                ORDER BY p.semantic_kind_ref, p.semantic_fingerprint_ref
+                "#,
+                &[&proposition_delta, &event_delta],
+            )?
+        };
+
+        let conflict_rows = if proposition_delta.is_empty() {
+            vec![]
+        } else {
+            client.query(
+                r#"
+                SELECT c.relation_ref, c.base_signature_ref,
+                       c.positive_proposition_fingerprint_ref,
+                       c.negative_proposition_fingerprint_ref,
+                       c.detector_ref, c.candidate_only, c.requires_review,
+                       c.creates_contestation_identity,
+                       c.creates_semantic_authority, c.claim_truth_promoted
+                FROM semantic.contestation_candidate c
+                WHERE c.positive_proposition_fingerprint_ref = ANY($1)
+                   OR c.negative_proposition_fingerprint_ref = ANY($1)
+                ORDER BY c.relation_ref
+                "#,
+                &[&proposition_delta],
+            )?
+        };
+        (pressure_rows, conflict_rows)
+    } else {
+        let pressure_rows = client.query(
+            r#"
+            WITH touched AS (
+              SELECT DISTINCT 'proposition'::TEXT AS semantic_kind_ref,
+                              proposition_fingerprint_ref AS semantic_fingerprint_ref
+              FROM semantic.proposition_candidate_occurrence
+              WHERE source_revision_ref=$1
+              UNION
+              SELECT DISTINCT 'event'::TEXT,
+                              event_fingerprint_ref
+              FROM semantic.event_candidate_occurrence
+              WHERE source_revision_ref=$1
+            )
+            SELECT p.pressure_ref, p.semantic_kind_ref, p.semantic_fingerprint_ref,
+                   p.occurrence_count, p.source_revision_count,
+                   p.reason_ref, p.candidate_only, p.requires_review,
+                   p.creates_semantic_authority, p.claim_truth_promoted
+            FROM semantic.reconciliation_pressure_candidate p
+            JOIN touched t
+              ON t.semantic_kind_ref=p.semantic_kind_ref
+             AND t.semantic_fingerprint_ref=p.semantic_fingerprint_ref
+            ORDER BY p.semantic_kind_ref, p.semantic_fingerprint_ref
+            "#,
+            &[&source_revision_ref],
+        )?;
+
+        let conflict_rows = client.query(
+            r#"
+            WITH touched_proposition AS (
+              SELECT DISTINCT proposition_fingerprint_ref
+              FROM semantic.proposition_candidate_occurrence
+              WHERE source_revision_ref=$1
+            )
+            SELECT c.relation_ref, c.base_signature_ref,
+                   c.positive_proposition_fingerprint_ref,
+                   c.negative_proposition_fingerprint_ref,
+                   c.detector_ref, c.candidate_only, c.requires_review,
+                   c.creates_contestation_identity,
+                   c.creates_semantic_authority, c.claim_truth_promoted
+            FROM semantic.contestation_candidate c
+            WHERE c.positive_proposition_fingerprint_ref IN
+                    (SELECT proposition_fingerprint_ref FROM touched_proposition)
+               OR c.negative_proposition_fingerprint_ref IN
+                    (SELECT proposition_fingerprint_ref FROM touched_proposition)
+            ORDER BY c.relation_ref
+            "#,
+            &[&source_revision_ref],
+        )?;
+        (pressure_rows, conflict_rows)
+    };
 
 
     let mut proposition_target_refs = BTreeSet::new();
@@ -473,6 +605,19 @@ pub fn enqueue_reconciliation_review_items_for_parser_run(
     for row in &conflict_rows {
         proposition_target_refs.insert(row.get::<_, String>(2));
         proposition_target_refs.insert(row.get::<_, String>(3));
+    }
+    if let Some(delta) = review_delta.as_ref() {
+        for (kind, fingerprint) in delta {
+            match kind.as_str() {
+                "proposition" => {
+                    proposition_target_refs.insert(fingerprint.clone());
+                }
+                "event" => {
+                    event_target_refs.insert(fingerprint.clone());
+                }
+                _ => return Err(ReconciliationReviewError::PromotionBoundary),
+            }
+        }
     }
     let target_fibre_count =
         proposition_target_refs.len() + event_target_refs.len();
