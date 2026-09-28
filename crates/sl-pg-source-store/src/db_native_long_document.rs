@@ -24,6 +24,15 @@ use crate::candidate_pnf_store::{
 use crate::statement_trace_store::persist_source_statement_with_client_detailed;
 pub const DEFAULT_CANDIDATE_COMMIT_BATCH_SIZE: usize = 128;
 
+#[must_use]
+pub const fn bounded_candidate_commit_count(candidate_count: usize, batch_size: usize) -> usize {
+    if candidate_count == 0 || batch_size == 0 {
+        0
+    } else {
+        1 + (candidate_count - 1) / batch_size
+    }
+}
+
 use crate::{
     build_plain_text_long_source_with_family, canonical_candidate_pnf_batch_ref,
     canonical_statement_ref, compile_initial_intake_statement,
@@ -556,6 +565,18 @@ pub fn finalize_db_native_long_document(
     }
 
     if !candidate_persistence_reused {
+        let expected_candidate_commit_count = bounded_candidate_commit_count(
+            parser_state.succeeded,
+            DEFAULT_CANDIDATE_COMMIT_BATCH_SIZE,
+        );
+        if candidate_commit_count != expected_candidate_commit_count {
+            return Err(DbNativeLongDocumentError::IncompleteDurablePartitionDetail(
+                format!(
+                    "candidate commit count={candidate_commit_count} expected={expected_candidate_commit_count} batch_size={DEFAULT_CANDIDATE_COMMIT_BATCH_SIZE}"
+                ),
+            ));
+        }
+
         let stage = persist_candidate_persistence_stage_receipt_with_client(
             &mut persistence_client,
             &source_revision_ref,
@@ -667,6 +688,20 @@ pub fn finalize_db_native_long_document(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn bounded_commit_count_is_ceiling_division() {
+        assert_eq!(bounded_candidate_commit_count(0, 128), 0);
+        assert_eq!(bounded_candidate_commit_count(1, 128), 1);
+        assert_eq!(bounded_candidate_commit_count(128, 128), 1);
+        assert_eq!(bounded_candidate_commit_count(129, 128), 2);
+    }
+
+    #[test]
+    fn gwb_candidate_commit_geometry_is_bounded() {
+        assert_eq!(bounded_candidate_commit_count(6678, 128), 53);
+        assert!(bounded_candidate_commit_count(6678, 128) < 6678);
+    }
 
     #[test]
     fn final_receipt_boundary_distinguishes_extraction_from_admission() {
