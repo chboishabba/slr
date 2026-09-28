@@ -211,6 +211,35 @@ CREATE TABLE IF NOT EXISTS semantic.l2_candidate_product_entity_factor (
 CREATE INDEX IF NOT EXISTS l2_candidate_product_entity_fingerprint_idx
 ON semantic.l2_candidate_product_entity_factor(entity_fingerprint_ref, product_ref);
 
+CREATE TABLE IF NOT EXISTS semantic.corpus_reconciliation_review_delta_fibre (
+    source_revision_ref TEXT NOT NULL,
+    parser_run_ref TEXT NOT NULL,
+    detector_ref TEXT NOT NULL,
+    semantic_kind_ref TEXT NOT NULL CHECK (
+      semantic_kind_ref IN ('proposition','event')
+    ),
+    semantic_fingerprint_ref TEXT NOT NULL,
+    candidate_only BOOLEAN NOT NULL CHECK (candidate_only),
+    creates_semantic_authority BOOLEAN NOT NULL CHECK (NOT creates_semantic_authority),
+    claim_truth_promoted BOOLEAN NOT NULL CHECK (NOT claim_truth_promoted),
+    PRIMARY KEY (
+      source_revision_ref, parser_run_ref, detector_ref,
+      semantic_kind_ref, semantic_fingerprint_ref
+    )
+);
+
+CREATE TABLE IF NOT EXISTS semantic.corpus_reconciliation_review_delta_receipt (
+    source_revision_ref TEXT NOT NULL,
+    parser_run_ref TEXT NOT NULL,
+    detector_ref TEXT NOT NULL,
+    changed_fibre_count BIGINT NOT NULL,
+    complete BOOLEAN NOT NULL CHECK (complete),
+    candidate_only BOOLEAN NOT NULL CHECK (candidate_only),
+    creates_semantic_authority BOOLEAN NOT NULL CHECK (NOT creates_semantic_authority),
+    claim_truth_promoted BOOLEAN NOT NULL CHECK (NOT claim_truth_promoted),
+    PRIMARY KEY (source_revision_ref, parser_run_ref, detector_ref)
+);
+
 CREATE TABLE IF NOT EXISTS semantic.corpus_reconciliation_stage_receipt (
     source_revision_ref TEXT NOT NULL,
     parser_run_ref TEXT NOT NULL,
@@ -1048,6 +1077,7 @@ pub fn reconcile_source_candidate_semantics(
         return Ok(receipt);
     }
     let mut work = CorpusReconciliationWork::default();
+    let mut review_delta_fibres = BTreeSet::<(String, String)>::new();
     ensure_l2_product_summaries(&mut client, source_revision_ref, &mut work)?;
     let batches = load_statement_batches(&mut client, source_revision_ref)?;
     work.factor_rows_scanned += batches.iter().map(|batch| batch.factors.len()).sum::<usize>();
@@ -1320,7 +1350,7 @@ pub fn reconcile_source_candidate_semantics(
                 "contestation-candidate:{}",
                 digest_ref("polarity-conflict:v1", &[base, positive, negative])
             );
-            work.contestation_rows_inserted += tx.execute(
+            let inserted = tx.execute(
                 r#"INSERT INTO semantic.contestation_candidate
                    (relation_ref, base_signature_ref,
                     positive_proposition_fingerprint_ref,
@@ -1332,6 +1362,11 @@ pub fn reconcile_source_candidate_semantics(
                    ON CONFLICT (relation_ref) DO NOTHING"#,
                 &[&relation_ref, base, positive, negative, &DETECTOR_REF],
             )? as usize;
+            work.contestation_rows_inserted += inserted;
+            if inserted != 0 {
+                review_delta_fibres.insert(("proposition".to_owned(), positive.clone()));
+                review_delta_fibres.insert(("proposition".to_owned(), negative.clone()));
+            }
             polarity_conflict_candidate_count += 1;
         }
     }
@@ -1378,7 +1413,7 @@ pub fn reconcile_source_candidate_semantics(
             "reconciliation-pressure:{}",
             digest_ref("reconciliation-pressure:v1", &[&kind, &fingerprint])
         );
-        work.pressure_rows_upserted += tx.execute(
+        let changed = tx.execute(
             r#"INSERT INTO semantic.reconciliation_pressure_candidate
                (pressure_ref, semantic_kind_ref, semantic_fingerprint_ref,
                 occurrence_count, source_revision_count, reason_ref,
@@ -1388,7 +1423,11 @@ pub fn reconcile_source_candidate_semantics(
                        TRUE,TRUE,FALSE,FALSE)
                ON CONFLICT (pressure_ref) DO UPDATE SET
                  occurrence_count=EXCLUDED.occurrence_count,
-                 source_revision_count=EXCLUDED.source_revision_count"#,
+                 source_revision_count=EXCLUDED.source_revision_count
+               WHERE semantic.reconciliation_pressure_candidate.occurrence_count
+                       IS DISTINCT FROM EXCLUDED.occurrence_count
+                  OR semantic.reconciliation_pressure_candidate.source_revision_count
+                       IS DISTINCT FROM EXCLUDED.source_revision_count"#,
             &[
                 &pressure_ref,
                 &kind,
@@ -1397,6 +1436,10 @@ pub fn reconcile_source_candidate_semantics(
                 &source_revision_count,
             ],
         )? as usize;
+        work.pressure_rows_upserted += changed;
+        if changed != 0 {
+            review_delta_fibres.insert((kind.clone(), fingerprint.clone()));
+        }
         review_pressure_candidate_count += 1;
     }
 
@@ -1423,6 +1466,42 @@ pub fn reconcile_source_candidate_semantics(
         creates_event_identity: false,
         claim_truth_promoted: false,
     };
+
+    for (kind, fingerprint) in &review_delta_fibres {
+        tx.execute(
+            r#"
+            INSERT INTO semantic.corpus_reconciliation_review_delta_fibre
+              (source_revision_ref, parser_run_ref, detector_ref,
+               semantic_kind_ref, semantic_fingerprint_ref,
+               candidate_only, creates_semantic_authority, claim_truth_promoted)
+            VALUES ($1,$2,$3,$4,$5,TRUE,FALSE,FALSE)
+            ON CONFLICT DO NOTHING
+            "#,
+            &[
+                &source_revision_ref,
+                &parser_run_ref,
+                &DETECTOR_REF,
+                kind,
+                fingerprint,
+            ],
+        )?;
+    }
+    tx.execute(
+        r#"
+        INSERT INTO semantic.corpus_reconciliation_review_delta_receipt
+          (source_revision_ref, parser_run_ref, detector_ref,
+           changed_fibre_count, complete, candidate_only,
+           creates_semantic_authority, claim_truth_promoted)
+        VALUES ($1,$2,$3,$4,TRUE,TRUE,FALSE,FALSE)
+        ON CONFLICT (source_revision_ref, parser_run_ref, detector_ref) DO NOTHING
+        "#,
+        &[
+            &source_revision_ref,
+            &parser_run_ref,
+            &DETECTOR_REF,
+            &(review_delta_fibres.len() as i64),
+        ],
+    )?;
 
     tx.execute(
         r#"
