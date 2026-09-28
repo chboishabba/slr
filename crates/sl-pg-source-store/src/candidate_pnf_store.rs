@@ -803,6 +803,7 @@ pub(crate) fn load_candidate_pnf_batches_with_client(
         return Ok((BTreeMap::new(), 0));
     }
     let mut query_count = 0usize;
+    let requested_batch_refs = batch_refs.to_vec();
 
     #[derive(Debug)]
     struct BatchMeta {
@@ -857,7 +858,7 @@ pub(crate) fn load_candidate_pnf_batches_with_client(
         WHERE b.batch_ref = ANY($1)
         ORDER BY b.batch_ref
         "#,
-        &[&batch_refs],
+        &[&requested_batch_refs],
     )?;
 
     let mut meta = BTreeMap::<String, BatchMeta>::new();
