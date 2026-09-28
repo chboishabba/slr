@@ -474,7 +474,9 @@ pub fn finalize_db_native_long_document_with_candidate_commit_batch_size(
             }
 
             let precommit_started = Instant::now();
-            let mut tx = persistence_client.transaction()?;
+            let mut tx = persistence_client
+                .transaction()
+                .map_err(CandidatePnfStoreError::from)?;
             let mut committed = Vec::with_capacity(chunk.len());
             let mut chunk_source_statement_rows_inserted = 0usize;
             let mut chunk_candidate_product_reuse_hits = 0usize;
@@ -508,7 +510,7 @@ pub fn finalize_db_native_long_document_with_candidate_commit_batch_size(
             candidate_precommit_write_ns += precommit_started.elapsed().as_nanos();
 
             let commit_started = Instant::now();
-            tx.commit()?;
+            tx.commit().map_err(CandidatePnfStoreError::from)?;
             candidate_commit_wait_ns += commit_started.elapsed().as_nanos();
 
             let reopen_started = Instant::now();

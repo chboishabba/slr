@@ -1,4 +1,4 @@
-#![recursion_limit = "256"]
+#![recursion_limit = "512"]
 
 // Source-family-neutral entry point for the SCALE-1 compiler.
 //
