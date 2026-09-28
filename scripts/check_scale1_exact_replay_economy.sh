@@ -40,6 +40,10 @@ jq -e '
   and .compiler_receipt.performance.downstream_candidate_persistence_reused == true
   and .compiler_receipt.performance.downstream_l2_reused == true
   and .compiler_receipt.performance.downstream_auto_reused == true
+  and .compiler_receipt.candidate_cardinality.review_projection_reused == true
+  and .compiler_receipt.candidate_cardinality.review_occurrence_lookup_count == 0
+  and .compiler_receipt.candidate_cardinality.review_items_persist_attempted == 0
+  and .compiler_receipt.performance.downstream_review_projection_reused == true
   and .compiler_receipt.integrity.unattempted_semantic_regions == 0
   and .compiler_receipt.integrity.source_region_loss_count == 0
   and .compiler_receipt.integrity.candidate_pnf_reopen_complete == true
@@ -60,6 +64,7 @@ jq '{
     candidate_persistence: .compiler_receipt.integrity.candidate_persistence_reused,
     l2_reconciliation: .compiler_receipt.integrity.l2_reconciliation_reused,
     auto_event_projection: .compiler_receipt.integrity.auto_event_projection_reused,
+    review_projection: .compiler_receipt.candidate_cardinality.review_projection_reused,
     candidate_commit_count: .compiler_receipt.integrity.candidate_commit_count,
     candidate_postcommit_reopen_query_count: .compiler_receipt.integrity.candidate_postcommit_reopen_query_count
   },
@@ -69,6 +74,8 @@ jq '{
     l2_reconciliation_ns: .compiler_receipt.performance.l2_reconciliation_ns,
     auto_event_ns: .compiler_receipt.performance.auto_event_ns,
     review_projection_ns: .compiler_receipt.performance.review_projection_ns,
+    review_input_identity_ns: .compiler_receipt.performance.review_input_identity_ns,
+    review_materialize_ns: .compiler_receipt.performance.review_materialize_ns,
     reload_verify_ns: .compiler_receipt.performance.reload_verify_ns
   }
 }' "$REPLAY_OUTPUT"
