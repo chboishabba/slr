@@ -622,6 +622,27 @@ pub fn finalize_db_native_long_document_with_candidate_commit_batch_size(
             ));
         }
 
+        let max_reopen_queries = candidate_commit_count.saturating_mul(3);
+        if candidate_postcommit_reopen_query_count > max_reopen_queries {
+            return Err(DbNativeLongDocumentError::IncompleteDurablePartitionDetail(
+                format!(
+                    "candidate reopen queries={candidate_postcommit_reopen_query_count} exceed bounded maximum={max_reopen_queries} commits={candidate_commit_count}"
+                ),
+            ));
+        }
+        let product_backed_count =
+            candidate_product_reuse_hits_this_run + candidate_product_new_this_run;
+        if product_backed_count == persisted_candidate_batch_count {
+            let expected_reopen_queries = candidate_commit_count.saturating_mul(2);
+            if candidate_postcommit_reopen_query_count != expected_reopen_queries {
+                return Err(DbNativeLongDocumentError::IncompleteDurablePartitionDetail(
+                    format!(
+                        "product-backed candidate reopen queries={candidate_postcommit_reopen_query_count} expected={expected_reopen_queries} commits={candidate_commit_count}"
+                    ),
+                ));
+            }
+        }
+
         let stage = persist_candidate_persistence_stage_receipt_with_client(
             &mut persistence_client,
             &source_revision_ref,
