@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS semantic.reconciliation_review_projection_stage_recei
     algorithm_ref TEXT NOT NULL,
     input_fingerprint_ref TEXT NOT NULL,
     consumer_scope_ref TEXT NOT NULL,
+    target_fibre_count BIGINT NOT NULL DEFAULT 0,
     cluster_review_items BIGINT NOT NULL,
     contestation_review_items BIGINT NOT NULL,
     review_item_refs TEXT[] NOT NULL,
@@ -66,6 +67,9 @@ CREATE TABLE IF NOT EXISTS semantic.reconciliation_review_projection_stage_recei
     )
 );
 
+ALTER TABLE semantic.reconciliation_review_projection_stage_receipt_v2
+  ADD COLUMN IF NOT EXISTS target_fibre_count BIGINT NOT NULL DEFAULT 0;
+
 "#;
 
 #[derive(Debug, Error)]
@@ -83,6 +87,7 @@ pub struct ReconciliationReviewReceipt {
     pub source_revision_ref: String,
     pub stage_reused: bool,
     pub input_fingerprint_ref: String,
+    pub target_fibre_count: usize,
     pub pressure_rows_scanned: usize,
     pub contestation_rows_scanned: usize,
     pub occurrence_rows_scanned: usize,
@@ -203,8 +208,8 @@ fn load_fast_reusable_projection_receipt(
 
     let Some(row) = client.query_opt(
         r#"
-        SELECT cluster_review_items, contestation_review_items, review_item_refs,
-               candidate_only, creates_semantic_authority, creates_event_identity,
+        SELECT target_fibre_count, cluster_review_items, contestation_review_items,
+               review_item_refs, candidate_only, creates_semantic_authority, creates_event_identity,
                applicability_promoted, claim_truth_promoted
         FROM semantic.reconciliation_review_projection_stage_receipt_v2
         WHERE source_revision_ref=$1
@@ -224,7 +229,7 @@ fn load_fast_reusable_projection_receipt(
         return Ok(None);
     };
 
-    let review_item_refs: Vec<String> = row.get(2);
+    let review_item_refs: Vec<String> = row.get(3);
     let boundaries = client.query_one(
         r#"
         SELECT COUNT(*)::BIGINT,
@@ -252,6 +257,7 @@ fn load_fast_reusable_projection_receipt(
             source_revision_ref,
             parser_run_ref,
         ),
+        target_fibre_count: row.get::<_, i64>(0).max(0) as usize,
         pressure_rows_scanned: 0,
         contestation_rows_scanned: 0,
         occurrence_rows_scanned: 0,
@@ -261,14 +267,14 @@ fn load_fast_reusable_projection_receipt(
         input_identity_ns: 0,
         materialize_ns: 0,
         stage_receipt_ns: 0,
-        cluster_review_items: row.get::<_, i64>(0).max(0) as usize,
-        contestation_review_items: row.get::<_, i64>(1).max(0) as usize,
+        cluster_review_items: row.get::<_, i64>(1).max(0) as usize,
+        contestation_review_items: row.get::<_, i64>(2).max(0) as usize,
         review_item_refs,
-        candidate_only: row.get(3),
-        creates_semantic_authority: row.get(4),
-        creates_event_identity: row.get(5),
-        applicability_promoted: row.get(6),
-        claim_truth_promoted: row.get(7),
+        candidate_only: row.get(4),
+        creates_semantic_authority: row.get(5),
+        creates_event_identity: row.get(6),
+        applicability_promoted: row.get(7),
+        claim_truth_promoted: row.get(8),
     };
     if !receipt.candidate_only
         || receipt.creates_semantic_authority
@@ -337,6 +343,7 @@ fn load_reusable_projection_receipt(
         source_revision_ref: source_revision_ref.to_owned(),
         stage_reused: true,
         input_fingerprint_ref: input_fingerprint_ref.to_owned(),
+        target_fibre_count: 0,
         pressure_rows_scanned,
         contestation_rows_scanned,
         occurrence_rows_scanned,
@@ -449,24 +456,55 @@ pub fn enqueue_reconciliation_review_items_for_parser_run(
     )?;
 
 
-    let occurrence_rows = client.query(
-        r#"
-        SELECT 'proposition'::TEXT AS semantic_kind_ref,
-               proposition_fingerprint_ref AS semantic_fingerprint_ref,
-               statement_ref
-        FROM semantic.proposition_candidate_occurrence
-        WHERE source_revision_ref=$1
-        UNION ALL
-        SELECT 'event'::TEXT,
-               event_fingerprint_ref,
-               statement_ref
-        FROM semantic.event_candidate_occurrence
-        WHERE source_revision_ref=$1
-        ORDER BY 1,2,3
-        "#,
-        &[&source_revision_ref],
-    )?;
-    let occurrence_lookup_count = 1usize;
+    let mut proposition_target_refs = BTreeSet::new();
+    let mut event_target_refs = BTreeSet::new();
+    for row in &pressure_rows {
+        let kind: String = row.get(1);
+        let fingerprint: String = row.get(2);
+        match kind.as_str() {
+            "proposition" => {
+                proposition_target_refs.insert(fingerprint);
+            }
+            "event" => {
+                event_target_refs.insert(fingerprint);
+            }
+            _ => {}
+        }
+    }
+    for row in &conflict_rows {
+        proposition_target_refs.insert(row.get::<_, String>(2));
+        proposition_target_refs.insert(row.get::<_, String>(3));
+    }
+    let target_fibre_count =
+        proposition_target_refs.len() + event_target_refs.len();
+    let proposition_targets =
+        proposition_target_refs.iter().cloned().collect::<Vec<_>>();
+    let event_targets = event_target_refs.iter().cloned().collect::<Vec<_>>();
+
+    let occurrence_rows = if target_fibre_count == 0 {
+        vec![]
+    } else {
+        client.query(
+            r#"
+            SELECT 'proposition'::TEXT AS semantic_kind_ref,
+                   proposition_fingerprint_ref AS semantic_fingerprint_ref,
+                   statement_ref
+            FROM semantic.proposition_candidate_occurrence
+            WHERE source_revision_ref=$1
+              AND proposition_fingerprint_ref = ANY($2)
+            UNION ALL
+            SELECT 'event'::TEXT,
+                   event_fingerprint_ref,
+                   statement_ref
+            FROM semantic.event_candidate_occurrence
+            WHERE source_revision_ref=$1
+              AND event_fingerprint_ref = ANY($3)
+            ORDER BY 1,2,3
+            "#,
+            &[&source_revision_ref, &proposition_targets, &event_targets],
+        )?
+    };
+    let occurrence_lookup_count = usize::from(target_fibre_count != 0);
     let occurrence_rows_scanned = occurrence_rows.len();
     let mut occurrence_refs =
         BTreeMap::<(String, String), BTreeSet<String>>::new();
@@ -659,6 +697,7 @@ pub fn enqueue_reconciliation_review_items_for_parser_run(
         source_revision_ref: source_revision_ref.to_owned(),
         stage_reused: false,
         input_fingerprint_ref: input_fingerprint_ref.clone(),
+        target_fibre_count,
         pressure_rows_scanned,
         contestation_rows_scanned,
         occurrence_rows_scanned,
@@ -695,6 +734,7 @@ pub fn enqueue_reconciliation_review_items_for_parser_run(
             &REVIEW_PROJECTION_ALGORITHM_REF,
             &input_fingerprint_ref,
             &consumer_scope_ref,
+            &(receipt.target_fibre_count as i64),
             &(receipt.cluster_review_items as i64),
             &(receipt.contestation_review_items as i64),
             &receipt.review_item_refs,
@@ -704,11 +744,11 @@ pub fn enqueue_reconciliation_review_items_for_parser_run(
         r#"
         INSERT INTO semantic.reconciliation_review_projection_stage_receipt_v2
         (source_revision_ref, parser_run_ref, reconciliation_detector_ref,
-         algorithm_ref, consumer_scope_ref, cluster_review_items,
-         contestation_review_items, review_item_refs, candidate_only,
+         algorithm_ref, consumer_scope_ref, target_fibre_count,
+         cluster_review_items, contestation_review_items, review_item_refs, candidate_only,
          creates_semantic_authority, creates_event_identity,
          applicability_promoted, claim_truth_promoted)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,TRUE,FALSE,FALSE,FALSE,FALSE)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,TRUE,FALSE,FALSE,FALSE,FALSE)
         ON CONFLICT (
           source_revision_ref, parser_run_ref, reconciliation_detector_ref,
           algorithm_ref, consumer_scope_ref
