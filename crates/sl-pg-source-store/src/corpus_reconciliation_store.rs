@@ -238,7 +238,9 @@ CREATE TABLE IF NOT EXISTS semantic.corpus_reconciliation_stage_receipt (
 
 "#;
 
-const DETECTOR_REF: &str = "scale1:persistent-pnf-fingerprint:v1";
+pub(crate) const CORPUS_RECONCILIATION_DETECTOR_REF: &str =
+    "scale1:persistent-pnf-fingerprint:v1";
+const DETECTOR_REF: &str = CORPUS_RECONCILIATION_DETECTOR_REF;
 
 #[derive(Debug, Error)]
 pub enum CorpusReconciliationError {
