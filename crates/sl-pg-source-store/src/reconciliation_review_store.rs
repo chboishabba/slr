@@ -9,7 +9,7 @@
 //! - polarity conflict candidates become ClaimContestation review work;
 //! - accepting these review items changes workflow state only.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::time::Instant;
 
 use postgres::{Client, NoTls};
@@ -63,6 +63,7 @@ pub struct ReconciliationReviewReceipt {
     pub input_fingerprint_ref: String,
     pub pressure_rows_scanned: usize,
     pub contestation_rows_scanned: usize,
+    pub occurrence_rows_scanned: usize,
     pub occurrence_lookup_count: usize,
     pub review_items_persist_attempted: usize,
     pub persisted_refs_verified: usize,
@@ -97,20 +98,35 @@ fn canonical_scope_ref(affected_consumer_refs: &[String]) -> String {
 }
 
 fn review_input_fingerprint(
-    pressure_refs: &[String],
-    contestation_refs: &[String],
+    pressure_components: &[String],
+    contestation_components: &[String],
+    occurrence_components: &[String],
 ) -> String {
-    let mut parts = Vec::with_capacity(pressure_refs.len() + contestation_refs.len() + 2);
-    parts.push(format!("pressure-count:{}", pressure_refs.len()));
-    parts.extend(pressure_refs.iter().map(|value| format!("pressure:{value}")));
-    parts.push(format!("contestation-count:{}", contestation_refs.len()));
+    let mut parts = Vec::with_capacity(
+        pressure_components.len()
+            + contestation_components.len()
+            + occurrence_components.len()
+            + 3,
+    );
+    parts.push(format!("pressure-count:{}", pressure_components.len()));
+    parts.extend(pressure_components.iter().map(|value| format!("pressure:{value}")));
+    parts.push(format!(
+        "contestation-count:{}",
+        contestation_components.len()
+    ));
     parts.extend(
-        contestation_refs
+        contestation_components
             .iter()
             .map(|value| format!("contestation:{value}")),
     );
+    parts.push(format!("occurrence-count:{}", occurrence_components.len()));
+    parts.extend(
+        occurrence_components
+            .iter()
+            .map(|value| format!("occurrence:{value}")),
+    );
     let borrowed = parts.iter().map(String::as_str).collect::<Vec<_>>();
-    digest_ref("reconciliation-review-input:v1", &borrowed)
+    digest_ref("reconciliation-review-input:v2", &borrowed)
 }
 
 fn load_reusable_projection_receipt(
@@ -120,6 +136,8 @@ fn load_reusable_projection_receipt(
     consumer_scope_ref: &str,
     pressure_rows_scanned: usize,
     contestation_rows_scanned: usize,
+    occurrence_rows_scanned: usize,
+    occurrence_lookup_count: usize,
     input_identity_ns: u128,
 ) -> Result<Option<ReconciliationReviewReceipt>, ReconciliationReviewError> {
     let Some(row) = client.query_opt(
@@ -169,7 +187,8 @@ fn load_reusable_projection_receipt(
         input_fingerprint_ref: input_fingerprint_ref.to_owned(),
         pressure_rows_scanned,
         contestation_rows_scanned,
-        occurrence_lookup_count: 0,
+        occurrence_rows_scanned,
+        occurrence_lookup_count,
         review_items_persist_attempted: 0,
         persisted_refs_verified: review_item_refs.len(),
         input_identity_ns,
@@ -294,16 +313,71 @@ pub fn enqueue_reconciliation_review_items(
     )?;
 
 
-    let pressure_refs = pressure_rows
+    let occurrence_rows = client.query(
+        r#"
+        SELECT 'proposition'::TEXT AS semantic_kind_ref,
+               proposition_fingerprint_ref AS semantic_fingerprint_ref,
+               statement_ref
+        FROM semantic.proposition_candidate_occurrence
+        WHERE source_revision_ref=$1
+        UNION ALL
+        SELECT 'event'::TEXT,
+               event_fingerprint_ref,
+               statement_ref
+        FROM semantic.event_candidate_occurrence
+        WHERE source_revision_ref=$1
+        ORDER BY 1,2,3
+        "#,
+        &[&source_revision_ref],
+    )?;
+    let occurrence_lookup_count = 1usize;
+    let occurrence_rows_scanned = occurrence_rows.len();
+    let mut occurrence_refs =
+        BTreeMap::<(String, String), BTreeSet<String>>::new();
+    let mut occurrence_components = Vec::with_capacity(occurrence_rows.len());
+    for row in occurrence_rows {
+        let kind: String = row.get(0);
+        let fingerprint: String = row.get(1);
+        let statement_ref: String = row.get(2);
+        occurrence_components.push(format!(
+            "{kind}\u{1f}{fingerprint}\u{1f}{statement_ref}"
+        ));
+        occurrence_refs
+            .entry((kind, fingerprint))
+            .or_default()
+            .insert(statement_ref);
+    }
+
+    let pressure_components = pressure_rows
         .iter()
-        .map(|row| row.get::<_, String>(0))
+        .map(|row| {
+            format!(
+                "{}\u{1f}{}\u{1f}{}\u{1f}{}",
+                row.get::<_, String>(0),
+                row.get::<_, String>(1),
+                row.get::<_, String>(2),
+                row.get::<_, String>(5),
+            )
+        })
         .collect::<Vec<_>>();
-    let contestation_refs = conflict_rows
+    let contestation_components = conflict_rows
         .iter()
-        .map(|row| row.get::<_, String>(0))
+        .map(|row| {
+            format!(
+                "{}\u{1f}{}\u{1f}{}\u{1f}{}\u{1f}{}",
+                row.get::<_, String>(0),
+                row.get::<_, String>(1),
+                row.get::<_, String>(2),
+                row.get::<_, String>(3),
+                row.get::<_, String>(4),
+            )
+        })
         .collect::<Vec<_>>();
-    let input_fingerprint_ref =
-        review_input_fingerprint(&pressure_refs, &contestation_refs);
+    let input_fingerprint_ref = review_input_fingerprint(
+        &pressure_components,
+        &contestation_components,
+        &occurrence_components,
+    );
     let consumer_scope_ref = canonical_scope_ref(&affected_consumer_refs);
     let pressure_rows_scanned = pressure_rows.len();
     let contestation_rows_scanned = conflict_rows.len();
@@ -316,6 +390,8 @@ pub fn enqueue_reconciliation_review_items(
         &consumer_scope_ref,
         pressure_rows_scanned,
         contestation_rows_scanned,
+        occurrence_rows_scanned,
+        occurrence_lookup_count,
         input_identity_ns,
     )? {
         return Ok(receipt);
@@ -324,8 +400,7 @@ pub fn enqueue_reconciliation_review_items(
     let materialize_started = Instant::now();
     let mut review_item_refs = BTreeSet::new();
     let mut cluster_review_items = 0usize;
-    let mut occurrence_lookup_count = 0usize;
-    let mut review_items_persist_attempted = 0usize;
+       let mut review_items_persist_attempted = 0usize;
 
     for row in pressure_rows {
         let pressure_ref: String = row.get(0);
@@ -343,13 +418,10 @@ pub fn enqueue_reconciliation_review_items(
             return Err(ReconciliationReviewError::PromotionBoundary);
         }
 
-        occurrence_lookup_count += 1;
-        let source_refs = load_occurrence_statement_refs(
-            &mut client,
-            &kind,
-            &fingerprint_ref,
-            source_revision_ref,
-        )?;
+        let source_refs = occurrence_refs
+            .get(&(kind.clone(), fingerprint_ref.clone()))
+            .map(|refs| refs.iter().cloned().collect::<Vec<_>>())
+            .unwrap_or_default();
         if source_refs.is_empty() {
             continue;
         }
@@ -410,14 +482,10 @@ pub fn enqueue_reconciliation_review_items(
 
         let mut source_refs = BTreeSet::new();
         for fingerprint in [&positive_ref, &negative_ref] {
-            occurrence_lookup_count += 1;
-            for statement_ref in load_occurrence_statement_refs(
-                &mut client,
-                "proposition",
-                fingerprint,
-                source_revision_ref,
-            )? {
-                source_refs.insert(statement_ref);
+            if let Some(refs) =
+                occurrence_refs.get(&("proposition".to_owned(), fingerprint.clone()))
+            {
+                source_refs.extend(refs.iter().cloned());
             }
         }
         if source_refs.is_empty() {
@@ -458,6 +526,7 @@ pub fn enqueue_reconciliation_review_items(
         input_fingerprint_ref: input_fingerprint_ref.clone(),
         pressure_rows_scanned,
         contestation_rows_scanned,
+        occurrence_rows_scanned,
         occurrence_lookup_count,
         review_items_persist_attempted,
         persisted_refs_verified: review_item_refs.len(),
