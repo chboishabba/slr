@@ -18,9 +18,9 @@ use sensiblaw_core::review_workstation::{
 };
 use thiserror::Error;
 
+use crate::review_workstation_store::persist_review_projection_item_with_client;
 use crate::{
-    install_review_workstation_schema, persist_review_item, DatabaseConfig,
-    ReviewWorkstationStoreError,
+    install_review_workstation_schema, DatabaseConfig, ReviewWorkstationStoreError,
 };
 
 const REVIEW_PROJECTION_ALGORITHM_REF: &str = "scale1:reconciliation-review-projection:v1";
@@ -350,7 +350,7 @@ pub fn enqueue_reconciliation_review_items(
             applicability_promoted: false,
             claim_truth_promoted: false,
         };
-        persist_review_item(config, &item)?;
+        persist_review_projection_item_with_client(&mut client, &item)?;
         review_item_refs.insert(review_item_ref);
         cluster_review_items += 1;
     }
@@ -411,7 +411,7 @@ pub fn enqueue_reconciliation_review_items(
             applicability_promoted: false,
             claim_truth_promoted: false,
         };
-        persist_review_item(config, &item)?;
+        persist_review_projection_item_with_client(&mut client, &item)?;
         review_item_refs.insert(review_item_ref);
         contestation_review_items += 1;
     }
