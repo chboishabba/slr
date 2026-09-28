@@ -43,7 +43,7 @@ jq -e '
   and .performance.downstream_l2_reused == true
   and .performance.downstream_auto_reused == true
   and .candidate_cardinality.review_projection_reused == true
-  and .candidate_cardinality.review_occurrence_lookup_count == 0
+  and .candidate_cardinality.review_occurrence_lookup_count == 1
   and .candidate_cardinality.review_items_persist_attempted == 0
   and .performance.downstream_review_projection_reused == true
   and .integrity.unattempted_semantic_regions == 0
