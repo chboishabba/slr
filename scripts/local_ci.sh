@@ -32,7 +32,9 @@ bash -n scripts/check_scale1_candidate_commit_receipt.sh
 bash -n scripts/check_scale1_cold_source_baseline.sh
 bash -n scripts/check_scale1_small_edit_locality.sh
 bash -n scripts/check_scale1_same_domain_new_source.sh
+bash -n scripts/check_scale1_economy_closure.sh
 python3 -m py_compile python/scale1_small_edit_locality.py
+python3 -m py_compile python/scale1_economy_closure.py
 python3 -m py_compile python/scale1_performance_series.py
 
 echo '== pre-existing source contracts =='
