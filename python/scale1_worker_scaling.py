@@ -244,6 +244,8 @@ def main():
         help="worker count; repeat for multiple points (must include 1)",
     )
     ap.add_argument("--runtime-head")
+    ap.add_argument("--min-best-parallel-speedup", type=float, required=True)
+    ap.add_argument("--min-max-worker-efficiency", type=float, required=True)
     ap.add_argument("--output", required=True)
     args = ap.parse_args()
 
@@ -276,8 +278,26 @@ def main():
         point["speedup_vs_one_worker"] = speedup
         point["parallel_efficiency"] = speedup / point["worker_count"]
 
+    parallel_points = [p for p in points if p["worker_count"] > 1]
+    best_parallel_speedup = max(p["speedup_vs_one_worker"] for p in parallel_points)
+    max_worker_count = max(p["worker_count"] for p in points)
+    max_worker_point = next(p for p in points if p["worker_count"] == max_worker_count)
+    acceptance_green = (
+        best_parallel_speedup >= args.min_best_parallel_speedup
+        and max_worker_point["parallel_efficiency"]
+        >= args.min_max_worker_efficiency
+    )
+    if not acceptance_green:
+        raise SystemExit(
+            "worker scaling acceptance failed: "
+            f"best_parallel_speedup={best_parallel_speedup:.6f} "
+            f"(required {args.min_best_parallel_speedup:.6f}), "
+            f"max_worker_efficiency={max_worker_point['parallel_efficiency']:.6f} "
+            f"(required {args.min_max_worker_efficiency:.6f})"
+        )
+
     result = {
-        "schema": "sensiblaw.scale1.worker-scaling-series.v0_1",
+        "schema": "sensiblaw.scale1.worker-scaling-series.v0_2",
         "runtime_head": args.runtime_head,
         "benchmark_ref": args.benchmark_ref,
         "source_family": args.source_family,
@@ -291,6 +311,14 @@ def main():
             "same canonical text and parser behaviour; benchmark_nonce changes "
             "parser-product identity only so every point performs fresh parser work"
         ),
+        "acceptance": {
+            "green": acceptance_green,
+            "min_best_parallel_speedup": args.min_best_parallel_speedup,
+            "observed_best_parallel_speedup": best_parallel_speedup,
+            "min_max_worker_efficiency": args.min_max_worker_efficiency,
+            "observed_max_worker_efficiency": max_worker_point["parallel_efficiency"],
+            "max_worker_count": max_worker_count,
+        },
         "points": points,
         "boundary": {
             "candidate_only": True,
