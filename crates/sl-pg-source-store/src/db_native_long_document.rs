@@ -275,6 +275,23 @@ pub fn finalize_db_native_long_document(
     config: &DatabaseConfig,
     parser_run_ref: &str,
 ) -> Result<DbNativeLongDocumentReceipt, DbNativeLongDocumentError> {
+    finalize_db_native_long_document_with_candidate_commit_batch_size(
+        config,
+        parser_run_ref,
+        DEFAULT_CANDIDATE_COMMIT_BATCH_SIZE,
+    )
+}
+
+pub fn finalize_db_native_long_document_with_candidate_commit_batch_size(
+    config: &DatabaseConfig,
+    parser_run_ref: &str,
+    candidate_commit_batch_size: usize,
+) -> Result<DbNativeLongDocumentReceipt, DbNativeLongDocumentError> {
+    if candidate_commit_batch_size == 0 {
+        return Err(DbNativeLongDocumentError::IncompleteDurablePartitionDetail(
+            "candidate commit batch size must be positive".into(),
+        ));
+    }
     let finalize_started = Instant::now();
     let load_started = Instant::now();
     let parser_state = complete_parser_run(config, parser_run_ref)?;
@@ -446,7 +463,7 @@ pub fn finalize_db_native_long_document(
             }
         }
 
-        for chunk in candidates.chunks(DEFAULT_CANDIDATE_COMMIT_BATCH_SIZE) {
+        for chunk in candidates.chunks(candidate_commit_batch_size) {
             for candidate in chunk {
                 candidate
                     .validate()
@@ -579,12 +596,12 @@ pub fn finalize_db_native_long_document(
     if !candidate_persistence_reused {
         let expected_candidate_commit_count = bounded_candidate_commit_count(
             parser_state.succeeded,
-            DEFAULT_CANDIDATE_COMMIT_BATCH_SIZE,
+            candidate_commit_batch_size,
         );
         if candidate_commit_count != expected_candidate_commit_count {
             return Err(DbNativeLongDocumentError::IncompleteDurablePartitionDetail(
                 format!(
-                    "candidate commit count={candidate_commit_count} expected={expected_candidate_commit_count} batch_size={DEFAULT_CANDIDATE_COMMIT_BATCH_SIZE}"
+                    "candidate commit count={candidate_commit_count} expected={expected_candidate_commit_count} batch_size={candidate_commit_batch_size}"
                 ),
             ));
         }
@@ -681,7 +698,7 @@ pub fn finalize_db_native_long_document(
         candidate_product_factor_rows_inserted_this_run,
         source_statement_rows_inserted_this_run,
         candidate_batch_rows_inserted_this_run,
-        candidate_commit_batch_size: DEFAULT_CANDIDATE_COMMIT_BATCH_SIZE,
+        candidate_commit_batch_size,
         candidate_commit_count,
         reconciliation,
         reconciliation_review,
