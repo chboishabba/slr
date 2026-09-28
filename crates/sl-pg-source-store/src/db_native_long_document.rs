@@ -112,6 +112,9 @@ pub struct DbNativeLongDocumentTimings {
     pub load_and_validate_ns: u128,
     pub m12_compile_ns: u128,
     pub candidate_persist_ns: u128,
+    pub candidate_precommit_write_ns: u128,
+    pub candidate_commit_wait_ns: u128,
+    pub candidate_postcommit_reopen_ns: u128,
     pub reconciliation_ns: u128,
     pub review_projection_ns: u128,
     pub auto_event_ns: u128,
@@ -387,6 +390,9 @@ pub fn finalize_db_native_long_document(
     let mut candidate_batch_rows_inserted_this_run = 0usize;
 
     let mut candidate_commit_count = 0usize;
+    let mut candidate_precommit_write_ns = 0u128;
+    let mut candidate_commit_wait_ns = 0u128;
+    let mut candidate_postcommit_reopen_ns = 0u128;
 
     if !candidate_persistence_reused {
         let mut candidates = Vec::with_capacity(parser_state.succeeded);
@@ -447,6 +453,7 @@ pub fn finalize_db_native_long_document(
                     .map_err(|_| CandidatePnfStoreError::InvalidCandidate)?;
             }
 
+            let precommit_started = Instant::now();
             let mut tx = persistence_client.transaction()?;
             let mut committed = Vec::with_capacity(chunk.len());
             let mut chunk_source_statement_rows_inserted = 0usize;
@@ -478,9 +485,13 @@ pub fn finalize_db_native_long_document(
                     usize::from(product_work.batch_row_inserted);
                 committed.push((batch_ref, candidate));
             }
+            candidate_precommit_write_ns += precommit_started.elapsed().as_nanos();
 
+            let commit_started = Instant::now();
             tx.commit()?;
+            candidate_commit_wait_ns += commit_started.elapsed().as_nanos();
 
+            let reopen_started = Instant::now();
             // A batch only counts as durably committed after every individual
             // product reopens and equals its exact expected candidate.
             for (batch_ref, candidate) in &committed {
@@ -535,6 +546,7 @@ pub fn finalize_db_native_long_document(
                 persisted_candidate_batch_count += 1;
                 persisted_candidate_factor_count += reopened.factors.len();
             }
+            candidate_postcommit_reopen_ns += reopen_started.elapsed().as_nanos();
 
             source_statement_rows_inserted_this_run +=
                 chunk_source_statement_rows_inserted;
@@ -637,6 +649,9 @@ pub fn finalize_db_native_long_document(
         load_and_validate_ns,
         m12_compile_ns,
         candidate_persist_ns,
+        candidate_precommit_write_ns,
+        candidate_commit_wait_ns,
+        candidate_postcommit_reopen_ns,
         reconciliation_ns,
         review_projection_ns,
         auto_event_ns,
