@@ -33,10 +33,15 @@ jq -e --argjson min_reuse "$MIN_REUSE_HITS" '
   and .performance.candidate_product_reuse_hits_this_run >= $min_reuse
   and .candidate_cardinality.l2_product_summary_reuse_hits_this_run
       >= .performance.candidate_product_reuse_hits_this_run
+  and .candidate_cardinality.l2_product_summaries_created_this_run
+      <= .performance.candidate_product_new_this_run
+  and .candidate_cardinality.l2_factor_rows_scanned_this_run
+      <= .performance.candidate_product_factor_rows_inserted_this_run
   and .candidate_cardinality.review_occurrence_lookup_count <= 1
-  and .candidate_cardinality.review_target_fibre_count
-      <= (.candidate_cardinality.review_pressure_rows_scanned
-          + 2 * .candidate_cardinality.review_contestation_rows_scanned)
+  and .candidate_cardinality.review_pressure_rows_scanned
+      <= .candidate_cardinality.review_target_fibre_count
+  and .candidate_cardinality.review_contestation_rows_scanned
+      <= (2 * (.candidate_cardinality.review_target_fibre_count | if . < 1 then 1 else . end))
   and .integrity.unattempted_semantic_regions == 0
   and .integrity.source_region_loss_count == 0
   and .integrity.candidate_pnf_reopen_complete == true
