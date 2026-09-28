@@ -1149,6 +1149,7 @@ fn compile_source_values(
                 "review_items": receipt.reconciliation_review.review_item_refs.len(),
                 "review_projection_reused": receipt.reconciliation_review.stage_reused,
                 "review_input_fingerprint_ref": receipt.reconciliation_review.input_fingerprint_ref,
+                "review_target_fibre_count": receipt.reconciliation_review.target_fibre_count,
                 "review_pressure_rows_scanned": receipt.reconciliation_review.pressure_rows_scanned,
                 "review_contestation_rows_scanned": receipt.reconciliation_review.contestation_rows_scanned,
                 "review_occurrence_rows_scanned": receipt.reconciliation_review.occurrence_rows_scanned,
