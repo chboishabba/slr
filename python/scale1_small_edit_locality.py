@@ -177,6 +177,27 @@ def main():
         len(affected_after) * 64,
     )
 
+    review_target_fibres = int(cardinality.get("review_target_fibre_count", 0))
+    review_pressure_rows = int(cardinality.get("review_pressure_rows_scanned", 0))
+    review_contestation_rows = int(
+        cardinality.get("review_contestation_rows_scanned", 0)
+    )
+    review_occurrence_rows = int(
+        cardinality.get("review_occurrence_rows_scanned", 0)
+    )
+    review_occurrence_lookups = int(
+        cardinality.get("review_occurrence_lookup_count", 0)
+    )
+    review_projection_reused = bool(
+        cardinality.get("review_projection_reused", False)
+    )
+    review_fibre_bound = (
+        review_occurrence_lookups <= 1
+        and review_target_fibres
+        <= review_pressure_rows + 2 * review_contestation_rows
+        and (review_target_fibres != 0 or review_occurrence_rows == 0)
+    )
+
     result = {
         "schema": "sensiblaw.scale1.small-edit-locality-audit.v0_2",
         "edit_transport": {
@@ -228,6 +249,16 @@ def main():
             "pressure_rows_upserted_this_run": l2_pressure_upserts,
             "locality_enforced": True,
         },
+        "review_projection": {
+            "status": "green" if review_fibre_bound else "nonlocal_review_scan_observed",
+            "stage_reused": review_projection_reused,
+            "target_fibre_count": review_target_fibres,
+            "pressure_rows_scanned": review_pressure_rows,
+            "contestation_rows_scanned": review_contestation_rows,
+            "occurrence_rows_scanned": review_occurrence_rows,
+            "occurrence_lookup_count": review_occurrence_lookups,
+            "fibre_bounded_query_geometry": review_fibre_bound,
+        },
         "boundary": {
             "transport_uses_source_coordinates": True,
             "semantic_value_used_as_occurrence_identity": False,
@@ -245,6 +276,8 @@ def main():
         raise SystemExit(3)
     if not l2_scan_local:
         raise SystemExit(4)
+    if not review_fibre_bound:
+        raise SystemExit(5)
 
 
 if __name__ == "__main__":
