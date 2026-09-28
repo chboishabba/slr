@@ -68,6 +68,10 @@ CREATE TABLE IF NOT EXISTS semantic.reconciliation_review_projection_stage_recei
 
 ALTER TABLE semantic.reconciliation_review_projection_stage_receipt_v2
   ADD COLUMN IF NOT EXISTS target_fibre_count BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE semantic.reconciliation_review_projection_stage_receipt_v2
+  ADD COLUMN IF NOT EXISTS delta_fibre_input_used BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE semantic.reconciliation_review_projection_stage_receipt_v2
+  ADD COLUMN IF NOT EXISTS delta_fibre_count BIGINT NOT NULL DEFAULT 0;
 
 "#;
 
@@ -87,6 +91,8 @@ pub struct ReconciliationReviewReceipt {
     pub stage_reused: bool,
     pub input_fingerprint_ref: String,
     pub target_fibre_count: usize,
+    pub delta_fibre_input_used: bool,
+    pub delta_fibre_count: usize,
     pub pressure_rows_scanned: usize,
     pub contestation_rows_scanned: usize,
     pub occurrence_rows_scanned: usize,
@@ -207,7 +213,8 @@ fn load_fast_reusable_projection_receipt(
 
     let Some(row) = client.query_opt(
         r#"
-        SELECT target_fibre_count, cluster_review_items, contestation_review_items,
+        SELECT target_fibre_count, delta_fibre_input_used, delta_fibre_count,
+               cluster_review_items, contestation_review_items,
                review_item_refs, candidate_only, creates_semantic_authority, creates_event_identity,
                applicability_promoted, claim_truth_promoted
         FROM semantic.reconciliation_review_projection_stage_receipt_v2
@@ -228,7 +235,7 @@ fn load_fast_reusable_projection_receipt(
         return Ok(None);
     };
 
-    let review_item_refs: Vec<String> = row.get(3);
+    let review_item_refs: Vec<String> = row.get(5);
     let boundaries = client.query_one(
         r#"
         SELECT COUNT(*)::BIGINT,
@@ -257,6 +264,8 @@ fn load_fast_reusable_projection_receipt(
             parser_run_ref,
         ),
         target_fibre_count: row.get::<_, i64>(0).max(0) as usize,
+        delta_fibre_input_used: row.get(1),
+        delta_fibre_count: row.get::<_, i64>(2).max(0) as usize,
         pressure_rows_scanned: 0,
         contestation_rows_scanned: 0,
         occurrence_rows_scanned: 0,
@@ -266,14 +275,14 @@ fn load_fast_reusable_projection_receipt(
         input_identity_ns: 0,
         materialize_ns: 0,
         stage_receipt_ns: 0,
-        cluster_review_items: row.get::<_, i64>(1).max(0) as usize,
-        contestation_review_items: row.get::<_, i64>(2).max(0) as usize,
+        cluster_review_items: row.get::<_, i64>(3).max(0) as usize,
+        contestation_review_items: row.get::<_, i64>(4).max(0) as usize,
         review_item_refs,
-        candidate_only: row.get(4),
-        creates_semantic_authority: row.get(5),
-        creates_event_identity: row.get(6),
-        applicability_promoted: row.get(7),
-        claim_truth_promoted: row.get(8),
+        candidate_only: row.get(6),
+        creates_semantic_authority: row.get(7),
+        creates_event_identity: row.get(8),
+        applicability_promoted: row.get(9),
+        claim_truth_promoted: row.get(10),
     };
     if !receipt.candidate_only
         || receipt.creates_semantic_authority
@@ -343,6 +352,8 @@ fn load_reusable_projection_receipt(
         stage_reused: true,
         input_fingerprint_ref: input_fingerprint_ref.to_owned(),
         target_fibre_count: 0,
+        delta_fibre_input_used: false,
+        delta_fibre_count: 0,
         pressure_rows_scanned,
         contestation_rows_scanned,
         occurrence_rows_scanned,
@@ -842,6 +853,8 @@ pub fn enqueue_reconciliation_review_items_for_parser_run(
         stage_reused: false,
         input_fingerprint_ref: input_fingerprint_ref.clone(),
         target_fibre_count,
+        delta_fibre_input_used: review_delta.is_some(),
+        delta_fibre_count: review_delta.as_ref().map_or(0, BTreeSet::len),
         pressure_rows_scanned,
         contestation_rows_scanned,
         occurrence_rows_scanned,
@@ -888,10 +901,11 @@ pub fn enqueue_reconciliation_review_items_for_parser_run(
         INSERT INTO semantic.reconciliation_review_projection_stage_receipt_v2
         (source_revision_ref, parser_run_ref, reconciliation_detector_ref,
          algorithm_ref, consumer_scope_ref, target_fibre_count,
+         delta_fibre_input_used, delta_fibre_count,
          cluster_review_items, contestation_review_items, review_item_refs, candidate_only,
          creates_semantic_authority, creates_event_identity,
          applicability_promoted, claim_truth_promoted)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,TRUE,FALSE,FALSE,FALSE,FALSE)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,TRUE,FALSE,FALSE,FALSE,FALSE)
         ON CONFLICT (
           source_revision_ref, parser_run_ref, reconciliation_detector_ref,
           algorithm_ref, consumer_scope_ref
@@ -904,6 +918,8 @@ pub fn enqueue_reconciliation_review_items_for_parser_run(
             &REVIEW_PROJECTION_ALGORITHM_REF,
             &consumer_scope_ref,
             &(receipt.target_fibre_count as i64),
+            &receipt.delta_fibre_input_used,
+            &(receipt.delta_fibre_count as i64),
             &(receipt.cluster_review_items as i64),
             &(receipt.contestation_review_items as i64),
             &receipt.review_item_refs,
