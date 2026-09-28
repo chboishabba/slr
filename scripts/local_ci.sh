@@ -44,6 +44,8 @@ python3 -m py_compile python/scale1_worker_scaling.py
 python3 -m py_compile python/scale1_archive_scale_series.py
 python3 -m py_compile python/scale1_production_scale_closure.py
 python3 -m py_compile python/scale1_revalidate_scale_receipt.py
+python3 -m py_compile python/test_scale1_scale_evidence.py
+python3 -m unittest discover -s python -p 'test_scale1_scale_evidence.py'
 
 echo '== pre-existing source contracts =='
 python3 scripts/verify_source_contract.py
