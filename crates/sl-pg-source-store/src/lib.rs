@@ -245,7 +245,9 @@ pub use db_native_parser::{
     PersistedParserOutputReceipt, DB_NATIVE_PARSER_SCHEMA_SQL,
 };
 pub use db_native_long_document::{
-    finalize_db_native_long_document, prepare_db_native_long_document,
+    finalize_db_native_long_document,
+    finalize_db_native_long_document_with_candidate_commit_batch_size,
+    prepare_db_native_long_document,
     prepare_db_native_long_source, DbNativeLongDocumentError,
     DbNativeLongDocumentReceipt, DbNativeLongDocumentTimings,
     PreparedDbNativeLongDocument,
