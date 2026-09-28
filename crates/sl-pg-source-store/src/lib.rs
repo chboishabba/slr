@@ -74,8 +74,9 @@ pub use corpus_reconciliation_store::{
     CorpusReconciliationWork, CORPUS_RECONCILIATION_SCHEMA_SQL,
 };
 pub use reconciliation_review_store::{
-    enqueue_reconciliation_review_items, ReconciliationReviewError,
-    ReconciliationReviewReceipt,
+    enqueue_reconciliation_review_items,
+    enqueue_reconciliation_review_items_for_parser_run,
+    ReconciliationReviewError, ReconciliationReviewReceipt,
 };
 pub use reconciliation_materialization::{
     install_reconciliation_materialization_schema,
