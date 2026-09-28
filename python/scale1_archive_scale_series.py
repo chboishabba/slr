@@ -117,6 +117,8 @@ def point(path):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--receipt", action="append", required=True)
+    ap.add_argument("--max-work-units-per-token", type=float, required=True)
+    ap.add_argument("--min-token-span-ratio", type=float, required=True)
     ap.add_argument("--output", required=True)
     args = ap.parse_args()
 
@@ -148,8 +150,25 @@ def main():
             <= slope * p["represented_tokens"] + intercept
         )
 
+    min_tokens = min(token_counts)
+    max_tokens = max(token_counts)
+    token_span_ratio = max_tokens / min_tokens
+    all_points_within = all(p["within_declared_work_envelope"] for p in points)
+    acceptance_green = (
+        all_points_within
+        and slope <= args.max_work_units_per_token
+        and token_span_ratio >= args.min_token_span_ratio
+    )
+    if not acceptance_green:
+        raise SystemExit(
+            "archive scaling acceptance failed: "
+            f"slope={slope} (max {args.max_work_units_per_token}), "
+            f"token_span_ratio={token_span_ratio:.6f} "
+            f"(min {args.min_token_span_ratio:.6f})"
+        )
+
     result = {
-        "schema": "sensiblaw.scale1.archive-scale-series.v0_1",
+        "schema": "sensiblaw.scale1.archive-scale-series.v0_2",
         "runtime_head": next(iter(heads)),
         "parser_model_ref": next(iter(models)),
         "represented_carrier": "parser_tokens",
@@ -160,10 +179,17 @@ def main():
         "observed_affine_envelope": {
             "slope_work_units_per_token": slope,
             "intercept_work_units": intercept,
-            "all_points_within": all(
-                p["within_declared_work_envelope"] for p in points
-            ),
+            "all_points_within": all_points_within,
             "scope": "observed_points_only_not_asymptotic_claim",
+        },
+        "acceptance": {
+            "green": acceptance_green,
+            "max_work_units_per_token": args.max_work_units_per_token,
+            "observed_slope_work_units_per_token": slope,
+            "min_token_span_ratio": args.min_token_span_ratio,
+            "observed_token_span_ratio": token_span_ratio,
+            "min_tokens": min_tokens,
+            "max_tokens": max_tokens,
         },
         "points": points,
         "boundary": {
