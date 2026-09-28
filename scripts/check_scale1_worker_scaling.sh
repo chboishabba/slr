@@ -31,7 +31,9 @@ done
 python3 python/scale1_worker_scaling.py   --scale1-bin "$SCALE1_BIN"   --source-family "$SOURCE_FAMILY"   --source-text "$SOURCE_TEXT"   --source-ref-prefix "$SOURCE_REF_PREFIX"   --provider-ref "$PROVIDER_REF"   --acquisition-ref-prefix "$ACQUISITION_REF_PREFIX"   --benchmark-ref "$BENCHMARK_REF"   --model "$MODEL_REF"   --config-json "$CONFIG_JSON"   --parser-script "$PARSER_SCRIPT"   --batch-size "$BATCH_SIZE"   --runtime-head "$RUNTIME_HEAD"   "${worker_args[@]}"   --output "$OUTPUT" >/dev/null
 
 jq -e   --arg head "$RUNTIME_HEAD"   --argjson min_speedup "$MIN_BEST_SPEEDUP"   --argjson min_eff "$MIN_MAX_WORKER_EFFICIENCY" '
-  .schema == "sensiblaw.scale1.worker-scaling-series.v0_1"
+  . as $root
+  | ($root.points | map(.worker_count) | max) as $max_workers
+  | .schema == "sensiblaw.scale1.worker-scaling-series.v0_1"
   and .runtime_head == $head
   and (.points | length) >= 2
   and any(.points[]; .worker_count == 1)
@@ -47,8 +49,8 @@ jq -e   --arg head "$RUNTIME_HEAD"   --argjson min_speedup "$MIN_BEST_SPEEDUP"  
       and .finalize_integrity.candidate_pnf_reopen_complete == true)
   and ([.points[].speedup_vs_one_worker] | max) >= $min_speedup
   and (
-      [.points[] | select(.worker_count == ([.points[].worker_count] | max))
-       | .parallel_efficiency] | first
+      [.points[] | select(.worker_count == $max_workers) | .parallel_efficiency]
+      | first
     ) >= $min_eff
   and .boundary.candidate_only == true
   and .boundary.creates_semantic_authority == false
