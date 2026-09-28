@@ -32,6 +32,10 @@ jq -e --argjson target "$TARGET_RATIO" '
   and .performance.post_spacy_target_ratio == $target
   and .performance.full_post_spacy_to_spacy_ratio <= $target
   and .performance.post_spacy_target_met == true
+  and .candidate_cardinality.review_delta_fibre_input_used == true
+  and .candidate_cardinality.review_delta_fibre_count
+      == .candidate_cardinality.review_target_fibre_count
+  and .candidate_cardinality.review_occurrence_lookup_count <= 1
   and .integrity.unattempted_semantic_regions == 0
   and .integrity.source_region_loss_count == 0
   and .integrity.candidate_pnf_reopen_complete == true
@@ -61,6 +65,9 @@ jq '{
     target_met: .performance.post_spacy_target_met
   },
   review: {
+    delta_fibre_input_used: .candidate_cardinality.review_delta_fibre_input_used,
+    delta_fibre_count: .candidate_cardinality.review_delta_fibre_count,
+    target_fibre_count: .candidate_cardinality.review_target_fibre_count,
     projection_ns: .performance.review_projection_ns,
     input_identity_ns: .performance.review_input_identity_ns,
     materialize_ns: .performance.review_materialize_ns
