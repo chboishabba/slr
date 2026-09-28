@@ -16,7 +16,17 @@ jq -e '
   and .economy.small_edit_locality == true
   and .economy.same_domain_new_source == true
   and .worker_scaling.green == true
+  and .worker_scaling.observed_best_parallel_speedup
+      >= .worker_scaling.min_best_parallel_speedup
+  and .worker_scaling.max_worker_parallel_efficiency
+      >= .worker_scaling.min_max_worker_efficiency
   and .archive_scale.green == true
+  and .archive_scale.observed_slope_work_units_per_token
+      <= .archive_scale.max_work_units_per_token
+  and .archive_scale.observed_token_span_ratio
+      >= .archive_scale.min_token_span_ratio
+  and .archive_scale.observation_count >= 2
+  and .archive_scale.max_tokens > .archive_scale.min_tokens
   and .boundary.creates_semantic_authority == false
   and .boundary.claim_truth_promoted == false
   and .scale1_production_scale_closed == true
