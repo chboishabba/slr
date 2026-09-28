@@ -17,7 +17,8 @@ use sensiblaw_core::source_ingest::{DocumentRegionKind, SourceFamily};
 use thiserror::Error;
 
 use crate::candidate_pnf_store::{
-    load_candidate_persistence_stage_receipt_with_client, load_candidate_pnf_batch_with_client,
+    load_candidate_persistence_stage_receipt_with_client,
+    load_candidate_pnf_batches_with_client,
     persist_candidate_persistence_stage_receipt_with_client,
     persist_statement_candidate_pnf_in_scope,
 };
@@ -147,6 +148,7 @@ pub struct DbNativeLongDocumentReceipt {
     pub candidate_batch_rows_inserted_this_run: usize,
     pub candidate_commit_batch_size: usize,
     pub candidate_commit_count: usize,
+    pub candidate_postcommit_reopen_query_count: usize,
     pub reconciliation: CorpusReconciliationReceipt,
     pub reconciliation_review: ReconciliationReviewReceipt,
     pub auto_event: Scale1AutoEventReceipt,
@@ -410,6 +412,7 @@ pub fn finalize_db_native_long_document_with_candidate_commit_batch_size(
     let mut candidate_precommit_write_ns = 0u128;
     let mut candidate_commit_wait_ns = 0u128;
     let mut candidate_postcommit_reopen_ns = 0u128;
+    let mut candidate_postcommit_reopen_query_count = 0usize;
 
     if !candidate_persistence_reused {
         let mut candidates = Vec::with_capacity(parser_state.succeeded);
@@ -510,13 +513,23 @@ pub fn finalize_db_native_long_document_with_candidate_commit_batch_size(
 
             let reopen_started = Instant::now();
             // A batch only counts as durably committed after every individual
-            // product reopens and equals its exact expected candidate.
-            for (batch_ref, candidate) in &committed {
-                let reopened = load_candidate_pnf_batch_with_client(
+            // product reopens and equals its exact expected candidate.  The
+            // physical read is set-wise, but equality remains per product.
+            let batch_refs = committed
+                .iter()
+                .map(|(batch_ref, _)| batch_ref.clone())
+                .collect::<Vec<_>>();
+            let (mut reopened_by_ref, reopen_query_count) =
+                load_candidate_pnf_batches_with_client(
                     &mut persistence_client,
-                    batch_ref,
-                )?
-                .ok_or(CandidatePnfStoreError::ExistingBatchConflict)?;
+                    &batch_refs,
+                )?;
+            candidate_postcommit_reopen_query_count += reopen_query_count;
+
+            for (batch_ref, candidate) in &committed {
+                let reopened = reopened_by_ref
+                    .remove(batch_ref)
+                    .ok_or(CandidatePnfStoreError::ExistingBatchConflict)?;
 
                 let mut expected_factors = candidate.pnf.candidates.clone();
                 expected_factors.sort_by(|left, right| {
@@ -562,6 +575,9 @@ pub fn finalize_db_native_long_document_with_candidate_commit_batch_size(
                 persisted_statement_count += 1;
                 persisted_candidate_batch_count += 1;
                 persisted_candidate_factor_count += reopened.factors.len();
+            }
+            if !reopened_by_ref.is_empty() {
+                return Err(CandidatePnfStoreError::ExistingBatchConflict.into());
             }
             candidate_postcommit_reopen_ns += reopen_started.elapsed().as_nanos();
 
@@ -700,6 +716,7 @@ pub fn finalize_db_native_long_document_with_candidate_commit_batch_size(
         candidate_batch_rows_inserted_this_run,
         candidate_commit_batch_size,
         candidate_commit_count,
+        candidate_postcommit_reopen_query_count,
         reconciliation,
         reconciliation_review,
         auto_event,
