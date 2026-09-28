@@ -35,11 +35,13 @@ bash -n scripts/check_scale1_same_domain_new_source.sh
 bash -n scripts/check_scale1_economy_closure.sh
 bash -n scripts/check_scale1_worker_scaling.sh
 bash -n scripts/check_scale1_archive_scale_series.sh
+bash -n scripts/check_scale1_production_scale_closure.sh
 python3 -m py_compile python/scale1_small_edit_locality.py
 python3 -m py_compile python/scale1_economy_closure.py
 python3 -m py_compile python/scale1_performance_series.py
 python3 -m py_compile python/scale1_worker_scaling.py
 python3 -m py_compile python/scale1_archive_scale_series.py
+python3 -m py_compile python/scale1_production_scale_closure.py
 
 echo '== pre-existing source contracts =='
 python3 scripts/verify_source_contract.py
