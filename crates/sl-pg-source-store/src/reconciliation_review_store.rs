@@ -10,6 +10,7 @@
 //! - accepting these review items changes workflow state only.
 
 use std::collections::BTreeSet;
+use std::time::Instant;
 
 use postgres::{Client, NoTls};
 use sha2::{Digest, Sha256};
@@ -60,6 +61,14 @@ pub struct ReconciliationReviewReceipt {
     pub source_revision_ref: String,
     pub stage_reused: bool,
     pub input_fingerprint_ref: String,
+    pub pressure_rows_scanned: usize,
+    pub contestation_rows_scanned: usize,
+    pub occurrence_lookup_count: usize,
+    pub review_items_persist_attempted: usize,
+    pub persisted_refs_verified: usize,
+    pub input_identity_ns: u128,
+    pub materialize_ns: u128,
+    pub stage_receipt_ns: u128,
     pub cluster_review_items: usize,
     pub contestation_review_items: usize,
     pub review_item_refs: Vec<String>,
@@ -109,6 +118,9 @@ fn load_reusable_projection_receipt(
     source_revision_ref: &str,
     input_fingerprint_ref: &str,
     consumer_scope_ref: &str,
+    pressure_rows_scanned: usize,
+    contestation_rows_scanned: usize,
+    input_identity_ns: u128,
 ) -> Result<Option<ReconciliationReviewReceipt>, ReconciliationReviewError> {
     let Some(row) = client.query_opt(
         r#"
@@ -151,10 +163,20 @@ fn load_reusable_projection_receipt(
         return Ok(None);
     }
 
-    let receipt = ReconciliationReviewReceipt {
+    let materialize_ns = materialize_started.elapsed().as_nanos();
+    let stage_receipt_started = Instant::now();
+    let mut receipt = ReconciliationReviewReceipt {
         source_revision_ref: source_revision_ref.to_owned(),
         stage_reused: true,
         input_fingerprint_ref: input_fingerprint_ref.to_owned(),
+        pressure_rows_scanned,
+        contestation_rows_scanned,
+        occurrence_lookup_count: 0,
+        review_items_persist_attempted: 0,
+        persisted_refs_verified: review_item_refs.len(),
+        input_identity_ns,
+        materialize_ns: 0,
+        stage_receipt_ns: 0,
         cluster_review_items: row.get::<_, i64>(0).max(0) as usize,
         contestation_review_items: row.get::<_, i64>(1).max(0) as usize,
         review_item_refs,
@@ -221,6 +243,7 @@ pub fn enqueue_reconciliation_review_items(
 ) -> Result<ReconciliationReviewReceipt, ReconciliationReviewError> {
     install_review_workstation_schema(config)?;
     let mut client = Client::connect(config.database_url(), NoTls)?;
+    let input_identity_started = Instant::now();
     client.batch_execute(REVIEW_PROJECTION_STAGE_SQL)?;
 
     let pressure_rows = client.query(
@@ -284,18 +307,27 @@ pub fn enqueue_reconciliation_review_items(
     let input_fingerprint_ref =
         review_input_fingerprint(&pressure_refs, &contestation_refs);
     let consumer_scope_ref = canonical_scope_ref(&affected_consumer_refs);
+    let pressure_rows_scanned = pressure_rows.len();
+    let contestation_rows_scanned = conflict_rows.len();
+    let input_identity_ns = input_identity_started.elapsed().as_nanos();
 
     if let Some(receipt) = load_reusable_projection_receipt(
         &mut client,
         source_revision_ref,
         &input_fingerprint_ref,
         &consumer_scope_ref,
+        pressure_rows_scanned,
+        contestation_rows_scanned,
+        input_identity_ns,
     )? {
         return Ok(receipt);
     }
 
+    let materialize_started = Instant::now();
     let mut review_item_refs = BTreeSet::new();
     let mut cluster_review_items = 0usize;
+    let mut occurrence_lookup_count = 0usize;
+    let mut review_items_persist_attempted = 0usize;
 
     for row in pressure_rows {
         let pressure_ref: String = row.get(0);
@@ -313,6 +345,7 @@ pub fn enqueue_reconciliation_review_items(
             return Err(ReconciliationReviewError::PromotionBoundary);
         }
 
+        occurrence_lookup_count += 1;
         let source_refs = load_occurrence_statement_refs(
             &mut client,
             &kind,
@@ -350,6 +383,7 @@ pub fn enqueue_reconciliation_review_items(
             applicability_promoted: false,
             claim_truth_promoted: false,
         };
+        review_items_persist_attempted += 1;
         persist_review_projection_item_with_client(&mut client, &item)?;
         review_item_refs.insert(review_item_ref);
         cluster_review_items += 1;
@@ -378,6 +412,7 @@ pub fn enqueue_reconciliation_review_items(
 
         let mut source_refs = BTreeSet::new();
         for fingerprint in [&positive_ref, &negative_ref] {
+            occurrence_lookup_count += 1;
             for statement_ref in load_occurrence_statement_refs(
                 &mut client,
                 "proposition",
@@ -411,6 +446,7 @@ pub fn enqueue_reconciliation_review_items(
             applicability_promoted: false,
             claim_truth_promoted: false,
         };
+        review_items_persist_attempted += 1;
         persist_review_projection_item_with_client(&mut client, &item)?;
         review_item_refs.insert(review_item_ref);
         contestation_review_items += 1;
@@ -420,6 +456,14 @@ pub fn enqueue_reconciliation_review_items(
         source_revision_ref: source_revision_ref.to_owned(),
         stage_reused: false,
         input_fingerprint_ref: input_fingerprint_ref.clone(),
+        pressure_rows_scanned,
+        contestation_rows_scanned,
+        occurrence_lookup_count,
+        review_items_persist_attempted,
+        persisted_refs_verified: review_item_refs.len(),
+        input_identity_ns,
+        materialize_ns,
+        stage_receipt_ns: 0,
         cluster_review_items,
         contestation_review_items,
         review_item_refs: review_item_refs.into_iter().collect(),
@@ -452,6 +496,7 @@ pub fn enqueue_reconciliation_review_items(
             &receipt.review_item_refs,
         ],
     )?;
+    receipt.stage_receipt_ns = stage_receipt_started.elapsed().as_nanos();
 
     Ok(receipt)
 }
