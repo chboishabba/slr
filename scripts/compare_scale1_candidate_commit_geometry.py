@@ -32,6 +32,8 @@ def load(path: str) -> tuple[str, dict]:
         "applicability_promoted": integrity.get("applicability_promoted"),
         "claim_truth_promoted": integrity.get("claim_truth_promoted"),
         "candidate_persistence_reused": integrity.get("candidate_persistence_reused"),
+        "candidate_product_reuse_hits_this_run": integrity.get("candidate_product_reuse_hits_this_run"),
+        "candidate_product_new_this_run": integrity.get("candidate_product_new_this_run"),
         "candidate_commit_batch_size": integrity.get("candidate_commit_batch_size"),
         "candidate_commit_count": integrity.get("candidate_commit_count"),
         "candidate_postcommit_reopen_query_count": integrity.get("candidate_postcommit_reopen_query_count"),
@@ -82,6 +84,15 @@ def main(argv: list[str]) -> int:
             reopen_queries <= 3 * row["candidate_commit_count"],
             f"{path}: reopen query geometry is not bounded by 3x commit count",
         )
+        product_backed = (
+            (row["candidate_product_reuse_hits_this_run"] or 0)
+            + (row["candidate_product_new_this_run"] or 0)
+        )
+        if product_backed == row["persisted_candidate_batch_count"]:
+            require(
+                reopen_queries == 2 * row["candidate_commit_count"],
+                f"{path}: fully productized reopen geometry must equal 2x commit count",
+            )
         for key in (
             "candidate_persist_ns",
             "candidate_precommit_write_ns",
