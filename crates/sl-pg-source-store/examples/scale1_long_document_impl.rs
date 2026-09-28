@@ -924,6 +924,7 @@ fn worker(args: &[String]) -> Result<(), Box<dyn Error>> {
             "parser_job_max_ns": worker.parser_job_ns.iter().copied().max().unwrap_or(0),
             "parser_job_c1": concentration_ratio(&worker.parser_job_ns, 1),
             "parser_job_c10": concentration_ratio(&worker.parser_job_ns, 10),
+            "parser_job_ns": worker.parser_job_ns,
             "queued": state.queued,
             "leased": state.leased,
             "succeeded_total": state.succeeded,
