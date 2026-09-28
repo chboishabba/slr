@@ -3,6 +3,8 @@
 //! Parser output and M12 candidate factors are persistent compilation products,
 //! not transient counters. Review/admission remains a separate payment.
 
+use std::collections::BTreeMap;
+
 use postgres::{Client, GenericClient, NoTls};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
@@ -791,6 +793,265 @@ pub(crate) fn persist_statement_candidate_pnf_with_client_detailed(
         return Err(CandidatePnfStoreError::ExistingBatchConflict);
     }
     Ok((persisted, outcome))
+}
+
+pub(crate) fn load_candidate_pnf_batches_with_client(
+    client: &mut Client,
+    batch_refs: &[String],
+) -> Result<BTreeMap<String, PersistedCandidatePnfBatch>, CandidatePnfStoreError> {
+    if batch_refs.is_empty() {
+        return Ok(BTreeMap::new());
+    }
+
+    #[derive(Debug)]
+    struct BatchMeta {
+        statement_ref: String,
+        exact_span_ref: String,
+        parser_receipt_ref: String,
+        factor_count: usize,
+        candidate_product_ref: Option<String>,
+        candidate_only: bool,
+        semantic_admission_paid: bool,
+        proposition_support_paid: bool,
+        applicability_paid: bool,
+        claim_truth_paid: bool,
+        parser_run_ref: Option<String>,
+        region_start: Option<i64>,
+        parser_candidate_only: Option<bool>,
+        parser_authority: Option<bool>,
+        parser_applicability: Option<bool>,
+        parser_truth: Option<bool>,
+    }
+
+    #[derive(Clone)]
+    struct ProductFactorRow {
+        token_ordinal: i32,
+        start_offset: i64,
+        end_offset: i64,
+        role_ref: String,
+        surface: String,
+        lemma: String,
+        dependency_ref: String,
+        candidate_only: bool,
+    }
+
+    let rows = client.query(
+        r#"
+        SELECT b.batch_ref, b.statement_ref, b.exact_span_ref,
+               b.parser_receipt_ref, b.factor_count, b.candidate_product_ref,
+               b.candidate_only, b.semantic_admission_paid,
+               b.proposition_support_paid, b.applicability_paid,
+               b.claim_truth_paid,
+               j.parser_run_ref, j.region_start_char,
+               j.candidate_only, j.creates_semantic_authority,
+               j.applicability_promoted, j.claim_truth_promoted
+        FROM pnf.statement_candidate_batch b
+        JOIN corpus.source_statement s ON s.statement_ref=b.statement_ref
+        LEFT JOIN ingest.parser_job j
+          ON j.source_revision_ref=s.source_revision_ref
+         AND j.region_ref=b.exact_span_ref
+         AND ('db-parser:' || j.parser_run_ref || ':' || j.region_ref)=b.parser_receipt_ref
+         AND j.status='succeeded'
+        WHERE b.batch_ref = ANY($1)
+        ORDER BY b.batch_ref
+        "#,
+        &[&batch_refs],
+    )?;
+
+    let mut meta = BTreeMap::<String, BatchMeta>::new();
+    let mut product_refs = Vec::new();
+    let mut legacy_batch_refs = Vec::new();
+    for row in rows {
+        let batch_ref: String = row.get(0);
+        let factor_count = row.get::<_, i64>(4);
+        if factor_count < 0 {
+            return Err(CandidatePnfStoreError::ExistingBatchConflict);
+        }
+        let candidate_product_ref: Option<String> = row.get(5);
+        if let Some(reference) = candidate_product_ref.as_ref() {
+            product_refs.push(reference.clone());
+        } else {
+            legacy_batch_refs.push(batch_ref.clone());
+        }
+        meta.insert(
+            batch_ref,
+            BatchMeta {
+                statement_ref: row.get(1),
+                exact_span_ref: row.get(2),
+                parser_receipt_ref: row.get(3),
+                factor_count: factor_count as usize,
+                candidate_product_ref,
+                candidate_only: row.get(6),
+                semantic_admission_paid: row.get(7),
+                proposition_support_paid: row.get(8),
+                applicability_paid: row.get(9),
+                claim_truth_paid: row.get(10),
+                parser_run_ref: row.get(11),
+                region_start: row.get(12),
+                parser_candidate_only: row.get(13),
+                parser_authority: row.get(14),
+                parser_applicability: row.get(15),
+                parser_truth: row.get(16),
+            },
+        );
+    }
+    if meta.len() != batch_refs.len() {
+        return Err(CandidatePnfStoreError::ExistingBatchConflict);
+    }
+
+    product_refs.sort();
+    product_refs.dedup();
+    let mut product_factors = BTreeMap::<String, Vec<ProductFactorRow>>::new();
+    if !product_refs.is_empty() {
+        for row in client.query(
+            r#"
+            SELECT product_ref, factor_ordinal, token_ordinal,
+                   start_offset, end_offset, role_ref, surface,
+                   lemma, dependency_ref, candidate_only
+            FROM pnf.candidate_semantic_product_factor
+            WHERE product_ref = ANY($1)
+            ORDER BY product_ref, factor_ordinal
+            "#,
+            &[&product_refs],
+        )? {
+            let product_ref: String = row.get(0);
+            let factor_ordinal: i32 = row.get(1);
+            if factor_ordinal < 0
+                || factor_ordinal as usize
+                    != product_factors.get(&product_ref).map_or(0, Vec::len)
+            {
+                return Err(CandidatePnfStoreError::ExistingFactorConflict);
+            }
+            product_factors
+                .entry(product_ref)
+                .or_default()
+                .push(ProductFactorRow {
+                    token_ordinal: row.get(2),
+                    start_offset: row.get(3),
+                    end_offset: row.get(4),
+                    role_ref: row.get(5),
+                    surface: row.get(6),
+                    lemma: row.get(7),
+                    dependency_ref: row.get(8),
+                    candidate_only: row.get(9),
+                });
+        }
+    }
+
+    let mut legacy_factors = BTreeMap::<String, Vec<CandidatePnfFactor>>::new();
+    if !legacy_batch_refs.is_empty() {
+        for row in client.query(
+            r#"
+            SELECT batch_ref, candidate_ref, role_ref,
+                   source_start_char, source_end_char,
+                   surface, lemma, dependency_ref, candidate_only
+            FROM pnf.statement_candidate_factor
+            WHERE batch_ref = ANY($1)
+            ORDER BY batch_ref, source_start_char, source_end_char, candidate_ref
+            "#,
+            &[&legacy_batch_refs],
+        )? {
+            let batch_ref: String = row.get(0);
+            let start: i64 = row.get(3);
+            let end: i64 = row.get(4);
+            if start < 0 || end <= start {
+                return Err(CandidatePnfStoreError::ExistingFactorConflict);
+            }
+            legacy_factors
+                .entry(batch_ref)
+                .or_default()
+                .push(CandidatePnfFactor {
+                    candidate_ref: row.get(1),
+                    role: role_from_db(&row.get::<_, String>(2))?,
+                    source_start_char: start as u32,
+                    source_end_char: end as u32,
+                    surface: row.get(5),
+                    lemma: row.get(6),
+                    dependency_ref: row.get(7),
+                    candidate_only: row.get(8),
+                });
+        }
+    }
+
+    let mut out = BTreeMap::new();
+    for batch_ref in batch_refs {
+        let Some(meta) = meta.remove(batch_ref) else {
+            return Err(CandidatePnfStoreError::ExistingBatchConflict);
+        };
+        let factors = if let Some(product_ref) = meta.candidate_product_ref.as_ref() {
+            if meta.parser_candidate_only != Some(true)
+                || meta.parser_authority != Some(false)
+                || meta.parser_applicability != Some(false)
+                || meta.parser_truth != Some(false)
+            {
+                return Err(CandidatePnfStoreError::ExistingBatchConflict);
+            }
+            let Some(parser_run_ref) = meta.parser_run_ref.as_ref() else {
+                return Err(CandidatePnfStoreError::ExistingBatchConflict);
+            };
+            let Some(region_start) = meta.region_start else {
+                return Err(CandidatePnfStoreError::ExistingBatchConflict);
+            };
+            if region_start < 0 {
+                return Err(CandidatePnfStoreError::ExistingFactorConflict);
+            }
+            let raw = product_factors.get(product_ref).cloned().unwrap_or_default();
+            let mut factors = Vec::with_capacity(raw.len());
+            for factor in raw {
+                let start = region_start + factor.start_offset;
+                let end = region_start + factor.end_offset;
+                if factor.token_ordinal < 0
+                    || factor.start_offset < 0
+                    || factor.end_offset <= factor.start_offset
+                    || start < 0
+                    || end < 0
+                {
+                    return Err(CandidatePnfStoreError::ExistingFactorConflict);
+                }
+                factors.push(CandidatePnfFactor {
+                    candidate_ref: format!(
+                        "candidate-pnf-db:{}:{}:{}:{}:{}",
+                        parser_run_ref,
+                        meta.exact_span_ref,
+                        factor.token_ordinal,
+                        start,
+                        end
+                    ),
+                    role: role_from_db(&factor.role_ref)?,
+                    source_start_char: start as u32,
+                    source_end_char: end as u32,
+                    surface: factor.surface,
+                    lemma: factor.lemma,
+                    dependency_ref: factor.dependency_ref,
+                    candidate_only: factor.candidate_only,
+                });
+            }
+            factors
+        } else {
+            legacy_factors.remove(batch_ref).unwrap_or_default()
+        };
+
+        if factors.len() != meta.factor_count {
+            return Err(CandidatePnfStoreError::ExistingBatchConflict);
+        }
+
+        out.insert(
+            batch_ref.clone(),
+            PersistedCandidatePnfBatch {
+                batch_ref: batch_ref.clone(),
+                statement_ref: meta.statement_ref,
+                exact_span_ref: meta.exact_span_ref,
+                parser_receipt_ref: meta.parser_receipt_ref,
+                factors,
+                candidate_only: meta.candidate_only,
+                semantic_admission_paid: meta.semantic_admission_paid,
+                proposition_support_paid: meta.proposition_support_paid,
+                applicability_paid: meta.applicability_paid,
+                claim_truth_paid: meta.claim_truth_paid,
+            },
+        );
+    }
+    Ok(out)
 }
 
 pub fn load_candidate_pnf_batch(
