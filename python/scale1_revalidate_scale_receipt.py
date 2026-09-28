@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 from pathlib import Path
 
 
@@ -56,10 +57,37 @@ def upgrade_worker(raw: dict, min_speedup: float, min_efficiency: float) -> dict
         "worker series contains reused/incomplete parser work",
     )
 
-    best_parallel = max(float(p["speedup_vs_one_worker"]) for p in parallel)
-    max_workers = max(int(p["worker_count"]) for p in points)
+    counts = [int(p["worker_count"]) for p in points]
+    require(len(set(counts)) == len(counts),
+            "worker series repeats worker-count points")
+    baseline = next(p for p in points if int(p["worker_count"]) == 1)
+    baseline_ns = int(baseline.get("worker_wall_ns", 0))
+    require(baseline_ns > 0, "worker baseline has invalid measured wall time")
+    baseline_tokens = int(baseline.get("tokens", 0))
+    baseline_regions = int(baseline.get("semantic_regions", 0))
+    require(baseline_tokens > 0 and baseline_regions > 0,
+            "worker baseline has no measured work")
+    require(
+        all(
+            int(p.get("worker_wall_ns", 0)) > 0
+            and int(p.get("tokens", -1)) == baseline_tokens
+            and int(p.get("semantic_regions", -1)) == baseline_regions
+            for p in points
+        ),
+        "worker series has invalid wall time or unmatched workload",
+    )
+    for p in points:
+        require(
+            int(p.get("job_tail", {}).get("count", -1))
+            == int(p["succeeded"]),
+            "worker point is missing job-duration observations",
+        )
+    best_parallel = max(
+        baseline_ns / int(p["worker_wall_ns"]) for p in parallel
+    )
+    max_workers = max(counts)
     max_point = next(p for p in points if int(p["worker_count"]) == max_workers)
-    max_eff = float(max_point["parallel_efficiency"])
+    max_eff = baseline_ns / int(max_point["worker_wall_ns"]) / max_workers
     require(best_parallel >= min_speedup,
             "retained worker series misses parallel speedup threshold")
     require(max_eff >= min_efficiency,
@@ -112,14 +140,24 @@ def upgrade_archive(raw: dict, max_work: float, min_span: float) -> dict:
     max_tokens = max(tokens)
     span = max_tokens / min_tokens
 
-    envelope = raw.get("observed_affine_envelope", {})
-    slope = float(envelope.get("slope_work_units_per_token", float("inf")))
-    require(envelope.get("all_points_within") is True,
-            "retained archive points violate their observed envelope")
+    work = [int(p.get("measured_post_parser_work_units", -1)) for p in points]
+    require(all(w >= 0 for w in work),
+            "archive point lacks measured post-parser work")
+    slope = max(math.ceil(w / t) for w, t in zip(work, tokens))
+    require(
+        all(w <= slope * t for w, t in zip(work, tokens)),
+        "archive recomputed work envelope failed",
+    )
     require(slope <= max_work, "retained archive series misses work/token budget")
     require(span >= min_span, "retained archive series misses token-span requirement")
 
     out = dict(raw)
+    out["observed_affine_envelope"] = {
+        "slope_work_units_per_token": slope,
+        "intercept_work_units": 0,
+        "all_points_within": True,
+        "scope": "observed_points_only_not_asymptotic_claim",
+    }
     out["schema"] = "sensiblaw.scale1.archive-scale-series.v0_2"
     out["runtime_head"] = next(iter(heads))
     out["parser_model_ref"] = next(iter(models))
