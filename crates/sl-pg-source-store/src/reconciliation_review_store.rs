@@ -12,6 +12,7 @@
 use std::collections::BTreeSet;
 
 use postgres::{Client, NoTls};
+use sha2::{Digest, Sha256};
 use sensiblaw_core::review_workstation::{
     ReviewAction, ReviewItem, ReviewItemKind, ReviewStatus,
 };
@@ -21,6 +22,28 @@ use crate::{
     install_review_workstation_schema, persist_review_item, DatabaseConfig,
     ReviewWorkstationStoreError,
 };
+
+const REVIEW_PROJECTION_ALGORITHM_REF: &str = "scale1:reconciliation-review-projection:v1";
+
+const REVIEW_PROJECTION_STAGE_SQL: &str = r#"
+CREATE TABLE IF NOT EXISTS semantic.reconciliation_review_projection_stage_receipt (
+    source_revision_ref TEXT NOT NULL,
+    algorithm_ref TEXT NOT NULL,
+    input_fingerprint_ref TEXT NOT NULL,
+    consumer_scope_ref TEXT NOT NULL,
+    cluster_review_items BIGINT NOT NULL,
+    contestation_review_items BIGINT NOT NULL,
+    review_item_refs TEXT[] NOT NULL,
+    candidate_only BOOLEAN NOT NULL CHECK (candidate_only),
+    creates_semantic_authority BOOLEAN NOT NULL CHECK (NOT creates_semantic_authority),
+    creates_event_identity BOOLEAN NOT NULL CHECK (NOT creates_event_identity),
+    applicability_promoted BOOLEAN NOT NULL CHECK (NOT applicability_promoted),
+    claim_truth_promoted BOOLEAN NOT NULL CHECK (NOT claim_truth_promoted),
+    PRIMARY KEY (
+      source_revision_ref, algorithm_ref, input_fingerprint_ref, consumer_scope_ref
+    )
+);
+"#;
 
 #[derive(Debug, Error)]
 pub enum ReconciliationReviewError {
@@ -35,6 +58,8 @@ pub enum ReconciliationReviewError {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReconciliationReviewReceipt {
     pub source_revision_ref: String,
+    pub stage_reused: bool,
+    pub input_fingerprint_ref: String,
     pub cluster_review_items: usize,
     pub contestation_review_items: usize,
     pub review_item_refs: Vec<String>,
@@ -43,6 +68,111 @@ pub struct ReconciliationReviewReceipt {
     pub creates_event_identity: bool,
     pub applicability_promoted: bool,
     pub claim_truth_promoted: bool,
+}
+
+fn digest_ref(domain: &str, parts: &[&str]) -> String {
+    let mut hasher = Sha256::new();
+    for part in std::iter::once(domain).chain(parts.iter().copied()) {
+        hasher.update((part.len() as u64).to_be_bytes());
+        hasher.update(part.as_bytes());
+    }
+    format!("sha256:{:x}", hasher.finalize())
+}
+
+fn canonical_scope_ref(affected_consumer_refs: &[String]) -> String {
+    let mut refs = affected_consumer_refs.to_vec();
+    refs.sort();
+    refs.dedup();
+    let parts = refs.iter().map(String::as_str).collect::<Vec<_>>();
+    digest_ref("reconciliation-review-consumer-scope:v1", &parts)
+}
+
+fn review_input_fingerprint(
+    pressure_refs: &[String],
+    contestation_refs: &[String],
+) -> String {
+    let mut parts = Vec::with_capacity(pressure_refs.len() + contestation_refs.len() + 2);
+    parts.push(format!("pressure-count:{}", pressure_refs.len()));
+    parts.extend(pressure_refs.iter().map(|value| format!("pressure:{value}")));
+    parts.push(format!("contestation-count:{}", contestation_refs.len()));
+    parts.extend(
+        contestation_refs
+            .iter()
+            .map(|value| format!("contestation:{value}")),
+    );
+    let borrowed = parts.iter().map(String::as_str).collect::<Vec<_>>();
+    digest_ref("reconciliation-review-input:v1", &borrowed)
+}
+
+fn load_reusable_projection_receipt(
+    client: &mut Client,
+    source_revision_ref: &str,
+    input_fingerprint_ref: &str,
+    consumer_scope_ref: &str,
+) -> Result<Option<ReconciliationReviewReceipt>, ReconciliationReviewError> {
+    let Some(row) = client.query_opt(
+        r#"
+        SELECT cluster_review_items, contestation_review_items, review_item_refs,
+               candidate_only, creates_semantic_authority, creates_event_identity,
+               applicability_promoted, claim_truth_promoted
+        FROM semantic.reconciliation_review_projection_stage_receipt
+        WHERE source_revision_ref=$1
+          AND algorithm_ref=$2
+          AND input_fingerprint_ref=$3
+          AND consumer_scope_ref=$4
+        "#,
+        &[
+            &source_revision_ref,
+            &REVIEW_PROJECTION_ALGORITHM_REF,
+            &input_fingerprint_ref,
+            &consumer_scope_ref,
+        ],
+    )? else {
+        return Ok(None);
+    };
+
+    let review_item_refs: Vec<String> = row.get(2);
+    let boundaries = client.query_one(
+        r#"
+        SELECT COUNT(*)::BIGINT,
+               COALESCE(BOOL_AND(
+                 candidate_only
+                 AND NOT creates_semantic_authority
+                 AND NOT applicability_promoted
+                 AND NOT claim_truth_promoted
+               ), TRUE)
+        FROM semantic.review_item
+        WHERE review_item_ref = ANY($1)
+        "#,
+        &[&review_item_refs],
+    )?;
+    let expected = review_item_refs.len() as i64;
+    if boundaries.get::<_, i64>(0) != expected || !boundaries.get::<_, bool>(1) {
+        return Ok(None);
+    }
+
+    let receipt = ReconciliationReviewReceipt {
+        source_revision_ref: source_revision_ref.to_owned(),
+        stage_reused: true,
+        input_fingerprint_ref: input_fingerprint_ref.to_owned(),
+        cluster_review_items: row.get::<_, i64>(0).max(0) as usize,
+        contestation_review_items: row.get::<_, i64>(1).max(0) as usize,
+        review_item_refs,
+        candidate_only: row.get(3),
+        creates_semantic_authority: row.get(4),
+        creates_event_identity: row.get(5),
+        applicability_promoted: row.get(6),
+        claim_truth_promoted: row.get(7),
+    };
+    if !receipt.candidate_only
+        || receipt.creates_semantic_authority
+        || receipt.creates_event_identity
+        || receipt.applicability_promoted
+        || receipt.claim_truth_promoted
+    {
+        return Err(ReconciliationReviewError::PromotionBoundary);
+    }
+    Ok(Some(receipt))
 }
 
 fn common_actions() -> Vec<ReviewAction> {
@@ -91,6 +221,7 @@ pub fn enqueue_reconciliation_review_items(
 ) -> Result<ReconciliationReviewReceipt, ReconciliationReviewError> {
     install_review_workstation_schema(config)?;
     let mut client = Client::connect(config.database_url(), NoTls)?;
+    client.batch_execute(REVIEW_PROJECTION_STAGE_SQL)?;
 
     let pressure_rows = client.query(
         r#"
@@ -117,6 +248,51 @@ pub fn enqueue_reconciliation_review_items(
         "#,
         &[&source_revision_ref],
     )?;
+
+    let conflict_rows = client.query(
+        r#"
+        WITH touched_proposition AS (
+          SELECT DISTINCT proposition_fingerprint_ref
+          FROM semantic.proposition_candidate_occurrence
+          WHERE source_revision_ref=$1
+        )
+        SELECT c.relation_ref, c.base_signature_ref,
+               c.positive_proposition_fingerprint_ref,
+               c.negative_proposition_fingerprint_ref,
+               c.detector_ref, c.candidate_only, c.requires_review,
+               c.creates_contestation_identity,
+               c.creates_semantic_authority, c.claim_truth_promoted
+        FROM semantic.contestation_candidate c
+        WHERE c.positive_proposition_fingerprint_ref IN
+                (SELECT proposition_fingerprint_ref FROM touched_proposition)
+           OR c.negative_proposition_fingerprint_ref IN
+                (SELECT proposition_fingerprint_ref FROM touched_proposition)
+        ORDER BY c.relation_ref
+        "#,
+        &[&source_revision_ref],
+    )?;
+
+
+    let pressure_refs = pressure_rows
+        .iter()
+        .map(|row| row.get::<_, String>(0))
+        .collect::<Vec<_>>();
+    let contestation_refs = conflict_rows
+        .iter()
+        .map(|row| row.get::<_, String>(0))
+        .collect::<Vec<_>>();
+    let input_fingerprint_ref =
+        review_input_fingerprint(&pressure_refs, &contestation_refs);
+    let consumer_scope_ref = canonical_scope_ref(&affected_consumer_refs);
+
+    if let Some(receipt) = load_reusable_projection_receipt(
+        &mut client,
+        source_revision_ref,
+        &input_fingerprint_ref,
+        &consumer_scope_ref,
+    )? {
+        return Ok(receipt);
+    }
 
     let mut review_item_refs = BTreeSet::new();
     let mut cluster_review_items = 0usize;
@@ -179,29 +355,6 @@ pub fn enqueue_reconciliation_review_items(
         cluster_review_items += 1;
     }
 
-    let conflict_rows = client.query(
-        r#"
-        WITH touched_proposition AS (
-          SELECT DISTINCT proposition_fingerprint_ref
-          FROM semantic.proposition_candidate_occurrence
-          WHERE source_revision_ref=$1
-        )
-        SELECT c.relation_ref, c.base_signature_ref,
-               c.positive_proposition_fingerprint_ref,
-               c.negative_proposition_fingerprint_ref,
-               c.detector_ref, c.candidate_only, c.requires_review,
-               c.creates_contestation_identity,
-               c.creates_semantic_authority, c.claim_truth_promoted
-        FROM semantic.contestation_candidate c
-        WHERE c.positive_proposition_fingerprint_ref IN
-                (SELECT proposition_fingerprint_ref FROM touched_proposition)
-           OR c.negative_proposition_fingerprint_ref IN
-                (SELECT proposition_fingerprint_ref FROM touched_proposition)
-        ORDER BY c.relation_ref
-        "#,
-        &[&source_revision_ref],
-    )?;
-
     let mut contestation_review_items = 0usize;
     for row in conflict_rows {
         let relation_ref: String = row.get(0);
@@ -263,8 +416,10 @@ pub fn enqueue_reconciliation_review_items(
         contestation_review_items += 1;
     }
 
-    Ok(ReconciliationReviewReceipt {
+    let receipt = ReconciliationReviewReceipt {
         source_revision_ref: source_revision_ref.to_owned(),
+        stage_reused: false,
+        input_fingerprint_ref: input_fingerprint_ref.clone(),
         cluster_review_items,
         contestation_review_items,
         review_item_refs: review_item_refs.into_iter().collect(),
@@ -273,7 +428,32 @@ pub fn enqueue_reconciliation_review_items(
         creates_event_identity: false,
         applicability_promoted: false,
         claim_truth_promoted: false,
-    })
+    };
+
+    client.execute(
+        r#"
+        INSERT INTO semantic.reconciliation_review_projection_stage_receipt
+        (source_revision_ref, algorithm_ref, input_fingerprint_ref,
+         consumer_scope_ref, cluster_review_items, contestation_review_items,
+         review_item_refs, candidate_only, creates_semantic_authority,
+         creates_event_identity, applicability_promoted, claim_truth_promoted)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,TRUE,FALSE,FALSE,FALSE,FALSE)
+        ON CONFLICT (
+          source_revision_ref, algorithm_ref, input_fingerprint_ref, consumer_scope_ref
+        ) DO NOTHING
+        "#,
+        &[
+            &source_revision_ref,
+            &REVIEW_PROJECTION_ALGORITHM_REF,
+            &input_fingerprint_ref,
+            &consumer_scope_ref,
+            &(receipt.cluster_review_items as i64),
+            &(receipt.contestation_review_items as i64),
+            &receipt.review_item_refs,
+        ],
+    )?;
+
+    Ok(receipt)
 }
 
 #[cfg(test)]
