@@ -1150,6 +1150,8 @@ fn compile_source_values(
                 "review_projection_reused": receipt.reconciliation_review.stage_reused,
                 "review_input_fingerprint_ref": receipt.reconciliation_review.input_fingerprint_ref,
                 "review_target_fibre_count": receipt.reconciliation_review.target_fibre_count,
+                "review_delta_fibre_input_used": receipt.reconciliation_review.delta_fibre_input_used,
+                "review_delta_fibre_count": receipt.reconciliation_review.delta_fibre_count,
                 "review_pressure_rows_scanned": receipt.reconciliation_review.pressure_rows_scanned,
                 "review_contestation_rows_scanned": receipt.reconciliation_review.contestation_rows_scanned,
                 "review_occurrence_rows_scanned": receipt.reconciliation_review.occurrence_rows_scanned,
