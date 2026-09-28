@@ -33,11 +33,11 @@ def main():
         "SCALE-1 economy closure receipt is not green",
     )
     require(
-        workers.get("schema") == "sensiblaw.scale1.worker-scaling-series.v0_1",
+        workers.get("schema") == "sensiblaw.scale1.worker-scaling-series.v0_2",
         "worker scaling receipt schema mismatch",
     )
     require(
-        archive.get("schema") == "sensiblaw.scale1.archive-scale-series.v0_1",
+        archive.get("schema") == "sensiblaw.scale1.archive-scale-series.v0_2",
         "archive scale receipt schema mismatch",
     )
 
@@ -48,6 +48,20 @@ def main():
     }
     require(None not in heads and len(heads) == 1,
             "production-scale receipts are not from one runtime head")
+
+    worker_acceptance = workers.get("acceptance", {})
+    require(worker_acceptance.get("green") is True,
+            "worker scaling receipt is not accepted")
+    require(
+        float(worker_acceptance.get("observed_best_parallel_speedup", 0.0))
+        >= float(worker_acceptance.get("min_best_parallel_speedup", float("inf"))),
+        "worker scaling best parallel speedup is below declared threshold",
+    )
+    require(
+        float(worker_acceptance.get("observed_max_worker_efficiency", 0.0))
+        >= float(worker_acceptance.get("min_max_worker_efficiency", float("inf"))),
+        "worker scaling max-worker efficiency is below declared threshold",
+    )
 
     points = workers.get("points", [])
     require(len(points) >= 2, "worker scaling series has fewer than two points")
@@ -64,6 +78,20 @@ def main():
             for p in points
         ),
         "worker scaling series contains non-fresh or incomplete parser work",
+    )
+
+    archive_acceptance = archive.get("acceptance", {})
+    require(archive_acceptance.get("green") is True,
+            "archive scale receipt is not accepted")
+    require(
+        float(archive_acceptance.get("observed_slope_work_units_per_token", float("inf")))
+        <= float(archive_acceptance.get("max_work_units_per_token", -1.0)),
+        "archive scale observed slope exceeds declared budget",
+    )
+    require(
+        float(archive_acceptance.get("observed_token_span_ratio", 0.0))
+        >= float(archive_acceptance.get("min_token_span_ratio", float("inf"))),
+        "archive scale token span is below declared minimum",
     )
 
     envelope = archive.get("observed_affine_envelope", {})
@@ -90,6 +118,15 @@ def main():
         "worker_scaling": {
             "green": True,
             "worker_counts": [p["worker_count"] for p in points],
+            "min_best_parallel_speedup": worker_acceptance[
+                "min_best_parallel_speedup"
+            ],
+            "observed_best_parallel_speedup": worker_acceptance[
+                "observed_best_parallel_speedup"
+            ],
+            "min_max_worker_efficiency": worker_acceptance[
+                "min_max_worker_efficiency"
+            ],
             "best_speedup_vs_one_worker": max(
                 float(p["speedup_vs_one_worker"]) for p in points
             ),
@@ -103,6 +140,18 @@ def main():
         "archive_scale": {
             "green": True,
             "represented_carrier": "parser_tokens",
+            "max_work_units_per_token": archive_acceptance[
+                "max_work_units_per_token"
+            ],
+            "observed_slope_work_units_per_token": archive_acceptance[
+                "observed_slope_work_units_per_token"
+            ],
+            "min_token_span_ratio": archive_acceptance[
+                "min_token_span_ratio"
+            ],
+            "observed_token_span_ratio": archive_acceptance[
+                "observed_token_span_ratio"
+            ],
             "observation_count": len(archive_points),
             "min_tokens": min(int(p["represented_tokens"]) for p in archive_points),
             "max_tokens": max(int(p["represented_tokens"]) for p in archive_points),
