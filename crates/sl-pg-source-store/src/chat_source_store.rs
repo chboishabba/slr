@@ -110,6 +110,10 @@ pub enum ChatSourceStoreError {
     TransportSelectionConflict,
     #[error("source-join validation failed: {0}")]
     SourceJoinValidation(String),
+    #[error(transparent)]
+    ParserSnapshot(#[from] crate::DbNativeParserError),
+    #[error("parser run source revision does not match chat message")]
+    ParserRevisionMismatch,
 }
 
 pub fn load_chat_archive_export_jsonl(
@@ -522,6 +526,31 @@ pub fn compile_and_persist_chat_selections<P: crate::CandidatePnfProducer>(
         }
     }
     Ok(receipt)
+}
+
+/// PG-native compiled-chat entry point: reuse a *previously completed*
+/// parser run, not a new TSV ingestion lane. Selected spans must already have
+/// matching parser jobs and immutable native chat identity. Missing parser work
+/// stays a residual, never a fabricated success.
+pub fn compile_and_persist_chat_from_parser_run(
+    config: &DatabaseConfig,
+    message_ref: &str,
+    selections: &[ChatStatementCandidateSpan],
+    parser_run_ref: &str,
+) -> Result<crate::LosslessBulkSourceCompilation, ChatSourceStoreError> {
+    let source = load_chat_message_source(config, message_ref)?
+        .ok_or_else(|| ChatSourceStoreError::UnknownMessage(message_ref.to_owned()))?;
+    let snapshot = crate::DbNativeParserSnapshot::load(config, parser_run_ref)?;
+    if snapshot.source_revision_ref() != source.source_revision_ref {
+        return Err(ChatSourceStoreError::ParserRevisionMismatch);
+    }
+    compile_and_persist_chat_selections(
+        config,
+        message_ref,
+        selections,
+        &snapshot,
+        &format!("db-parser:{parser_run_ref}"),
+    )
 }
 
 pub fn load_chat_message_source(
