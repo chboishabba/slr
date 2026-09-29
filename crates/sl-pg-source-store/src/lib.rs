@@ -222,6 +222,7 @@ pub use source_candidate_persistence::{
 };
 pub use correspondence_review_store::{
     CorrespondenceAxis, CorrespondenceReviewProposal, CorrespondenceReviewError,
+    CorrespondenceReviewActionRecord, load_correspondence_review_history,
     CORRESPONDENCE_REVIEW_SQL, propose_correspondence_review,
     load_correspondence_review, apply_correspondence_review,
 };
