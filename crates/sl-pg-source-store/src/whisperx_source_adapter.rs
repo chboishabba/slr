@@ -143,8 +143,18 @@ pub fn plan_whisperx_source(
             missing_speaker_count += 1;
         }
         if index > 0 {
+            let separator_start = position;
             canonical_text.push('\n');
             position += 1;
+            // This newline belongs to the deterministic projection, not a
+            // diarized utterance; account for it without parsing it as speech.
+            regions.push(SourceExecutionRegion {
+                region_ref: format!("transcript-boundary:{source_revision_ref}:{index}"),
+                source_revision_ref: source_revision_ref.clone(),
+                start_char: separator_start,
+                end_char: position,
+                class: SourceRegionExecutionClass::StructuralOnly,
+            });
         }
         let start = position;
         canonical_text.push_str(&segment.text);
@@ -350,7 +360,10 @@ pub fn compile_whisperx_from_parser_run(
     let state = crate::parser_run_state(config, parser_run_ref)?;
     if state.queued != 0 || state.leased != 0
         || state.unattempted_semantic_regions != 0
-        || state.succeeded + state.residual != plan.regions.len()
+        || state.succeeded + state.residual
+            != plan.regions.iter().filter(|region|
+                region.class == SourceRegionExecutionClass::SemanticCandidate
+            ).count()
     {
         return Err(WhisperxSourceError::IncompleteParserRun);
     }
@@ -392,7 +405,8 @@ mod tests {
         let plan = plan_whisperx_source(raw, "source:audio:1", "receipt:asr:1", None).unwrap();
         assert_eq!(plan.canonical_text, "Écho 🛰\nUncertain.");
         assert_eq!(plan.regions[0].end_char, 6);
-        assert_eq!(plan.regions[1].start_char, 7);
+        assert_eq!(plan.regions[1].class, SourceRegionExecutionClass::StructuralOnly);
+        assert_eq!(plan.regions[2].start_char, 7);
         assert_eq!(plan.native.segments[0].additional["words"][0]["start"], 0.1);
         assert_eq!(plan.missing_speaker_count, 1);
         assert!(plan.audio_hash_ref.is_none());
