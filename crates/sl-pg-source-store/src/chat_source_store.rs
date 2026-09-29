@@ -354,7 +354,7 @@ pub fn canonical_chat_statement_span_ref(
 ) -> String {
     let digest = sha256(
         format!(
-            "chat-statement-span:v1\\n{}\\n{}\\n{}\\n{}",
+            "chat-statement-span:v1\n{}\n{}\n{}\n{}",
             source_revision_ref,
             selection.statement_candidate_ref,
             selection.start_char,
