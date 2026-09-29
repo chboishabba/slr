@@ -139,9 +139,26 @@ speaker/word/utterance schema needs an explicit versioned bridge.
 This change is source-written and pushed, not a claim of exact-head
 compiler/SQL/CI certification. The PG-native chat prepare/finalize
 steps need a running migrated database and finished parser-worker run.
-The transcript producer-side packet is persisted and reopens, but the
-M12 transcript parser jobs and source-native word/utterance preservation
-acceptance still need production wiring.
+The transcript producer-side packet is persisted and reopens.
+`prepare_whisperx_parser_run`, the existing SCALE-1 worker, and
+`finalize_whisperx_parser_run` provide the PG-native segment-to-M12
+statement/candidate route. The generic persistence layer rechecks
+each candidate against reopened canonical text and reopens existing
+candidate-store batches. **Actual PostgreSQL execution and source-native
+word/utterance parity acceptance remain unverified**; the richer
+TiRCorder normalized packet still needs its own adapter.
 
 SCALE-1's separate economy, worker-scaling and archive-scaling receipts,
 and PRODUCT review/chronology user stories, remain separate gates.
+
+### Source-neutral candidate durability
+
+`persist_lossless_generic_candidates` provides a single generic persistence
+path for completed source-region compilations. It validates all candidate
+identities against the reopened `ingest.generic_source_revision` canonical
+text, inserts exact source spans into `corpus.span`, persists statements
+through the established statement-trace store, and persists/reopens PNF
+candidate batches through the existing candidate-product machinery.
+Parser residuals do not become statements, and none of the persistence
+receipts pays semantic admission or claims truth. This implementation
+does **not** claim a global single-transaction corpus commit.
