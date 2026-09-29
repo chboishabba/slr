@@ -15,6 +15,8 @@ pub enum ReviewItemKind {
     ResearchAcquisition,
     LegalTreatment,
     ScopeHandoff,
+    /// Review of a proposed relationship, never acceptance of either source's truth.
+    SourceCorrespondence,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
