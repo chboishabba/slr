@@ -1,0 +1,255 @@
+//! SCALE-2E.2 / M10.2 source-context read boundary.
+//!
+//! This is a comparison of *persisted* sources, not a text-matching engine.
+//! PNF/L2 signatures nominate contextual questions, native source joins record
+//! lineage when independently supported, and StatiBaker links remain observer
+//! annotations. None of these implies source identity, copying, or witness
+//! independence by itself. A missing scoped observer is not negative evidence.
+
+use std::collections::BTreeSet;
+
+use postgres::{Client, NoTls};
+use thiserror::Error;
+
+use crate::{DatabaseConfig, ChatSourceJoin, SourceJoinType};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ContextVisibility {
+    Available,
+    NotObserved,
+    Unavailable,
+    ExcludedByScope,
+    Redacted,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SemanticComparison {
+    SharedCandidateFingerprint,
+    NoSharedCandidateFingerprint,
+    InsufficientPnf,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GenealogyStatus {
+    ExactNativeTextCorrespondence,
+    SourceBackreferenceUnverified,
+    NoRecordedLineage,
+}
+
+/// Values are deliberately orthogonal: common candidate factors do not pay
+/// source genealogy, review status or independent corroboration.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MixedSourceComparison {
+    pub left_source_revision_ref: String,
+    pub right_source_revision_ref: String,
+    pub left_statement_refs: Vec<String>,
+    pub right_statement_refs: Vec<String>,
+    pub shared_entity_candidate_refs: Vec<String>,
+    pub shared_proposition_candidate_refs: Vec<String>,
+    pub shared_event_candidate_refs: Vec<String>,
+    pub semantic_comparison: SemanticComparison,
+    pub genealogy: GenealogyStatus,
+    pub native_join_refs: Vec<String>,
+    pub operational_context_refs: Vec<String>,
+    pub operational_visibility: ContextVisibility,
+    pub semantic_review_pending: bool,
+    pub independent_witnesses_established: Option<usize>,
+    pub creates_semantic_authority: bool,
+    pub pays_evidence: bool,
+    pub claim_truth_promoted: bool,
+}
+
+#[derive(Debug, Error)]
+pub enum MixedSourceReviewError {
+    #[error(transparent)]
+    Postgres(#[from] postgres::Error),
+    #[error(transparent)]
+    ChatStore(#[from] crate::ChatSourceStoreError),
+    #[error(transparent)]
+    ChatJoin(#[from] crate::ChatSourceJoinError),
+    #[error(transparent)]
+    Operational(#[from] crate::OperationalStateStoreError),
+    #[error("both source revisions must be explicitly selected")]
+    MissingSourceSelection,
+    #[error("selected source revision is not persisted")]
+    MissingSourceRevision,
+    #[error("persisted semantic candidate rows crossed a non-promotion boundary")]
+    CandidatePromotion,
+}
+
+fn registered(client: &mut Client, name: &str) -> Result<bool, postgres::Error> {
+    let row = client.query_one("SELECT to_regclass($1)::text", &[&name])?;
+    Ok(row.get::<_, Option<String>>(0).is_some())
+}
+
+fn source_statements(
+    client: &mut Client,
+    revision: &str,
+) -> Result<Vec<String>, postgres::Error> {
+    Ok(client.query(
+        "SELECT statement_ref FROM corpus.source_statement
+         WHERE source_revision_ref=$1 AND candidate_only=TRUE
+         AND creates_semantic_authority=FALSE
+         AND applicability_promoted=FALSE AND claim_truth_promoted=FALSE
+         ORDER BY statement_ref", &[&revision],
+    )?.into_iter().map(|r| r.get(0)).collect())
+}
+
+fn fingerprint_refs(
+    client: &mut Client, table: &str,
+    fingerprint_col: &str, revision: &str,
+) -> Result<BTreeSet<String>, postgres::Error> {
+    // Both names come from the fixed callers, never user input.
+    let sql = format!(
+        "SELECT DISTINCT {fingerprint_col} FROM {table}
+         WHERE source_revision_ref=$1 AND candidate_only=TRUE
+         AND creates_semantic_authority=FALSE AND claim_truth_promoted=FALSE"
+    );
+    Ok(client.query(&sql, &[&revision])?
+        .into_iter().map(|row| row.get(0)).collect())
+}
+
+fn entity_fingerprints(
+    client: &mut Client, revision: &str,
+) -> Result<BTreeSet<String>, postgres::Error> {
+    Ok(client.query(
+        "SELECT DISTINCT m.entity_fingerprint_ref
+         FROM semantic.entity_mention_candidate m
+         JOIN corpus.source_statement s ON s.statement_ref=m.statement_ref
+         WHERE s.source_revision_ref=$1 AND m.candidate_only=TRUE
+         AND m.creates_entity_identity=FALSE
+         AND m.creates_semantic_authority=FALSE
+         AND m.claim_truth_promoted=FALSE", &[&revision],
+    )?.into_iter().map(|row| row.get(0)).collect())
+}
+
+fn intersection(left: &BTreeSet<String>, right: &BTreeSet<String>) -> Vec<String> {
+    left.intersection(right).cloned().collect()
+}
+
+/// Read through established SLR semantic/source stores. The optional
+/// operational field is controlled by the requesting workspace's explicit
+/// scope; no implicit StatiBaker access occurs.
+pub fn load_mixed_source_comparison(
+    config: &DatabaseConfig,
+    left_revision: &str,
+    right_revision: &str,
+    chat_message_ref: Option<&str>,
+    operational_visibility: ContextVisibility,
+) -> Result<MixedSourceComparison, MixedSourceReviewError> {
+    if left_revision.trim().is_empty() || right_revision.trim().is_empty() {
+        return Err(MixedSourceReviewError::MissingSourceSelection);
+    }
+    let mut client = Client::connect(config.database_url(), NoTls)?;
+    let present: i64 = client.query_one(
+        "SELECT count(*) FROM ingest.generic_source_revision
+         WHERE source_revision_ref=$1 OR source_revision_ref=$2",
+        &[&left_revision, &right_revision],
+    )?.get(0);
+    let required = if left_revision == right_revision { 1 } else { 2 };
+    if present != required { return Err(MixedSourceReviewError::MissingSourceRevision); }
+    let left_statements = source_statements(&mut client,left_revision)?;
+    let right_statements = source_statements(&mut client,right_revision)?;
+    let pnf_tables = [
+        "semantic.entity_mention_candidate",
+        "semantic.proposition_candidate_occurrence",
+        "semantic.event_candidate_occurrence",
+    ];
+    let pnf_available = pnf_tables.iter().map(|name| registered(&mut client,name))
+        .collect::<Result<Vec<_>,_>>()?.into_iter().all(|flag|flag);
+    let (shared_entities,shared_propositions,shared_events) = if pnf_available {
+        let ent_left=entity_fingerprints(&mut client,left_revision)?;
+        let ent_right=entity_fingerprints(&mut client,right_revision)?;
+        let prop_left=fingerprint_refs(&mut client,"semantic.proposition_candidate_occurrence","proposition_fingerprint_ref",left_revision)?;
+        let prop_right=fingerprint_refs(&mut client,"semantic.proposition_candidate_occurrence","proposition_fingerprint_ref",right_revision)?;
+        let event_left=fingerprint_refs(&mut client,"semantic.event_candidate_occurrence","event_fingerprint_ref",left_revision)?;
+        let event_right=fingerprint_refs(&mut client,"semantic.event_candidate_occurrence","event_fingerprint_ref",right_revision)?;
+        (
+            intersection(&ent_left,&ent_right),
+            intersection(&prop_left,&prop_right),
+            intersection(&event_left,&event_right),
+        )
+    } else { (vec![],vec![],vec![]) };
+    let semantic_comparison = if !pnf_available
+        || left_statements.is_empty() || right_statements.is_empty()
+    {
+        SemanticComparison::InsufficientPnf
+    } else if shared_entities.is_empty() && shared_propositions.is_empty()
+        && shared_events.is_empty()
+    {
+        SemanticComparison::NoSharedCandidateFingerprint
+    } else { SemanticComparison::SharedCandidateFingerprint };
+
+    let mut joins: Vec<ChatSourceJoin> = Vec::new();
+    let mut join_refs=Vec::new();
+    let mut genealogy=GenealogyStatus::NoRecordedLineage;
+    if let Some(message_ref) = chat_message_ref {
+        // Chat-only digests do NOT certify transcript derivation. Even a
+        // verified native-text equality needs lineage evidence to claim copy.
+        joins=crate::load_chat_source_joins_for_message(config,message_ref)?;
+    }
+    let relevant = joins.iter().filter(|join| {
+        join.source_locator_ref == left_revision
+            || join.source_locator_ref == right_revision
+    }).collect::<Vec<_>>();
+    if !relevant.is_empty() {
+        genealogy=GenealogyStatus::SourceBackreferenceUnverified;
+        join_refs=relevant.iter().map(|j|format!(
+            "{}:{}:{}-{}:{}",
+            j.source_locator_ref,j.message_ref,j.start_char,j.end_char,
+            match j.join_type {
+                SourceJoinType::ExactDigest=>"exact_digest",
+                SourceJoinType::NearText=>"near_text",
+                SourceJoinType::TimeWindowToolCall=>"time_window_tool_call",
+                SourceJoinType::UserDeclared=>"user_declared",
+                SourceJoinType::HeuristicShape=>"heuristic_shape",
+            }
+        )).collect();
+    }
+
+    let op_refs = if operational_visibility == ContextVisibility::Available {
+        let mut values=BTreeSet::new();
+        for target in [left_revision,right_revision] {
+            for relation in crate::load_operational_semantic_links_for_target(config,target)? {
+                values.insert(format!("{}:{}",relation.operational_event_ref,relation.link_ref));
+            }
+        }
+        values.into_iter().collect::<Vec<_>>()
+    } else { vec![] };
+
+    Ok(MixedSourceComparison {
+        left_source_revision_ref:left_revision.into(),
+        right_source_revision_ref:right_revision.into(),
+        left_statement_refs:left_statements,
+        right_statement_refs:right_statements,
+        shared_entity_candidate_refs:shared_entities,
+        shared_proposition_candidate_refs:shared_propositions,
+        shared_event_candidate_refs:shared_events,
+        semantic_comparison,
+        genealogy,
+        native_join_refs:join_refs,
+        operational_context_refs:op_refs,
+        operational_visibility: if operational_visibility==ContextVisibility::Available
+            && op_refs.is_empty() { ContextVisibility::NotObserved }
+            else { operational_visibility },
+        semantic_review_pending:true,
+        independent_witnesses_established:None,
+        creates_semantic_authority:false,
+        pays_evidence:false,
+        claim_truth_promoted:false,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn candidate_fingerprint_intersection_is_not_evidence_independence() {
+        let a=BTreeSet::from(["entity:paper".into(),"entity:source".into()]);
+        let b=BTreeSet::from(["entity:paper".into(),"entity:judgment".into()]);
+        assert_eq!(intersection(&a,&b),vec!["entity:paper".to_string()]);
+        // A shared candidate is *only* a comparison scheduling signal.
+        assert_ne!(GenealogyStatus::SourceBackreferenceUnverified,
+                   GenealogyStatus::ExactNativeTextCorrespondence);
+    }
+}
