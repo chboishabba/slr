@@ -34,6 +34,7 @@ mod whisperx_source_adapter;
 mod tircorder_session_bridge;
 mod transcript_chat_correspondence;
 mod mixed_source_review;
+mod correspondence_review_store;
 mod jmail_adapter;
 mod plain_text_document_adapter;
 mod long_document_ingest_store;
@@ -183,7 +184,7 @@ pub use reviewed_pnf::{
 };
 pub use review_workstation_store::{
     apply_persisted_review_command, install_review_workstation_schema,
-    load_review_queue, persist_review_item, persist_review_receipt,
+    load_review_queue, load_review_item, persist_review_item, persist_review_receipt,
     ReviewWorkstationStoreError,
 };
 pub use sensiblaw_core::review_workstation::{
@@ -218,6 +219,11 @@ pub use generic_source_compiler::{
 pub use source_candidate_persistence::{
     persist_lossless_generic_candidates, GenericCandidatePersistenceError,
     GenericCandidatePersistenceReceipt,
+};
+pub use correspondence_review_store::{
+    CorrespondenceAxis, CorrespondenceReviewProposal, CorrespondenceReviewError,
+    CORRESPONDENCE_REVIEW_SQL, propose_correspondence_review,
+    load_correspondence_review, apply_correspondence_review,
 };
 pub use mixed_source_review::{
     load_mixed_source_comparison, MixedSourceComparison,
