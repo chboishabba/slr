@@ -128,7 +128,7 @@ impl ChatSourceJoin {
     }
 }
 
-fn join_ref(join: &ChatSourceJoin) -> String {
+pub(crate) fn canonical_chat_source_join_ref(join: &ChatSourceJoin) -> String {
     let serial = format!(
         "chat-source-join:v1\\n{}\\n{}\\n{}\\n{}\\n{}\\n{}\\n{}\\n{}\\n{}",
         join.message_ref,
@@ -152,7 +152,7 @@ pub fn persist_chat_source_join(
         .ok_or(ChatSourceJoinError::UnknownMessage)?;
     join.validate_for_message(&message.literal_text)?;
 
-    let reference = join_ref(join);
+    let reference = canonical_chat_source_join_ref(join);
     let mut client = Client::connect(config.database_url(), NoTls)?;
     client.batch_execute(CHAT_SOURCE_JOIN_SQL)?;
     client.execute(
