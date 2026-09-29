@@ -241,14 +241,20 @@ pub fn load_mixed_source_comparison(
     }
     let left_excerpt=load_native_excerpt(&mut client,left_revision,generic_present,chat_present)?;
     let right_excerpt=load_native_excerpt(&mut client,right_revision,generic_present,chat_present)?;
-    let left_statements = source_statements(&mut client,left_revision)?;
-    let right_statements = source_statements(&mut client,right_revision)?;
+    let statement_store_present=registered(&mut client,"corpus.source_statement")?;
+    let left_statements = if statement_store_present {
+        source_statements(&mut client,left_revision)?
+    } else {vec![]};
+    let right_statements = if statement_store_present {
+        source_statements(&mut client,right_revision)?
+    } else {vec![]};
     let pnf_tables = [
         "semantic.entity_mention_candidate",
         "semantic.proposition_candidate_occurrence",
         "semantic.event_candidate_occurrence",
     ];
-    let pnf_available = pnf_tables.iter().map(|name| registered(&mut client,name))
+    let pnf_available = statement_store_present &&
+        pnf_tables.iter().map(|name| registered(&mut client,name))
         .collect::<Result<Vec<_>,_>>()?.into_iter().all(|flag|flag);
     let (shared_entities,shared_propositions,shared_events) = if pnf_available {
         let ent_left=entity_fingerprints(&mut client,left_revision)?;
