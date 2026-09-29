@@ -220,3 +220,75 @@ and review acceptance remain separate work.
 
 None of the above claims runtime certification: the new Rust/SQL source
 routes remain uncompiled/unexecuted in this integration tranche.
+
+## M10.4 — reviewed source correspondence (S29-owned)
+
+`SourceCorrespondence` is a new **kind of the existing S29 ReviewItem**,
+not a replacement review queue or another admission engine. The existing
+`ReviewStatus`, `ReviewAction`, lock/transaction reducer and receipt
+authority remain unchanged.
+
+The fixed correspondence axes are `same_subject`, `same_event`,
+`quotation`, and `source_dependency`. Each operator-selected
+proposal requires two **persisted and distinct** source revisions, a
+consumer-scope reference, and a witness from the existing read model:
+shared L2 entity fingerprints nominate same-subject review; shared L2
+event fingerprints nominate same-event review; an evidence-qualified,
+source-pair-bound native chat join nominates quotation or dependency
+review. These are suggestions, **not verified relations**.
+
+`propose_correspondence_review` stores the immutable relation
+coordinates as a sidecar under `semantic.source_correspondence_review`
+and creates/reopens the ordinary S29 item. Symmetric subject/event
+proposal identity is insensitive to source selection order; quotation
+and dependency preserve direction. Every sidecar column remains
+candidate-only/non-promoting, including
+`independence_established = false`.
+
+`apply_correspondence_review` validates that the command targets the
+correct immutable relation, delegates to
+`apply_persisted_review_command` (existing S29 row locking,
+reduction and receipt storage) and reopens the item. Qualification,
+abstention and evidence requests are distinct actions. An accepted
+review is an *accepted review disposition*, not semantic admission,
+claim-truth payment, proof of copying, independent corroboration, or
+canonical source merger.
+
+`load_correspondence_review_history` reopens the existing S29
+`review_receipt` rows with reviewer, action and effect. S29's current
+receipt schema does not expose a canonical event timestamp, so listing
+by command reference must not be interpreted as chronological order.
+The original candidate evidence reference remains immutable through
+all review outcomes.
+
+### S30 Matter scope firewall
+
+The S30 `project_matter_workspace` already composes the S29 queue
+under the MatterContext authorization/cut machinery. A new explicit
+rule **requires both source revision refs to be included** before any
+correspondence review item may be projected. Merely making the review
+item ref or a single source visible cannot leak the existence of a
+second excluded source. The scoped Matter projection remains the
+canonical composition point, not an independent persisted UI world.
+
+The Dioxus mixed-source inspector requires a separately selected
+`ITIR_MIXED_CONSUMER_SCOPE` before presenting write actions.
+That explicit environment selector is a *review identity coordinate*,
+not itself a credential or a substitute for MatterContext enforcement.
+
+### Formal owner
+
+`dashi_agda/DASHI/Cognition/PNF/SensibLawSourceCorrespondenceReviewExact.agda`
+adds axis-indexed eligible witness classes, the standard S29
+`nextStatus` relationship, separate observer availability and
+genealogy coordinates, and non-promotion constraints; the existing
+Agda S29 review kind vocabulary also includes `sourceCorrespondence`.
+This is source-written formal work awaiting an Agda kernel receipt. Its
+negative constructors encode impossible authority operations; they do
+not prove the Rust SQL integration correct or verify the evidence
+belongs to the selected source revisions.
+
+Exact-head Rust, schema migration, native-source PG fixture,
+idempotent reopen, scope isolation and GUI interaction remain
+**acceptance gates**, not completed certificates. SCALE-1's physical
+performance acceptance stays entirely separate.
