@@ -28,6 +28,7 @@ mod reviewed_source_expansion;
 mod review_workstation_store;
 mod statement_pnf_spine;
 mod generic_source_compiler;
+mod whisperx_source_adapter;
 mod jmail_adapter;
 mod plain_text_document_adapter;
 mod long_document_ingest_store;
@@ -49,6 +50,7 @@ pub use chat_source_store::{
     install_chat_source_schema, load_chat_archive_export_jsonl,
     load_chat_message_source, load_chat_messages_for_conversation,
     materialize_chat_statement, persist_chat_archive_message,
+    canonical_chat_statement_span_ref, compile_and_persist_chat_selections,
     ChatArchiveExportRow, ChatSourceStoreError, PersistedChatMessageSource,
     CHAT_ARCHIVE_EXPORT_SCHEMA,
 };
@@ -200,10 +202,17 @@ pub use statement_pnf_spine::{
 pub use generic_source_compiler::{
     compile_long_document, compile_long_document_lossless,
     compile_long_document_lossless_for_document_ref, compile_mail_message,
-    compile_mail_message_lossless, BulkSourceCompilation,
+    compile_mail_message_lossless, compile_chat_message_lossless,
+    compile_source_regions_lossless, SourceExecutionRegion,
+    SourceRegionExecutionClass, BulkSourceCompilation,
     GenericSourceCompilerError, LosslessBulkSourceCompilation,
     RegionCompilationAssignment, RegionCompilationDisposition,
     RegionCompilationResidual,
+};
+pub use whisperx_source_adapter::{
+    plan_whisperx_source, compile_whisperx_source_lossless,
+    WhisperxExecutionEnvelope, WhisperxSegment, WhisperxSourceError,
+    WhisperxSourcePlan,
 };
 pub use jmail_adapter::{
     jmail_record_to_mail_source, segment_jmail_body, JmailAdapterError,
