@@ -567,18 +567,22 @@ pub fn prepare_chat_selection_parser_run(
     }
     let mut ordered = selections.iter().collect::<Vec<_>>();
     ordered.sort_by_key(|selection| (selection.start_char, selection.end_char));
+    let ranges = ordered.iter().map(|selection| (
+        u64::from(selection.start_char), u64::from(selection.end_char),
+    )).collect::<Vec<_>>();
+    let literals = crate::generic_source_compiler::canonical_char_subspans(
+        &source.literal_text, &ranges,
+    ).ok_or(ChatSourceStoreError::InvalidStatementSpan)?;
     let mut end_previous = 0u64;
     let total = source.literal_text.chars().count() as u64;
     let mut specs = Vec::with_capacity(ordered.len());
-    for selection in ordered {
+    for (selection, literal) in ordered.into_iter().zip(literals) {
         selection.validate().map_err(|_| ChatSourceStoreError::InvalidStatementSpan)?;
         let start = u64::from(selection.start_char);
         let end = u64::from(selection.end_char);
         if selection.message_ref != message_ref
             || start < end_previous || end > total
-            || source.literal_text
-                .chars().skip(start as usize).take((end - start) as usize)
-                .collect::<String>() != selection.literal_text
+            || literal != selection.literal_text
         {
             return Err(ChatSourceStoreError::InvalidStatementSpan);
         }
