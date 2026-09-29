@@ -1038,4 +1038,80 @@ mod tests {
             compile_long_document(&EchoProducer, &document, text, "parse:unicode").unwrap();
         assert_eq!(receipt.compiled[0].statement.literal_text, "αβγ.");
     }
+
+    #[test]
+    fn generic_region_engine_fails_closed_on_revision_and_duplicate_refs() {
+        let region = SourceExecutionRegion {
+            region_ref: "span:1".into(),
+            source_revision_ref: "revision:fixture".into(),
+            start_char: 0,
+            end_char: 4,
+            class: SourceRegionExecutionClass::SemanticCandidate,
+        };
+        let duplicate = vec![region.clone(), region.clone()];
+        assert!(matches!(
+            compile_source_regions_lossless(
+                &EchoProducer, "source:fixture", "revision:fixture",
+                "document:fixture", "Test", &duplicate, "parse:fixture"
+            ),
+            Err(GenericSourceCompilerError::SourceIngest(
+                SourceIngestError::DuplicateRegion(_)
+            ))
+        ));
+        let mut wrong_revision = region;
+        wrong_revision.source_revision_ref = "revision:other".into();
+        assert!(matches!(
+            compile_source_regions_lossless(
+                &EchoProducer, "source:fixture", "revision:fixture",
+                "document:fixture", "Test", &[wrong_revision], "parse:fixture"
+            ),
+            Err(GenericSourceCompilerError::SourceIngest(
+                SourceIngestError::RevisionMismatch
+            ))
+        ));
+    }
+
+    #[test]
+    fn chat_reuses_lossless_region_engine_without_promoting_tool_or_history() {
+        use sensiblaw_core::chat_source::{
+            ChatBranchMembership, ChatContentKind, ChatMessageRole,
+        };
+        let mut message = crate::chat_source_store::PersistedChatMessageSource {
+            message_ref: "message:1".into(),
+            conversation_ref: "conversation:1".into(),
+            node_ref: "node:1".into(),
+            parent_node_ref: None,
+            message_time_ref: "2026-09-29T00:00:00Z".into(),
+            thread_title: "Fixture".into(),
+            literal_text: "Évidence! 🚀".into(),
+            document_ref: "document:chat:1".into(),
+            source_revision_ref: "revision:chat:1".into(),
+            full_message_span_ref: "span:chat:1".into(),
+            branch_membership: ChatBranchMembership::Active,
+            role: ChatMessageRole::User,
+            content_kind: ChatContentKind::Message,
+        };
+        let active = compile_chat_message_lossless(&EchoProducer, &message, "parse:chat")
+            .unwrap();
+        assert_eq!(active.exact_region_count, 1);
+        assert_eq!(active.compiled_statement_count, 1);
+        assert!(active.source_coverage_complete());
+        assert!(!active.creates_semantic_authority);
+
+        message.branch_membership = ChatBranchMembership::Inactive;
+        message.role = ChatMessageRole::Assistant;
+        let inactive = compile_chat_message_lossless(&EchoProducer, &message, "parse:chat")
+            .unwrap();
+        assert_eq!(inactive.compiled_statement_count, 0);
+        assert_eq!(inactive.transport_or_nonsemantic_region_count, 1);
+        assert!(inactive.source_coverage_complete());
+
+        message.branch_membership = ChatBranchMembership::Active;
+        message.role = ChatMessageRole::Tool;
+        message.content_kind = ChatContentKind::ToolOutput;
+        let tool = compile_chat_message_lossless(&EchoProducer, &message, "parse:chat")
+            .unwrap();
+        assert_eq!(tool.compiled_statement_count, 0);
+        assert!(tool.source_coverage_complete());
+    }
 }
