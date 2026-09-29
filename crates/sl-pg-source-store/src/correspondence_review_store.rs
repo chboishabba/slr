@@ -56,6 +56,20 @@ pub struct CorrespondenceReviewProposal {
     pub independence_established: bool,
 }
 
+/// The existing S29 receipt ledger, exposed without inventing timestamps:
+/// command_ref is stable identity, not a claim of wall-clock chronology.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CorrespondenceReviewActionRecord {
+    pub command_ref: String,
+    pub review_item_ref: String,
+    pub reviewer_ref: String,
+    pub action_ref: String,
+    pub effect_ref: String,
+    pub effect_value_ref: Option<String>,
+    pub creates_semantic_authority: bool,
+    pub claim_truth_promoted: bool,
+}
+
 #[derive(Debug, Error)]
 pub enum CorrespondenceReviewError {
     #[error(transparent)]
@@ -257,6 +271,37 @@ pub fn load_correspondence_review(
         creates_semantic_authority:false,claim_truth_promoted:false,
         independence_established:false,
     }))
+}
+
+/// Replay the *existing* S29 receipt history for this relation. Every
+/// receipt is separately attributable. A new proposal never deletes receipts.
+pub fn load_correspondence_review_history(
+    config: &DatabaseConfig, relation_ref: &str,
+) -> Result<Vec<CorrespondenceReviewActionRecord>,CorrespondenceReviewError> {
+    let proposal=load_correspondence_review(config,relation_ref)?
+        .ok_or(CorrespondenceReviewError::UnownedReviewItem)?;
+    let mut client=Client::connect(config.database_url(),NoTls)?;
+    let rows=client.query(
+        "SELECT command_ref,review_item_ref,reviewer_ref,action_ref,
+                effect_ref,effect_value_ref,candidate_only,
+                creates_semantic_authority,applicability_promoted,
+                claim_truth_promoted
+         FROM semantic.review_receipt WHERE review_item_ref=$1
+         ORDER BY command_ref", &[&proposal.review_item_ref],
+    )?;
+    let mut out=Vec::with_capacity(rows.len());
+    for row in rows {
+        if !row.get::<_,bool>(6) || row.get::<_,bool>(7)
+            || row.get::<_,bool>(8) || row.get::<_,bool>(9)
+        {return Err(CorrespondenceReviewError::ReviewPromotion);}
+        out.push(CorrespondenceReviewActionRecord {
+            command_ref:row.get(0),review_item_ref:row.get(1),
+            reviewer_ref:row.get(2),action_ref:row.get(3),
+            effect_ref:row.get(4),effect_value_ref:row.get(5),
+            creates_semantic_authority:false,claim_truth_promoted:false,
+        });
+    }
+    Ok(out)
 }
 
 /// Review this relation, not either source or underlying proposition. S29
