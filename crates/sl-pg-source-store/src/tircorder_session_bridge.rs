@@ -356,12 +356,12 @@ pub fn persist_tircorder_session(
         "INSERT INTO ingest.tircorder_batch_identity
          (source_collection_ref,batch_id,packet_digest_ref)
          VALUES ($1,$2,$3) ON CONFLICT DO NOTHING",
-        &[&collection,&packet.batch_id,&plan.raw_packet_sha256],
+        &[collection,&packet.batch_id,&plan.raw_packet_sha256],
     )?;
     let recorded: String = client.query_one(
         "SELECT packet_digest_ref FROM ingest.tircorder_batch_identity
          WHERE source_collection_ref=$1 AND batch_id=$2",
-        &[&collection,&packet.batch_id],
+        &[collection,&packet.batch_id],
     )?.get(0);
     if recorded != plan.raw_packet_sha256 {
         return Err(TircorderBridgeError::BatchIdentityConflict);
