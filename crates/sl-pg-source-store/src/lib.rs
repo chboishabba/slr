@@ -2,6 +2,7 @@ mod workbench_projection;
 pub use workbench_projection::*;
 mod cache_first;
 mod chat_source_store;
+mod chat_source_fold;
 mod chronology_contestation_store;
 mod candidate_pnf;
 mod candidate_pnf_store;
@@ -211,8 +212,14 @@ pub use generic_source_compiler::{
 };
 pub use whisperx_source_adapter::{
     plan_whisperx_source, compile_whisperx_source_lossless,
+    persist_whisperx_source_plan, reopen_whisperx_source_plan,
     WhisperxExecutionEnvelope, WhisperxSegment, WhisperxSourceError,
-    WhisperxSourcePlan,
+    WhisperxSourcePlan, WHISPERX_PROVENANCE_SQL,
+};
+pub use chat_source_fold::{
+    persist_chat_source_join, load_chat_source_joins_for_message,
+    ChatSourceJoin, ChatSourceJoinError, SourceJoinType,
+    CHAT_SOURCE_JOIN_SQL,
 };
 pub use jmail_adapter::{
     jmail_record_to_mail_source, segment_jmail_body, JmailAdapterError,
