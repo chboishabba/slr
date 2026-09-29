@@ -471,6 +471,27 @@ pub fn compile_source_regions_lossless<P: CandidatePnfProducer>(
         }
     }
 
+    // Build a sparse character-offset index once for all semantic spans.
+    // Repeated .chars().skip(start) rescans each document prefix and makes
+    // many-region compilation quadratic in the worst case.
+    let required_offsets = regions.iter()
+        .filter(|region| region.class == SourceRegionExecutionClass::SemanticCandidate)
+        .flat_map(|region| [region.start_char, region.end_char])
+        .collect::<BTreeSet<_>>();
+    let mut byte_offsets = std::collections::BTreeMap::new();
+    if !required_offsets.is_empty() {
+        for (char_offset, (byte_offset, _)) in canonical_text.char_indices().enumerate() {
+            let char_offset = char_offset as u64;
+            if required_offsets.contains(&char_offset) {
+                byte_offsets.insert(char_offset, byte_offset);
+            }
+        }
+        let end_char = canonical_text.chars().count() as u64;
+        if required_offsets.contains(&end_char) {
+            byte_offsets.insert(end_char, canonical_text.len());
+        }
+    }
+
     let mut compiled = Vec::new();
     let mut residuals = Vec::new();
     let mut assignments = Vec::with_capacity(regions.len());
@@ -487,12 +508,18 @@ pub fn compile_source_regions_lossless<P: CandidatePnfProducer>(
             }
             SourceRegionExecutionClass::SemanticCandidate => {
                 semantic_count += 1;
-                let result = text_by_char_range(
-                    canonical_text,
-                    &region.region_ref,
-                    region.start_char,
-                    region.end_char,
-                )
+                let result = match (
+                    byte_offsets.get(&region.start_char),
+                    byte_offsets.get(&region.end_char),
+                ) {
+                    (Some(&start), Some(&end)) if start < end => {
+                        Ok(canonical_text[start..end].to_owned())
+                    }
+                    _ => Err(GenericSourceCompilerError::RegionOutsideText {
+                        region_ref: region.region_ref.clone(),
+                        text_len: canonical_text.chars().count(),
+                    }),
+                }
                 .and_then(|literal| {
                     compile_region(
                         producer,
