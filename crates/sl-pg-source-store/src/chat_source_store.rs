@@ -340,6 +340,25 @@ pub fn persist_chat_archive_message(
     Ok(persisted)
 }
 
+/// The same stable span coordinate is used by the in-memory M12 compiler
+/// and by the PostgreSQL statement materializer.
+pub fn canonical_chat_statement_span_ref(
+    source_revision_ref: &str,
+    selection: &ChatStatementCandidateSpan,
+) -> String {
+    let digest = sha256(
+        format!(
+            "chat-statement-span:v1\\n{}\\n{}\\n{}\\n{}",
+            source_revision_ref,
+            selection.statement_candidate_ref,
+            selection.start_char,
+            selection.end_char,
+        )
+        .as_bytes(),
+    );
+    format!("span:chat-statement:sha256:{}", hex(&digest))
+}
+
 pub fn materialize_chat_statement(
     config: &DatabaseConfig,
     selection: &ChatStatementCandidateSpan,
@@ -381,17 +400,7 @@ pub fn materialize_chat_statement(
         return Err(ChatSourceStoreError::LiteralSubspanMismatch);
     }
 
-    let span_digest = sha256(
-        format!(
-            "chat-statement-span:v1\n{}\n{}\n{}\n{}",
-            source.source_revision_ref,
-            selection.statement_candidate_ref,
-            selection.start_char,
-            selection.end_char,
-        )
-        .as_bytes(),
-    );
-    let span_ref = format!("span:chat-statement:sha256:{}", hex(&span_digest));
+    let span_ref = canonical_chat_statement_span_ref(&source.source_revision_ref, selection);
     client.execute(
         r#"
         INSERT INTO corpus.span
