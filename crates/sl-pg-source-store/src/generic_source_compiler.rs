@@ -754,7 +754,9 @@ pub fn compile_chat_message_lossless<P: CandidatePnfProducer>(
             });
         }
         regions.push(SourceExecutionRegion {
-            region_ref: selected.statement_candidate_ref.clone(),
+            region_ref: crate::chat_source_store::canonical_chat_statement_span_ref(
+                &message.source_revision_ref, selected,
+            ),
             source_revision_ref: message.source_revision_ref.clone(),
             start_char: start,
             end_char: end,
