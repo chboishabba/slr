@@ -82,6 +82,12 @@ pub enum WhisperxSourceError {
     SourceStore(#[from] crate::GenericSourceContentStoreError),
     #[error("reopened WhisperX source has conflicting raw envelope identity")]
     RawEnvelopeIdentityConflict,
+    #[error(transparent)]
+    Parser(#[from] crate::DbNativeParserError),
+    #[error("parser run source revision differs from transcript")]
+    ParserRevisionMismatch,
+    #[error("parser worker has not attempted all transcript segments")]
+    IncompleteParserRun,
 }
 
 fn hash_ref(raw: &str) -> String {
@@ -294,6 +300,72 @@ pub fn reopen_whisperx_source_plan(
         return Err(WhisperxSourceError::RawEnvelopeIdentityConflict);
     }
     Ok(recovered)
+}
+
+/// Use the *existing* DB-native parser queue for the native WhisperX
+/// segment boundaries. These are source segment regions, not guessed sentence
+/// segmentation; model/speaker/time never enter parser input as free text.
+pub fn prepare_whisperx_parser_run(
+    config: &crate::DatabaseConfig,
+    plan: &WhisperxSourcePlan,
+    parser_family: &str,
+    parser_version: &str,
+    model_ref: &str,
+    parser_config_json: &str,
+) -> Result<(crate::ParserRunReceipt, crate::ParserEnqueueReceipt), WhisperxSourceError> {
+    let _persisted = persist_whisperx_source_plan(config, plan)?;
+    let run = crate::start_parser_run(
+        config,
+        &plan.envelope.source_revision_ref,
+        parser_family,
+        parser_version,
+        model_ref,
+        parser_config_json,
+    )?;
+    let regions = plan.regions.iter().filter(|region| {
+        region.class == SourceRegionExecutionClass::SemanticCandidate
+    }).map(|region| crate::ParserRegionJobSpec {
+        region_ref: region.region_ref.clone(),
+        start_char: region.start_char,
+        end_char: region.end_char,
+    }).collect::<Vec<_>>();
+    let enqueued = crate::enqueue_parser_regions_with_content_reuse(
+        config, &run, &regions, &plan.canonical_text,
+    )?;
+    Ok((run, enqueued))
+}
+
+/// Compile the reopened immutable source via the same DB-native M12 parser
+/// snapshot as books and chat. This returns a lossless compilation receipt;
+/// durable candidate batches and review projection remain a separate step.
+pub fn compile_whisperx_from_parser_run(
+    config: &crate::DatabaseConfig,
+    parser_run_ref: &str,
+) -> Result<LosslessBulkSourceCompilation, WhisperxSourceError> {
+    let snapshot = crate::DbNativeParserSnapshot::load(config, parser_run_ref)?;
+    let source_revision_ref = snapshot.source_revision_ref();
+    let plan = reopen_whisperx_source_plan(config, source_revision_ref)?;
+    let state = crate::parser_run_state(config, parser_run_ref)?;
+    if state.queued != 0 || state.leased != 0
+        || state.unattempted_semantic_regions != 0
+        || state.succeeded + state.residual != plan.regions.len()
+    {
+        return Err(WhisperxSourceError::IncompleteParserRun);
+    }
+    let (persisted, _) = crate::load_generic_text_source(config, source_revision_ref)?;
+    if persisted.source_revision_ref != plan.envelope.source_revision_ref {
+        return Err(WhisperxSourceError::ParserRevisionMismatch);
+    }
+    let compilation = compile_whisperx_source_lossless(
+        &snapshot,
+        &plan,
+        &persisted.document_ref,
+        &format!("db-parser:{parser_run_ref}"),
+    )?;
+    if !compilation.source_coverage_complete() {
+        return Err(WhisperxSourceError::IncompleteParserRun);
+    }
+    Ok(compilation)
 }
 
 #[cfg(test)]
