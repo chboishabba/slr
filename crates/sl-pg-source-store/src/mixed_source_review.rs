@@ -92,6 +92,8 @@ pub enum MixedSourceReviewError {
     Operational(#[from] crate::OperationalStateStoreError),
     #[error("both source revisions must be explicitly selected")]
     MissingSourceSelection,
+    #[error("a mixed-source comparison requires two distinct source revisions")]
+    SameSourceSelection,
     #[error("selected source revision is not persisted")]
     MissingSourceRevision,
     #[error("persisted semantic candidate rows crossed a non-promotion boundary")]
@@ -210,6 +212,9 @@ pub fn load_mixed_source_comparison(
 ) -> Result<MixedSourceComparison, MixedSourceReviewError> {
     if left_revision.trim().is_empty() || right_revision.trim().is_empty() {
         return Err(MixedSourceReviewError::MissingSourceSelection);
+    }
+    if left_revision == right_revision {
+        return Err(MixedSourceReviewError::SameSourceSelection);
     }
     let mut client = Client::connect(config.database_url(), NoTls)?;
     // Chat source revisions live in the original chat archive table rather
