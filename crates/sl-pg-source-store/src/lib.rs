@@ -29,6 +29,7 @@ mod reviewed_source_expansion;
 mod review_workstation_store;
 mod statement_pnf_spine;
 mod generic_source_compiler;
+mod source_candidate_persistence;
 mod whisperx_source_adapter;
 mod jmail_adapter;
 mod plain_text_document_adapter;
@@ -210,6 +211,10 @@ pub use generic_source_compiler::{
     GenericSourceCompilerError, LosslessBulkSourceCompilation,
     RegionCompilationAssignment, RegionCompilationDisposition,
     RegionCompilationResidual,
+};
+pub use source_candidate_persistence::{
+    persist_lossless_generic_candidates, GenericCandidatePersistenceError,
+    GenericCandidatePersistenceReceipt,
 };
 pub use whisperx_source_adapter::{
     plan_whisperx_source, compile_whisperx_source_lossless,
