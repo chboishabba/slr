@@ -44,6 +44,8 @@ pub struct MixedSourceComparison {
     pub right_source_revision_ref: String,
     pub left_statement_refs: Vec<String>,
     pub right_statement_refs: Vec<String>,
+    pub left_source_excerpt: String,
+    pub right_source_excerpt: String,
     pub shared_entity_candidate_refs: Vec<String>,
     pub shared_proposition_candidate_refs: Vec<String>,
     pub shared_event_candidate_refs: Vec<String>,
@@ -80,6 +82,35 @@ pub enum MixedSourceReviewError {
 fn registered(client: &mut Client, name: &str) -> Result<bool, postgres::Error> {
     let row = client.query_one("SELECT to_regclass($1)::text", &[&name])?;
     Ok(row.get::<_, Option<String>>(0).is_some())
+}
+
+fn load_native_excerpt(
+    client: &mut Client, revision: &str,
+    generic_present: bool, chat_present: bool,
+) -> Result<String,postgres::Error> {
+    let result=if generic_present {
+        client.query_opt(
+            "SELECT convert_from(c.payload,'UTF8')
+             FROM ingest.generic_source_revision r
+             JOIN corpus.document d ON d.document_ref=r.document_ref
+             JOIN corpus.canonical_content c ON c.canonical_ref=d.canonical_ref
+             WHERE r.source_revision_ref=$1", &[&revision],
+        )?
+    } else {None};
+    let result=match result {
+        Some(row)=>Some(row.get::<_,String>(0)),
+        None if chat_present=>client.query_opt(
+            "SELECT convert_from(c.payload,'UTF8')
+             FROM corpus.chat_archive_message m
+             JOIN corpus.document d ON d.document_ref=m.document_ref
+             JOIN corpus.canonical_content c ON c.canonical_ref=d.canonical_ref
+             WHERE m.source_revision_ref=$1 LIMIT 1", &[&revision],
+        )?.map(|row|row.get::<_,String>(0)),
+        None=>None,
+    };
+    let mut excerpt=result.unwrap_or_default().chars().take(500).collect::<String>();
+    if excerpt.chars().count()==500 {excerpt.push('…');}
+    Ok(excerpt)
 }
 
 fn source_statements(
@@ -141,13 +172,30 @@ pub fn load_mixed_source_comparison(
         return Err(MixedSourceReviewError::MissingSourceSelection);
     }
     let mut client = Client::connect(config.database_url(), NoTls)?;
-    let present: i64 = client.query_one(
-        "SELECT count(*) FROM ingest.generic_source_revision
-         WHERE source_revision_ref=$1 OR source_revision_ref=$2",
-        &[&left_revision, &right_revision],
-    )?.get(0);
-    let required = if left_revision == right_revision { 1 } else { 2 };
-    if present != required { return Err(MixedSourceReviewError::MissingSourceRevision); }
+    // Chat source revisions live in the original chat archive table rather
+    // than ingest.generic_source_revision. Do not demand a fake duplicate
+    // generic source just to make cross-family comparisons succeed.
+    let generic_present=registered(&mut client,"ingest.generic_source_revision")?;
+    let chat_present=registered(&mut client,"corpus.chat_archive_message")?;
+    for rev in [left_revision,right_revision] {
+        let generic=if generic_present {
+            client.query_opt(
+                "SELECT 1 FROM ingest.generic_source_revision
+                 WHERE source_revision_ref=$1", &[&rev],
+            )?.is_some()
+        } else {false};
+        let chat=if chat_present {
+            client.query_opt(
+                "SELECT 1 FROM corpus.chat_archive_message
+                 WHERE source_revision_ref=$1", &[&rev],
+            )?.is_some()
+        } else {false};
+        if !generic && !chat {
+            return Err(MixedSourceReviewError::MissingSourceRevision);
+        }
+    }
+    let left_excerpt=load_native_excerpt(&mut client,left_revision,generic_present,chat_present)?;
+    let right_excerpt=load_native_excerpt(&mut client,right_revision,generic_present,chat_present)?;
     let left_statements = source_statements(&mut client,left_revision)?;
     let right_statements = source_statements(&mut client,right_revision)?;
     let pnf_tables = [
@@ -225,6 +273,8 @@ pub fn load_mixed_source_comparison(
         right_source_revision_ref:right_revision.into(),
         left_statement_refs:left_statements,
         right_statement_refs:right_statements,
+        left_source_excerpt:left_excerpt,
+        right_source_excerpt:right_excerpt,
         shared_entity_candidate_refs:shared_entities,
         shared_proposition_candidate_refs:shared_propositions,
         shared_event_candidate_refs:shared_events,
