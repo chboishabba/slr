@@ -198,7 +198,7 @@ pub fn plan_tircorder_sessions(
             {
                 return Err(TircorderBridgeError::InvalidCoordinate);
             }
-            if utt.speaker_label.as_deref().is_none_or(|v| !present(v)) {
+            if !utt.speaker_label.as_deref().is_some_and(present) {
                 speaker_missing += 1;
             }
             let mut word_end = 0.0_f64;
