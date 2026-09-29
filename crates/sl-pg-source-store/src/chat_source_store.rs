@@ -407,6 +407,12 @@ pub fn materialize_chat_statement(
         .map_err(|_| ChatSourceStoreError::InvalidStatementSpan)?;
     let source = load_chat_message_source(config, &selection.message_ref)?
         .ok_or_else(|| ChatSourceStoreError::UnknownMessage(selection.message_ref.clone()))?;
+    if source.branch_membership != ChatBranchMembership::Active
+        || source.content_kind != ChatContentKind::Message
+        || !matches!(source.role, ChatMessageRole::User | ChatMessageRole::Assistant)
+    {
+        return Err(ChatSourceStoreError::InvalidSource);
+    }
     guard_chat_transport_selections(
         config, &selection.message_ref, std::slice::from_ref(selection),
     )?;
