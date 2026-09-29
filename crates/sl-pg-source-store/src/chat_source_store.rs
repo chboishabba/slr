@@ -106,6 +106,10 @@ pub enum ChatSourceStoreError {
     CandidatePnf(#[from] crate::CandidatePnfStoreError),
     #[error("compiled statement diverged from persisted chat statement identity")]
     CompiledStatementMismatch,
+    #[error("chat statement overlaps a producer-owned source backreference")]
+    TransportSelectionConflict,
+    #[error("source-join validation failed: {0}")]
+    SourceJoinValidation(String),
 }
 
 pub fn load_chat_archive_export_jsonl(
@@ -365,6 +369,28 @@ pub fn canonical_chat_statement_span_ref(
     format!("span:chat-statement:sha256:{}", hex(&digest))
 }
 
+/// Fail closed when a statement span overlaps a source-owned artifact
+/// quoted or pasted into a conversation message. The chat remains a source
+/// event; its transported content is not a second independent witness.
+fn guard_chat_transport_selections(
+    config: &DatabaseConfig,
+    message_ref: &str,
+    selections: &[ChatStatementCandidateSpan],
+) -> Result<(), ChatSourceStoreError> {
+    let joins = crate::load_chat_source_joins_for_message(config, message_ref)
+        .map_err(|error| ChatSourceStoreError::SourceJoinValidation(error.to_string()))?;
+    for selected in selections {
+        for joined in &joins {
+            if u64::from(selected.start_char) < joined.end_char
+                && joined.start_char < u64::from(selected.end_char)
+            {
+                return Err(ChatSourceStoreError::TransportSelectionConflict);
+            }
+        }
+    }
+    Ok(())
+}
+
 pub fn materialize_chat_statement(
     config: &DatabaseConfig,
     selection: &ChatStatementCandidateSpan,
@@ -375,6 +401,9 @@ pub fn materialize_chat_statement(
         .map_err(|_| ChatSourceStoreError::InvalidStatementSpan)?;
     let source = load_chat_message_source(config, &selection.message_ref)?
         .ok_or_else(|| ChatSourceStoreError::UnknownMessage(selection.message_ref.clone()))?;
+    guard_chat_transport_selections(
+        config, &selection.message_ref, std::slice::from_ref(selection),
+    )?;
 
     let mut client = Client::connect(config.database_url(), NoTls)?;
     let content: String = client
@@ -460,6 +489,7 @@ pub fn compile_and_persist_chat_selections<P: crate::CandidatePnfProducer>(
 ) -> Result<crate::LosslessBulkSourceCompilation, ChatSourceStoreError> {
     let source = load_chat_message_source(config, message_ref)?
         .ok_or_else(|| ChatSourceStoreError::UnknownMessage(message_ref.to_owned()))?;
+    guard_chat_transport_selections(config, message_ref, selections)?;
     let receipt = crate::compile_chat_message_lossless(
         producer, &source, selections, parser_receipt_prefix,
     ).map_err(|error| ChatSourceStoreError::GenericCompiler(error.to_string()))?;
