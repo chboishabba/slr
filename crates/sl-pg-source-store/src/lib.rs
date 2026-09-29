@@ -32,6 +32,7 @@ mod generic_source_compiler;
 mod source_candidate_persistence;
 mod whisperx_source_adapter;
 mod tircorder_session_bridge;
+mod transcript_chat_correspondence;
 mod jmail_adapter;
 mod plain_text_document_adapter;
 mod long_document_ingest_store;
@@ -216,6 +217,11 @@ pub use generic_source_compiler::{
 pub use source_candidate_persistence::{
     persist_lossless_generic_candidates, GenericCandidatePersistenceError,
     GenericCandidatePersistenceReceipt,
+};
+pub use transcript_chat_correspondence::{
+    persist_exact_transcript_chat_quote, TranscriptChatExactQuote,
+    TranscriptNativeEvent, TranscriptChatCorrespondenceReceipt,
+    TranscriptChatCorrespondenceError,
 };
 pub use tircorder_session_bridge::{
     plan_tircorder_sessions, compile_tircorder_session_lossless,
