@@ -696,6 +696,35 @@ pub fn compile_mail_message_lossless<P: CandidatePnfProducer>(
     )
 }
 
+/// Extract many exact Unicode character subspans in one scan, instead of
+/// repeatedly traversing document prefixes for individual selections.
+pub(crate) fn canonical_char_subspans<'a>(
+    text: &'a str,
+    ranges: &[(u64, u64)],
+) -> Option<Vec<&'a str>> {
+    use std::collections::{BTreeMap, BTreeSet};
+    let endpoints = ranges.iter()
+        .flat_map(|&(start, end)| [start, end])
+        .collect::<BTreeSet<_>>();
+    let mut offsets = BTreeMap::new();
+    for (char_index, (byte_index, _)) in text.char_indices().enumerate() {
+        let key = char_index as u64;
+        if endpoints.contains(&key) {
+            offsets.insert(key, byte_index);
+        }
+    }
+    let total = text.chars().count() as u64;
+    if endpoints.contains(&total) {
+        offsets.insert(total, text.len());
+    }
+    ranges.iter().map(|&(start, end)| {
+        if start >= end || end > total { return None; }
+        let a = *offsets.get(&start)?;
+        let b = *offsets.get(&end)?;
+        Some(&text[a..b])
+    }).collect()
+}
+
 /// Compile only explicitly selected chat statement subspans. The message's
 /// author, role, branch, node, timestamp and assets remain in the persisted
 /// source record. Unselected intervals receive structural-only assignments,
@@ -725,9 +754,16 @@ pub fn compile_chat_message_lossless<P: CandidatePnfProducer>(
     let total_chars = message.literal_text.chars().count() as u64;
     let mut ordered = selections.iter().collect::<Vec<_>>();
     ordered.sort_by_key(|span| (span.start_char, span.end_char));
+    let ranges = ordered.iter().map(|span| (
+        u64::from(span.start_char), u64::from(span.end_char),
+    )).collect::<Vec<_>>();
+    let literals = canonical_char_subspans(&message.literal_text, &ranges)
+        .ok_or(GenericSourceCompilerError::SourceIngest(
+            SourceIngestError::InvalidRange,
+        ))?;
     let mut regions = Vec::with_capacity(ordered.len() * 2 + 1);
     let mut position = 0u64;
-    for selected in ordered {
+    for (selected, literal) in ordered.into_iter().zip(literals) {
         selected.validate().map_err(|_| {
             GenericSourceCompilerError::SourceIngest(SourceIngestError::InvalidRange)
         })?;
@@ -743,9 +779,6 @@ pub fn compile_chat_message_lossless<P: CandidatePnfProducer>(
                 SourceIngestError::InvalidRange,
             ));
         }
-        let literal = message.literal_text
-            .chars().skip(start as usize).take((end - start) as usize)
-            .collect::<String>();
         if literal != selected.literal_text {
             return Err(GenericSourceCompilerError::SourceIngest(
                 SourceIngestError::CanonicalWeldMismatch("chat_selected_literal"),
