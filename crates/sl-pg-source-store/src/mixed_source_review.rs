@@ -39,6 +39,24 @@ pub enum GenealogyStatus {
 /// Values are deliberately orthogonal: common candidate factors do not pay
 /// source genealogy, review status or independent corroboration.
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MixedSourceOperationalLink {
+    pub link_ref: String,
+    pub operational_event_ref: String,
+    pub source_revision_ref: String,
+    pub relation_kind: String,
+    pub relationship_receipt_ref: String,
+    pub producer_ref: String,
+    pub producer_event_ref: String,
+    pub label: String,
+    pub start_time_ref: String,
+    pub end_time_ref: String,
+    pub provenance_refs: Vec<String>,
+    pub reviewed_link: bool,
+    pub creates_semantic_authority: bool,
+    pub pays_evidence: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MixedSourceComparison {
     pub left_source_revision_ref: String,
     pub right_source_revision_ref: String,
@@ -53,6 +71,7 @@ pub struct MixedSourceComparison {
     pub genealogy: GenealogyStatus,
     pub native_join_refs: Vec<String>,
     pub operational_context_refs: Vec<String>,
+    pub operational_links: Vec<MixedSourceOperationalLink>,
     pub operational_visibility: ContextVisibility,
     pub semantic_review_pending: bool,
     pub independent_witnesses_established: Option<usize>,
@@ -267,15 +286,35 @@ pub fn load_mixed_source_comparison(
     let requested_operational_scope = if operational_visibility == ContextVisibility::Available
         && !operation_schema_ready { ContextVisibility::Unavailable }
         else {operational_visibility};
-    let op_refs = if operation_schema_ready {
-        let mut values=BTreeSet::new();
+    let mut op_links=Vec::new();
+    if operation_schema_ready {
         for target in [left_revision,right_revision] {
             for relation in crate::load_operational_semantic_links_for_target(config,target)? {
-                values.insert(format!("{}:{}",relation.operational_event_ref,relation.link_ref));
+                let event=crate::load_operational_event(
+                    config,&relation.operational_event_ref,
+                )?.ok_or(MixedSourceReviewError::CandidatePromotion)?;
+                op_links.push(MixedSourceOperationalLink {
+                    link_ref:relation.link_ref,
+                    operational_event_ref:event.operational_event_ref,
+                    source_revision_ref:target.to_owned(),
+                    relation_kind:format!("{:?}",relation.relation_kind),
+                    relationship_receipt_ref:relation.relationship_receipt_ref,
+                    producer_ref:event.producer_ref,
+                    producer_event_ref:event.producer_event_ref,
+                    label:event.label,
+                    start_time_ref:event.start_time_ref,
+                    end_time_ref:event.end_time_ref,
+                    provenance_refs:event.provenance_refs,
+                    reviewed_link:relation.reviewed_link,
+                    creates_semantic_authority:false,
+                    pays_evidence:false,
+                });
             }
         }
-        values.into_iter().collect::<Vec<_>>()
-    } else { vec![] };
+        op_links.sort_by(|a,b| (&a.start_time_ref,&a.link_ref).cmp(&(&b.start_time_ref,&b.link_ref)));
+        op_links.dedup_by(|a,b|a.link_ref==b.link_ref);
+    }
+    let op_refs = op_links.iter().map(|item|item.link_ref.clone()).collect::<Vec<_>>();
 
     let resolved_visibility=if requested_operational_scope==ContextVisibility::Available
         && op_refs.is_empty() { ContextVisibility::NotObserved }
@@ -294,6 +333,7 @@ pub fn load_mixed_source_comparison(
         genealogy,
         native_join_refs:join_refs,
         operational_context_refs:op_refs,
+        operational_links:op_links,
         operational_visibility: resolved_visibility,
         semantic_review_pending:true,
         independent_witnesses_established:None,
