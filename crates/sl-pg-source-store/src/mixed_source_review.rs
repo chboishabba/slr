@@ -217,6 +217,9 @@ pub fn load_mixed_source_comparison(
         values.into_iter().collect::<Vec<_>>()
     } else { vec![] };
 
+    let resolved_visibility=if operational_visibility==ContextVisibility::Available
+        && op_refs.is_empty() { ContextVisibility::NotObserved }
+        else { operational_visibility };
     Ok(MixedSourceComparison {
         left_source_revision_ref:left_revision.into(),
         right_source_revision_ref:right_revision.into(),
@@ -229,9 +232,7 @@ pub fn load_mixed_source_comparison(
         genealogy,
         native_join_refs:join_refs,
         operational_context_refs:op_refs,
-        operational_visibility: if operational_visibility==ContextVisibility::Available
-            && op_refs.is_empty() { ContextVisibility::NotObserved }
-            else { operational_visibility },
+        operational_visibility: resolved_visibility,
         semantic_review_pending:true,
         independent_witnesses_established:None,
         creates_semantic_authority:false,
