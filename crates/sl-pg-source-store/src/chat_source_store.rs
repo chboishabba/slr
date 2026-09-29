@@ -532,6 +532,65 @@ pub fn compile_and_persist_chat_selections<P: crate::CandidatePnfProducer>(
 /// parser run, not a new TSV ingestion lane. Selected spans must already have
 /// matching parser jobs and immutable native chat identity. Missing parser work
 /// stays a residual, never a fabricated success.
+/// Prepare selected chat spans as ordinary PG-native parser jobs using the
+/// shared worker queue. No parser is run here: the existing `worker` command
+/// executes the jobs before `compile_and_persist_chat_from_parser_run`.
+pub fn prepare_chat_selection_parser_run(
+    config: &DatabaseConfig,
+    message_ref: &str,
+    selections: &[ChatStatementCandidateSpan],
+    parser_family: &str,
+    parser_version: &str,
+    model_ref: &str,
+    config_json: &str,
+) -> Result<(crate::ParserRunReceipt, crate::ParserEnqueueReceipt), ChatSourceStoreError> {
+    let source = load_chat_message_source(config, message_ref)?
+        .ok_or_else(|| ChatSourceStoreError::UnknownMessage(message_ref.to_owned()))?;
+    guard_chat_transport_selections(config, message_ref, selections)?;
+
+    use sensiblaw_core::chat_source::{
+        ChatBranchMembership, ChatContentKind, ChatMessageRole,
+    };
+    let eligible = source.branch_membership == ChatBranchMembership::Active
+        && source.content_kind == ChatContentKind::Message
+        && matches!(source.role, ChatMessageRole::User | ChatMessageRole::Assistant);
+    if !eligible && !selections.is_empty() {
+        return Err(ChatSourceStoreError::InvalidSource);
+    }
+    let mut ordered = selections.iter().collect::<Vec<_>>();
+    ordered.sort_by_key(|selection| (selection.start_char, selection.end_char));
+    let mut end_previous = 0u64;
+    let total = source.literal_text.chars().count() as u64;
+    let mut specs = Vec::with_capacity(ordered.len());
+    for selection in ordered {
+        selection.validate().map_err(|_| ChatSourceStoreError::InvalidStatementSpan)?;
+        let start = u64::from(selection.start_char);
+        let end = u64::from(selection.end_char);
+        if selection.message_ref != message_ref
+            || start < end_previous || end > total
+            || source.literal_text
+                .chars().skip(start as usize).take((end - start) as usize)
+                .collect::<String>() != selection.literal_text
+        {
+            return Err(ChatSourceStoreError::InvalidStatementSpan);
+        }
+        end_previous = end;
+        specs.push(crate::ParserRegionJobSpec {
+            region_ref: canonical_chat_statement_span_ref(&source.source_revision_ref, selection),
+            start_char: start,
+            end_char: end,
+        });
+    }
+    let run = crate::start_parser_run(
+        config, &source.source_revision_ref, parser_family, parser_version,
+        model_ref, config_json,
+    )?;
+    let queued = crate::enqueue_parser_regions_with_content_reuse(
+        config, &run, &specs, &source.literal_text,
+    )?;
+    Ok((run, queued))
+}
+
 pub fn compile_and_persist_chat_from_parser_run(
     config: &DatabaseConfig,
     message_ref: &str,
