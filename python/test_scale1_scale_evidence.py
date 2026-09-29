@@ -26,6 +26,11 @@ def worker_point(count, duration):
     return {
         "worker_count": count,
         "worker_wall_ns": duration,
+        "source_revision_ref": f"source:test:{count}",
+        "parser_run_ref": f"parser:test:{count}",
+        "aggregate_parser_process_ns": 100,
+        "aggregate_parser_persist_ns": 50,
+        "aggregate_worker_busy_ns": 150,
         "semantic_regions": 10,
         "new_jobs": 10,
         "reused_jobs": 0,
@@ -54,6 +59,10 @@ def archive_point(tokens, work):
         "parser_model_ref": "model:test",
         "parser_config_digest_ref": "config:test",
         "represented_tokens": tokens,
+        "source_revision_ref": f"archive-source:{tokens}",
+        "semantic_regions": 10,
+        "measured_elapsed_ns": 1000,
+        "measured_post_parser_elapsed_ns": 500,
         "measured_post_parser_work_units": work,
     }
 
@@ -158,6 +167,44 @@ class ScaleEvidenceRevalidationTests(unittest.TestCase):
             "min_token_span_ratio": 2,
             "observed_token_span_ratio": 3,
         }
+        with self.assertRaises(SystemExit):
+            final_closure(economy_receipt(), worker, archive)
+
+    def test_worker_recycled_parser_product_is_rejected(self):
+        raw = worker_receipt(500)
+        raw["points"][1]["parser_run_ref"] = raw["points"][0]["parser_run_ref"]
+        with self.assertRaises(SystemExit):
+            UPGRADE.upgrade_worker(raw, 1.05, 0.2)
+
+    def test_worker_contradictory_busy_counter_is_rejected(self):
+        raw = worker_receipt(500)
+        raw["points"][1]["aggregate_worker_busy_ns"] = 1
+        with self.assertRaises(SystemExit):
+            UPGRADE.upgrade_worker(raw, 1.05, 0.2)
+
+    def test_archive_duplicate_source_is_rejected(self):
+        raw = archive_receipt(600)
+        raw["points"][1]["source_revision_ref"] = raw["points"][0]["source_revision_ref"]
+        with self.assertRaises(SystemExit):
+            UPGRADE.upgrade_archive(raw, 3, 2)
+
+    def test_archive_missing_measured_elapsed_is_rejected(self):
+        raw = archive_receipt(600)
+        raw["points"][1]["measured_post_parser_elapsed_ns"] = 0
+        with self.assertRaises(SystemExit):
+            UPGRADE.upgrade_archive(raw, 3, 2)
+
+    def test_final_gate_rechecks_identity_independently(self):
+        worker = UPGRADE.upgrade_worker(worker_receipt(500), 1.05, 0.2)
+        archive = UPGRADE.upgrade_archive(archive_receipt(600), 3, 2)
+        worker["points"][1]["source_revision_ref"] = worker["points"][0]["source_revision_ref"]
+        with self.assertRaises(SystemExit):
+            final_closure(economy_receipt(), worker, archive)
+
+    def test_final_gate_rechecks_archive_metadata_independently(self):
+        worker = UPGRADE.upgrade_worker(worker_receipt(500), 1.05, 0.2)
+        archive = UPGRADE.upgrade_archive(archive_receipt(600), 3, 2)
+        archive["points"][1]["parser_model_ref"] = "different-model"
         with self.assertRaises(SystemExit):
             final_closure(economy_receipt(), worker, archive)
 
