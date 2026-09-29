@@ -280,7 +280,7 @@ pub fn persist_chat_archive_message(
         &[
             &full_message_span_ref,
             &document_ref,
-            &(message.content.len() as i32),
+            &(message.content.chars().count() as i32),
         ],
     )?;
 
@@ -364,15 +364,19 @@ pub fn materialize_chat_statement(
         )?
         .get(0);
 
-    let start = selection.start_char as usize;
-    let end = selection.end_char as usize;
-    if start >= end
-        || end > content.len()
-        || !content.is_char_boundary(start)
-        || !content.is_char_boundary(end)
-    {
+    // Source spans are character offsets, not UTF-8 byte offsets. The DB
+    // canonical text may contain multibyte Unicode before the selected span.
+    let start_char = selection.start_char as usize;
+    let end_char = selection.end_char as usize;
+    if start_char >= end_char || end_char > content.chars().count() {
         return Err(ChatSourceStoreError::InvalidStatementSpan);
     }
+    let start = content.char_indices().nth(start_char)
+        .map(|(byte, _)| byte)
+        .unwrap_or(content.len());
+    let end = content.char_indices().nth(end_char)
+        .map(|(byte, _)| byte)
+        .unwrap_or(content.len());
     if &content[start..end] != selection.literal_text {
         return Err(ChatSourceStoreError::LiteralSubspanMismatch);
     }
