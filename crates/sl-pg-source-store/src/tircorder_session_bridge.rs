@@ -83,6 +83,7 @@ pub struct TircorderSentenceSplit {
 #[derive(Debug, Clone)]
 pub struct TircorderSourcePlan {
     pub bridge_version: &'static str,
+    pub source_collection_ref: String,
     pub envelope: SourceIngestEnvelope,
     /// Original packet is retained, including data irrelevant to M12.
     pub raw_packet: String,
@@ -179,7 +180,12 @@ pub fn plan_tircorder_sessions(
             .map(normalized_audio_hash).transpose()?;
         // Source revision derives from original packet provenance plus this
         // session, so a changed device/audio/word/timing packet is a revision.
-        let source_ref = format!("source:tircorder:{source_collection_ref}:{}",session.session_id);
+        // Length-tagged tuple avoids cross-collection/session delimiter collisions.
+        let coordinate = format!(
+            "{}:{}|{}:{}",source_collection_ref.len(),source_collection_ref,
+            session.session_id.len(),session.session_id,
+        );
+        let source_ref = format!("source:tircorder:{}",digest(&coordinate));
         let source_revision_ref = format!(
             "source-revision:tircorder:{}:{}",
             digest(&source_ref), digest(&format!("{packet_digest}:{session_index}"))
@@ -275,6 +281,7 @@ pub fn plan_tircorder_sessions(
         }
         out.push(TircorderSourcePlan {
             bridge_version: TIRCORDER_SESSION_BRIDGE_VERSION,
+            source_collection_ref: source_collection_ref.to_owned(),
             envelope: SourceIngestEnvelope {
                 source_ref, source_revision_ref,
                 provider_ref: "tircorder:normalized-session".into(),
@@ -323,6 +330,7 @@ CREATE TABLE IF NOT EXISTS ingest.tircorder_session_source (
     source_revision_ref TEXT PRIMARY KEY
         REFERENCES ingest.generic_source_revision(source_revision_ref),
     bridge_version TEXT NOT NULL,
+    source_collection_ref TEXT NOT NULL,
     packet_digest_ref TEXT NOT NULL,
     raw_packet TEXT NOT NULL,
     session_index BIGINT NOT NULL CHECK (session_index >= 0),
@@ -339,10 +347,7 @@ pub fn persist_tircorder_session(
     plan: &TircorderSourcePlan,
 ) -> Result<crate::PersistedGenericSourceContent,TircorderBridgeError> {
     let packet: TircorderPacket = serde_json::from_str(&plan.raw_packet)?;
-    let collection = plan.envelope.source_ref
-        .strip_prefix("source:tircorder:")
-        .and_then(|v| v.strip_suffix(&format!(":{}",plan.native.session_id)))
-        .ok_or(TircorderBridgeError::ReopenMismatch)?;
+    let collection = &plan.source_collection_ref;
     let mut client = postgres::Client::connect(config.database_url(), postgres::NoTls)?;
     client.batch_execute(TIRCORDER_PROVENANCE_SQL)?;
     // Native packet batch ids have producer-scoped immutable identity. A
@@ -366,14 +371,16 @@ pub fn persist_tircorder_session(
     )?;
     client.execute(
         "INSERT INTO ingest.tircorder_session_source
-         (source_revision_ref, bridge_version, packet_digest_ref, raw_packet,
-          session_index, audio_hash_ref, missing_speaker_count,
-          candidate_only, creates_semantic_authority, claim_truth_promoted)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,TRUE,FALSE,FALSE)
+         (source_revision_ref, bridge_version, source_collection_ref,
+          packet_digest_ref, raw_packet, session_index, audio_hash_ref,
+          missing_speaker_count, candidate_only,
+          creates_semantic_authority, claim_truth_promoted)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,TRUE,FALSE,FALSE)
          ON CONFLICT (source_revision_ref) DO NOTHING",
         &[
             &plan.envelope.source_revision_ref,
             &plan.bridge_version,
+            &plan.source_collection_ref,
             &plan.raw_packet_sha256,
             &plan.raw_packet,
             &(plan.session_index as i64),
@@ -382,19 +389,20 @@ pub fn persist_tircorder_session(
         ],
     )?;
     let row = client.query_one(
-        "SELECT bridge_version, packet_digest_ref, raw_packet,
-                session_index, audio_hash_ref, missing_speaker_count,
+        "SELECT bridge_version, source_collection_ref, packet_digest_ref,
+                raw_packet, session_index, audio_hash_ref, missing_speaker_count,
                 candidate_only, creates_semantic_authority, claim_truth_promoted
          FROM ingest.tircorder_session_source WHERE source_revision_ref=$1",
         &[&plan.envelope.source_revision_ref],
     )?;
     if row.get::<_, String>(0) != plan.bridge_version
-        || row.get::<_, String>(1) != plan.raw_packet_sha256
-        || row.get::<_, String>(2) != plan.raw_packet
-        || row.get::<_, i64>(3) != plan.session_index as i64
-        || row.get::<_, Option<String>>(4) != plan.audio_hash_ref
-        || row.get::<_, i64>(5) != plan.missing_speaker_count as i64
-        || !row.get::<_, bool>(6) || row.get::<_, bool>(7) || row.get::<_, bool>(8)
+        || row.get::<_, String>(1) != plan.source_collection_ref
+        || row.get::<_, String>(2) != plan.raw_packet_sha256
+        || row.get::<_, String>(3) != plan.raw_packet
+        || row.get::<_, i64>(4) != plan.session_index as i64
+        || row.get::<_, Option<String>>(5) != plan.audio_hash_ref
+        || row.get::<_, i64>(6) != plan.missing_speaker_count as i64
+        || !row.get::<_, bool>(7) || row.get::<_, bool>(8) || row.get::<_, bool>(9)
     {
         return Err(TircorderBridgeError::ReopenMismatch);
     }
@@ -407,32 +415,23 @@ pub fn reopen_tircorder_session(
     let (source, canonical) = crate::load_generic_text_source(config, source_revision_ref)?;
     let mut client = postgres::Client::connect(config.database_url(), postgres::NoTls)?;
     let row = client.query_one(
-        "SELECT bridge_version, packet_digest_ref, raw_packet,
-                session_index, audio_hash_ref, missing_speaker_count
+        "SELECT bridge_version, source_collection_ref, packet_digest_ref,
+                raw_packet, session_index, audio_hash_ref, missing_speaker_count
          FROM ingest.tircorder_session_source WHERE source_revision_ref=$1",
         &[&source_revision_ref],
     )?;
-    let raw: String = row.get(2);
+    let raw: String = row.get(3);
+    let collection_ref: String = row.get(1);
     let plans = plan_tircorder_sessions(
-        &raw,
-        // Reconstruct collection identity by separating the session suffix
-        // from the source ref; session IDs themselves may contain colons.
-        // Avoid string splitting: each plan compares exact source identity.
-        source.source_ref.strip_prefix("source:tircorder:")
-            .and_then(|v| v.strip_suffix(&format!(":{}", 
-                // The native session_id is recovered from the packet below.
-                serde_json::from_str::<TircorderPacket>(&raw).ok()?
-                    .sessions.get(row.get::<_,i64>(3) as usize)?.session_id
-            )))
-            .ok_or(TircorderBridgeError::ReopenMismatch)?,
-        &source.acquisition_receipt_ref,
+        &raw, &collection_ref, &source.acquisition_receipt_ref,
     )?;
-    let index = row.get::<_,i64>(3) as usize;
+    let index = row.get::<_,i64>(4) as usize;
     let plan = plans.into_iter().nth(index).ok_or(TircorderBridgeError::ReopenMismatch)?;
     if plan.bridge_version != row.get::<_, String>(0)
-        || plan.raw_packet_sha256 != row.get::<_, String>(1)
-        || plan.audio_hash_ref != row.get::<_, Option<String>>(4)
-        || plan.missing_speaker_count as i64 != row.get::<_,i64>(5)
+        || plan.source_collection_ref != collection_ref
+        || plan.raw_packet_sha256 != row.get::<_, String>(2)
+        || plan.audio_hash_ref != row.get::<_, Option<String>>(5)
+        || plan.missing_speaker_count as i64 != row.get::<_,i64>(6)
         || plan.envelope.source_revision_ref != source_revision_ref
         || plan.envelope.source_ref != source.source_ref
         || plan.envelope.content_digest_ref != source.content_digest_ref
