@@ -128,6 +128,13 @@ pub fn propose_correspondence_review(
     if !nonempty(consumer_scope_ref) || !nonempty(evidence_ref)
         || !nonempty(left) || !nonempty(right)
     {return Err(CorrespondenceReviewError::MissingCoordinate);}
+    let (left,right) = if matches!(axis,
+        CorrespondenceAxis::SameSubject | CorrespondenceAxis::SameEvent
+    ) && left > right {
+        (right,left)
+    } else {(left,right)};
+    // The hypothesis of sharing a subject/event is symmetric. A source
+    // quotation or dependency is directed and retains the caller's order.
     let comparison=load_mixed_source_comparison(
         config,left,right,chat_message_ref,ContextVisibility::ExcludedByScope
     )?;
