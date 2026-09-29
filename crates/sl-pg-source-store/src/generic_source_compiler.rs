@@ -689,14 +689,18 @@ pub fn compile_mail_message_lossless<P: CandidatePnfProducer>(
     )
 }
 
-/// Adapter over persisted chat source identity. Message role, branch, node,
-/// timestamp and asset provenance remain in the authoritative chat source
-/// record, not inferred from flattened text. Only active conversational
-/// messages enter candidate generation; tool/asset/system and inactive
-/// generated branches stay source-preserved but uncompiled.
+/// Compile only explicitly selected chat statement subspans. The message's
+/// author, role, branch, node, timestamp and assets remain in the persisted
+/// source record. Unselected intervals receive structural-only assignments,
+/// so no source content disappears when an annotation is absent.
+///
+/// A full chat turn is not automatically a semantic statement. Inactive
+/// assistant generations, tool output, and system instructions do not acquire
+/// independent statement status through this boundary.
 pub fn compile_chat_message_lossless<P: CandidatePnfProducer>(
     producer: &P,
     message: &crate::chat_source_store::PersistedChatMessageSource,
+    selections: &[sensiblaw_core::chat_source::ChatStatementCandidateSpan],
     parser_receipt_prefix: &str,
 ) -> Result<LosslessBulkSourceCompilation, GenericSourceCompilerError> {
     use sensiblaw_core::chat_source::{
@@ -705,21 +709,68 @@ pub fn compile_chat_message_lossless<P: CandidatePnfProducer>(
     let eligible = message.content_kind == ChatContentKind::Message
         && message.branch_membership == ChatBranchMembership::Active
         && matches!(message.role, ChatMessageRole::User | ChatMessageRole::Assistant);
-    let regions = if message.literal_text.is_empty() {
-        Vec::new()
-    } else {
-        vec![SourceExecutionRegion {
-            region_ref: message.full_message_span_ref.clone(),
+    if !eligible && !selections.is_empty() {
+        return Err(GenericSourceCompilerError::SourceIngest(
+            SourceIngestError::MetadataOnlyMayNotBecomeTextStatement,
+        ));
+    }
+
+    let total_chars = message.literal_text.chars().count() as u64;
+    let mut ordered = selections.iter().collect::<Vec<_>>();
+    ordered.sort_by_key(|span| (span.start_char, span.end_char));
+    let mut regions = Vec::with_capacity(ordered.len() * 2 + 1);
+    let mut position = 0u64;
+    for selected in ordered {
+        selected.validate().map_err(|_| {
+            GenericSourceCompilerError::SourceIngest(SourceIngestError::InvalidRange)
+        })?;
+        let start = u64::from(selected.start_char);
+        let end = u64::from(selected.end_char);
+        if selected.message_ref != message.message_ref {
+            return Err(GenericSourceCompilerError::SourceIngest(
+                SourceIngestError::RevisionMismatch,
+            ));
+        }
+        if start < position || end > total_chars {
+            return Err(GenericSourceCompilerError::SourceIngest(
+                SourceIngestError::InvalidRange,
+            ));
+        }
+        let literal = message.literal_text
+            .chars().skip(start as usize).take((end - start) as usize)
+            .collect::<String>();
+        if literal != selected.literal_text {
+            return Err(GenericSourceCompilerError::SourceIngest(
+                SourceIngestError::CanonicalWeldMismatch("chat_selected_literal"),
+            ));
+        }
+        if position < start {
+            regions.push(SourceExecutionRegion {
+                region_ref: format!("{}:structural:{position}-{start}", message.full_message_span_ref),
+                source_revision_ref: message.source_revision_ref.clone(),
+                start_char: position,
+                end_char: start,
+                class: SourceRegionExecutionClass::StructuralOnly,
+            });
+        }
+        regions.push(SourceExecutionRegion {
+            region_ref: selected.statement_candidate_ref.clone(),
             source_revision_ref: message.source_revision_ref.clone(),
-            start_char: 0,
-            end_char: message.literal_text.chars().count() as u64,
-            class: if eligible {
-                SourceRegionExecutionClass::SemanticCandidate
-            } else {
-                SourceRegionExecutionClass::StructuralOnly
-            },
-        }]
-    };
+            start_char: start,
+            end_char: end,
+            class: SourceRegionExecutionClass::SemanticCandidate,
+        });
+        position = end;
+    }
+    if position < total_chars {
+        regions.push(SourceExecutionRegion {
+            region_ref: format!("{}:structural:{position}-{total_chars}", message.full_message_span_ref),
+            source_revision_ref: message.source_revision_ref.clone(),
+            start_char: position,
+            end_char: total_chars,
+            class: SourceRegionExecutionClass::StructuralOnly,
+        });
+    }
     compile_source_regions_lossless(
         producer,
         &message.message_ref,
@@ -1099,9 +1150,10 @@ mod tests {
     }
 
     #[test]
-    fn chat_reuses_lossless_region_engine_without_promoting_tool_or_history() {
+    fn chat_requires_explicit_exact_selected_spans_and_retains_gaps() {
         use sensiblaw_core::chat_source::{
             ChatBranchMembership, ChatContentKind, ChatMessageRole,
+            ChatStatementCandidateSpan,
         };
         let mut message = crate::chat_source_store::PersistedChatMessageSource {
             message_ref: "message:1".into(),
@@ -1118,27 +1170,49 @@ mod tests {
             role: ChatMessageRole::User,
             content_kind: ChatContentKind::Message,
         };
-        let active = compile_chat_message_lossless(&EchoProducer, &message, "parse:chat")
-            .unwrap();
-        assert_eq!(active.exact_region_count, 1);
+        let selection = ChatStatementCandidateSpan {
+            statement_candidate_ref: "candidate:1".into(),
+            message_ref: message.message_ref.clone(),
+            start_char: 0,
+            end_char: 9,
+            literal_text: "Évidence!".into(),
+            splitter_receipt_ref: "splitter:1".into(),
+            candidate_only: true,
+            creates_semantic_authority: false,
+            applicability_promoted: false,
+            claim_truth_promoted: false,
+        };
+        let empty = compile_chat_message_lossless(
+            &EchoProducer, &message, &[], "parse:chat"
+        ).unwrap();
+        assert_eq!(empty.compiled_statement_count, 0);
+        assert!(empty.source_coverage_complete());
+
+        let active = compile_chat_message_lossless(
+            &EchoProducer, &message, &[selection.clone()], "parse:chat"
+        ).unwrap();
         assert_eq!(active.compiled_statement_count, 1);
+        assert_eq!(active.exact_region_count, 2);
+        assert_eq!(active.transport_or_nonsemantic_region_count, 1);
         assert!(active.source_coverage_complete());
         assert!(!active.creates_semantic_authority);
 
+        let mut forged = selection.clone();
+        forged.literal_text = "Other".into();
+        assert!(compile_chat_message_lossless(
+            &EchoProducer, &message, &[forged], "parse:chat"
+        ).is_err());
         message.branch_membership = ChatBranchMembership::Inactive;
         message.role = ChatMessageRole::Assistant;
-        let inactive = compile_chat_message_lossless(&EchoProducer, &message, "parse:chat")
-            .unwrap();
-        assert_eq!(inactive.compiled_statement_count, 0);
-        assert_eq!(inactive.transport_or_nonsemantic_region_count, 1);
-        assert!(inactive.source_coverage_complete());
-
+        assert!(compile_chat_message_lossless(
+            &EchoProducer, &message, &[selection.clone()], "parse:chat"
+        ).is_err());
         message.branch_membership = ChatBranchMembership::Active;
         message.role = ChatMessageRole::Tool;
         message.content_kind = ChatContentKind::ToolOutput;
-        let tool = compile_chat_message_lossless(&EchoProducer, &message, "parse:chat")
-            .unwrap();
-        assert_eq!(tool.compiled_statement_count, 0);
-        assert!(tool.source_coverage_complete());
+        assert!(compile_chat_message_lossless(
+            &EchoProducer, &message, &[selection], "parse:chat"
+        ).is_err());
     }
+
 }
