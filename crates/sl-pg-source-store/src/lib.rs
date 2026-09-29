@@ -52,6 +52,7 @@ pub use chat_source_store::{
     load_chat_message_source, load_chat_messages_for_conversation,
     materialize_chat_statement, persist_chat_archive_message,
     canonical_chat_statement_span_ref, compile_and_persist_chat_selections,
+    prepare_chat_selection_parser_run, compile_and_persist_chat_from_parser_run,
     ChatArchiveExportRow, ChatSourceStoreError, PersistedChatMessageSource,
     CHAT_ARCHIVE_EXPORT_SCHEMA,
 };
