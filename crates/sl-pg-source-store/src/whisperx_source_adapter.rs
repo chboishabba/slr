@@ -119,10 +119,17 @@ pub fn plan_whisperx_source(
         return Err(WhisperxSourceError::EmptySegments);
     }
     let raw_digest = hash_ref(raw_json);
+    // SensibLaw's ASR envelope identity distinguishes the *same transcript*
+    // when the linked audio digest differs. Missing audio remains explicit.
+    let audio_identity = audio_hash_ref
+        .map(|digest| format!("sha256:{}", digest.strip_prefix("sha256:")
+            .unwrap_or(digest).to_ascii_lowercase()))
+        .unwrap_or_else(|| "audio-absent".into());
     let source_revision_ref = format!(
-        "source-revision:whisperx:{}:{}",
+        "source-revision:whisperx:{}:{}:{}",
         source_ref,
         raw_digest,
+        audio_identity,
     );
     let mut canonical_text = String::new();
     let mut regions = Vec::new();
@@ -192,7 +199,7 @@ pub fn plan_whisperx_source(
         canonical_text,
         regions,
         missing_speaker_count,
-        audio_hash_ref: audio_hash_ref.map(str::to_owned),
+        audio_hash_ref: audio_hash_ref.map(|_| audio_identity),
         transcript_completeness_claimed: false,
         diarization_establishes_person_identity: false,
     })
