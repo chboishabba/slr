@@ -7,6 +7,7 @@
 //! source plan. None of them establishes person identity or audio completeness.
 
 use serde::{Deserialize, Serialize};
+use postgres::{Client, NoTls};
 use sha2::{Digest, Sha256};
 use sensiblaw_core::source_ingest::{
     IngestRoleClass, SourceFamily, SourceIngestEnvelope,
@@ -75,6 +76,12 @@ pub enum WhisperxSourceError {
     SpanOverflow,
     #[error(transparent)]
     Compiler(#[from] GenericSourceCompilerError),
+    #[error(transparent)]
+    Postgres(#[from] postgres::Error),
+    #[error(transparent)]
+    SourceStore(#[from] crate::GenericSourceContentStoreError),
+    #[error("reopened WhisperX source has conflicting raw envelope identity")]
+    RawEnvelopeIdentityConflict,
 }
 
 fn hash_ref(raw: &str) -> String {
@@ -188,6 +195,105 @@ pub fn compile_whisperx_source_lossless<P: CandidatePnfProducer>(
         &plan.regions,
         parser_receipt_prefix,
     )?)
+}
+
+/// Sidecar stores the producer-owned execution packet verbatim. The compiler
+/// text representation is stored through the *existing* generic source store;
+/// this table is only an immutable provenance backreference. Do not treat
+/// diarization labels or this source record as semantic observations.
+pub const WHISPERX_PROVENANCE_SQL: &str = r#"
+CREATE SCHEMA IF NOT EXISTS ingest;
+CREATE TABLE IF NOT EXISTS ingest.whisperx_execution_source (
+    source_revision_ref TEXT PRIMARY KEY
+        REFERENCES ingest.generic_source_revision(source_revision_ref),
+    raw_payload_digest_ref TEXT NOT NULL,
+    raw_payload TEXT NOT NULL,
+    audio_hash_ref TEXT NULL,
+    missing_speaker_count BIGINT NOT NULL CHECK (missing_speaker_count >= 0),
+    candidate_only BOOLEAN NOT NULL CHECK (candidate_only),
+    creates_semantic_authority BOOLEAN NOT NULL CHECK (NOT creates_semantic_authority),
+    claim_truth_promoted BOOLEAN NOT NULL CHECK (NOT claim_truth_promoted)
+);
+"#;
+
+/// Idempotent PG persistence of both canonical *transcript text* and the exact
+/// native WhisperX packet. Audio itself is never synthesized or ingested here.
+pub fn persist_whisperx_source_plan(
+    config: &crate::DatabaseConfig,
+    plan: &WhisperxSourcePlan,
+) -> Result<crate::PersistedGenericSourceContent, WhisperxSourceError> {
+    // This generic substrate owns all immutable source/content identities.
+    let persisted = crate::persist_generic_text_source(
+        config, &plan.envelope, &plan.canonical_text,
+    )?;
+    let mut client = Client::connect(config.database_url(), NoTls)?;
+    client.batch_execute(WHISPERX_PROVENANCE_SQL)?;
+    client.execute(
+        "INSERT INTO ingest.whisperx_execution_source
+         (source_revision_ref, raw_payload_digest_ref, raw_payload,
+          audio_hash_ref, missing_speaker_count, candidate_only,
+          creates_semantic_authority, claim_truth_promoted)
+         VALUES ($1,$2,$3,$4,$5,TRUE,FALSE,FALSE)
+         ON CONFLICT (source_revision_ref) DO NOTHING",
+        &[
+            &plan.envelope.source_revision_ref,
+            &plan.raw_payload_digest_ref,
+            &plan.raw_payload,
+            &plan.audio_hash_ref,
+            &(plan.missing_speaker_count as i64),
+        ],
+    )?;
+    let row = client.query_one(
+        "SELECT raw_payload_digest_ref, raw_payload, audio_hash_ref,
+                missing_speaker_count, candidate_only,
+                creates_semantic_authority, claim_truth_promoted
+         FROM ingest.whisperx_execution_source WHERE source_revision_ref=$1",
+        &[&plan.envelope.source_revision_ref],
+    )?;
+    if row.get::<_, String>(0) != plan.raw_payload_digest_ref
+        || row.get::<_, String>(1) != plan.raw_payload
+        || row.get::<_, Option<String>>(2) != plan.audio_hash_ref
+        || row.get::<_, i64>(3) != plan.missing_speaker_count as i64
+        || !row.get::<_, bool>(4)
+        || row.get::<_, bool>(5)
+        || row.get::<_, bool>(6)
+    {
+        return Err(WhisperxSourceError::RawEnvelopeIdentityConflict);
+    }
+    Ok(persisted)
+}
+
+/// Reopen both source coordinates and the exact producer-owned packet. Never
+/// infer missing audio identity from transcript text or a speaker alias.
+pub fn reopen_whisperx_source_plan(
+    config: &crate::DatabaseConfig,
+    source_revision_ref: &str,
+) -> Result<WhisperxSourcePlan, WhisperxSourceError> {
+    let (persisted, canonical) = crate::load_generic_text_source(
+        config, source_revision_ref,
+    )?;
+    let mut client = Client::connect(config.database_url(), NoTls)?;
+    let row = client.query_one(
+        "SELECT raw_payload, raw_payload_digest_ref, audio_hash_ref,
+                missing_speaker_count
+         FROM ingest.whisperx_execution_source WHERE source_revision_ref=$1",
+        &[&source_revision_ref],
+    )?;
+    let raw: String = row.get(0);
+    let audio_hash_ref: Option<String> = row.get(2);
+    let recovered = plan_whisperx_source(
+        &raw, &persisted.source_ref, &persisted.acquisition_receipt_ref,
+        audio_hash_ref.as_deref(),
+    )?;
+    if recovered.raw_payload_digest_ref != row.get::<_, String>(1)
+        || recovered.missing_speaker_count as i64 != row.get::<_, i64>(3)
+        || recovered.envelope.source_revision_ref != source_revision_ref
+        || recovered.canonical_text != canonical
+        || recovered.envelope.content_digest_ref != persisted.content_digest_ref
+    {
+        return Err(WhisperxSourceError::RawEnvelopeIdentityConflict);
+    }
+    Ok(recovered)
 }
 
 #[cfg(test)]
