@@ -220,6 +220,7 @@ pub use whisperx_source_adapter::{
     plan_whisperx_source, compile_whisperx_source_lossless,
     persist_whisperx_source_plan, reopen_whisperx_source_plan,
     prepare_whisperx_parser_run, compile_whisperx_from_parser_run,
+    finalize_whisperx_parser_run,
     WhisperxExecutionEnvelope, WhisperxSegment, WhisperxSourceError,
     WhisperxSourcePlan, WHISPERX_PROVENANCE_SQL,
 };
