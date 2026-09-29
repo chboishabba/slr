@@ -59,6 +59,13 @@ def main():
     require(len(set(worker_counts)) == len(worker_counts)
             and all(count > 0 for count in worker_counts),
             "worker scaling worker-count series is invalid")
+    require(
+        all(p.get("source_revision_ref") for p in worker_points)
+        and len({p["source_revision_ref"] for p in worker_points}) == len(worker_points)
+        and all(p.get("parser_run_ref") for p in worker_points)
+        and len({p["parser_run_ref"] for p in worker_points}) == len(worker_points),
+        "worker scaling points reuse or omit compilation identities",
+    )
     baselines = [p for p in worker_points if int(p["worker_count"]) == 1]
     require(len(baselines) == 1, "worker scaling needs one baseline")
     base = baselines[0]
@@ -129,6 +136,24 @@ def main():
     archive_points = archive.get("points", [])
     require(len(archive_points) >= 2,
             "archive scale series has fewer than two observations")
+    require(
+        all(p.get("source_revision_ref") for p in archive_points)
+        and len({p["source_revision_ref"] for p in archive_points}) == len(archive_points)
+        and all(p.get("runtime_head") == next(iter(heads)) for p in archive_points)
+        and all(p.get("source_family") == archive.get("source_family") for p in archive_points)
+        and all(p.get("parser_model_ref") == archive.get("parser_model_ref") for p in archive_points)
+        and all(p.get("parser_config_digest_ref") == archive.get("parser_config_digest_ref")
+                for p in archive_points),
+        "archive points recycle source identity or do not match series metadata",
+    )
+    require(
+        all(int(p.get("semantic_regions", 0)) > 0
+            and int(p.get("measured_post_parser_elapsed_ns", 0)) > 0
+            and int(p.get("measured_elapsed_ns", 0))
+                >= int(p.get("measured_post_parser_elapsed_ns", -1))
+            for p in archive_points),
+        "archive points have missing/inconsistent measured elapsed time",
+    )
     token_sizes = [int(p.get("represented_tokens", 0)) for p in archive_points]
     work_sizes = [
         int(p.get("measured_post_parser_work_units", -1))
@@ -136,7 +161,7 @@ def main():
     ]
     require(
         all(t > 0 for t in token_sizes)
-        and all(w >= 0 for w in work_sizes)
+        and all(w > 0 for w in work_sizes)
         and len(set(token_sizes)) == len(token_sizes),
         "archive scale points have invalid measured tokens/work",
     )
