@@ -57,6 +57,15 @@ def upgrade_worker(raw: dict, min_speedup: float, min_efficiency: float) -> dict
         "worker series contains reused/incomplete parser work",
     )
 
+    # Every concurrency point must be an independently compiled workload,
+    # not the same cached parser run relabelled with another worker count.
+    source_revisions = [p.get("source_revision_ref") for p in points]
+    parser_runs = [p.get("parser_run_ref") for p in points]
+    require(
+        all(source_revisions) and len(set(source_revisions)) == len(points)
+        and all(parser_runs) and len(set(parser_runs)) == len(points),
+        "worker series repeats or omits source/parser product identity",
+    )
     counts = [int(p["worker_count"]) for p in points]
     require(len(set(counts)) == len(counts),
             "worker series repeats worker-count points")
@@ -77,6 +86,17 @@ def upgrade_worker(raw: dict, min_speedup: float, min_efficiency: float) -> dict
         "worker series has invalid wall time or unmatched workload",
     )
     for p in points:
+        require(
+            int(p.get("worker_count", 0)) > 0
+            and int(p.get("succeeded", -1)) > 0
+            and int(p.get("tokens", -1)) > 0
+            and int(p.get("aggregate_parser_process_ns", -1)) >= 0
+            and int(p.get("aggregate_parser_persist_ns", -1)) >= 0
+            and int(p.get("aggregate_worker_busy_ns", -1))
+                == int(p.get("aggregate_parser_process_ns", -2))
+                   + int(p.get("aggregate_parser_persist_ns", -3)),
+            "worker series has missing or contradictory busy-time counters",
+        )
         require(
             int(p.get("job_tail", {}).get("count", -1))
             == int(p["succeeded"]),
@@ -140,9 +160,26 @@ def upgrade_archive(raw: dict, max_work: float, min_span: float) -> dict:
     max_tokens = max(tokens)
     span = max_tokens / min_tokens
 
+    # Source revisions must be distinct, and the promoted series cannot
+    # replace a missing measurement with an arbitrary zero-work point.
+    source_revisions = [p.get("source_revision_ref") for p in points]
+    require(
+        all(source_revisions) and len(set(source_revisions)) == len(points),
+        "archive series repeats or omits source revisions",
+    )
+    require(
+        all(
+            int(p.get("semantic_regions", 0)) > 0
+            and int(p.get("measured_post_parser_elapsed_ns", 0)) > 0
+            and int(p.get("measured_elapsed_ns", 0))
+                >= int(p.get("measured_post_parser_elapsed_ns", -1))
+            for p in points
+        ),
+        "archive series lacks valid elapsed measurements",
+    )
     work = [int(p.get("measured_post_parser_work_units", -1)) for p in points]
-    require(all(w >= 0 for w in work),
-            "archive point lacks measured post-parser work")
+    require(all(w > 0 for w in work),
+            "archive point lacks positive measured post-parser work")
     slope = max(math.ceil(w / t) for w, t in zip(work, tokens))
     require(
         all(w <= slope * t for w, t in zip(work, tokens)),
