@@ -129,6 +129,8 @@ pub enum TircorderBridgeError {
     ReopenMismatch,
     #[error("parser run source identity, completeness or counts mismatched")]
     ParserMismatch,
+    #[error("same TiRCorder collection and batch identity contains conflicting packet bytes")]
+    BatchIdentityConflict,
 }
 
 fn digest(raw: &str) -> String {
@@ -311,6 +313,12 @@ pub fn compile_tircorder_session_lossless<P: CandidatePnfProducer>(
 
 pub const TIRCORDER_PROVENANCE_SQL: &str = r#"
 CREATE SCHEMA IF NOT EXISTS ingest;
+CREATE TABLE IF NOT EXISTS ingest.tircorder_batch_identity (
+    source_collection_ref TEXT NOT NULL,
+    batch_id TEXT NOT NULL,
+    packet_digest_ref TEXT NOT NULL,
+    PRIMARY KEY (source_collection_ref,batch_id)
+);
 CREATE TABLE IF NOT EXISTS ingest.tircorder_session_source (
     source_revision_ref TEXT PRIMARY KEY
         REFERENCES ingest.generic_source_revision(source_revision_ref),
@@ -330,11 +338,32 @@ pub fn persist_tircorder_session(
     config: &crate::DatabaseConfig,
     plan: &TircorderSourcePlan,
 ) -> Result<crate::PersistedGenericSourceContent,TircorderBridgeError> {
+    let packet: TircorderPacket = serde_json::from_str(&plan.raw_packet)?;
+    let collection = plan.envelope.source_ref
+        .strip_prefix("source:tircorder:")
+        .and_then(|v| v.strip_suffix(&format!(":{}",plan.native.session_id)))
+        .ok_or(TircorderBridgeError::ReopenMismatch)?;
+    let mut client = postgres::Client::connect(config.database_url(), postgres::NoTls)?;
+    client.batch_execute(TIRCORDER_PROVENANCE_SQL)?;
+    // Native packet batch ids have producer-scoped immutable identity. A
+    // same-batch/different-content resend must not be admitted as a revision.
+    client.execute(
+        "INSERT INTO ingest.tircorder_batch_identity
+         (source_collection_ref,batch_id,packet_digest_ref)
+         VALUES ($1,$2,$3) ON CONFLICT DO NOTHING",
+        &[&collection,&packet.batch_id,&plan.raw_packet_sha256],
+    )?;
+    let recorded: String = client.query_one(
+        "SELECT packet_digest_ref FROM ingest.tircorder_batch_identity
+         WHERE source_collection_ref=$1 AND batch_id=$2",
+        &[&collection,&packet.batch_id],
+    )?.get(0);
+    if recorded != plan.raw_packet_sha256 {
+        return Err(TircorderBridgeError::BatchIdentityConflict);
+    }
     let source = crate::persist_generic_text_source(
         config, &plan.envelope, &plan.canonical_text
     )?;
-    let mut client = postgres::Client::connect(config.database_url(), postgres::NoTls)?;
-    client.batch_execute(TIRCORDER_PROVENANCE_SQL)?;
     client.execute(
         "INSERT INTO ingest.tircorder_session_source
          (source_revision_ref, bridge_version, packet_digest_ref, raw_packet,
