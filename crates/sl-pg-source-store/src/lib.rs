@@ -31,6 +31,7 @@ mod statement_pnf_spine;
 mod generic_source_compiler;
 mod source_candidate_persistence;
 mod whisperx_source_adapter;
+mod tircorder_session_bridge;
 mod jmail_adapter;
 mod plain_text_document_adapter;
 mod long_document_ingest_store;
@@ -215,6 +216,14 @@ pub use generic_source_compiler::{
 pub use source_candidate_persistence::{
     persist_lossless_generic_candidates, GenericCandidatePersistenceError,
     GenericCandidatePersistenceReceipt,
+};
+pub use tircorder_session_bridge::{
+    plan_tircorder_sessions, compile_tircorder_session_lossless,
+    persist_tircorder_session, reopen_tircorder_session,
+    prepare_tircorder_parser_run, finalize_tircorder_parser_run,
+    TircorderPacket, TircorderSession, TircorderUtterance, TircorderWord,
+    TircorderSentenceSplit, TircorderSourcePlan, TircorderBridgeError,
+    TIRCORDER_SESSION_BRIDGE_VERSION, TIRCORDER_PROVENANCE_SQL,
 };
 pub use whisperx_source_adapter::{
     plan_whisperx_source, compile_whisperx_source_lossless,
