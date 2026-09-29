@@ -88,6 +88,8 @@ pub enum WhisperxSourceError {
     ParserRevisionMismatch,
     #[error("parser worker has not attempted all transcript segments")]
     IncompleteParserRun,
+    #[error(transparent)]
+    CandidatePersistence(#[from] crate::GenericCandidatePersistenceError),
 }
 
 fn hash_ref(raw: &str) -> String {
@@ -366,6 +368,18 @@ pub fn compile_whisperx_from_parser_run(
         return Err(WhisperxSourceError::IncompleteParserRun);
     }
     Ok(compilation)
+}
+
+/// End-to-end native-transcript replay: reopen the producer's original
+/// WhisperX packet, consume the existing PG parser-run snapshot, and persist
+/// resulting M12 statements/PNF with the same generic source-fibre store.
+/// Parser residuals remain explicit and are not promoted to claim truth.
+pub fn finalize_whisperx_parser_run(
+    config: &crate::DatabaseConfig,
+    parser_run_ref: &str,
+) -> Result<crate::GenericCandidatePersistenceReceipt, WhisperxSourceError> {
+    let compiled = compile_whisperx_from_parser_run(config, parser_run_ref)?;
+    Ok(crate::persist_lossless_generic_candidates(config, &compiled)?)
 }
 
 #[cfg(test)]
