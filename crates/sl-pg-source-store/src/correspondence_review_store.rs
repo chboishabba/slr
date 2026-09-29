@@ -174,7 +174,18 @@ pub fn propose_correspondence_review(
 
     // Persist review state via S29 only. If sidecar creation fails a harmless
     // candidate review item can remain, but no fabricated relation is exposed.
-    let _=crate::persist_review_item(config,&item)?;
+    if let Some(existing)=crate::load_review_item(config,&item_ref)? {
+        if existing.item_kind!=ReviewItemKind::SourceCorrespondence
+            || existing.semantic_ref!=relation_ref
+            || existing.provenance_refs!=item.provenance_refs
+            || existing.source_refs!=item.source_refs
+            || existing.affected_consumer_refs!=item.affected_consumer_refs
+        {
+            return Err(CorrespondenceReviewError::ImmutableRelationConflict);
+        }
+    } else {
+        let _=crate::persist_review_item(config,&item)?;
+    }
     client.execute(
         "INSERT INTO semantic.source_correspondence_review
          (relation_ref,review_item_ref,left_source_revision_ref,
