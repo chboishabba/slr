@@ -448,6 +448,7 @@ pub fn compile_source_regions_lossless<P: CandidatePnfProducer>(
     }
 
     let mut seen = BTreeSet::new();
+    let canonical_char_count = canonical_text.chars().count();
     for region in regions {
         if region.region_ref.trim().is_empty() {
             return Err(GenericSourceCompilerError::SourceIngest(
@@ -463,6 +464,12 @@ pub fn compile_source_regions_lossless<P: CandidatePnfProducer>(
             return Err(GenericSourceCompilerError::SourceIngest(
                 SourceIngestError::InvalidRange,
             ));
+        }
+        if region.end_char > canonical_char_count as u64 {
+            return Err(GenericSourceCompilerError::RegionOutsideText {
+                region_ref: region.region_ref.clone(),
+                text_len: canonical_char_count,
+            });
         }
         if !seen.insert(region.region_ref.clone()) {
             return Err(GenericSourceCompilerError::SourceIngest(
@@ -486,7 +493,7 @@ pub fn compile_source_regions_lossless<P: CandidatePnfProducer>(
                 byte_offsets.insert(char_offset, byte_offset);
             }
         }
-        let end_char = canonical_text.chars().count() as u64;
+        let end_char = canonical_char_count as u64;
         if required_offsets.contains(&end_char) {
             byte_offsets.insert(end_char, canonical_text.len());
         }
