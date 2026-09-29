@@ -33,6 +33,7 @@ mod source_candidate_persistence;
 mod whisperx_source_adapter;
 mod tircorder_session_bridge;
 mod transcript_chat_correspondence;
+mod mixed_source_review;
 mod jmail_adapter;
 mod plain_text_document_adapter;
 mod long_document_ingest_store;
@@ -217,6 +218,11 @@ pub use generic_source_compiler::{
 pub use source_candidate_persistence::{
     persist_lossless_generic_candidates, GenericCandidatePersistenceError,
     GenericCandidatePersistenceReceipt,
+};
+pub use mixed_source_review::{
+    load_mixed_source_comparison, MixedSourceComparison,
+    MixedSourceReviewError, SemanticComparison, GenealogyStatus,
+    ContextVisibility,
 };
 pub use transcript_chat_correspondence::{
     persist_exact_transcript_chat_quote, TranscriptChatExactQuote,
