@@ -119,7 +119,7 @@ pub fn persist_lossless_generic_candidates(
         let end = byte_offsets.get(&u64::from(statement.span.end_char));
         match (start, end) {
             (Some(&a), Some(&b))
-                if a < b && canonical_text[a..b] == statement.literal_text => {}
+                if a < b && &canonical_text[a..b] == statement.literal_text.as_str() => {}
             _ => return Err(GenericCandidatePersistenceError::CanonicalSpanMismatch),
         }
         if i32::try_from(statement.span.end_char).is_err() {
