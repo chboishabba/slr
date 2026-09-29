@@ -173,6 +173,27 @@ fn entity_fingerprints(
     )?.into_iter().map(|row| row.get(0)).collect())
 }
 
+fn has_l2_candidates(
+    client: &mut Client, revision: &str,
+) -> Result<bool, postgres::Error> {
+    // Presence is distinct from overlap. A source with no completed L2
+    // candidate materialization is 'insufficient', not a negative match.
+    let present:bool=client.query_one(
+        "SELECT EXISTS(
+             SELECT 1 FROM semantic.proposition_candidate_occurrence
+             WHERE source_revision_ref=$1 AND candidate_only=TRUE
+         ) OR EXISTS(
+             SELECT 1 FROM semantic.event_candidate_occurrence
+             WHERE source_revision_ref=$1 AND candidate_only=TRUE
+         ) OR EXISTS(
+             SELECT 1 FROM semantic.entity_mention_candidate m
+             JOIN corpus.source_statement s ON s.statement_ref=m.statement_ref
+             WHERE s.source_revision_ref=$1 AND m.candidate_only=TRUE
+         )", &[&revision],
+    )?.get(0);
+    Ok(present)
+}
+
 fn intersection(left: &BTreeSet<String>, right: &BTreeSet<String>) -> Vec<String> {
     left.intersection(right).cloned().collect()
 }
@@ -237,7 +258,11 @@ pub fn load_mixed_source_comparison(
             intersection(&event_left,&event_right),
         )
     } else { (vec![],vec![],vec![]) };
-    let semantic_comparison = if !pnf_available
+    let l2_populated = if pnf_available {
+        has_l2_candidates(&mut client,left_revision)?
+            && has_l2_candidates(&mut client,right_revision)?
+    } else {false};
+    let semantic_comparison = if !pnf_available || !l2_populated
         || left_statements.is_empty() || right_statements.is_empty()
     {
         SemanticComparison::InsufficientPnf
