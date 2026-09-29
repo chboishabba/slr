@@ -453,6 +453,15 @@ fn persist_review_receipt_with_client(
     Ok(())
 }
 
+/// Read one S29 item by its durable reference without enumerating the queue.
+pub fn load_review_item(
+    config: &DatabaseConfig,
+    item_ref: &str,
+) -> Result<Option<ReviewItem>, ReviewWorkstationStoreError> {
+    let mut client = Client::connect(config.database_url(), NoTls)?;
+    load_review_item_with_client(&mut client, item_ref)
+}
+
 pub fn load_review_queue(
     config: &DatabaseConfig,
 ) -> Result<Vec<ReviewItem>, ReviewWorkstationStoreError> {
