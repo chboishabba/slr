@@ -114,6 +114,8 @@ pub enum ChatSourceStoreError {
     ParserSnapshot(#[from] crate::DbNativeParserError),
     #[error("parser run source revision does not match chat message")]
     ParserRevisionMismatch,
+    #[error("parser worker has not attempted all selected chat spans")]
+    IncompleteChatParserRun,
 }
 
 pub fn load_chat_archive_export_jsonl(
@@ -602,6 +604,15 @@ pub fn compile_and_persist_chat_from_parser_run(
     let snapshot = crate::DbNativeParserSnapshot::load(config, parser_run_ref)?;
     if snapshot.source_revision_ref() != source.source_revision_ref {
         return Err(ChatSourceStoreError::ParserRevisionMismatch);
+    }
+    let state = crate::parser_run_state(config, parser_run_ref)?;
+    if state.queued != 0 || state.leased != 0
+        || state.unattempted_semantic_regions != 0
+        || state.succeeded + state.residual != selections.len()
+        || snapshot.compiled_region_count() != state.succeeded
+        || snapshot.residual_region_count() != state.residual
+    {
+        return Err(ChatSourceStoreError::IncompleteChatParserRun);
     }
     compile_and_persist_chat_selections(
         config,
