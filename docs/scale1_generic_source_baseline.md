@@ -67,3 +67,81 @@ existing chat archive PostgreSQL importer already invokes the weld, nor
 that SensibLaw's separate WhisperX/TiRCorder source adapter is present
 in this crate. Running the integration through persistent SQL is an
 additional acceptance task.
+
+## SCALE-2 persistent integration (this PR)
+
+### Chat
+
+The retained `corpus.chat_archive_message` source remains the source
+authority. Call `prepare_chat_selection_parser_run` with explicitly
+selected `ChatStatementCandidateSpan` values, run the existing SCALE-1
+PostgreSQL parser worker against its returned parser run reference, and
+call `compile_and_persist_chat_from_parser_run` with that reference
+and the same selections. The latter uses the existing
+`DbNativeParserSnapshot`, generic source-region compiler, canonical
+chat statement materializer and candidate PNF store. No separate chat
+parser or TSV state is introduced.
+
+The selected span hash is **identical** in the compiler and PG
+materializer. The compiler preserves Unicode character offsets and
+unselected structural spans. Inactive assistant generations, tool
+output and system roles cannot be selected. A parser residual is
+reported, not turned into a statement.
+
+### Chat artifact folding
+
+`persist_chat_source_join` and `load_chat_source_joins_for_message`
+implement a small, append-only, reference-only instance of
+StatiBaker's `chat_source_join_v1` rule. The producer-owned source is
+identified by kind, locator, optional event, selected character range,
+join type and evidence. The chat canonical bytes are never overwritten.
+`exact_digest` verifies the **chat half** of the link; independently
+authenticating the producer's event is not claimed.
+
+PG statement selection refuses overlap with an attached backreference.
+The source join is not an independent corroborating observation. Other
+join strengths (`near_text`, `time_window_tool_call`,
+`user_declared`, `heuristic_shape`) remain evidence-qualified and
+cannot be promoted by this store. An unregistered pasted artifact is
+still an outstanding classification/review obligation, not proof that
+the message text is independent authorship.
+
+### WhisperX transcript donor
+
+`plan_whisperx_source` reads the *existing* SensibLaw
+`src/sensiblaw/ingest/asr_adapter.py` execution-envelope shape:
+`model`, optional `language`, and `segments` with `start`,
+`end`, `text`, optional `speaker` and `confidence`.
+Extra envelope/segment fields are retained as provider JSON values,
+including word-alignment extensions when supplied.
+
+`persist_whisperx_source_plan` writes the canonical transcript text
+through `persist_generic_text_source` and the original provider JSON
+verbatim into an immutable `ingest.whisperx_execution_source`
+provenance sidecar. `reopen_whisperx_source_plan` revalidates both
+halves. Audio is not ingested by this adapter; an audio hash is
+accepted only when supplied by the capture owner. Transcript source
+coverage is **not** audio-level completeness or person identity.
+
+`compile_whisperx_source_lossless` hands literal segment character
+intervals into the same `compile_source_regions_lossless` used by
+document, mail and selected chat. The generic M12 route remains
+candidate-only; any downstream actor mapping or timeline assertion
+needs separate authority and review.
+
+The separate, more ambitious normalized TiRCorder session/utterance
+packet in `docs/tircorder_connector.md` is **not** falsely treated as
+interchangeable with the implemented WhisperX envelope; its
+speaker/word/utterance schema needs an explicit versioned bridge.
+
+### Remaining acceptance boundaries
+
+This change is source-written and pushed, not a claim of exact-head
+compiler/SQL/CI certification. The PG-native chat prepare/finalize
+steps need a running migrated database and finished parser-worker run.
+The transcript producer-side packet is persisted and reopens, but the
+M12 transcript parser jobs and source-native word/utterance preservation
+acceptance still need production wiring.
+
+SCALE-1's separate economy, worker-scaling and archive-scaling receipts,
+and PRODUCT review/chronology user stories, remain separate gates.
