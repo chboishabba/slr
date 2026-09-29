@@ -400,6 +400,170 @@ fn residual_for(
     }
 }
 
+/// One source-family-neutral execution region. An adapter retains its native
+/// authorship, timing, parentage, and revision data outside this projection.
+/// In particular, transport text is never silently compiled as new authorship.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SourceRegionExecutionClass {
+    SemanticCandidate,
+    TransportOnly,
+    StructuralOnly,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SourceExecutionRegion {
+    pub region_ref: String,
+    pub source_revision_ref: String,
+    pub start_char: u64,
+    pub end_char: u64,
+    pub class: SourceRegionExecutionClass,
+}
+
+/// Single lossless compiler for exact, adapter-selected semantic regions.
+/// Every incoming region receives exactly one assignment. Parser failure keeps
+/// an explicit residual. This deliberately does not infer semantic eligibility
+/// from arbitrary text, nor does it mint authority from source structure.
+pub fn compile_source_regions_lossless<P: CandidatePnfProducer>(
+    producer: &P,
+    source_ref: &str,
+    source_revision_ref: &str,
+    statement_document_ref: &str,
+    canonical_text: &str,
+    regions: &[SourceExecutionRegion],
+    parser_receipt_prefix: &str,
+) -> Result<LosslessBulkSourceCompilation, GenericSourceCompilerError> {
+    use std::collections::BTreeSet;
+
+    for (name, value) in [
+        ("source_ref", source_ref),
+        ("source_revision_ref", source_revision_ref),
+        ("document_ref", statement_document_ref),
+        ("parser_receipt_prefix", parser_receipt_prefix),
+    ] {
+        if value.trim().is_empty() {
+            return Err(GenericSourceCompilerError::StatementPnf(
+                StatementPnfSpineError::EmptyCoordinate(name),
+            ));
+        }
+    }
+
+    let mut seen = BTreeSet::new();
+    for region in regions {
+        if region.region_ref.trim().is_empty() {
+            return Err(GenericSourceCompilerError::SourceIngest(
+                SourceIngestError::EmptyCoordinate("region_ref"),
+            ));
+        }
+        if region.source_revision_ref != source_revision_ref {
+            return Err(GenericSourceCompilerError::SourceIngest(
+                SourceIngestError::RevisionMismatch,
+            ));
+        }
+        if region.start_char >= region.end_char {
+            return Err(GenericSourceCompilerError::SourceIngest(
+                SourceIngestError::InvalidRange,
+            ));
+        }
+        if !seen.insert(region.region_ref.clone()) {
+            return Err(GenericSourceCompilerError::SourceIngest(
+                SourceIngestError::DuplicateRegion(region.region_ref.clone()),
+            ));
+        }
+    }
+
+    let mut compiled = Vec::new();
+    let mut residuals = Vec::new();
+    let mut assignments = Vec::with_capacity(regions.len());
+    let mut semantic_count = 0usize;
+
+    for region in regions {
+        let parser_receipt_ref = format!("{parser_receipt_prefix}:{}", region.region_ref);
+        let disposition = match region.class {
+            SourceRegionExecutionClass::TransportOnly => {
+                RegionCompilationDisposition::TransportOnly
+            }
+            SourceRegionExecutionClass::StructuralOnly => {
+                RegionCompilationDisposition::StructuralOnly
+            }
+            SourceRegionExecutionClass::SemanticCandidate => {
+                semantic_count += 1;
+                let result = text_by_char_range(
+                    canonical_text,
+                    &region.region_ref,
+                    region.start_char,
+                    region.end_char,
+                )
+                .and_then(|literal| {
+                    compile_region(
+                        producer,
+                        statement_document_ref,
+                        source_revision_ref,
+                        &region.region_ref,
+                        region.start_char,
+                        region.end_char,
+                        literal,
+                        parser_receipt_ref.clone(),
+                    )
+                });
+                match result {
+                    Ok(statement) => {
+                        let statement_ref = statement.statement.statement_ref.clone();
+                        compiled.push(statement);
+                        RegionCompilationDisposition::CompiledCandidate { statement_ref }
+                    }
+                    Err(error) => {
+                        let error_ref = format!("{error}");
+                        residuals.push(residual_for(
+                            &region.region_ref,
+                            source_revision_ref,
+                            parser_receipt_ref.clone(),
+                            &error,
+                        ));
+                        RegionCompilationDisposition::ParserResidual {
+                            parser_receipt_ref,
+                            error_ref,
+                        }
+                    }
+                }
+            }
+        };
+        assignments.push(RegionCompilationAssignment {
+            region_ref: region.region_ref.clone(),
+            source_revision_ref: source_revision_ref.to_owned(),
+            disposition,
+            source_region_preserved: true,
+            semantic_authority_created: false,
+            claim_truth_promoted: false,
+        });
+    }
+
+    let candidate_pnf_count = compiled
+        .iter()
+        .map(|statement| statement.pnf.candidates.len())
+        .sum::<usize>();
+    assignments.sort_by(|left, right| left.region_ref.cmp(&right.region_ref));
+    let source_region_accounted_count = assignments.len();
+
+    Ok(LosslessBulkSourceCompilation {
+        source_ref: source_ref.to_owned(),
+        source_revision_ref: source_revision_ref.to_owned(),
+        exact_region_count: regions.len(),
+        semantic_candidate_region_count: semantic_count,
+        compiled_statement_count: compiled.len(),
+        candidate_pnf_count,
+        residuals,
+        assignments,
+        transport_or_nonsemantic_region_count: regions.len() - semantic_count,
+        source_region_accounted_count,
+        source_region_loss_count: regions.len() - source_region_accounted_count,
+        candidate_only: true,
+        creates_semantic_authority: false,
+        applicability_promoted: false,
+        claim_truth_promoted: false,
+        parse_failure_deletes_source: false,
+    })
+}
+
 pub fn compile_long_document_lossless<P: CandidatePnfProducer>(
     producer: &P,
     document: &LongDocumentSource,
@@ -422,11 +586,6 @@ pub fn compile_long_document_lossless_for_document_ref<P: CandidatePnfProducer>(
     canonical_text: &str,
     parser_receipt_prefix: &str,
 ) -> Result<LosslessBulkSourceCompilation, GenericSourceCompilerError> {
-    if statement_document_ref.trim().is_empty() {
-        return Err(GenericSourceCompilerError::StatementPnf(
-            StatementPnfSpineError::EmptyCoordinate("document_ref"),
-        ));
-    }
     compile_long_document_lossless_with_statement_document_ref(
         producer,
         document,
@@ -450,116 +609,26 @@ fn compile_long_document_lossless_with_statement_document_ref<P: CandidatePnfPro
             SourceIngestError::ContentSpanRequired,
         ));
     }
-
-    let sentence_regions = document
-        .regions
-        .iter()
-        .filter(|region| region.kind == DocumentRegionKind::Sentence)
-        .collect::<Vec<_>>();
-
-    let mut compiled = Vec::new();
-    let mut residuals = Vec::new();
-    let mut assignments = document
-        .regions
-        .iter()
-        .filter(|region| region.kind != DocumentRegionKind::Sentence)
-        .map(|region| RegionCompilationAssignment {
-            region_ref: region.region_ref.clone(),
-            source_revision_ref: region.source_revision_ref.clone(),
-            disposition: RegionCompilationDisposition::StructuralOnly,
-            source_region_preserved: true,
-            semantic_authority_created: false,
-            claim_truth_promoted: false,
-        })
-        .collect::<Vec<_>>();
-
-    for region in &sentence_regions {
-        let parser_receipt_ref = format!("{parser_receipt_prefix}:{}", region.region_ref);
-        let result = text_by_char_range(
-            canonical_text,
-            &region.region_ref,
-            region.start_char,
-            region.end_char,
-        )
-        .and_then(|literal| {
-            compile_region(
-                producer,
-                statement_document_ref,
-                &document.ingest.source_revision_ref,
-                &region.region_ref,
-                region.start_char,
-                region.end_char,
-                literal,
-                parser_receipt_ref.clone(),
-            )
-        });
-
-        match result {
-            Ok(value) => {
-                assignments.push(RegionCompilationAssignment {
-                    region_ref: region.region_ref.clone(),
-                    source_revision_ref: document.ingest.source_revision_ref.clone(),
-                    disposition: RegionCompilationDisposition::CompiledCandidate {
-                        statement_ref: value.statement.statement_ref.clone(),
-                    },
-                    source_region_preserved: true,
-                    semantic_authority_created: false,
-                    claim_truth_promoted: false,
-                });
-                compiled.push(value);
-            }
-            Err(error) => {
-                assignments.push(RegionCompilationAssignment {
-                    region_ref: region.region_ref.clone(),
-                    source_revision_ref: document.ingest.source_revision_ref.clone(),
-                    disposition: RegionCompilationDisposition::ParserResidual {
-                        parser_receipt_ref: parser_receipt_ref.clone(),
-                        error_ref: format!("{error}"),
-                    },
-                    source_region_preserved: true,
-                    semantic_authority_created: false,
-                    claim_truth_promoted: false,
-                });
-                residuals.push(residual_for(
-                    &region.region_ref,
-                    &document.ingest.source_revision_ref,
-                    parser_receipt_ref,
-                    &error,
-                ));
-            }
-        }
-    }
-
-    let candidate_pnf_count = compiled
-        .iter()
-        .map(|statement| statement.pnf.candidates.len())
-        .sum::<usize>();
-    let transport_or_nonsemantic_region_count =
-        document.regions.len().saturating_sub(sentence_regions.len());
-    assignments.sort_by(|left, right| left.region_ref.cmp(&right.region_ref));
-    let source_region_accounted_count = assignments.len();
-
-    Ok(LosslessBulkSourceCompilation {
-        source_ref: document.ingest.source_ref.clone(),
-        source_revision_ref: document.ingest.source_revision_ref.clone(),
-        exact_region_count: document.regions.len(),
-        semantic_candidate_region_count: sentence_regions.len(),
-        compiled_statement_count: compiled.len(),
-        candidate_pnf_count,
-        residuals,
-        assignments,
-        transport_or_nonsemantic_region_count,
-        source_region_accounted_count,
-        source_region_loss_count: document
-            .regions
-            .len()
-            .saturating_sub(source_region_accounted_count),
-        candidate_only: true,
-        creates_semantic_authority: false,
-        applicability_promoted: false,
-        claim_truth_promoted: false,
-        parse_failure_deletes_source: false,
-    })
+    let regions = document.regions.iter().map(|region| SourceExecutionRegion {
+        region_ref: region.region_ref.clone(),
+        source_revision_ref: region.source_revision_ref.clone(),
+        start_char: region.start_char,
+        end_char: region.end_char,
+        class: if region.kind == DocumentRegionKind::Sentence {
+            SourceRegionExecutionClass::SemanticCandidate
+        } else {
+            SourceRegionExecutionClass::StructuralOnly
+        },
+    }).collect::<Vec<_>>();
+    compile_source_regions_lossless(
+        producer,
+        &document.ingest.source_ref,
+        &document.ingest.source_revision_ref,
+        statement_document_ref,
+        canonical_text,
+        &regions,
+        parser_receipt_prefix,
+    )
 }
 
 pub fn compile_mail_message_lossless<P: CandidatePnfProducer>(
@@ -569,123 +638,28 @@ pub fn compile_mail_message_lossless<P: CandidatePnfProducer>(
     parser_receipt_prefix: &str,
 ) -> Result<LosslessBulkSourceCompilation, GenericSourceCompilerError> {
     message.validate()?;
-
-    let semantic_segments = message
-        .segments
-        .iter()
-        .filter(|segment| segment.is_independent_authorship_candidate())
-        .collect::<Vec<_>>();
-
-    let mut compiled = Vec::new();
-    let mut residuals = Vec::new();
-    let mut assignments = message
-        .segments
-        .iter()
-        .filter(|segment| !segment.is_independent_authorship_candidate())
-        .map(|segment| RegionCompilationAssignment {
-            region_ref: segment.segment_ref.clone(),
-            source_revision_ref: segment.body_revision_ref.clone(),
-            disposition: match segment.kind {
-                MailBodySegmentKind::QuotedPriorMessage
-                | MailBodySegmentKind::ForwardedMessage => {
-                    RegionCompilationDisposition::TransportOnly
-                }
-                _ => RegionCompilationDisposition::StructuralOnly,
-            },
-            source_region_preserved: true,
-            semantic_authority_created: false,
-            claim_truth_promoted: false,
-        })
-        .collect::<Vec<_>>();
-
-    for segment in &semantic_segments {
-        let parser_receipt_ref =
-            format!("{parser_receipt_prefix}:{}", segment.segment_ref);
-        let result = text_by_char_range(
-            canonical_body_text,
-            &segment.segment_ref,
-            segment.start_char,
-            segment.end_char,
-        )
-        .and_then(|literal| {
-            compile_region(
-                producer,
-                &message.message_ref,
-                &message.body_revision_ref,
-                &segment.segment_ref,
-                segment.start_char,
-                segment.end_char,
-                literal,
-                parser_receipt_ref.clone(),
-            )
-        });
-
-        match result {
-            Ok(value) => {
-                assignments.push(RegionCompilationAssignment {
-                    region_ref: segment.segment_ref.clone(),
-                    source_revision_ref: message.body_revision_ref.clone(),
-                    disposition: RegionCompilationDisposition::CompiledCandidate {
-                        statement_ref: value.statement.statement_ref.clone(),
-                    },
-                    source_region_preserved: true,
-                    semantic_authority_created: false,
-                    claim_truth_promoted: false,
-                });
-                compiled.push(value);
-            }
-            Err(error) => {
-                assignments.push(RegionCompilationAssignment {
-                    region_ref: segment.segment_ref.clone(),
-                    source_revision_ref: message.body_revision_ref.clone(),
-                    disposition: RegionCompilationDisposition::ParserResidual {
-                        parser_receipt_ref: parser_receipt_ref.clone(),
-                        error_ref: format!("{error}"),
-                    },
-                    source_region_preserved: true,
-                    semantic_authority_created: false,
-                    claim_truth_promoted: false,
-                });
-                residuals.push(residual_for(
-                    &segment.segment_ref,
-                    &message.body_revision_ref,
-                    parser_receipt_ref,
-                    &error,
-                ));
-            }
-        }
-    }
-
-    let candidate_pnf_count = compiled
-        .iter()
-        .map(|statement| statement.pnf.candidates.len())
-        .sum::<usize>();
-    let transport_or_nonsemantic_region_count =
-        message.segments.len().saturating_sub(semantic_segments.len());
-    assignments.sort_by(|left, right| left.region_ref.cmp(&right.region_ref));
-    let source_region_accounted_count = assignments.len();
-
-    Ok(LosslessBulkSourceCompilation {
-        source_ref: message.message_ref.clone(),
-        source_revision_ref: message.body_revision_ref.clone(),
-        exact_region_count: message.segments.len(),
-        semantic_candidate_region_count: semantic_segments.len(),
-        compiled_statement_count: compiled.len(),
-        candidate_pnf_count,
-        residuals,
-        assignments,
-        transport_or_nonsemantic_region_count,
-        source_region_accounted_count,
-        source_region_loss_count: message
-            .segments
-            .len()
-            .saturating_sub(source_region_accounted_count),
-        candidate_only: true,
-        creates_semantic_authority: false,
-        applicability_promoted: false,
-        claim_truth_promoted: false,
-        parse_failure_deletes_source: false,
-    })
+    let regions = message.segments.iter().map(|segment| SourceExecutionRegion {
+        region_ref: segment.segment_ref.clone(),
+        source_revision_ref: segment.body_revision_ref.clone(),
+        start_char: segment.start_char,
+        end_char: segment.end_char,
+        class: match segment.kind {
+            MailBodySegmentKind::AuthoredHere | MailBodySegmentKind::AttachmentText =>
+                SourceRegionExecutionClass::SemanticCandidate,
+            MailBodySegmentKind::QuotedPriorMessage | MailBodySegmentKind::ForwardedMessage =>
+                SourceRegionExecutionClass::TransportOnly,
+            _ => SourceRegionExecutionClass::StructuralOnly,
+        },
+    }).collect::<Vec<_>>();
+    compile_source_regions_lossless(
+        producer,
+        &message.message_ref,
+        &message.body_revision_ref,
+        &message.message_ref,
+        canonical_body_text,
+        &regions,
+        parser_receipt_prefix,
+    )
 }
 
 #[cfg(test)]
