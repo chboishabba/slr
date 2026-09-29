@@ -122,7 +122,12 @@ def main():
             "worker scaling has no parallel point")
     require(
         all(
-            int(p.get("residual", -1)) == 0
+            int(p.get("aggregate_worker_busy_ns", -1))
+                == int(p.get("aggregate_parser_process_ns", -2))
+                   + int(p.get("aggregate_parser_persist_ns", -3))
+            and int(p.get("job_tail", {}).get("count", -1))
+                == int(p.get("succeeded", -2))
+            and int(p.get("residual", -1)) == 0
             and int(p.get("deferred_retry", -1)) == 0
             and int(p.get("new_jobs", -1)) == int(p.get("semantic_regions", -2))
             and int(p.get("reused_jobs", -1)) == 0
