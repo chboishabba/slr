@@ -255,7 +255,13 @@ pub fn load_mixed_source_comparison(
         )).collect();
     }
 
-    let op_refs = if operational_visibility == ContextVisibility::Available {
+    let operation_schema_ready = if operational_visibility == ContextVisibility::Available {
+        registered(&mut client,"operational.semantic_link")?
+    } else {false};
+    let requested_operational_scope = if operational_visibility == ContextVisibility::Available
+        && !operation_schema_ready { ContextVisibility::Unavailable }
+        else {operational_visibility};
+    let op_refs = if operation_schema_ready {
         let mut values=BTreeSet::new();
         for target in [left_revision,right_revision] {
             for relation in crate::load_operational_semantic_links_for_target(config,target)? {
@@ -265,9 +271,9 @@ pub fn load_mixed_source_comparison(
         values.into_iter().collect::<Vec<_>>()
     } else { vec![] };
 
-    let resolved_visibility=if operational_visibility==ContextVisibility::Available
+    let resolved_visibility=if requested_operational_scope==ContextVisibility::Available
         && op_refs.is_empty() { ContextVisibility::NotObserved }
-        else { operational_visibility };
+        else { requested_operational_scope };
     Ok(MixedSourceComparison {
         left_source_revision_ref:left_revision.into(),
         right_source_revision_ref:right_revision.into(),
