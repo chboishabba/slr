@@ -9,7 +9,7 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 use crate::{
-    canonical_char_subspans_for_correspondence, ChatSourceJoin, ChatSourceJoinError,
+    ChatSourceJoin, ChatSourceJoinError,
     DatabaseConfig, SourceJoinType, load_chat_message_source,
     persist_chat_source_join,
 };
@@ -68,7 +68,7 @@ pub fn persist_exact_transcript_chat_quote(
 ) -> Result<TranscriptChatCorrespondenceReceipt,TranscriptChatCorrespondenceError> {
     let message = load_chat_message_source(config, &request.message_ref)?
         .ok_or(crate::ChatSourceStoreError::UnknownMessage(request.message_ref.clone()))?;
-    let text = canonical_char_subspans_for_correspondence(
+    let text = crate::generic_source_compiler::canonical_char_subspans(
         &message.literal_text,
         &[(request.chat_start_char,request.chat_end_char)]
     ).ok_or(TranscriptChatCorrespondenceError::InvalidChatSpan)?
