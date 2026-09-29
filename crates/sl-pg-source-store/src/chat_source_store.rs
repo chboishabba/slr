@@ -100,6 +100,12 @@ pub enum ChatSourceStoreError {
     InvalidStatementSpan,
     #[error(transparent)]
     StatementTrace(#[from] StatementTraceStoreError),
+    #[error("generic source compiler error: {0}")]
+    GenericCompiler(String),
+    #[error(transparent)]
+    CandidatePnf(#[from] crate::CandidatePnfStoreError),
+    #[error("compiled statement diverged from persisted chat statement identity")]
+    CompiledStatementMismatch,
 }
 
 pub fn load_chat_archive_export_jsonl(
@@ -435,6 +441,57 @@ pub fn materialize_chat_statement(
     };
     statement.statement_ref = canonical_statement_ref(&statement);
     persist_source_statement(config, &statement).map_err(Into::into)
+}
+
+/// Persist selected chat M12 statements and candidate batches using the
+/// existing chat archive rows as immutable source authority. This deliberately
+/// does not process raw chat exports or invent transcript/person provenance.
+///
+/// All selections are compiled (and therefore validated) *before* persistence.
+/// Parser failures remain explicit in the returned lossless receipt. Successful
+/// selections enter the existing statement and candidate stores; they never
+/// pay semantic admission or claim truth.
+pub fn compile_and_persist_chat_selections<P: crate::CandidatePnfProducer>(
+    config: &DatabaseConfig,
+    message_ref: &str,
+    selections: &[ChatStatementCandidateSpan],
+    producer: &P,
+    parser_receipt_prefix: &str,
+) -> Result<crate::LosslessBulkSourceCompilation, ChatSourceStoreError> {
+    let source = load_chat_message_source(config, message_ref)?
+        .ok_or_else(|| ChatSourceStoreError::UnknownMessage(message_ref.to_owned()))?;
+    let receipt = crate::compile_chat_message_lossless(
+        producer, &source, selections, parser_receipt_prefix,
+    ).map_err(|error| ChatSourceStoreError::GenericCompiler(error.to_string()))?;
+    if !receipt.source_coverage_complete() {
+        return Err(ChatSourceStoreError::InvalidSource);
+    }
+
+    // The explicit selection and its durable canonical span are distinct
+    // identifiers. Compare canonical span keys, never local ordinals.
+    let selected_by_span = selections.iter().map(|selection| (
+        canonical_chat_statement_span_ref(&source.source_revision_ref, selection),
+        selection,
+    )).collect::<std::collections::BTreeMap<_, _>>();
+
+    for candidate in &receipt.compiled {
+        let selected = selected_by_span
+            .get(&candidate.statement.span.span_ref)
+            .ok_or(ChatSourceStoreError::CompiledStatementMismatch)?;
+        let persisted = materialize_chat_statement(
+            config, selected, StatementOrigin::InitialIntake,
+        )?;
+        if persisted.statement_ref != candidate.statement.statement_ref {
+            return Err(ChatSourceStoreError::CompiledStatementMismatch);
+        }
+        let batch = crate::persist_statement_candidate_pnf(config, candidate)?;
+        if batch.statement_ref != persisted.statement_ref
+            || batch.exact_span_ref != candidate.statement.span.span_ref
+        {
+            return Err(ChatSourceStoreError::CompiledStatementMismatch);
+        }
+    }
+    Ok(receipt)
 }
 
 pub fn load_chat_message_source(
