@@ -234,6 +234,17 @@ pub fn project_matter_workspace(
 
     let mut review_queue = input.review_queue.clone();
     review_queue.items.retain(|item| {
+        // Correspondence metadata itself discloses that *both* sources
+        // exist and were compared. An individually visible item or one
+        // visible endpoint cannot authorize the other source to leak into
+        // a recipient-scoped Matter. Require both explicit source members.
+        if item.item_kind ==
+            sensiblaw_core::review_workstation::ReviewItemKind::SourceCorrespondence
+        {
+            return item.source_refs.len() == 2 &&
+                item.source_refs.iter().all(|reference|
+                    visible.contains(reference.as_str()));
+        }
         visible.contains(item.review_item_ref.as_str())
             || visible.contains(item.semantic_ref.as_str())
             || item
