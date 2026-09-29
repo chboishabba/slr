@@ -348,6 +348,9 @@ pub fn persist_tircorder_session(
 ) -> Result<crate::PersistedGenericSourceContent,TircorderBridgeError> {
     let packet: TircorderPacket = serde_json::from_str(&plan.raw_packet)?;
     let collection = &plan.source_collection_ref;
+    // The immutable session FK needs the established source revision schema
+    // before we create its producer-owned sidecar on an otherwise clean DB.
+    crate::install_generic_source_revision_schema(config)?;
     let mut client = postgres::Client::connect(config.database_url(), postgres::NoTls)?;
     client.batch_execute(TIRCORDER_PROVENANCE_SQL)?;
     // Native packet batch ids have producer-scoped immutable identity. A
