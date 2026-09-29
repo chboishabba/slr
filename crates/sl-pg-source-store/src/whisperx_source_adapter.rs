@@ -364,6 +364,8 @@ pub fn compile_whisperx_from_parser_run(
             != plan.regions.iter().filter(|region|
                 region.class == SourceRegionExecutionClass::SemanticCandidate
             ).count()
+        || snapshot.compiled_region_count() != state.succeeded
+        || snapshot.residual_region_count() != state.residual
     {
         return Err(WhisperxSourceError::IncompleteParserRun);
     }
