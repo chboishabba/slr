@@ -162,3 +162,61 @@ candidate batches through the existing candidate-product machinery.
 Parser residuals do not become statements, and none of the persistence
 receipts pays semantic admission or claims truth. This implementation
 does **not** claim a global single-transaction corpus commit.
+
+## SCALE-2D — TiRCorder normalized session packet (versioned bridge)
+
+`tircorder_session_bridge` implements
+`tircorder-normalized-session.v1` as an **explicitly separate producer
+contract** from the deployed SensibLaw WhisperX `asr_adapter.py` envelope.
+Its source donor is the *session/utterance packet* at the start of
+`SensibLaw/docs/tircorder_connector.md`; it intentionally does not ingest
+the unrelated graph-oriented packet appended later in that document.
+
+`plan_tircorder_sessions` retains the original producer packet and each
+session's ID, capture-device ID, optional audio digest, utterance ID,
+ordered text, timestamp strings, optional speaker label/confidence, word
+alignment, native sentence splits, and extra provider fields. The
+`source_revision_ref` identifies the immutable capture packet/session
+presentation. No speaker label is promoted to a person and no transcript
+is called complete relative to audio. No word alignment is fabricated.
+
+Native sentence splits are accepted only when ranges fit and do not
+overlap the actual Unicode character text. Supplied gaps are structural
+regions; absent splits fall back conservatively to the entire native
+utterance as a parser **candidate** region, not a verified sentence.
+Projection-inserted separators are also structural. These enter the
+existing `compile_source_regions_lossless` classification, not a
+TiRCorder-specific M12 implementation.
+
+`persist_tircorder_session` records the canonical text through the
+existing generic source store and the original packet as an immutable
+source sidecar; `reopen_tircorder_session` reconstructs and checks the
+native region plan against the reopened source. Producer-scoped batch
+identity rejects a changed packet under an existing batch ID.
+`prepare_tircorder_parser_run` / the ordinary PG parser worker /
+`finalize_tircorder_parser_run` reuse the same job, M12 and candidate
+persistence owners as chat and WhisperX.
+
+This is an integration of the **documented** TiRCorder packet contract.
+It is not evidence that TiRCorder's active deployed capture service
+currently emits that exact JSON variant. That requires an actual
+producer fixture and integration receipt.
+
+## SCALE-2E — cross-family exact correspondence
+
+`persist_exact_transcript_chat_quote` reopens both the immutable chat
+message and the independently stored native WhisperX segment or TiRCorder
+utterance. Only a byte-exact UTF-8 match of the selected character span to
+the original native event text allows an `exact_digest` chat-source join.
+The join carries the original transcript revision ID and native event ID,
+and returns `independent_witness_increment = 0`. It does **not** create
+a new transcript, observational authority or corroborating statement.
+
+Near-text, heuristic and user-declared references remain weaker
+StatiBaker-style joins and do not pass through this exact-correspondence
+function. Operational state and tool activity remain observer inputs
+rather than content-bearing world facts. PRODUCT chronology, uncertainty,
+and review acceptance remain separate work.
+
+None of the above claims runtime certification: the new Rust/SQL source
+routes remain uncompiled/unexecuted in this integration tranche.
