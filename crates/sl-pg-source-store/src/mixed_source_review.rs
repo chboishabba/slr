@@ -11,7 +11,7 @@ use std::collections::BTreeSet;
 use postgres::{Client, NoTls};
 use thiserror::Error;
 
-use crate::{DatabaseConfig, ChatSourceJoin, SourceJoinType};
+use crate::{DatabaseConfig, ChatSourceJoin};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ContextVisibility {
@@ -228,31 +228,37 @@ pub fn load_mixed_source_comparison(
         SemanticComparison::NoSharedCandidateFingerprint
     } else { SemanticComparison::SharedCandidateFingerprint };
 
-    let mut joins: Vec<ChatSourceJoin> = Vec::new();
     let mut join_refs=Vec::new();
     let mut genealogy=GenealogyStatus::NoRecordedLineage;
     if let Some(message_ref) = chat_message_ref {
-        // Chat-only digests do NOT certify transcript derivation. Even a
-        // verified native-text equality needs lineage evidence to claim copy.
-        joins=crate::load_chat_source_joins_for_message(config,message_ref)?;
-    }
-    let relevant = joins.iter().filter(|join| {
-        join.source_locator_ref == left_revision
-            || join.source_locator_ref == right_revision
-    }).collect::<Vec<_>>();
-    if !relevant.is_empty() {
-        genealogy=GenealogyStatus::SourceBackreferenceUnverified;
-        join_refs=relevant.iter().map(|j|format!(
-            "{}:{}:{}-{}:{}",
-            j.source_locator_ref,j.message_ref,j.start_char,j.end_char,
-            match j.join_type {
-                SourceJoinType::ExactDigest=>"exact_digest",
-                SourceJoinType::NearText=>"near_text",
-                SourceJoinType::TimeWindowToolCall=>"time_window_tool_call",
-                SourceJoinType::UserDeclared=>"user_declared",
-                SourceJoinType::HeuristicShape=>"heuristic_shape",
+        // A join belongs to this comparison only if its canonical chat
+        // message actually owns one selected source revision and its producer
+        // locator is the *other* source. Matching a random message to either
+        // side would manufacture a relationship not in the source records.
+        let owner_revision=client.query_opt(
+            "SELECT source_revision_ref FROM corpus.chat_archive_message
+             WHERE message_ref=$1", &[&message_ref],
+        )?.map(|r|r.get::<_,String>(0));
+        let other_revision=match owner_revision.as_deref() {
+            Some(rev) if rev==left_revision=>Some(right_revision),
+            Some(rev) if rev==right_revision=>Some(left_revision),
+            _=>None,
+        };
+        if let Some(other)=other_revision {
+            let joins: Vec<ChatSourceJoin>=crate::load_chat_source_joins_for_message(
+                config,message_ref,
+            )?;
+            for join in &joins {
+                if join.source_locator_ref == other {
+                    // Stored exact_digest only verifies the chat side;
+                    // source genealogy is not promoted by this reader.
+                    genealogy=GenealogyStatus::SourceBackreferenceUnverified;
+                    join_refs.push(
+                        crate::chat_source_fold::canonical_chat_source_join_ref(join)
+                    );
+                }
             }
-        )).collect();
+        }
     }
 
     let operation_schema_ready = if operational_visibility == ContextVisibility::Available {
