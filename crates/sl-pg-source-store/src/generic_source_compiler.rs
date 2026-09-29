@@ -662,6 +662,48 @@ pub fn compile_mail_message_lossless<P: CandidatePnfProducer>(
     )
 }
 
+/// Adapter over persisted chat source identity. Message role, branch, node,
+/// timestamp and asset provenance remain in the authoritative chat source
+/// record, not inferred from flattened text. Only active conversational
+/// messages enter candidate generation; tool/asset/system and inactive
+/// generated branches stay source-preserved but uncompiled.
+pub fn compile_chat_message_lossless<P: CandidatePnfProducer>(
+    producer: &P,
+    message: &crate::chat_source_store::PersistedChatMessageSource,
+    parser_receipt_prefix: &str,
+) -> Result<LosslessBulkSourceCompilation, GenericSourceCompilerError> {
+    use sensiblaw_core::chat_source::{
+        ChatBranchMembership, ChatContentKind, ChatMessageRole,
+    };
+    let eligible = message.content_kind == ChatContentKind::Message
+        && message.branch_membership == ChatBranchMembership::Active
+        && matches!(message.role, ChatMessageRole::User | ChatMessageRole::Assistant);
+    let regions = if message.literal_text.is_empty() {
+        Vec::new()
+    } else {
+        vec![SourceExecutionRegion {
+            region_ref: message.full_message_span_ref.clone(),
+            source_revision_ref: message.source_revision_ref.clone(),
+            start_char: 0,
+            end_char: message.literal_text.chars().count() as u64,
+            class: if eligible {
+                SourceRegionExecutionClass::SemanticCandidate
+            } else {
+                SourceRegionExecutionClass::StructuralOnly
+            },
+        }]
+    };
+    compile_source_regions_lossless(
+        producer,
+        &message.message_ref,
+        &message.source_revision_ref,
+        &message.document_ref,
+        &message.literal_text,
+        &regions,
+        parser_receipt_prefix,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
