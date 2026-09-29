@@ -148,6 +148,9 @@ pub fn propose_correspondence_review(
         &[left,right,axis.key(),evidence_ref,consumer_scope_ref],
     ));
     let item_ref=format!("review-item:{}",relation_ref);
+    let mut source_refs=vec![left.to_owned(),right.to_owned()];
+    source_refs.sort();
+    source_refs.dedup();
     let item=ReviewItem {
         review_item_ref:item_ref.clone(),
         semantic_ref:relation_ref.clone(),
@@ -155,7 +158,7 @@ pub fn propose_correspondence_review(
         reason:format!("Review candidate {} relationship; witness is not admission",
             axis.key()),
         provenance_refs:vec![evidence_ref.into()],
-        source_refs:vec![left.into(),right.into()],
+        source_refs,
         current_status:ReviewStatus::Pending,
         available_actions:vec![
             ReviewAction::Accept,ReviewAction::Reject,ReviewAction::Abstain,
