@@ -114,6 +114,9 @@ pub struct OntologyDiagnosticPacket {
     pub producer_run_ref: String,
     pub producer_receipt_ref: String,
     pub producer_output_digest_ref: String,
+    /// The literal emitted checker record (e.g. JMD repair-review CSV row)
+    /// is retained for independent digest verification and source reopening.
+    pub raw_checker_output: String,
     /// The source of *execution*, not a mere citation to a Lean theorem.
     pub executed_checker: bool,
     /// True ONLY with separately provided real Lean kernel receipt.
@@ -224,7 +227,8 @@ pub fn validate_ontology_packet(p:&OntologyDiagnosticPacket)
         || !valid_ref(&p.lean_source_commit)
         || !valid_ref(&p.producer_run_ref)
         || !valid_ref(&p.producer_receipt_ref)
-        || !valid_ref(&p.producer_output_digest_ref)
+        || p.raw_checker_output.is_empty()
+        || p.producer_output_digest_ref!=digest(p.raw_checker_output.as_bytes())
         || !p.executed_checker
         || (p.lean_kernel_checked != p.lean_kernel_receipt_ref.is_some())
         || p.lean_kernel_receipt_ref.as_deref().is_some_and(|s|!valid_ref(s))
