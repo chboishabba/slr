@@ -35,6 +35,7 @@ mod tircorder_session_bridge;
 mod transcript_chat_correspondence;
 mod mixed_source_review;
 mod correspondence_review_store;
+mod wikidata_ontology_review;
 mod jmail_adapter;
 mod plain_text_document_adapter;
 mod long_document_ingest_store;
@@ -219,6 +220,14 @@ pub use generic_source_compiler::{
 pub use source_candidate_persistence::{
     persist_lossless_generic_candidates, GenericCandidatePersistenceError,
     GenericCandidatePersistenceReceipt,
+};
+pub use wikidata_ontology_review::{
+    WIKI_DIAGNOSTIC_SCHEMA, WIKI_DIAGNOSTIC_SQL,
+    OntologyDiagnosticPacket, OntologyWitness, OntologyRepairCandidate,
+    WikidataGraphView, OntologyCheckerKind, OntologyDiagnosticDisposition,
+    OntologyDiagnosticRead, OntologyReviewError,
+    validate_ontology_packet, persist_ontology_diagnostic,
+    load_ontology_diagnostic,
 };
 pub use correspondence_review_store::{
     CorrespondenceAxis, CorrespondenceReviewProposal, CorrespondenceReviewError,
