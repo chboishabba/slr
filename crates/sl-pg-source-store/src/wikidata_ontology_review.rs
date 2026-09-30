@@ -114,8 +114,10 @@ pub struct OntologyDiagnosticPacket {
     pub producer_run_ref: String,
     pub producer_receipt_ref: String,
     pub producer_output_digest_ref: String,
-    /// The literal emitted checker record (e.g. JMD repair-review CSV row)
-    /// is retained for independent digest verification and source reopening.
+    /// A retained row-level transcription of producer checker output.
+    /// Its digest is verified against this string. For the JMD CSV bridge
+    /// this is deterministic JSON of one parsed CSV row, *not* the original
+    /// entire CSV bytes or an independently authenticated run receipt.
     pub raw_checker_output: String,
     /// The source of *execution*, not a mere citation to a Lean theorem.
     pub executed_checker: bool,
