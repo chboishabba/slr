@@ -505,6 +505,13 @@ pub fn compare_relational_observations(
                 alignment(&demand.role_ref,&r.role_ref,consumer,
                     &consumer.role_alignments).is_some()
             ).collect::<Vec<_>>();
+            if related_roles.is_empty() {
+                residuals.push(ComparisonResidual {
+                    kind:ResidualKind::MissingRequiredRole,
+                    left_ref:None,right_ref:None,
+                    obligation_ref:format!("{}:{side}:role-absent",demand.contract_ref),
+                });
+            }
             for role in related_roles {
                 let candidates=o.role_type_hypotheses.iter()
                     .filter(|t|t.role_ref==role.role_ref
