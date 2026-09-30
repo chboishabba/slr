@@ -366,8 +366,12 @@ pub fn persist_ontology_diagnostic(
           &graph_tag(&p.graph_view),&p.lean_owner_ref,&p.producer_run_ref,
           &p.producer_receipt_ref,&packet_digest,&canonical],
     )?;
-    load_ontology_diagnostic(config,&diagnostic_ref)?
-        .ok_or(OntologyReviewError::IdentityConflict)
+    let reopened=load_ontology_diagnostic(config,&diagnostic_ref)?
+        .ok_or(OntologyReviewError::IdentityConflict)?;
+    if reopened.packet!=*p || reopened.consumer_scope_ref!=consumer_scope_ref {
+        return Err(OntologyReviewError::IdentityConflict);
+    }
+    Ok(reopened)
 }
 /// The ontology issue uses the ordinary S29 transactional review reducer:
 /// this never changes a Wikidata statement or treats an advisory repair as
