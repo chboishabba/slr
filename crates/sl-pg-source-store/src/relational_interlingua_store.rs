@@ -65,26 +65,34 @@ fn source_digest(client:&mut Client,revision:&str,
     generic:bool,chat:bool)->Result<Option<String>,postgres::Error>{
     let generic_row=if generic{
         client.query_opt(
-            "SELECT c.payload FROM ingest.generic_source_revision r
+            "SELECT c.payload,r.content_digest_ref FROM ingest.generic_source_revision r
              JOIN corpus.document d ON d.document_ref=r.document_ref
              JOIN corpus.canonical_content c ON c.canonical_ref=d.canonical_ref
              WHERE r.source_revision_ref=$1 AND r.candidate_only=TRUE
              AND r.creates_semantic_authority=FALSE
+             AND r.applicability_promoted=FALSE
              AND r.claim_truth_promoted=FALSE",
             &[&revision])?
     }else{None};
-    let row=match generic_row{
-        Some(row)=>Some(row),
-        None if chat=>client.query_opt(
+    if let Some(row)=generic_row {
+        let bytes:Vec<u8>=row.get(0);
+        let expected:String=row.get(1);
+        let computed=format!("sha256:{:x}",Sha256::digest(&bytes));
+        // Source revision and canonical bytes must agree *before* they can
+        // enter the relational acceptance artefact.
+        return Ok((expected==computed).then_some(computed));
+    }
+    let row=if chat{
+        client.query_opt(
             "SELECT c.payload FROM corpus.chat_archive_message m
              JOIN corpus.document d ON d.document_ref=m.document_ref
              JOIN corpus.canonical_content c ON c.canonical_ref=d.canonical_ref
              WHERE m.source_revision_ref=$1 AND m.candidate_only=TRUE
              AND m.creates_semantic_authority=FALSE
+             AND m.applicability_promoted=FALSE
              AND m.claim_truth_promoted=FALSE LIMIT 1",
-            &[&revision])?,
-        None=>None,
-    };
+            &[&revision])?
+    }else{None};
     Ok(row.map(|r|{
         let bytes:Vec<u8>=r.get(0);
         format!("sha256:{:x}",Sha256::digest(&bytes))
