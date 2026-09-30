@@ -156,6 +156,60 @@ pub enum RelationalComparisonError {
     #[error("alignment licence is missing or improperly scoped")]
     InvalidLicence,
 }
+/// Transfer an existing candidate-PNF batch into the generic carrier,
+/// without a new parser. The caller chooses which *already persisted*
+/// predicate candidate organizes this interpretation. No arbitrary
+/// subject/entity identity is inferred from a surface word.
+pub fn observation_from_candidate_pnf(
+    source_revision_ref:&str, source_family:SourceFamily,
+    observation_ref:&str, producer_ref:&str,
+    selected_predicate_candidate_ref:&str,
+    batch:&crate::CandidatePnfBatch,
+    context:ObservationContext,
+    provenance_refs:Vec<String>,
+) -> Result<RelationalObservation,RelationalComparisonError> {
+    use crate::CandidatePnfRole;
+    if !present(&batch.exact_span_ref)
+        || batch.proposition_support_paid
+        || batch.applicability_paid || batch.claim_truth_paid
+        || !batch.candidates.iter().any(|f|f.candidate_ref==selected_predicate_candidate_ref
+            && f.role==CandidatePnfRole::Predicate && f.candidate_only)
+        || batch.candidates.iter().any(|f|!f.candidate_only)
+    {return Err(RelationalComparisonError::Promotion);}
+    let mut positions=BTreeMap::<String,u32>::new();
+    let mut role_bindings=Vec::new();
+    for factor in &batch.candidates {
+        let role=match factor.role {
+            CandidatePnfRole::Actor=>"agent",
+            CandidatePnfRole::Patient=>"patient",
+            CandidatePnfRole::Qualifier=>"qualifier",
+            CandidatePnfRole::Other=>"other",
+            CandidatePnfRole::Predicate=>continue,
+        };
+        let key=role.to_owned();
+        let position=positions.entry(key.clone()).or_insert(0);
+        role_bindings.push(RoleBinding {
+            role_ref:key,
+            filler_candidate_ref:factor.candidate_ref.clone(),
+            occurrence:*position,
+        });
+        *position+=1;
+    }
+    let candidate=RelationalObservation {
+        observation_ref:observation_ref.into(),
+        source_revision_ref:source_revision_ref.into(),
+        source_family,source_span_ref:batch.exact_span_ref.clone(),
+        parser_or_producer_ref:producer_ref.into(),
+        predicate_candidate_ref:selected_predicate_candidate_ref.into(),
+        role_bindings,context,candidate_type_refs:vec![],
+        provenance_refs,polarity:Polarity::Undetermined,
+        candidate_only:true,creates_semantic_authority:false,
+        claim_truth_promoted:false,
+    };
+    valid_observation(&candidate)?;
+    Ok(candidate)
+}
+
 fn present(s:&str)->bool { !s.trim().is_empty() }
 fn valid_observation(o:&RelationalObservation)->Result<(),RelationalComparisonError> {
     if !present(&o.observation_ref) || !present(&o.source_revision_ref)
