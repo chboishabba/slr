@@ -380,8 +380,10 @@ pub fn compare_relational_observations(
     let required=consumer.required_roles.iter().map(String::as_str)
         .collect::<BTreeSet<_>>();
     for role in required {
-        if !l.keys().any(|(name,_)|*name==role)
-            || !r.keys().any(|(name,_)|*name==role) {
+        if !l.keys().any(|(name,_)|*name==role
+            || alignment(role,name,consumer,&consumer.role_alignments).is_some())
+            || !r.keys().any(|(name,_)|*name==role
+                || alignment(role,name,consumer,&consumer.role_alignments).is_some()) {
             residuals.push(ComparisonResidual {
                 kind:ResidualKind::MissingRequiredRole,
                 left_ref:l.keys().find(|(name,_)|*name==role)
