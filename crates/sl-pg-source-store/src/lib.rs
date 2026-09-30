@@ -9,6 +9,7 @@ mod relational_interlingua;
 mod relational_interlingua_store;
 mod scoped_soft_type;
 mod bounded_repair_assessment;
+mod runtime_witness_certificate;
 mod candidate_pnf_store;
 mod corpus_reconciliation_store;
 mod reconciliation_review_store;
@@ -70,6 +71,10 @@ pub use cache_first::{
     resolve_cache_first, AcquiredSourceBundle, CacheFirstAcquirer, CacheFirstError,
     CacheFirstResolution, CacheLookupDemand, CachedResolvedDocument,
     ExactResolutionReceiptOwned, ResolvedExternalDocumentOwned,
+};
+pub use runtime_witness_certificate::{
+    RuntimeWitnessKind, RuntimeWitnessCertificate, CheckedRuntimeWitness,
+    RuntimeWitnessError, validate_runtime_witness, require_witness,
 };
 pub use bounded_repair_assessment::{
     BoundedRepairCandidate, BoundedRepairAssessment,
