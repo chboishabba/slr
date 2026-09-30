@@ -211,6 +211,59 @@ pub fn observation_from_candidate_pnf(
     Ok(candidate)
 }
 
+/// Lift a *producer-native* Wikidata statement from the existing WIKI-1
+/// witness store. This is an adapter from already recorded typed data, not a
+/// new ontology or inference rule. All qualifiers survive as role bindings;
+/// no P31/P279 'type' conclusion is manufactured.
+pub fn observation_from_native_wikidata(
+    source_revision_ref:&str,
+    statement:&crate::OntologyNativeStatement,
+    producer_ref:&str,
+    provenance_refs:Vec<String>,
+    mut context:ObservationContext,
+)->Result<RelationalObservation,RelationalComparisonError> {
+    let mut role_bindings=vec![
+        RoleBinding {
+            role_ref:"subject".into(),
+            filler_candidate_ref:statement.subject_ref.clone(),
+            occurrence:0,
+        },
+        RoleBinding {
+            role_ref:"object".into(),
+            filler_candidate_ref:statement.value_ref.clone(),
+            occurrence:0,
+        },
+    ];
+    let mut seen=BTreeMap::<String,u32>::new();
+    for q in &statement.qualifiers {
+        let role=format!("qualifier:{}",q.property_ref);
+        let occurrence=seen.entry(role.clone()).or_insert(0);
+        role_bindings.push(RoleBinding{
+            role_ref:role,filler_candidate_ref:q.value_ref.clone(),
+            occurrence:*occurrence,
+        });
+        *occurrence+=1;
+    }
+    // Rank and statement revision are original source coordinates, not
+    // evidence of relevance, truth or priority. The caller may index
+    // source-specific rank in the scoped comparison context.
+    context.attribution_ref.get_or_insert(statement.statement_revision_ref.clone());
+    let o=RelationalObservation {
+        observation_ref:statement.statement_ref.clone(),
+        source_revision_ref:source_revision_ref.into(),
+        source_family:SourceFamily::Wikidata,
+        source_span_ref:statement.statement_ref.clone(),
+        parser_or_producer_ref:producer_ref.into(),
+        predicate_candidate_ref:statement.property_ref.clone(),
+        role_bindings,context,candidate_type_refs:vec![],
+        provenance_refs,polarity:Polarity::Undetermined,
+        candidate_only:true,creates_semantic_authority:false,
+        claim_truth_promoted:false,
+    };
+    valid_observation(&o)?;
+    Ok(o)
+}
+
 fn present(s:&str)->bool { !s.trim().is_empty() }
 fn valid_observation(o:&RelationalObservation)->Result<(),RelationalComparisonError> {
     if !present(&o.observation_ref) || !present(&o.source_revision_ref)
@@ -551,6 +604,33 @@ mod tests {
         let r=compare_relational_observations(&a,&b,&c).unwrap();
         assert_eq!(r.finding,ComparisonFinding::LicensedCompatible);
         assert_eq!(r.used_alignment_witness_refs,vec!["alignment:witness"]);
+    }
+    #[test] fn explicit_role_transport_requires_license() {
+        let mut left=obs("wiki:1",SourceFamily::Wikipedia);
+        let mut right=obs("kb:1",SourceFamily::Wikidata);
+        right.role_bindings[0].role_ref="subject".into();
+        right.role_bindings[1].role_ref="object".into();
+        let c=consumer();
+        assert_eq!(compare_relational_observations(&left,&right,&c).unwrap().finding,
+            ComparisonFinding::MissingTypedMeet);
+        let mut licensed=c;
+        let consumer_ref=licensed.consumer_ref.clone();
+        licensed.role_alignments=[
+            ("agent","subject"),("patient","object"),
+        ].iter().map(|(l,r)|LicensedAlignment {
+            left_ref:(*l).into(),right_ref:(*r).into(),
+            witness_ref:format!("witness:{l}:{r}"),
+            consumer_ref:consumer_ref.clone(),
+            licence_ref:"reviewed:role-licence".into(),
+            direction:AlignmentDirection::Symmetric,
+        }).collect();
+        assert_eq!(compare_relational_observations(&left,&right,&licensed).unwrap().finding,
+            ComparisonFinding::LicensedCompatible);
+        left.polarity=Polarity::Counters;
+        right.polarity=Polarity::Supports;
+        let result=compare_relational_observations(&left,&right,&licensed).unwrap();
+        assert_eq!(result.finding,ComparisonFinding::PolarityConflictCandidate);
+        assert_eq!(result.counter_support_refs,vec!["wiki:1"]);
     }
     #[test] fn class_and_set_incidence_does_not_prove_type_identity() {
         let mut a=obs("a",SourceFamily::Wikidata);
