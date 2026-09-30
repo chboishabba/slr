@@ -9,7 +9,7 @@ use serde::{Deserialize,Serialize};
 use sensiblaw_pg_source_store::{
     load_database_config, persist_relational_comparison,
     compare_relational_observations, RelationalObservation,RelationalConsumer,
-    ComparisonFinding,ResidualKind,
+    ComparisonFinding,ResidualKind,SourceFamily,
 };
 use std::{collections::BTreeSet,env,fs,process};
 
@@ -57,6 +57,24 @@ fn run()->Result<(),String>{
         || suite.cases.len()<3
         || !suite.cases.iter().any(|v|v.negative_control)
     {return Err("suite needs a source fixture ref, three cases and a negative control".into());}
+    let wiki_text=suite.cases.iter().any(|c|
+        (c.left.source_family==SourceFamily::Wikidata
+            &&c.right.source_family==SourceFamily::Wikipedia)
+        ||(c.left.source_family==SourceFamily::Wikipedia
+            &&c.right.source_family==SourceFamily::Wikidata));
+    let biomedical=suite.cases.iter().any(|c|
+        c.left.source_family==SourceFamily::Biomedical
+            &&c.right.source_family==SourceFamily::Biomedical
+            &&c.left.source_revision_ref!=c.right.source_revision_ref);
+    let multilingual=suite.cases.iter().any(|c|
+        c.left.source_family==SourceFamily::Wikipedia
+            &&c.right.source_family==SourceFamily::Wikipedia
+            &&c.left.context.language_ref.is_some()
+            &&c.right.context.language_ref.is_some()
+            &&c.left.context.language_ref!=c.right.context.language_ref);
+    if !(wiki_text && biomedical && multilingual){
+        return Err("ITIR-REL-1 requires Wikidata↔text, biomedical pair, and two Wikipedia language views".into());
+    }
     let config=load_database_config(None).map_err(|e|e.to_string())?;
     let mut failures=Vec::new();
     for case in &suite.cases {
