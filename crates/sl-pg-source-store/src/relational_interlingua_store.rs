@@ -35,6 +35,8 @@ CREATE INDEX IF NOT EXISTS itir_relational_comparison_scope_idx
 pub struct DurableRelationalComparison {
     pub left:RelationalObservation,
     pub right:RelationalObservation,
+    pub left_source_content_sha256:String,
+    pub right_source_content_sha256:String,
     pub consumer:RelationalConsumer,
     pub comparison:RelationalComparison,
 }
@@ -55,15 +57,38 @@ fn exists(client:&mut Client,name:&str)->Result<bool,postgres::Error>{
     Ok(client.query_one("SELECT to_regclass($1)::text",&[&name])?
         .get::<_,Option<String>>(0).is_some())
 }
-fn source_present(client:&mut Client,revision:&str,
-    generic:bool,chat:bool)->Result<bool,postgres::Error>{
-    if generic && client.query_opt(
-        "SELECT 1 FROM ingest.generic_source_revision WHERE source_revision_ref=$1",
-        &[&revision])?.is_some() {return Ok(true);}
-    if chat && client.query_opt(
-        "SELECT 1 FROM corpus.chat_archive_message WHERE source_revision_ref=$1",
-        &[&revision])?.is_some() {return Ok(true);}
-    Ok(false)
+/// Reopen and digest the actual native source bytes rather than merely
+/// confirming a claimed revision ID exists. Existing generic content
+/// integrity is already checked by its owner; chat uses its canonical
+/// payload through the document/canonical-content spine.
+fn source_digest(client:&mut Client,revision:&str,
+    generic:bool,chat:bool)->Result<Option<String>,postgres::Error>{
+    let generic_row=if generic{
+        client.query_opt(
+            "SELECT c.payload FROM ingest.generic_source_revision r
+             JOIN corpus.document d ON d.document_ref=r.document_ref
+             JOIN corpus.canonical_content c ON c.canonical_ref=d.canonical_ref
+             WHERE r.source_revision_ref=$1 AND r.candidate_only=TRUE
+             AND r.creates_semantic_authority=FALSE
+             AND r.claim_truth_promoted=FALSE",
+            &[&revision])?
+    }else{None};
+    let row=match generic_row{
+        Some(row)=>Some(row),
+        None if chat=>client.query_opt(
+            "SELECT c.payload FROM corpus.chat_archive_message m
+             JOIN corpus.document d ON d.document_ref=m.document_ref
+             JOIN corpus.canonical_content c ON c.canonical_ref=d.canonical_ref
+             WHERE m.source_revision_ref=$1 AND m.candidate_only=TRUE
+             AND m.creates_semantic_authority=FALSE
+             AND m.claim_truth_promoted=FALSE LIMIT 1",
+            &[&revision])?,
+        None=>None,
+    };
+    Ok(row.map(|r|{
+        let bytes:Vec<u8>=r.get(0);
+        format!("sha256:{:x}",Sha256::digest(&bytes))
+    }))
 }
 fn sha(s:&str)->String {
     format!("sha256:{:x}",Sha256::digest(s.as_bytes()))
@@ -78,18 +103,19 @@ pub fn persist_relational_comparison(
     if left.source_revision_ref==right.source_revision_ref {
         return Err(DurableRelationalError::ChangedReplay);
     }
-    let result=DurableRelationalComparison{
-        left:left.clone(),right:right.clone(),
-        consumer:consumer.clone(),comparison,
-    };
     let mut client=Client::connect(config.database_url(),NoTls)?;
     let generic=exists(&mut client,"ingest.generic_source_revision")?;
     let chat=exists(&mut client,"corpus.chat_archive_message")?;
-    for rev in [&left.source_revision_ref,&right.source_revision_ref] {
-        if !source_present(&mut client,rev,generic,chat)? {
-            return Err(DurableRelationalError::MissingSource);
-        }
-    }
+    let left_digest=source_digest(&mut client,&left.source_revision_ref,generic,chat)?
+        .ok_or(DurableRelationalError::MissingSource)?;
+    let right_digest=source_digest(&mut client,&right.source_revision_ref,generic,chat)?
+        .ok_or(DurableRelationalError::MissingSource)?;
+    let result=DurableRelationalComparison{
+        left:left.clone(),right:right.clone(),
+        left_source_content_sha256:left_digest,
+        right_source_content_sha256:right_digest,
+        consumer:consumer.clone(),comparison,
+    };
     client.batch_execute(RELATIONAL_COMPARISON_SQL)?;
     let body=serde_json::to_string(&result)?;
     client.execute(
@@ -139,9 +165,14 @@ pub fn load_relational_comparison(
     }
     let generic=exists(&mut client,"ingest.generic_source_revision")?;
     let chat=exists(&mut client,"corpus.chat_archive_message")?;
-    for rev in [&data.left.source_revision_ref,&data.right.source_revision_ref]{
-        if !source_present(&mut client,rev,generic,chat)?{
-            return Err(DurableRelationalError::MissingSource);
+    for (rev,expected) in [
+        (&data.left.source_revision_ref,&data.left_source_content_sha256),
+        (&data.right.source_revision_ref,&data.right_source_content_sha256),
+    ]{
+        let actual=source_digest(&mut client,rev,generic,chat)?
+            .ok_or(DurableRelationalError::MissingSource)?;
+        if actual!=*expected{
+            return Err(DurableRelationalError::ChangedReplay);
         }
     }
     Ok(Some(data))
