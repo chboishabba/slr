@@ -75,6 +75,7 @@ pub struct RelationalConsumer {
     pub compare_language: bool,
     /// Explicit reviewed/licensed alignment pairs. No lexical fallback.
     pub predicate_alignments: Vec<LicensedAlignment>,
+    pub role_alignments: Vec<LicensedAlignment>,
     pub filler_alignments: Vec<LicensedAlignment>,
     pub type_alignments: Vec<LicensedAlignment>,
 }
@@ -293,6 +294,7 @@ pub fn compare_relational_observations(
         || !consumer.permitted_source_families.contains(&right.source_family)
     {return Err(RelationalComparisonError::OutsideConsumer);}
     for a in consumer.predicate_alignments.iter()
+        .chain(&consumer.role_alignments)
         .chain(&consumer.filler_alignments).chain(&consumer.type_alignments) {
         if a.consumer_ref!=consumer.consumer_ref || !present(&a.witness_ref)
             || !present(&a.licence_ref) || !present(&a.left_ref)
@@ -313,7 +315,6 @@ pub fn compare_relational_observations(
     }
     let l=role_index(left);
     let r=role_index(right);
-    let keys=l.keys().chain(r.keys()).copied().collect::<BTreeSet<_>>();
     let required=consumer.required_roles.iter().map(String::as_str)
         .collect::<BTreeSet<_>>();
     for role in required {
@@ -329,16 +330,57 @@ pub fn compare_relational_observations(
             });
         }
     }
-    for key in keys {
-        match (l.get(&key),r.get(&key)) {
-            (Some(&a),Some(&b)) if align_or_equal(a,b,consumer,
-                &consumer.filler_alignments,&mut witnesses) => {},
-            (a,b)=>residuals.push(ComparisonResidual {
+    // Explicitly licensed role transport, not a hard-coded 'agent=subject'
+    // rule. Resolve one-to-one; ambiguous role mappings remain residuals.
+    let mut used_right=BTreeSet::new();
+    for ((left_role,occurrence),left_filler) in &l {
+        let matches=r.iter().filter(|((right_role,right_occ),_)|
+            right_occ==occurrence &&
+            (*left_role==*right_role ||
+              alignment(left_role,right_role,consumer,
+                &consumer.role_alignments).is_some()))
+            .collect::<Vec<_>>();
+        if matches.len()!=1 {
+            residuals.push(ComparisonResidual {
                 kind:ResidualKind::UnalignedRoleFiller,
-                left_ref:a.map(|value|(*value).into()),
-                right_ref:b.map(|value|(*value).into()),
-                obligation_ref:format!("role:{}:{}",key.0,key.1),
-            }),
+                left_ref:Some((*left_filler).into()),right_ref:None,
+                obligation_ref:format!("ambiguous-or-missing-role:{left_role}:{occurrence}"),
+            });
+            continue;
+        }
+        let ((right_role,right_occurrence),right_filler)=matches[0];
+        if !used_right.insert((*right_role,*right_occurrence)) {
+            residuals.push(ComparisonResidual {
+                kind:ResidualKind::UnalignedRoleFiller,
+                left_ref:Some((*left_filler).into()),
+                right_ref:Some((*right_filler).into()),
+                obligation_ref:format!("multiply-matched-role:{left_role}:{occurrence}"),
+            });
+            continue;
+        }
+        if left_role!=right_role {
+            if let Some(w)=alignment(left_role,right_role,consumer,
+                &consumer.role_alignments) {
+                witnesses.insert(w.witness_ref.clone());
+            }
+        }
+        if !align_or_equal(left_filler,right_filler,consumer,
+            &consumer.filler_alignments,&mut witnesses) {
+            residuals.push(ComparisonResidual {
+                kind:ResidualKind::UnalignedRoleFiller,
+                left_ref:Some((*left_filler).into()),
+                right_ref:Some((*right_filler).into()),
+                obligation_ref:format!("filler-compatibility:{left_role}:{occurrence}"),
+            });
+        }
+    }
+    for ((role,occ),filler) in &r {
+        if !used_right.contains(&(*role,*occ)) {
+            residuals.push(ComparisonResidual {
+                kind:ResidualKind::UnalignedRoleFiller,
+                left_ref:None,right_ref:Some((*filler).into()),
+                obligation_ref:format!("unpaired-right-role:{role}:{occ}"),
+            });
         }
     }
     // A missing type in either source is not a type error, and shared
@@ -475,7 +517,8 @@ mod tests {
             compare_scope:true,compare_time:true,compare_modality:true,
             compare_quantifier:true,compare_attribution:true,
             compare_ontology:true,compare_language:false,
-            predicate_alignments:vec![],filler_alignments:vec![],type_alignments:vec![],
+            predicate_alignments:vec![],role_alignments:vec![],
+            filler_alignments:vec![],type_alignments:vec![],
         }
     }
     #[test] fn cross_family_same_shape_is_candidate_only() {
