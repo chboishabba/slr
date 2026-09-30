@@ -30,7 +30,9 @@ pub struct BoundedRepairAssessment {
     pub discharged_obligations:Vec<String>,
     pub newly_created_obligations:Vec<String>,
     pub strictly_improves_checked_debt:bool,
-    pub preserves_selected_consumer_observation:bool,
+    pub producer_declares_consumer_observation_preservation:bool,
+    /// A named witness ref is not yet a checked formal transport proof.
+    pub preservation_formally_verified:bool,
     pub applies_external_edit:bool,
     pub creates_semantic_authority:bool,
     pub establishes_world_truth:bool,
@@ -90,7 +92,8 @@ pub fn assess_bounded_repair(
         strictly_improves_checked_debt:strict,
         // A named receipt is supplied, not yet an authenticated theorem;
         // this field records the producer's asserted preservation claim.
-        preserves_selected_consumer_observation:true,
+        producer_declares_consumer_observation_preservation:true,
+        preservation_formally_verified:false,
         applies_external_edit:false,
         creates_semantic_authority:false,
         establishes_world_truth:false,
