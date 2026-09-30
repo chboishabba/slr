@@ -29,6 +29,8 @@ pub struct BoundedRepairAssessment {
     pub after_debt:Vec<String>,
     pub discharged_obligations:Vec<String>,
     pub newly_created_obligations:Vec<String>,
+    pub discharged_obligation_refs:Vec<String>,
+    pub newly_created_obligation_refs:Vec<String>,
     pub strictly_improves_checked_debt:bool,
     pub producer_declares_consumer_observation_preservation:bool,
     /// A named witness ref is not yet a checked formal transport proof.
@@ -79,6 +81,16 @@ pub fn assess_bounded_repair(
     let y=debts(after);
     let eliminated=x.difference(&y).cloned().collect::<Vec<_>>();
     let new=y.difference(&x).cloned().collect::<Vec<_>>();
+    let before_by_key=before.residuals.iter()
+        .map(|r|(debt_key(r),r.obligation_ref.clone()))
+        .collect::<std::collections::BTreeMap<_,_>>();
+    let after_by_key=after.residuals.iter()
+        .map(|r|(debt_key(r),r.obligation_ref.clone()))
+        .collect::<std::collections::BTreeMap<_,_>>();
+    let discharged_refs=eliminated.iter().filter_map(|k|before_by_key.get(k).cloned())
+        .collect::<BTreeSet<_>>().into_iter().collect::<Vec<_>>();
+    let new_refs=new.iter().filter_map(|k|after_by_key.get(k).cloned())
+        .collect::<BTreeSet<_>>().into_iter().collect::<Vec<_>>();
     let strict=y.is_subset(&x)&&y!=x;
     Ok(BoundedRepairAssessment{
         repair_candidate_ref:proposal.repair_candidate_ref.clone(),
@@ -89,6 +101,8 @@ pub fn assess_bounded_repair(
         after_debt:y.into_iter().collect(),
         discharged_obligations:eliminated,
         newly_created_obligations:new,
+        discharged_obligation_refs:discharged_refs,
+        newly_created_obligation_refs:new_refs,
         strictly_improves_checked_debt:strict,
         // A named receipt is supplied, not yet an authenticated theorem;
         // this field records the producer's asserted preservation claim.
