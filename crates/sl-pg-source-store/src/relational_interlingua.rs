@@ -30,6 +30,9 @@ pub struct RelationalObservation {
     /// Roles are NOT sorted or flattened to a set. Repeated roles and
     /// distinct participants are permitted (agent, patient, instrument...).
     pub role_bindings: Vec<RoleBinding>,
+    /// Producer-supplied, evidence-backed type hypotheses for exact roles.
+    /// Never inferred from an unreviewed global ontology lookup.
+    pub role_type_hypotheses: Vec<RoleTypeHypothesis>,
     pub context: ObservationContext,
     pub candidate_type_refs: Vec<String>,
     pub provenance_refs: Vec<String>,
@@ -69,6 +72,9 @@ pub struct RelationalConsumer {
     pub consumer_ref: String,
     pub permitted_source_families: Vec<SourceFamily>,
     pub required_roles: Vec<String>,
+    /// Expectations of this *specific consumer operation*. Failing to
+    /// satisfy a demand is pressure/residual, never automatic retyping.
+    pub required_role_types: Vec<RoleTypeDemand>,
     pub compare_scope: bool,
     pub compare_time: bool,
     pub compare_modality: bool,
@@ -121,6 +127,8 @@ pub enum ResidualKind {
     LanguageMismatch,
     UnresolvedPolarity,
     MissingProvenance,
+    MissingRoleTypeEvidence,
+    RoleTypeContractPressure,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ComparisonResidual {
@@ -205,7 +213,8 @@ pub fn observation_from_candidate_pnf(
         source_family,source_span_ref:batch.exact_span_ref.clone(),
         parser_or_producer_ref:producer_ref.into(),
         predicate_candidate_ref:selected_predicate_candidate_ref.into(),
-        role_bindings,context,candidate_type_refs:vec![],
+        role_bindings,role_type_hypotheses:vec![],
+        context,candidate_type_refs:vec![],
         provenance_refs,native_metadata_refs:vec![],
         polarity:Polarity::Undetermined,
         candidate_only:true,creates_semantic_authority:false,
@@ -263,7 +272,8 @@ pub fn observation_from_native_wikidata(
         source_span_ref:statement.statement_ref.clone(),
         parser_or_producer_ref:producer_ref.into(),
         predicate_candidate_ref:statement.property_ref.clone(),
-        role_bindings,context,candidate_type_refs:vec![],
+        role_bindings,role_type_hypotheses:vec![],
+        context,candidate_type_refs:vec![],
         provenance_refs,native_metadata_refs,
         polarity:Polarity::Undetermined,
         candidate_only:true,creates_semantic_authority:false,
@@ -287,6 +297,13 @@ fn valid_observation(o:&RelationalObservation)->Result<(),RelationalComparisonEr
     for role in &o.role_bindings {
         if !present(&role.role_ref) || !present(&role.filler_candidate_ref)
             || !roles.insert((&role.role_ref,role.occurrence)) {
+            return Err(RelationalComparisonError::InvalidRoles);
+        }
+    }
+    for t in &o.role_type_hypotheses {
+        if !present(&t.role_ref)||!present(&t.candidate_type_ref)
+            || !present(&t.witness_ref)
+            || !roles.contains(&(&t.role_ref,t.occurrence)) {
             return Err(RelationalComparisonError::InvalidRoles);
         }
     }
@@ -472,6 +489,38 @@ pub fn compare_relational_observations(
             });
         }
     }
+    for demand in &consumer.required_role_types {
+        if !present(&demand.role_ref)||!present(&demand.required_type_ref)
+            || !present(&demand.contract_ref) {
+            return Err(RelationalComparisonError::InvalidLicence);
+        }
+        for (side,o) in [("left",left),("right",right)] {
+            let related_roles=o.role_bindings.iter().filter(|r|
+                r.role_ref==demand.role_ref ||
+                alignment(&demand.role_ref,&r.role_ref,consumer,
+                    &consumer.role_alignments).is_some()
+            ).collect::<Vec<_>>();
+            for role in related_roles {
+                let candidates=o.role_type_hypotheses.iter()
+                    .filter(|t|t.role_ref==role.role_ref
+                        && t.occurrence==role.occurrence).collect::<Vec<_>>();
+                let has_compatible=candidates.iter().any(|t|
+                    align_or_equal(&t.candidate_type_ref,
+                        &demand.required_type_ref,consumer,
+                        &consumer.type_alignments,&mut witnesses));
+                if !has_compatible {
+                    residuals.push(ComparisonResidual {
+                        kind:if candidates.is_empty() {
+                            ResidualKind::MissingRoleTypeEvidence
+                        } else {ResidualKind::RoleTypeContractPressure},
+                        left_ref:(side=="left").then(||role.filler_candidate_ref.clone()),
+                        right_ref:(side=="right").then(||role.filler_candidate_ref.clone()),
+                        obligation_ref:demand.contract_ref.clone(),
+                    });
+                }
+            }
+        }
+    }
     let a=&left.context;
     let b=&right.context;
     field_delta(&a.scope_ref,&b.scope_ref,consumer.compare_scope,
@@ -517,7 +566,9 @@ pub fn compare_relational_observations(
     let structural_debt=residuals.iter().any(|r|
         matches!(r.kind,ResidualKind::UnalignedPredicate
             |ResidualKind::UnalignedRoleFiller|ResidualKind::MissingRequiredRole
-            |ResidualKind::UnalignedType));
+            |ResidualKind::UnalignedType
+            |ResidualKind::MissingRoleTypeEvidence
+            |ResidualKind::RoleTypeContractPressure));
     let finding=if unknown {
         ComparisonFinding::Undetermined
     } else if opposite && !structural_debt && residuals.is_empty() {
@@ -566,7 +617,8 @@ mod tests {
             role_bindings:vec![
                 RoleBinding{role_ref:"agent".into(),filler_candidate_ref:"I".into(),occurrence:0},
                 RoleBinding{role_ref:"patient".into(),filler_candidate_ref:"dog".into(),occurrence:0},
-            ],context:ObservationContext::default(),
+            ],role_type_hypotheses:vec![],
+            context:ObservationContext::default(),
             candidate_type_refs:vec![],provenance_refs:vec!["receipt:source".into()],
             native_metadata_refs:vec![],polarity:Polarity::Supports,candidate_only:true,
             creates_semantic_authority:false,claim_truth_promoted:false,
@@ -578,6 +630,7 @@ mod tests {
             permitted_source_families:vec![
                 SourceFamily::Wikipedia,SourceFamily::Wikidata,SourceFamily::Biomedical],
             required_roles:vec!["agent".into(),"patient".into()],
+            required_role_types:vec![],
             compare_scope:true,compare_time:true,compare_modality:true,
             compare_quantifier:true,compare_attribution:true,
             compare_ontology:true,compare_language:false,
