@@ -164,3 +164,95 @@ requires independently sourced data and a matching consumer licence.
 - separately held SCALE-1 production economy measurement.
 
 A compiler implementation is not runtime or scientific validation.
+
+## ITIR-REL-1 runnable acceptance and soft-type refinement (new tranche)
+
+The new `scoped_soft_type.rs` evaluates a **consumer-scoped single-value
+contract** without inferring a violation from an ontology label or
+different raw values. Each selected pair carries independently supplied
+subject-identity, property-alignment, scope-comparability, applicability
+and value-distinctness witness references. Their absence yields an
+`undetermined` receipt with a specific missing-premise ref. Different
+year/scope tags similarly block the violation outcome. Only after
+these separate payments are present does it emit
+`candidate_violation`; this is still a source-backed *candidate*, not a
+kernel proof of the producer's assertion or a Wikidata edit licence.
+
+The formal statement in
+`dashi_lean4/DASHI/output-final_aristotle/RequestProject/
+DASHIScopedSoftTyping.lean` requires actual propositions:
+two observations in the same consumer scope **and a constructive proof
+that their values differ**. The `violationHasConcreteCounterexample`
+and `missingCannotBePromotedToViolation` lemmas characterize the
+contract. Source-provided Rust receipt strings do not magically satisfy
+the stronger Lean proof; the producer-to-formal-evidence translation
+remains a distinct validation gate. The Agda partner
+`DASHI/Core/ScopedSoftTypeContractExact.agda` states the same
+proof-relevant counterexample boundary and a residual-eliminating
+repair record.
+
+`bounded_repair_assessment.rs` adds a measured *model-only* repair
+assessment. It checks that the new typed residual set is a **strict
+subset** of the old residual set and reports both discharged and newly
+introduced obligations. An unchanged or regression-creating candidate
+fails the `strictly_improves_checked_debt` result. A separately supplied
+consumer-observation preservation witness is required, but remains
+producer-declared until independently validated. No external source
+edit, ontology rewrite, admission or repair execution follows from
+the assessment. The Lean `MeasuredImprovement` theorem combines
+consumer-observation preservation with a strict decrease under an
+explicit debt measure, rather than claiming every proposed repair
+improves anything.
+
+### Acceptance executable
+
+The new `examples/itir_rel1_acceptance.rs` consumes a JSON suite
+`itir.rel1.source-acceptance.v1` with **at least three real native
+source cases** and one negative control. Each case declares:
+
+- `case_ref`, `family_purpose`, `negative_control` and independently
+  obtained acquisition/producer receipt refs;
+- an original `left`/`right` `RelationalObservation` plus the
+  *same* typed `RelationalConsumer` carrier across domains;
+- expected `finding`, required and forbidden residual kinds;
+- expected original-source `left_source_sha256` and
+  `right_source_sha256` for the already persisted canonical bytes.
+
+Run with the actual production-postgres configuration **after**
+persisting both native sources through their existing adapters:
+
+```bash
+cargo run -p sensiblaw-pg-source-store \
+  --example itir_rel1_acceptance -- \
+  /path/to/independent-source-suite.json
+```
+
+The runner uses the generic comparator, persists in the **existing SLR
+authority database**, reopens the resulting packet, recomputes the typed
+finding and checks every expected source digest/residual, failing the
+process if any case fails. The persisted comparison now contains the
+actual SHA-256 of **both** native source payloads (rather than merely
+proof of source-row existence), which must still match upon replay.
+For generic source revisions, the native ingestion digest stored by
+SLR must also agree with those bytes; tampered content is rejected.
+
+The first three independently sourced test families should be:
+
+1. A Wikidata native full statement and a separately sourced
+   prose-derived PNF observation, retaining GUID, qualifiers, source
+   references and role licences; include an unmet scope/cardinality
+   negative control.
+2. A biomedical cross-species source pair with *independently sourced*
+   organism/lifecycle contracts. Shared argument structure is not a
+   licence to transfer organism-specific propositions.
+3. Ordinary / Simple / another-language Wikipedia with pinned article
+   revisions and separate licensed predicate/role correspondences.
+   The same QID or translated surface word is never the equivalence
+   certificate. An omitted qualification must survive as a residual.
+
+**No fabricated provenance is bundled with this runner.** Its
+independent source receipts, approved licences and expected semantic
+outcomes have to originate in actual producer/source/reviewer
+machinery. An executable binary without those fixtures is not a
+passed acceptance suite. The external run/kernel/GPU reports and
+SCALE-1 performance closure remain outstanding.
