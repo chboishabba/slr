@@ -100,10 +100,11 @@ fn certify_runtime_witnesses(case:&Case)
 fn require_optional(
     checked:&[sensiblaw_pg_source_store::CheckedRuntimeWitness],
     reference:&Option<String>,kind:RuntimeWitnessKind,case:&Case,
+    required_sources:&[String],
 )->Result<(),String>{
     if let Some(reference)=reference{
         require_witness(checked,reference,kind,&case.consumer.consumer_ref,
-            &required_sources(case)).map_err(|e|e.to_string())?;
+            required_sources).map_err(|e|e.to_string())?;
     }
     Ok(())
 }
@@ -115,20 +116,23 @@ fn check_soft_type(case:&Case,
     if spec.contract.consumer_ref!=case.consumer.consumer_ref{
         return Err("soft-type contract consumer differs from relational consumer".into());
     }
+    let pair_sources=required_sources(case);
+    let left_source=vec![case.left.source_revision_ref.clone()];
+    let right_source=vec![case.right.source_revision_ref.clone()];
     require_optional(checked,&spec.pair.shared_subject_witness_ref,
-        RuntimeWitnessKind::SubjectIdentity,case)?;
+        RuntimeWitnessKind::SubjectIdentity,case,&pair_sources)?;
     require_optional(checked,&spec.pair.property_alignment_witness_ref,
-        RuntimeWitnessKind::PropertyAlignment,case)?;
+        RuntimeWitnessKind::PropertyAlignment,case,&pair_sources)?;
     require_optional(checked,&spec.pair.scope_comparability_witness_ref,
-        RuntimeWitnessKind::ScopeComparability,case)?;
+        RuntimeWitnessKind::ScopeComparability,case,&pair_sources)?;
     require_optional(checked,&spec.left.applicability_witness_ref,
-        RuntimeWitnessKind::LeftApplicability,case)?;
+        RuntimeWitnessKind::LeftApplicability,case,&left_source)?;
     require_optional(checked,&spec.right.applicability_witness_ref,
-        RuntimeWitnessKind::RightApplicability,case)?;
+        RuntimeWitnessKind::RightApplicability,case,&right_source)?;
     require_optional(checked,&spec.pair.value_distinctness_witness_ref,
-        RuntimeWitnessKind::ValueDistinctness,case)?;
+        RuntimeWitnessKind::ValueDistinctness,case,&pair_sources)?;
     require_optional(checked,&spec.pair.positive_outside_scope_witness_ref,
-        RuntimeWitnessKind::PositiveOutsideScope,case)?;
+        RuntimeWitnessKind::PositiveOutsideScope,case,&pair_sources)?;
     let result=evaluate_single_value_contract(
         &spec.contract,&spec.left,&spec.right,&spec.pair)
         .map_err(|e|e.to_string())?;
