@@ -147,6 +147,7 @@ pub struct RelationalComparison {
     pub finding: ComparisonFinding,
     pub residuals: Vec<ComparisonResidual>,
     pub used_alignment_witness_refs: Vec<String>,
+    pub role_type_evidence_refs: Vec<String>,
     pub positive_support_refs: Vec<String>,
     pub counter_support_refs: Vec<String>,
     pub explicit_unknown_refs: Vec<String>,
@@ -383,6 +384,10 @@ pub fn compare_relational_observations(
     }
     let mut residuals=vec![];
     let mut witnesses=BTreeSet::new();
+    let type_evidence=left.role_type_hypotheses.iter()
+        .chain(right.role_type_hypotheses.iter())
+        .map(|h|h.witness_ref.clone())
+        .collect::<BTreeSet<_>>();
     if !align_or_equal(&left.predicate_candidate_ref,&right.predicate_candidate_ref,
         consumer,&consumer.predicate_alignments,&mut witnesses) {
         residuals.push(ComparisonResidual {
@@ -599,6 +604,7 @@ pub fn compare_relational_observations(
             &right.observation_ref]),
         finding,residuals,
         used_alignment_witness_refs:witnesses.into_iter().collect(),
+        role_type_evidence_refs:type_evidence.into_iter().collect(),
         positive_support_refs:support,counter_support_refs:counters,
         explicit_unknown_refs:undetermined,
         creates_semantic_authority:false,merges_sources:false,
@@ -695,6 +701,33 @@ mod tests {
         let result=compare_relational_observations(&left,&right,&licensed).unwrap();
         assert_eq!(result.finding,ComparisonFinding::PolarityConflictCandidate);
         assert_eq!(result.counter_support_refs,vec!["wiki:1"]);
+    }
+    #[test] fn witnessed_role_type_pressures_without_retyping() {
+        let mut a=obs("a",SourceFamily::Wikipedia);
+        let mut b=obs("b",SourceFamily::Biomedical);
+        a.role_type_hypotheses=vec![RoleTypeHypothesis {
+            role_ref:"patient".into(),occurrence:0,
+            candidate_type_ref:"type:companion".into(),
+            witness_ref:"pnf:source-a-type".into(),
+        }];
+        b.role_type_hypotheses=vec![RoleTypeHypothesis {
+            role_ref:"patient".into(),occurrence:0,
+            candidate_type_ref:"type:organism".into(),
+            witness_ref:"ontology:source-b-type".into(),
+        }];
+        let mut c=consumer();
+        c.required_role_types=vec![RoleTypeDemand {
+            role_ref:"patient".into(),
+            required_type_ref:"type:organism".into(),
+            contract_ref:"consumer:biological-patient".into(),
+        }];
+        let r=compare_relational_observations(&a,&b,&c).unwrap();
+        assert_eq!(r.finding,ComparisonFinding::MissingTypedMeet);
+        assert!(r.residuals.iter().any(|v|
+            v.kind==ResidualKind::RoleTypeContractPressure
+                && v.obligation_ref=="consumer:biological-patient"));
+        assert_eq!(r.role_type_evidence_refs.len(),2);
+        assert!(!r.creates_semantic_authority);
     }
     #[test] fn class_and_set_incidence_does_not_prove_type_identity() {
         let mut a=obs("a",SourceFamily::Wikidata);
