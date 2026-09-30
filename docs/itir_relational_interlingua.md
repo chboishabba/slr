@@ -256,3 +256,89 @@ outcomes have to originate in actual producer/source/reviewer
 machinery. An executable binary without those fixtures is not a
 passed acceptance suite. The external run/kernel/GPU reports and
 SCALE-1 performance closure remain outstanding.
+
+## ITIR-REL-1B integrated contract acceptance
+
+The acceptance schema has advanced to
+`itir.rel1.integrated-acceptance.v1`. Each case still carries the
+same revision-pinned `RelationalObservation` pair and one
+`RelationalConsumer`, but may now add:
+
+- **typed runtime witness certificates**, source-pinned to the same
+  fixture and validator-attributed;
+- one optional **scoped single-value contract** with expected status,
+  required missing premises and forbidden missing premises;
+- one optional **modeled repair** with a recomputed after-comparison,
+  expected strict-improvement state, expected discharged obligations
+  and expected new obligations.
+
+The executable now performs the intended graph in one run:
+
+```
+native source revisions
+  -> generic relational comparison
+  -> optional source-scoped contract judgment
+  -> PostgreSQL persist + real reopen/recompute/source-digest verification
+  -> optional modeled repair re-comparison + debt assessment
+```
+
+At least one suite case must exercise a scoped contract and at least
+one must exercise repair; the suite must still contain the Wikidata↔
+text, biomedical, and multilingual Wikipedia families plus a negative
+control. This pays the integration gap where comparator, soft typing
+and repair existed but were previously exercised independently.
+
+### Runtime witness certification is not a proof cast
+
+`runtime_witness_certificate.rs` introduces typed certificates for
+subject identity, property alignment, scope comparability, each
+source-side applicability, value distinctness, positive
+non-applicability/outside-scope, consumer-observation preservation,
+and heterogeneous observable bridges. Validation requires native
+source refs, evidence refs, a deterministic payload digest, validator
+identity/version and a validation receipt.
+
+The validator deliberately rejects a certificate that sets
+`formal_premise_established=true`. A checked runtime witness can pay
+an **executable acceptance premise**, but cannot be silently coerced
+into a Lean/Agda proposition. Formal companions:
+
+- Lean:
+  `RequestProject/DASHIRuntimeWitnessRefinement.lean`;
+- Agda:
+  `DASHI/Core/RuntimeWitnessFormalRefinementExact.agda`.
+
+Both require an independently supplied formal premise to construct the
+proof-carrying refined witness. This is the explicit
+runtime-witness → checked-evidence → formal-premise boundary.
+
+### Outside scope is positive evidence, not missing evidence
+
+`ScopedPairEvidence.positive_outside_scope_witness_ref` distinguishes
+positive non-applicability from unresolved comparability. If an
+authorized validator establishes that the selected contract does not
+apply to the pair, `evaluate_single_value_contract` returns
+`outside_scope`. If scope/applicability is merely missing, it returns
+`undetermined` with explicit unpaid premise refs. Neither state is a
+violation.
+
+### Multi-consumer repair vector
+
+A modeled transformation can now be assessed over a vector of named
+consumer fibres. `repair_vector.rs` classifies each consumer:
+
+- `improved`: residual debt strictly decreased with no new debt;
+- `preserved`: checked residual debt is unchanged;
+- `regressed`: new/replacement residual debt appears;
+- `unchecked`: no assessment exists for that consumer.
+
+`acceptable_for_further_review` is true only when **no checked
+consumer regresses and at least one checked consumer improves**.
+Unchecked consumers remain explicit and cannot be treated as
+preserved. This is still a modeled review candidate, not external edit
+authority. Formal owners are
+`DASHIRepairVector.lean` and
+`MultiConsumerRepairVectorExact.agda`.
+
+No exact-head runtime/kernel receipt or real three-domain source suite
+is claimed by committing these integration surfaces.
