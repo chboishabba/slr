@@ -315,6 +315,13 @@ pub fn persist_ontology_diagnostic(
         &p.producer_output_digest_ref,consumer_scope_ref,
     ]);
     let item_ref=format!("review-item:{diagnostic_ref}");
+    let mut provenance_refs=vec![
+        p.producer_receipt_ref.clone(),
+        p.source_snapshot_digest_ref.clone(),
+        p.lean_source_commit.clone(),
+    ];
+    provenance_refs.sort();
+    provenance_refs.dedup();
     let item=ReviewItem {
         review_item_ref:item_ref.clone(),
         semantic_ref:diagnostic_ref.clone(),
@@ -322,8 +329,7 @@ pub fn persist_ontology_diagnostic(
         reason:format!(
             "Review finite Wikidata ontology {:?} on {:?} (not an edit authorization)",
             p.disposition,p.graph_view),
-        provenance_refs:vec![p.producer_receipt_ref.clone(),
-            p.source_snapshot_digest_ref.clone(),p.lean_source_commit.clone()],
+        provenance_refs,
         source_refs:refs_for_review(p),
         current_status:ReviewStatus::Pending,
         available_actions:vec![
