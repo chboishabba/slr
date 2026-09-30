@@ -8,6 +8,7 @@ mod candidate_pnf;
 mod relational_interlingua;
 mod relational_interlingua_store;
 mod scoped_soft_type;
+mod bounded_repair_assessment;
 mod candidate_pnf_store;
 mod corpus_reconciliation_store;
 mod reconciliation_review_store;
@@ -69,6 +70,10 @@ pub use cache_first::{
     resolve_cache_first, AcquiredSourceBundle, CacheFirstAcquirer, CacheFirstError,
     CacheFirstResolution, CacheLookupDemand, CachedResolvedDocument,
     ExactResolutionReceiptOwned, ResolvedExternalDocumentOwned,
+};
+pub use bounded_repair_assessment::{
+    BoundedRepairCandidate, BoundedRepairAssessment,
+    RepairAssessmentError, assess_bounded_repair,
 };
 pub use scoped_soft_type::{
     ScopedIncidence, SingleValueContract, ScopedPairEvidence,
