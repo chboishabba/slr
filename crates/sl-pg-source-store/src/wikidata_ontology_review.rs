@@ -11,7 +11,7 @@ use postgres::{Client, NoTls};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use sensiblaw_core::review_workstation::{
-    ReviewAction, ReviewItem, ReviewItemKind, ReviewStatus,
+    ReviewAction, ReviewCommand, ReviewItem, ReviewItemKind, ReviewReceipt, ReviewStatus,
 };
 use thiserror::Error;
 
@@ -322,6 +322,30 @@ pub fn persist_ontology_diagnostic(
     )?;
     load_ontology_diagnostic(config,&diagnostic_ref)?
         .ok_or(OntologyReviewError::IdentityConflict)
+}
+/// The ontology issue uses the ordinary S29 transactional review reducer:
+/// this never changes a Wikidata statement or treats an advisory repair as
+/// approved. Receipt and status are reopened from S29 after the command.
+pub fn apply_ontology_diagnostic_review(
+    config:&DatabaseConfig, diagnostic_ref:&str, command:&ReviewCommand,
+)->Result<(ReviewReceipt,OntologyDiagnosticRead),OntologyReviewError> {
+    let before=load_ontology_diagnostic(config,diagnostic_ref)?
+        .ok_or(OntologyReviewError::UnknownDiagnostic)?;
+    if command.review_item_ref!=before.review_item_ref {
+        return Err(OntologyReviewError::IdentityConflict);
+    }
+    let (receipt,item)=crate::apply_persisted_review_command(config,command)?;
+    if !receipt.candidate_only||receipt.creates_semantic_authority
+        || receipt.applicability_promoted||receipt.claim_truth_promoted
+        || item.item_kind!=ReviewItemKind::OntologyDiagnostic
+    {return Err(OntologyReviewError::IdentityConflict);}
+    let after=load_ontology_diagnostic(config,diagnostic_ref)?
+        .ok_or(OntologyReviewError::UnknownDiagnostic)?;
+    if after.s29_status!=item.current_status
+        || after.packet!=before.packet
+        || after.consumer_scope_ref!=before.consumer_scope_ref
+    {return Err(OntologyReviewError::IdentityConflict);}
+    Ok((receipt,after))
 }
 pub fn load_ontology_diagnostic(
     config:&DatabaseConfig, diagnostic_ref:&str,
