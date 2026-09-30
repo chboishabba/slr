@@ -245,6 +245,16 @@ pub fn project_matter_workspace(
                 item.source_refs.iter().all(|reference|
                     visible.contains(reference.as_str()));
         }
+        if item.item_kind ==
+            sensiblaw_core::review_workstation::ReviewItemKind::OntologyDiagnostic
+        {
+            // Diagnostic witnesses may identify other, more tightly scoped
+            // native statements. Do not disclose their existence from an
+            // individually visible review-item reference.
+            return !item.source_refs.is_empty() &&
+                item.source_refs.iter().all(|reference|
+                    visible.contains(reference.as_str()));
+        }
         visible.contains(item.review_item_ref.as_str())
             || visible.contains(item.semantic_ref.as_str())
             || item
