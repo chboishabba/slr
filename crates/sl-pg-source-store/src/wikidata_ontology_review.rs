@@ -246,11 +246,9 @@ pub fn validate_ontology_packet(p:&OntologyDiagnosticPacket)
             || w.statement_refs.is_empty()
             || !unique_nonempty(&w.evidence_refs)
         {return Err(OntologyReviewError::InvalidPacket);}
-        let witness_statement_refs=w.statement_refs.iter()
-            .collect::<std::collections::BTreeSet<_>>();
         let mut seen_native=std::collections::BTreeSet::new();
         for statement in &w.native_statements {
-            if !witness_statement_refs.contains(&statement.statement_ref)
+            if !w.statement_refs.iter().any(|v|v==&statement.statement_ref)
                 || !seen_native.insert(&statement.statement_ref)
                 || [
                     &statement.subject_ref,&statement.property_ref,
