@@ -54,6 +54,26 @@ pub enum OntologyDiagnosticDisposition {
     Undetermined,
     Inapplicable,
 }
+/// Producer-native Wikidata statement bundle. GUID, rank, qualifiers and
+/// source references are carried literally; the bridge never synthesizes a
+/// claim from a collapsed truthy/rank-filtered graph.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct OntologyNativeStatement {
+    pub statement_ref: String,
+    pub subject_ref: String,
+    pub property_ref: String,
+    pub value_ref: String,
+    pub rank_ref: String,
+    /// Ordered native qualifier property/value references, not PNF proof.
+    pub qualifiers: Vec<OntologyNativeQualifier>,
+    pub reference_refs: Vec<String>,
+    pub statement_revision_ref: String,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct OntologyNativeQualifier {
+    pub property_ref: String,
+    pub value_ref: String,
+}
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct OntologyWitness {
     /// An ID supplied by the checker for the precise finite-KB issue.
@@ -61,6 +81,8 @@ pub struct OntologyWitness {
     /// Exact stable source-statement GUIDs or bounded native identifiers;
     /// never substitute an inferred item-level equality for statement refs.
     pub statement_refs: Vec<String>,
+    #[serde(default)]
+    pub native_statements: Vec<OntologyNativeStatement>,
     pub rule_ref: String,
     pub explanation: String,
     pub evidence_refs: Vec<String>,
@@ -220,6 +242,22 @@ pub fn validate_ontology_packet(p:&OntologyDiagnosticPacket)
             || w.statement_refs.is_empty()
             || !unique_nonempty(&w.evidence_refs)
         {return Err(OntologyReviewError::InvalidPacket);}
+        let witness_statement_refs=w.statement_refs.iter()
+            .collect::<std::collections::BTreeSet<_>>();
+        let mut seen_native=std::collections::BTreeSet::new();
+        for statement in &w.native_statements {
+            if !witness_statement_refs.contains(&statement.statement_ref)
+                || !seen_native.insert(&statement.statement_ref)
+                || [
+                    &statement.subject_ref,&statement.property_ref,
+                    &statement.value_ref,&statement.rank_ref,
+                    &statement.statement_revision_ref,
+                ].iter().any(|value|!valid_ref(value))
+                || !unique_nonempty(&statement.reference_refs)
+                || statement.qualifiers.iter().any(|q|
+                    !valid_ref(&q.property_ref)||!valid_ref(&q.value_ref))
+            {return Err(OntologyReviewError::InvalidPacket);}
+        }
     }
     let mut repairs=std::collections::BTreeSet::new();
     for r in &p.repair_candidates {
