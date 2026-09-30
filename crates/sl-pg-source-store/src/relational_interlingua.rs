@@ -33,6 +33,9 @@ pub struct RelationalObservation {
     pub context: ObservationContext,
     pub candidate_type_refs: Vec<String>,
     pub provenance_refs: Vec<String>,
+    /// Native rank, statement revision, source-reference coordinates etc.
+    /// These remain inspectable without silently becoming predicate roles.
+    pub native_metadata_refs: Vec<String>,
     pub polarity: Polarity,
     pub candidate_only: bool,
     pub creates_semantic_authority: bool,
@@ -203,7 +206,8 @@ pub fn observation_from_candidate_pnf(
         parser_or_producer_ref:producer_ref.into(),
         predicate_candidate_ref:selected_predicate_candidate_ref.into(),
         role_bindings,context,candidate_type_refs:vec![],
-        provenance_refs,polarity:Polarity::Undetermined,
+        provenance_refs,native_metadata_refs:vec![],
+        polarity:Polarity::Undetermined,
         candidate_only:true,creates_semantic_authority:false,
         claim_truth_promoted:false,
     };
@@ -220,7 +224,7 @@ pub fn observation_from_native_wikidata(
     statement:&crate::OntologyNativeStatement,
     producer_ref:&str,
     provenance_refs:Vec<String>,
-    mut context:ObservationContext,
+    context:ObservationContext,
 )->Result<RelationalObservation,RelationalComparisonError> {
     let mut role_bindings=vec![
         RoleBinding {
@@ -244,10 +248,14 @@ pub fn observation_from_native_wikidata(
         });
         *occurrence+=1;
     }
-    // Rank and statement revision are original source coordinates, not
-    // evidence of relevance, truth or priority. The caller may index
-    // source-specific rank in the scoped comparison context.
-    context.attribution_ref.get_or_insert(statement.statement_revision_ref.clone());
+    // Rank and revision remain native metadata; do not reinterpret either
+    // as attribution, priority or a semantic role.
+    let mut native_metadata_refs=vec![
+        format!("rank:{}",statement.rank_ref),
+        format!("native-revision:{}",statement.statement_revision_ref),
+    ];
+    native_metadata_refs.extend(statement.reference_refs.iter().map(|reference|
+        format!("native-reference:{reference}")));
     let o=RelationalObservation {
         observation_ref:statement.statement_ref.clone(),
         source_revision_ref:source_revision_ref.into(),
@@ -256,7 +264,8 @@ pub fn observation_from_native_wikidata(
         parser_or_producer_ref:producer_ref.into(),
         predicate_candidate_ref:statement.property_ref.clone(),
         role_bindings,context,candidate_type_refs:vec![],
-        provenance_refs,polarity:Polarity::Undetermined,
+        provenance_refs,native_metadata_refs,
+        polarity:Polarity::Undetermined,
         candidate_only:true,creates_semantic_authority:false,
         claim_truth_promoted:false,
     };
@@ -557,7 +566,7 @@ mod tests {
                 RoleBinding{role_ref:"patient".into(),filler_candidate_ref:"dog".into(),occurrence:0},
             ],context:ObservationContext::default(),
             candidate_type_refs:vec![],provenance_refs:vec!["receipt:source".into()],
-            polarity:Polarity::Supports,candidate_only:true,
+            native_metadata_refs:vec![],polarity:Polarity::Supports,candidate_only:true,
             creates_semantic_authority:false,claim_truth_promoted:false,
         }
     }
