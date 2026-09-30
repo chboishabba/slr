@@ -224,6 +224,8 @@ pub use source_candidate_persistence::{
 pub use wikidata_ontology_review::{
     WIKI_DIAGNOSTIC_SCHEMA, WIKI_DIAGNOSTIC_SQL,
     OntologyDiagnosticPacket, OntologyWitness, OntologyRepairCandidate,
+    OntologyNativeStatement, OntologyNativeQualifier,
+    apply_ontology_diagnostic_review,
     WikidataGraphView, OntologyCheckerKind, OntologyDiagnosticDisposition,
     OntologyDiagnosticRead, OntologyReviewError,
     validate_ontology_packet, persist_ontology_diagnostic,
