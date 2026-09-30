@@ -5,6 +5,7 @@ mod chat_source_store;
 mod chat_source_fold;
 mod chronology_contestation_store;
 mod candidate_pnf;
+mod relational_interlingua;
 mod candidate_pnf_store;
 mod corpus_reconciliation_store;
 mod reconciliation_review_store;
@@ -66,6 +67,14 @@ pub use cache_first::{
     resolve_cache_first, AcquiredSourceBundle, CacheFirstAcquirer, CacheFirstError,
     CacheFirstResolution, CacheLookupDemand, CachedResolvedDocument,
     ExactResolutionReceiptOwned, ResolvedExternalDocumentOwned,
+};
+pub use relational_interlingua::{
+    RELATIONAL_INTERLINGUA_SCHEMA, SourceFamily, RelationalObservation,
+    RoleBinding, ObservationContext, Polarity, RelationalConsumer,
+    LicensedAlignment, AlignmentDirection, ComparisonFinding,
+    ResidualKind, ComparisonResidual, RelationalComparison,
+    RelationalComparisonError, observation_from_candidate_pnf,
+    compare_relational_observations,
 };
 pub use candidate_pnf::{
     CandidatePnfBatch, CandidatePnfError, CandidatePnfFactor, CandidatePnfProducer,
