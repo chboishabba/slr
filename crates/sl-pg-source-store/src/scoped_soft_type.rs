@@ -41,6 +41,10 @@ pub struct ScopedPairEvidence {
     pub property_alignment_witness_ref:Option<String>,
     pub scope_comparability_witness_ref:Option<String>,
     pub value_distinctness_witness_ref:Option<String>,
+    /// Positive evidence that the contract does not apply to this source pair.
+    /// This is categorically different from failure to establish comparability.
+    #[serde(default)]
+    pub positive_outside_scope_witness_ref:Option<String>,
 }
 #[derive(Debug,Clone,PartialEq,Eq,Serialize,Deserialize)]
 #[serde(rename_all="snake_case")]
@@ -106,6 +110,22 @@ pub fn evaluate_single_value_contract(
     let mut debt=Vec::new();
     let mut witnesses=BTreeSet::new();
     witnesses.insert(contract.contract_source_ref.clone());
+    if let Some(outside)=optional_witness(&pair.positive_outside_scope_witness_ref){
+        witnesses.insert(outside);
+        return Ok(ScopedContractReceipt{
+            consumer_ref:contract.consumer_ref.clone(),
+            contract_ref:contract.contract_ref.clone(),
+            left_statement_ref:left.statement_ref.clone(),
+            right_statement_ref:right.statement_ref.clone(),
+            status:ContractResult::OutsideScope,
+            witness_refs:witnesses.into_iter().collect(),
+            missing_premise_refs:vec![],
+            observed_value_refs:vec![left.value_candidate_ref.clone(),
+                right.value_candidate_ref.clone()],
+            suggested_retyping:false,establishes_claim_truth:false,
+            establishes_source_identity:false,grants_repair_authority:false,
+        });
+    }
     for receipt in [
         needs(&mut debt,"subject-identity-unpaid",
             &pair.shared_subject_witness_ref),
@@ -187,6 +207,7 @@ mod tests{
             property_alignment_witness_ref:Some("property:proof".into()),
             scope_comparability_witness_ref:Some("scope:proof".into()),
             value_distinctness_witness_ref:Some("values:nonidentity".into()),
+            positive_outside_scope_witness_ref:None,
         };
         (c,mk("a","A"),mk("b","B"),pair)
     }
@@ -213,6 +234,16 @@ mod tests{
         assert!(result.missing_premise_refs.contains(
             &"source-scope-or-time-alignment-unpaid".to_owned()));
     }
+    #[test]fn positive_nonapplicability_is_outside_scope_not_unknown(){
+        let(c,a,b,mut p)=specimen();
+        p.positive_outside_scope_witness_ref=Some("scope:does-not-apply".into());
+        p.scope_comparability_witness_ref=None;
+        let result=evaluate_single_value_contract(&c,&a,&b,&p).unwrap();
+        assert_eq!(result.status,ContractResult::OutsideScope);
+        assert!(result.missing_premise_refs.is_empty());
+        assert!(result.witness_refs.contains(&"scope:does-not-apply".to_owned()));
+    }
+
     #[test]fn distinctness_receipt_not_optional(){
         let(c,a,b,mut p)=specimen();
         p.value_distinctness_witness_ref=None;
