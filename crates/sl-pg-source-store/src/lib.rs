@@ -76,7 +76,8 @@ pub use relational_interlingua_store::{
 };
 pub use relational_interlingua::{
     RELATIONAL_INTERLINGUA_SCHEMA, SourceFamily, RelationalObservation,
-    RoleBinding, ObservationContext, Polarity, RelationalConsumer,
+    RoleBinding, RoleTypeHypothesis, RoleTypeDemand, ObservationContext,
+    Polarity, RelationalConsumer,
     LicensedAlignment, AlignmentDirection, ComparisonFinding,
     ResidualKind, ComparisonResidual, RelationalComparison,
     RelationalComparisonError, observation_from_candidate_pnf,
