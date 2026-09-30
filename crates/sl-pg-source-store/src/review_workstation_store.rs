@@ -29,6 +29,7 @@ fn kind_db(kind: ReviewItemKind) -> &'static str {
         ReviewItemKind::LegalTreatment => "legal_treatment",
         ReviewItemKind::ScopeHandoff => "scope_handoff",
         ReviewItemKind::SourceCorrespondence => "source_correspondence",
+        ReviewItemKind::OntologyDiagnostic => "ontology_diagnostic",
     }
 }
 
@@ -44,6 +45,7 @@ fn kind_from_db(value: &str) -> Result<ReviewItemKind, ReviewWorkstationStoreErr
         "legal_treatment" => Ok(ReviewItemKind::LegalTreatment),
         "scope_handoff" => Ok(ReviewItemKind::ScopeHandoff),
         "source_correspondence" => Ok(ReviewItemKind::SourceCorrespondence),
+        "ontology_diagnostic" => Ok(ReviewItemKind::OntologyDiagnostic),
         _ => Err(ReviewWorkstationStoreError::ExistingRowConflict),
     }
 }
@@ -619,6 +621,7 @@ mod tests {
             ReviewItemKind::LegalTreatment,
             ReviewItemKind::ScopeHandoff,
             ReviewItemKind::SourceCorrespondence,
+            ReviewItemKind::OntologyDiagnostic,
         ] {
             assert_eq!(kind_from_db(kind_db(kind)).unwrap(), kind);
         }
