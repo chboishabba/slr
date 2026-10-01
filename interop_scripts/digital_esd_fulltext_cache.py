@@ -79,12 +79,21 @@ def write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
 
 
 def free_space_gib(path: Path) -> float:
-    st = path.stat()
-    return st.st_free / (1024 ** 3)
+    path.mkdir(parents=True, exist_ok=True)
+    return shutil.disk_usage(path).free / (1024 ** 3)
 
 
 def fmt_gib(gib: float) -> str:
     return f"{gib:.2f} GiB"
+
+
+def sha256_file(path: Path) -> str:
+    import hashlib
+    h = hashlib.sha256()
+    with path.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
 
 
 class FullTextCacheWrapper:
@@ -104,6 +113,9 @@ class FullTextCacheWrapper:
         self.worklist = worklist
         self.priority_queue = priority_queue
         self.max_items = max_items
+        self.max_cache_gib = max_cache_gib
+        self.reserve_gib = reserve_gib
+        self.planning_size_mb = planning_size_mb
         self.max_cache_bytes = max_cache_gib * (1024 ** 3)
         self.reserve_bytes = reserve_gib * (1024 ** 3)
         self.planning_size_bytes = planning_size_mb * (1024 ** 2)
@@ -119,14 +131,39 @@ class FullTextCacheWrapper:
 
         retained = [r for r in worklist if str(r.get("decision") or "") in ("include", "probable")]
 
-        by_ref: dict[str, dict[str, Any]] = {str(r.get("source_identity_reference") or ""): r for r in retained}
+        parsed_manifest = self.cache_dir.parent / "parsed-manifest.jsonl"
+        parsed_rows = jsonl(parsed_manifest) if parsed_manifest.exists() else []
+        parsed_refs = {
+            str(r.get("source_identity_reference") or "")
+            for r in parsed_rows
+            if str(r.get("source_identity_reference") or "")
+            and bool(r.get("verified", True))
+        }
+
+        retrieved_manifest = self.cache_dir.parent / "retrieved-manifest.jsonl"
+        retrieved_rows = jsonl(retrieved_manifest) if retrieved_manifest.exists() else []
+        retrieved_refs = {
+            str(r.get("source_identity_reference") or "")
+            for r in retrieved_rows
+            if str(r.get("source_identity_reference") or "")
+        }
+
+        by_ref: dict[str, dict[str, Any]] = {
+            str(r.get("source_identity_reference") or ""): r
+            for r in retained
+            if str(r.get("source_identity_reference") or "") not in parsed_refs
+        }
 
         priority_order: list[str] = []
         for item in priority:
             ref = str(item.get("source_identity_reference") or "")
             if ref in by_ref and ref not in priority_order:
                 priority_order.append(ref)
-        remaining = [r for r in retained if str(r.get("source_identity_reference") or "") not in priority_order]
+        remaining = [
+            r for r in retained
+            if str(r.get("source_identity_reference") or "") not in priority_order
+            and str(r.get("source_identity_reference") or "") not in parsed_refs
+        ]
         remaining.sort(key=lambda r: str(r.get("source_identity_reference") or ""))
         final_order = priority_order + [str(r.get("source_identity_reference") or "") for r in remaining]
 
@@ -135,7 +172,10 @@ class FullTextCacheWrapper:
 
         estimated_bytes = len(selected) * self.planning_size_bytes
         free_gib = free_space_gib(self.cache_dir)
-        fits = estimated_bytes <= (self.max_cache_bytes - self.reserve_bytes) and free_gib >= self.reserve_gib
+        fits_cache_cap = estimated_bytes <= self.max_cache_bytes
+        free_after_gib = free_gib - (estimated_bytes / (1024 ** 3))
+        meets_reserve = free_after_gib >= self.reserve_gib
+        fits = fits_cache_cap and meets_reserve
 
         batch: list[dict[str, Any]] = []
         for item in selected:
@@ -145,6 +185,7 @@ class FullTextCacheWrapper:
                 "decision": str(item.get("decision") or ""),
                 "decision_reference": str(item.get("decision_reference") or ""),
                 "estimated_planning_size_bytes": self.planning_size_bytes,
+                "retrieved_cache_present": ref in retrieved_refs,
                 "cache_dir": str(self.cache_dir),
                 "candidate_path": str(self.cache_dir / f"{ref}.pdf"),
             })
@@ -157,6 +198,11 @@ class FullTextCacheWrapper:
             "reserve_gib": self.reserve_gib,
             "planning_size_mb": self.planning_size_mb,
             "retained_worklist_count": len(retained),
+            "already_parsed_count": len(parsed_refs & {
+                str(r.get("source_identity_reference") or "") for r in retained
+            }),
+            "remaining_unparsed_count": len(by_ref),
+            "already_retrieved_unparsed_count": len(retrieved_refs & set(by_ref)),
             "priority_queue_count": len(priority),
             "selected_count": len(batch),
             "estimated_total_bytes": estimated_bytes,
@@ -164,9 +210,10 @@ class FullTextCacheWrapper:
             "free_space_gib": round(free_gib, 4),
             "max_cache_bytes": self.max_cache_bytes,
             "reserve_bytes": self.reserve_bytes,
-            "fits_cache_cap": fits,
-            "meets_reserve": free_gib >= self.reserve_gib,
-            "eligible_for_fetch": fits and free_gib >= self.reserve_gib,
+            "fits_cache_cap": fits_cache_cap,
+            "meets_reserve": meets_reserve,
+            "free_space_after_plan_gib": round(free_after_gib, 4),
+            "eligible_for_fetch": fits,
             "batch": batch,
         }
         return result
@@ -176,17 +223,42 @@ class FullTextCacheWrapper:
     # ------------------------------------------------------------------
 
     def register(self, fetch_plan_path: Path | None = None) -> dict[str, Any]:
-        plan = self.plan() if fetch_plan_path is None else json.loads(fetch_plan_path.read_text())
-        batch = plan.get("batch", [])
+        if fetch_plan_path is None:
+            plan = self.plan()
+            batch = plan.get("batch", [])
+        else:
+            raw = fetch_plan_path.read_text(encoding="utf-8").strip()
+            if not raw:
+                batch = []
+            else:
+                try:
+                    payload = json.loads(raw)
+                except json.JSONDecodeError:
+                    batch = jsonl(fetch_plan_path)
+                else:
+                    if isinstance(payload, dict):
+                        batch = payload.get("batch", [])
+                    elif isinstance(payload, list):
+                        batch = payload
+                    else:
+                        raise ValueError(
+                            "fetch plan must be an object with batch, a JSON array, or JSONL"
+                        )
         plan_refs = {str(b["source_identity_reference"]) for b in batch}
 
-        retrieved = jsonl(self.cache_dir.parent / "retrieved-manifest.jsonl") if (self.cache_dir.parent / "retrieved-manifest.jsonl").exists() else []
+        retrieved_path = self.cache_dir.parent / "retrieved-manifest.jsonl"
+        retrieved = jsonl(retrieved_path) if retrieved_path.exists() else []
+        retrieved_by_ref = {
+            str(row.get("source_identity_reference") or ""): row
+            for row in retrieved
+            if str(row.get("source_identity_reference") or "")
+        }
 
         registered: list[dict[str, Any]] = []
         rejected: list[dict[str, Any]] = []
         cache_used = 0
 
-        for ref in plan_refs:
+        for ref in sorted(plan_refs):
             artifact = self.cache_dir / f"{ref}.pdf"
             if not artifact.exists() or not artifact.is_file():
                 rejected.append({
@@ -207,12 +279,39 @@ class FullTextCacheWrapper:
                 })
                 continue
 
+            observed_digest = sha256_file(artifact)
+            receipt = retrieved_by_ref.get(ref)
+            if receipt is not None:
+                expected_digest = str(receipt.get("sha256") or "").lower().removeprefix("sha256:")
+                if expected_digest and expected_digest != observed_digest:
+                    rejected.append({
+                        "source_identity_reference": ref,
+                        "reason": "retrieval-receipt-digest-mismatch",
+                        "expected_sha256": expected_digest,
+                        "observed_sha256": observed_digest,
+                    })
+                    continue
+                revision = str(
+                    receipt.get("source_revision_reference")
+                    or f"fulltext-sha256:{observed_digest}"
+                )
+                retrieval_reference = str(
+                    receipt.get("retrieval_reference") or artifact.resolve()
+                )
+            else:
+                revision = f"fulltext-sha256:{observed_digest}"
+                retrieval_reference = f"local-cache-register:{artifact.resolve()}"
+
             registered.append({
                 "source_identity_reference": ref,
+                "source_revision_reference": revision,
+                "content_sha256": observed_digest,
                 "artifact_path": str(artifact),
                 "artifact_size_bytes": size,
+                "retrieval_reference": retrieval_reference,
                 "registered_at": now_iso(),
                 "in_fetch_plan": True,
+                "retrieval_receipt_observed": receipt is not None,
                 "creates_source_truth": False,
                 "creates_source_audit_admission": False,
             })
@@ -403,72 +502,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
-
-# ------------------------------------------------------------------
-# fetch
-# ------------------------------------------------------------------
-
-def fetch(
-    fetch_plan_path: Path | None = None,
-    cache_dir: Path = DEFAULT_CACHE_DIR,
-    dry_run: bool = False,
-) -> dict[str, Any]:
-    """Execute the fetch plan: download artifacts to the cache directory.
-
-    Uses the fetch-batch.jsonl produced by plan() to download
-    full-text artifacts to the local cache.
-    """
-    if fetch_plan_path is None:
-        fetch_plan_path = DEFAULT_CACHE_DIR.parent / "fetch-batch.jsonl"
-
-    plan_rows = read_jsonl(fetch_plan_path) if fetch_plan_path.exists() else []
-    results: list[dict[str, Any]] = []
-    total_bytes = 0
-
-    for item in plan_rows:
-        ref = str(item.get("source_identity_reference") or "")
-        artifact_path = Path(str(item.get("candidate_path") or cache_dir / f"{ref}.pdf"))
-        artifact_path.parent.mkdir(parents=True, exist_ok=True)
-
-        if dry_run:
-            results.append({
-                "source_identity_reference": ref,
-                "artifact_path": str(artifact_path),
-                "status": "dry-run",
-                "actual_bytes": 0,
-            })
-            continue
-
-        # Placeholder for actual download
-        # In production: requests.get(item["artifact_url"], stream=True)
-        downloaded = False
-
-        if downloaded:
-            total_bytes += artifact_path.stat().st_size
-            results.append({
-                "source_identity_reference": ref,
-                "artifact_path": str(artifact_path),
-                "status": "downloaded",
-                "actual_bytes": artifact_path.stat().st_size,
-            })
-        else:
-            results.append({
-                "source_identity_reference": ref,
-                "artifact_path": str(artifact_path),
-                "status": "download-failed",
-                "actual_bytes": 0,
-            })
-
-    result: dict[str, Any] = {
-        "schema": "sensiblaw.digital-esd-fulltext-cache-fetch.v0_1",
-        "fetched_at": now_iso(),
-        "dry_run": dry_run,
-        "plan_count": len(plan_rows),
-        "downloaded_count": sum(1 for r in results if r["status"] == "downloaded"),
-        "failed_count": sum(1 for r in results if r["status"] == "download-failed"),
-        "total_bytes": total_bytes,
-        "results": results,
-    }
-    write_jsonl(cache_dir.parent / "fetch-results.jsonl", results)
-    return result

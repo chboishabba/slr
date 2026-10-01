@@ -33,6 +33,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from interop_scripts.document_text import DocumentTextError, extract_document_text
+
 
 STRUCTURE_PATTERNS = {
     "heading": re.compile(r"^(#{1,6})\s+(.+)$", re.MULTILINE),
@@ -147,10 +149,26 @@ class ScholarlyParserPrototype:
 
     def parse_file(self, artifact_path: Path, request: dict[str, Any]) -> dict[str, Any]:
         """Parse a single scholarly document and return structure + candidates."""
-        content = artifact_path.read_text(encoding="utf-8", errors="replace")
         file_ext = artifact_path.suffix.lower()
         format_type = self._detect_format(file_ext)
+        try:
+            extracted = extract_document_text(artifact_path)
+        except DocumentTextError as error:
+            return {
+                "request_reference": request.get("request_reference", ""),
+                "source_identity_reference": request.get("source_identity_reference", ""),
+                "source_revision_reference": request.get("source_revision_reference", ""),
+                "content_sha256": request.get("content_sha256", ""),
+                "artifact_path": str(artifact_path),
+                "format_type": format_type,
+                "candidate_only": True,
+                "creates_study_truth": False,
+                "creates_source_audit_admission": False,
+                "parser_success": False,
+                "reason": str(error),
+            }
 
+        content = extracted.text
         document_nodes = self._extract_structure(content, format_type)
         facets = self._extract_facets(content)
 
@@ -161,6 +179,9 @@ class ScholarlyParserPrototype:
             "content_sha256": request.get("content_sha256", ""),
             "artifact_path": str(artifact_path),
             "format_type": format_type,
+            "text_extractor_reference": extracted.extractor_reference,
+            "extracted_text_sha256": extracted.extracted_text_sha256,
+            "extracted_text_length": len(content),
             "document_nodes": document_nodes,
             "study_facets": facets,
             "candidate_only": True,
