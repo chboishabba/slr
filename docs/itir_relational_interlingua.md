@@ -342,3 +342,50 @@ authority. Formal owners are
 
 No exact-head runtime/kernel receipt or real three-domain source suite
 is claimed by committing these integration surfaces.
+
+## Live fixture acquisition/preflight
+
+REL-1B deliberately does **not** synthesize a "real" cross-domain suite from
+whatever happens to be present in the authority database. The current live
+database may contain unrelated generic/chat sources and still be wholly
+unsuitable for the three-domain acceptance contract.
+
+`examples/itir_rel1_fixture_preflight.rs` checks a separately prepared
+`itir.rel1.fixture-acquisition.v1` manifest against the live PostgreSQL
+authority. For each required source it reports:
+
+- source revision presence;
+- canonical payload SHA-256;
+- native source family;
+- stored acquisition receipt agreement where the native store exposes it;
+- explicit revision locator;
+- parser/adapter receipt;
+- consumer and alignment-licence coordinates.
+
+A case is **not ready** when any source is missing, hashes differ, the stored
+source family differs, a generic-source acquisition receipt differs, or the
+consumer/licence/producer coordinates are absent. The tool never substitutes
+a chat quote, cached example, same-QID page, fixture from another matter, or
+model-generated text for a missing source.
+
+Run:
+
+```bash
+cargo run -p sensiblaw-pg-source-store \
+  --example itir_rel1_fixture_preflight -- \
+  /path/to/real-acquisition-manifest.json
+```
+
+A deliberately non-runnable planning specimen lives at
+`docs/itir_rel1_fixture_acquisition.template.json`; its schema is
+`itir.rel1.fixture-acquisition.template.v1`, so the executable will reject it
+until the caller replaces all placeholders and deliberately changes the
+schema to `itir.rel1.fixture-acquisition.v1`.
+
+This separates two states that must not be conflated:
+
+1. **implementation ready to evaluate a fixture**, and
+2. **the required independently sourced fixture actually exists in PG**.
+
+A blocked preflight is therefore an honest acquisition result, not an
+acceptance failure of the relational mathematics.
