@@ -9,9 +9,11 @@ use serde::{Deserialize,Serialize};
 use sha2::{Digest,Sha256};
 use thiserror::Error;
 use crate::{
-    acquisition_pareto_frontier, load_relational_comparison,
+    acquisition_pareto_frontier, apply_acquisition_update,
+    load_relational_comparison, selective_reopening,
     AcquisitionObligation,AcquisitionPriorityReceipt,AcquisitionRouteCandidate,
-    DatabaseConfig,DurableRelationalError,InvestigationAcquisitionError,
+    AcquisitionUpdate,DatabaseConfig,DurableRelationalError,
+    InvestigationAcquisitionError,RecordAvailability,SelectiveReopeningReceipt,
 };
 
 pub const INVESTIGATION_ACQUISITION_SQL:&str=r#"
@@ -44,6 +46,23 @@ CREATE TABLE IF NOT EXISTS semantic.investigation_acquisition_priority (
     scalar_score_used BOOLEAN NOT NULL CHECK(NOT scalar_score_used),
     creates_semantic_authority BOOLEAN NOT NULL CHECK(NOT creates_semantic_authority),
     creates_decision BOOLEAN NOT NULL CHECK(NOT creates_decision)
+);
+CREATE TABLE IF NOT EXISTS semantic.investigation_acquisition_update (
+    obligation_ref TEXT NOT NULL
+      REFERENCES semantic.investigation_acquisition_obligation(obligation_ref),
+    acquisition_receipt_ref TEXT NOT NULL,
+    packet_sha256 TEXT NOT NULL,
+    packet_json TEXT NOT NULL,
+    PRIMARY KEY(obligation_ref,acquisition_receipt_ref)
+);
+CREATE TABLE IF NOT EXISTS semantic.investigation_selective_reopening (
+    obligation_ref TEXT NOT NULL
+      REFERENCES semantic.investigation_acquisition_obligation(obligation_ref),
+    acquisition_receipt_ref TEXT NOT NULL,
+    packet_sha256 TEXT NOT NULL,
+    packet_json TEXT NOT NULL,
+    creates_semantic_authority BOOLEAN NOT NULL CHECK(NOT creates_semantic_authority),
+    PRIMARY KEY(obligation_ref,acquisition_receipt_ref)
 );
 "#;
 
@@ -136,6 +155,85 @@ pub fn persist_acquisition_queue(
     };
     if reopened!=expected{return Err(InvestigationStoreError::ChangedReplay);}
     Ok(reopened)
+}
+
+fn source_revision_exists(
+    client:&mut Client,revision:&str,
+)->Result<bool,postgres::Error>{
+    if client.query_opt(
+        "SELECT 1 FROM ingest.generic_source_revision
+         WHERE source_revision_ref=$1 AND candidate_only=TRUE
+           AND creates_semantic_authority=FALSE
+           AND applicability_promoted=FALSE AND claim_truth_promoted=FALSE",
+        &[&revision])?.is_some(){return Ok(true);}
+    Ok(client.query_opt(
+        "SELECT 1 FROM corpus.chat_archive_message
+         WHERE source_revision_ref=$1 AND candidate_only=TRUE
+           AND creates_semantic_authority=FALSE
+           AND applicability_promoted=FALSE AND claim_truth_promoted=FALSE
+         LIMIT 1",
+        &[&revision])?.is_some())
+}
+
+/// Persist an acquisition result only after the source is already ingested by
+/// its native adapter. Known-absent closes the exact branch and produces no
+/// selective-reopening receipt.
+pub fn persist_acquisition_update(
+    config:&DatabaseConfig,
+    update:&AcquisitionUpdate,
+    dependency_graph_ref:&str,
+    dependency_edges:&[(String,String)],
+    dependency_universe_refs:&[String],
+)->Result<Option<SelectiveReopeningReceipt>,InvestigationStoreError>{
+    let queue=load_acquisition_queue(config,&update.obligation_ref)?
+        .ok_or(InvestigationStoreError::WrongOwner)?;
+    apply_acquisition_update(&queue.obligation,update)?;
+    let mut client=Client::connect(config.database_url(),NoTls)?;
+    client.batch_execute(INVESTIGATION_ACQUISITION_SQL)?;
+
+    if update.after==RecordAvailability::Present{
+        let revision=update.acquired_source_revision_ref.as_ref()
+            .ok_or(InvestigationStoreError::ChangedReplay)?;
+        if !source_revision_exists(&mut client,revision)?{
+            return Err(InvestigationStoreError::WrongOwner);
+        }
+    }
+
+    let body=serde_json::to_string(update)?;
+    client.execute(
+        "INSERT INTO semantic.investigation_acquisition_update
+         (obligation_ref,acquisition_receipt_ref,packet_sha256,packet_json)
+         VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING",
+        &[&update.obligation_ref,&update.acquisition_receipt_ref,
+          &digest(&body),&body],
+    )?;
+    let row=client.query_one(
+        "SELECT packet_sha256,packet_json
+         FROM semantic.investigation_acquisition_update
+         WHERE obligation_ref=$1 AND acquisition_receipt_ref=$2",
+        &[&update.obligation_ref,&update.acquisition_receipt_ref])?;
+    let reopened_json:String=row.get(1);
+    if digest(&reopened_json)!=row.get::<_,String>(0)
+        ||serde_json::from_str::<AcquisitionUpdate>(&reopened_json)?!=*update{
+        return Err(InvestigationStoreError::ChangedReplay);
+    }
+
+    if update.after==RecordAvailability::KnownAbsent{
+        return Ok(None);
+    }
+    let revision=update.acquired_source_revision_ref.as_ref().unwrap();
+    let reopening=selective_reopening(
+        revision,dependency_graph_ref,dependency_edges,dependency_universe_refs)?;
+    let reopening_json=serde_json::to_string(&reopening)?;
+    client.execute(
+        "INSERT INTO semantic.investigation_selective_reopening
+         (obligation_ref,acquisition_receipt_ref,packet_sha256,packet_json,
+          creates_semantic_authority)
+         VALUES($1,$2,$3,$4,FALSE) ON CONFLICT DO NOTHING",
+        &[&update.obligation_ref,&update.acquisition_receipt_ref,
+          &digest(&reopening_json),&reopening_json],
+    )?;
+    Ok(Some(reopening))
 }
 
 pub fn load_acquisition_queue(
