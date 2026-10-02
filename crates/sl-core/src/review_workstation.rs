@@ -15,6 +15,10 @@ pub enum ReviewItemKind {
     ResearchAcquisition,
     LegalTreatment,
     ScopeHandoff,
+    /// Review of a proposed relationship, never acceptance of either source's truth.
+    SourceCorrespondence,
+    /// Source-pinned finite ontology diagnostic, not a repair authorization.
+    OntologyDiagnostic,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

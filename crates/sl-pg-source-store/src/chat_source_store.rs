@@ -100,6 +100,22 @@ pub enum ChatSourceStoreError {
     InvalidStatementSpan,
     #[error(transparent)]
     StatementTrace(#[from] StatementTraceStoreError),
+    #[error("generic source compiler error: {0}")]
+    GenericCompiler(String),
+    #[error(transparent)]
+    CandidatePnf(#[from] crate::CandidatePnfStoreError),
+    #[error("compiled statement diverged from persisted chat statement identity")]
+    CompiledStatementMismatch,
+    #[error("chat statement overlaps a producer-owned source backreference")]
+    TransportSelectionConflict,
+    #[error("source-join validation failed: {0}")]
+    SourceJoinValidation(String),
+    #[error(transparent)]
+    ParserSnapshot(#[from] crate::DbNativeParserError),
+    #[error("parser run source revision does not match chat message")]
+    ParserRevisionMismatch,
+    #[error("parser worker has not attempted all selected chat spans")]
+    IncompleteChatParserRun,
 }
 
 pub fn load_chat_archive_export_jsonl(
@@ -280,7 +296,7 @@ pub fn persist_chat_archive_message(
         &[
             &full_message_span_ref,
             &document_ref,
-            &(message.content.len() as i32),
+            &(message.content.chars().count() as i32),
         ],
     )?;
 
@@ -340,6 +356,47 @@ pub fn persist_chat_archive_message(
     Ok(persisted)
 }
 
+/// The same stable span coordinate is used by the in-memory M12 compiler
+/// and by the PostgreSQL statement materializer.
+pub fn canonical_chat_statement_span_ref(
+    source_revision_ref: &str,
+    selection: &ChatStatementCandidateSpan,
+) -> String {
+    let digest = sha256(
+        format!(
+            "chat-statement-span:v1\n{}\n{}\n{}\n{}",
+            source_revision_ref,
+            selection.statement_candidate_ref,
+            selection.start_char,
+            selection.end_char,
+        )
+        .as_bytes(),
+    );
+    format!("span:chat-statement:sha256:{}", hex(&digest))
+}
+
+/// Fail closed when a statement span overlaps a source-owned artifact
+/// quoted or pasted into a conversation message. The chat remains a source
+/// event; its transported content is not a second independent witness.
+fn guard_chat_transport_selections(
+    config: &DatabaseConfig,
+    message_ref: &str,
+    selections: &[ChatStatementCandidateSpan],
+) -> Result<(), ChatSourceStoreError> {
+    let joins = crate::load_chat_source_joins_for_message(config, message_ref)
+        .map_err(|error| ChatSourceStoreError::SourceJoinValidation(error.to_string()))?;
+    for selected in selections {
+        for joined in &joins {
+            if u64::from(selected.start_char) < joined.end_char
+                && joined.start_char < u64::from(selected.end_char)
+            {
+                return Err(ChatSourceStoreError::TransportSelectionConflict);
+            }
+        }
+    }
+    Ok(())
+}
+
 pub fn materialize_chat_statement(
     config: &DatabaseConfig,
     selection: &ChatStatementCandidateSpan,
@@ -350,6 +407,15 @@ pub fn materialize_chat_statement(
         .map_err(|_| ChatSourceStoreError::InvalidStatementSpan)?;
     let source = load_chat_message_source(config, &selection.message_ref)?
         .ok_or_else(|| ChatSourceStoreError::UnknownMessage(selection.message_ref.clone()))?;
+    if source.branch_membership != ChatBranchMembership::Active
+        || source.content_kind != ChatContentKind::Message
+        || !matches!(source.role, ChatMessageRole::User | ChatMessageRole::Assistant)
+    {
+        return Err(ChatSourceStoreError::InvalidSource);
+    }
+    guard_chat_transport_selections(
+        config, &selection.message_ref, std::slice::from_ref(selection),
+    )?;
 
     let mut client = Client::connect(config.database_url(), NoTls)?;
     let content: String = client
@@ -364,30 +430,24 @@ pub fn materialize_chat_statement(
         )?
         .get(0);
 
-    let start = selection.start_char as usize;
-    let end = selection.end_char as usize;
-    if start >= end
-        || end > content.len()
-        || !content.is_char_boundary(start)
-        || !content.is_char_boundary(end)
-    {
+    // Source spans are character offsets, not UTF-8 byte offsets. The DB
+    // canonical text may contain multibyte Unicode before the selected span.
+    let start_char = selection.start_char as usize;
+    let end_char = selection.end_char as usize;
+    if start_char >= end_char || end_char > content.chars().count() {
         return Err(ChatSourceStoreError::InvalidStatementSpan);
     }
+    let start = content.char_indices().nth(start_char)
+        .map(|(byte, _)| byte)
+        .unwrap_or(content.len());
+    let end = content.char_indices().nth(end_char)
+        .map(|(byte, _)| byte)
+        .unwrap_or(content.len());
     if &content[start..end] != selection.literal_text {
         return Err(ChatSourceStoreError::LiteralSubspanMismatch);
     }
 
-    let span_digest = sha256(
-        format!(
-            "chat-statement-span:v1\n{}\n{}\n{}\n{}",
-            source.source_revision_ref,
-            selection.statement_candidate_ref,
-            selection.start_char,
-            selection.end_char,
-        )
-        .as_bytes(),
-    );
-    let span_ref = format!("span:chat-statement:sha256:{}", hex(&span_digest));
+    let span_ref = canonical_chat_statement_span_ref(&source.source_revision_ref, selection);
     client.execute(
         r#"
         INSERT INTO corpus.span
@@ -422,6 +482,155 @@ pub fn materialize_chat_statement(
     };
     statement.statement_ref = canonical_statement_ref(&statement);
     persist_source_statement(config, &statement).map_err(Into::into)
+}
+
+/// Persist selected chat M12 statements and candidate batches using the
+/// existing chat archive rows as immutable source authority. This deliberately
+/// does not process raw chat exports or invent transcript/person provenance.
+///
+/// All selections are compiled (and therefore validated) *before* persistence.
+/// Parser failures remain explicit in the returned lossless receipt. Successful
+/// selections enter the existing statement and candidate stores; they never
+/// pay semantic admission or claim truth.
+pub fn compile_and_persist_chat_selections<P: crate::CandidatePnfProducer>(
+    config: &DatabaseConfig,
+    message_ref: &str,
+    selections: &[ChatStatementCandidateSpan],
+    producer: &P,
+    parser_receipt_prefix: &str,
+) -> Result<crate::LosslessBulkSourceCompilation, ChatSourceStoreError> {
+    let source = load_chat_message_source(config, message_ref)?
+        .ok_or_else(|| ChatSourceStoreError::UnknownMessage(message_ref.to_owned()))?;
+    guard_chat_transport_selections(config, message_ref, selections)?;
+    let receipt = crate::compile_chat_message_lossless(
+        producer, &source, selections, parser_receipt_prefix,
+    ).map_err(|error| ChatSourceStoreError::GenericCompiler(error.to_string()))?;
+    if !receipt.source_coverage_complete() {
+        return Err(ChatSourceStoreError::InvalidSource);
+    }
+
+    // The explicit selection and its durable canonical span are distinct
+    // identifiers. Compare canonical span keys, never local ordinals.
+    let selected_by_span = selections.iter().map(|selection| (
+        canonical_chat_statement_span_ref(&source.source_revision_ref, selection),
+        selection,
+    )).collect::<std::collections::BTreeMap<_, _>>();
+
+    for candidate in &receipt.compiled {
+        let selected = selected_by_span
+            .get(&candidate.statement.span.span_ref)
+            .ok_or(ChatSourceStoreError::CompiledStatementMismatch)?;
+        let persisted = materialize_chat_statement(
+            config, selected, StatementOrigin::InitialIntake,
+        )?;
+        if persisted.statement_ref != candidate.statement.statement_ref {
+            return Err(ChatSourceStoreError::CompiledStatementMismatch);
+        }
+        let batch = crate::persist_statement_candidate_pnf(config, candidate)?;
+        if batch.statement_ref != persisted.statement_ref
+            || batch.exact_span_ref != candidate.statement.span.span_ref
+        {
+            return Err(ChatSourceStoreError::CompiledStatementMismatch);
+        }
+    }
+    Ok(receipt)
+}
+
+/// PG-native compiled-chat entry point: reuse a *previously completed*
+/// parser run, not a new TSV ingestion lane. Selected spans must already have
+/// matching parser jobs and immutable native chat identity. Missing parser work
+/// stays a residual, never a fabricated success.
+/// Prepare selected chat spans as ordinary PG-native parser jobs using the
+/// shared worker queue. No parser is run here: the existing `worker` command
+/// executes the jobs before `compile_and_persist_chat_from_parser_run`.
+pub fn prepare_chat_selection_parser_run(
+    config: &DatabaseConfig,
+    message_ref: &str,
+    selections: &[ChatStatementCandidateSpan],
+    parser_family: &str,
+    parser_version: &str,
+    model_ref: &str,
+    config_json: &str,
+) -> Result<(crate::ParserRunReceipt, crate::ParserEnqueueReceipt), ChatSourceStoreError> {
+    let source = load_chat_message_source(config, message_ref)?
+        .ok_or_else(|| ChatSourceStoreError::UnknownMessage(message_ref.to_owned()))?;
+    guard_chat_transport_selections(config, message_ref, selections)?;
+
+    use sensiblaw_core::chat_source::{
+        ChatBranchMembership, ChatContentKind, ChatMessageRole,
+    };
+    let eligible = source.branch_membership == ChatBranchMembership::Active
+        && source.content_kind == ChatContentKind::Message
+        && matches!(source.role, ChatMessageRole::User | ChatMessageRole::Assistant);
+    if !eligible && !selections.is_empty() {
+        return Err(ChatSourceStoreError::InvalidSource);
+    }
+    let mut ordered = selections.iter().collect::<Vec<_>>();
+    ordered.sort_by_key(|selection| (selection.start_char, selection.end_char));
+    let ranges = ordered.iter().map(|selection| (
+        u64::from(selection.start_char), u64::from(selection.end_char),
+    )).collect::<Vec<_>>();
+    let literals = crate::generic_source_compiler::canonical_char_subspans(
+        &source.literal_text, &ranges,
+    ).ok_or(ChatSourceStoreError::InvalidStatementSpan)?;
+    let mut end_previous = 0u64;
+    let total = source.literal_text.chars().count() as u64;
+    let mut specs = Vec::with_capacity(ordered.len());
+    for (selection, literal) in ordered.into_iter().zip(literals) {
+        selection.validate().map_err(|_| ChatSourceStoreError::InvalidStatementSpan)?;
+        let start = u64::from(selection.start_char);
+        let end = u64::from(selection.end_char);
+        if selection.message_ref != message_ref
+            || start < end_previous || end > total
+            || literal != selection.literal_text
+        {
+            return Err(ChatSourceStoreError::InvalidStatementSpan);
+        }
+        end_previous = end;
+        specs.push(crate::ParserRegionJobSpec {
+            region_ref: canonical_chat_statement_span_ref(&source.source_revision_ref, selection),
+            start_char: start,
+            end_char: end,
+        });
+    }
+    let run = crate::start_parser_run(
+        config, &source.source_revision_ref, parser_family, parser_version,
+        model_ref, config_json,
+    )?;
+    let queued = crate::enqueue_parser_regions_with_content_reuse(
+        config, &run, &specs, &source.literal_text,
+    )?;
+    Ok((run, queued))
+}
+
+pub fn compile_and_persist_chat_from_parser_run(
+    config: &DatabaseConfig,
+    message_ref: &str,
+    selections: &[ChatStatementCandidateSpan],
+    parser_run_ref: &str,
+) -> Result<crate::LosslessBulkSourceCompilation, ChatSourceStoreError> {
+    let source = load_chat_message_source(config, message_ref)?
+        .ok_or_else(|| ChatSourceStoreError::UnknownMessage(message_ref.to_owned()))?;
+    let snapshot = crate::DbNativeParserSnapshot::load(config, parser_run_ref)?;
+    if snapshot.source_revision_ref() != source.source_revision_ref {
+        return Err(ChatSourceStoreError::ParserRevisionMismatch);
+    }
+    let state = crate::parser_run_state(config, parser_run_ref)?;
+    if state.queued != 0 || state.leased != 0
+        || state.unattempted_semantic_regions != 0
+        || state.succeeded + state.residual != selections.len()
+        || snapshot.compiled_region_count() != state.succeeded
+        || snapshot.residual_region_count() != state.residual
+    {
+        return Err(ChatSourceStoreError::IncompleteChatParserRun);
+    }
+    compile_and_persist_chat_selections(
+        config,
+        message_ref,
+        selections,
+        &snapshot,
+        &format!("db-parser:{parser_run_ref}"),
+    )
 }
 
 pub fn load_chat_message_source(

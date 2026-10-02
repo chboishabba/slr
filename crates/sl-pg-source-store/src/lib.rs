@@ -2,8 +2,15 @@ mod workbench_projection;
 pub use workbench_projection::*;
 mod cache_first;
 mod chat_source_store;
+mod chat_source_fold;
 mod chronology_contestation_store;
 mod candidate_pnf;
+mod relational_interlingua;
+mod relational_interlingua_store;
+mod scoped_soft_type;
+mod bounded_repair_assessment;
+mod runtime_witness_certificate;
+mod repair_vector;
 mod candidate_pnf_store;
 mod corpus_reconciliation_store;
 mod reconciliation_review_store;
@@ -28,6 +35,13 @@ mod reviewed_source_expansion;
 mod review_workstation_store;
 mod statement_pnf_spine;
 mod generic_source_compiler;
+mod source_candidate_persistence;
+mod whisperx_source_adapter;
+mod tircorder_session_bridge;
+mod transcript_chat_correspondence;
+mod mixed_source_review;
+mod correspondence_review_store;
+mod wikidata_ontology_review;
 mod jmail_adapter;
 mod plain_text_document_adapter;
 mod long_document_ingest_store;
@@ -49,6 +63,8 @@ pub use chat_source_store::{
     install_chat_source_schema, load_chat_archive_export_jsonl,
     load_chat_message_source, load_chat_messages_for_conversation,
     materialize_chat_statement, persist_chat_archive_message,
+    canonical_chat_statement_span_ref, compile_and_persist_chat_selections,
+    prepare_chat_selection_parser_run, compile_and_persist_chat_from_parser_run,
     ChatArchiveExportRow, ChatSourceStoreError, PersistedChatMessageSource,
     CHAT_ARCHIVE_EXPORT_SCHEMA,
 };
@@ -56,6 +72,38 @@ pub use cache_first::{
     resolve_cache_first, AcquiredSourceBundle, CacheFirstAcquirer, CacheFirstError,
     CacheFirstResolution, CacheLookupDemand, CachedResolvedDocument,
     ExactResolutionReceiptOwned, ResolvedExternalDocumentOwned,
+};
+pub use repair_vector::{
+    RepairConsumerOutcome, RepairVectorEntry, RepairVectorConsumerReceipt,
+    RepairVectorReceipt, RepairVectorError, assess_repair_vector,
+};
+pub use runtime_witness_certificate::{
+    RuntimeWitnessKind, RuntimeWitnessCertificate, CheckedRuntimeWitness,
+    RuntimeWitnessError, validate_runtime_witness, require_witness,
+};
+pub use bounded_repair_assessment::{
+    BoundedRepairCandidate, BoundedRepairAssessment,
+    RepairAssessmentError, assess_bounded_repair,
+};
+pub use scoped_soft_type::{
+    ScopedIncidence, SingleValueContract, ScopedPairEvidence,
+    ContractResult, ScopedContractReceipt, SoftTypeError,
+    evaluate_single_value_contract,
+};
+pub use relational_interlingua_store::{
+    RELATIONAL_COMPARISON_SQL, DurableRelationalComparison,
+    DurableRelationalError, persist_relational_comparison,
+    load_relational_comparison,
+};
+pub use relational_interlingua::{
+    RELATIONAL_INTERLINGUA_SCHEMA, SourceFamily, RelationalObservation,
+    RoleBinding, RoleTypeHypothesis, RoleTypeDemand, ObservationContext,
+    Polarity, RelationalConsumer,
+    LicensedAlignment, AlignmentDirection, ComparisonFinding,
+    ResidualKind, ComparisonResidual, RelationalComparison,
+    RelationalComparisonError, observation_from_candidate_pnf,
+    observation_from_native_wikidata,
+    compare_relational_observations,
 };
 pub use candidate_pnf::{
     CandidatePnfBatch, CandidatePnfError, CandidatePnfFactor, CandidatePnfProducer,
@@ -175,7 +223,7 @@ pub use reviewed_pnf::{
 };
 pub use review_workstation_store::{
     apply_persisted_review_command, install_review_workstation_schema,
-    load_review_queue, persist_review_item, persist_review_receipt,
+    load_review_queue, load_review_item, persist_review_item, persist_review_receipt,
     ReviewWorkstationStoreError,
 };
 pub use sensiblaw_core::review_workstation::{
@@ -200,10 +248,63 @@ pub use statement_pnf_spine::{
 pub use generic_source_compiler::{
     compile_long_document, compile_long_document_lossless,
     compile_long_document_lossless_for_document_ref, compile_mail_message,
-    compile_mail_message_lossless, BulkSourceCompilation,
+    compile_mail_message_lossless, compile_chat_message_lossless,
+    compile_source_regions_lossless, SourceExecutionRegion,
+    SourceRegionExecutionClass, BulkSourceCompilation,
     GenericSourceCompilerError, LosslessBulkSourceCompilation,
     RegionCompilationAssignment, RegionCompilationDisposition,
     RegionCompilationResidual,
+};
+pub use source_candidate_persistence::{
+    persist_lossless_generic_candidates, GenericCandidatePersistenceError,
+    GenericCandidatePersistenceReceipt,
+};
+pub use wikidata_ontology_review::{
+    WIKI_DIAGNOSTIC_SCHEMA, WIKI_DIAGNOSTIC_SQL,
+    OntologyDiagnosticPacket, OntologyWitness, OntologyRepairCandidate,
+    OntologyNativeStatement, OntologyNativeQualifier,
+    apply_ontology_diagnostic_review,
+    WikidataGraphView, OntologyCheckerKind, OntologyDiagnosticDisposition,
+    OntologyDiagnosticRead, OntologyReviewError,
+    validate_ontology_packet, persist_ontology_diagnostic,
+    load_ontology_diagnostic,
+};
+pub use correspondence_review_store::{
+    CorrespondenceAxis, CorrespondenceReviewProposal, CorrespondenceReviewError,
+    CorrespondenceReviewActionRecord, load_correspondence_review_history,
+    CORRESPONDENCE_REVIEW_SQL, propose_correspondence_review,
+    load_correspondence_review, apply_correspondence_review,
+};
+pub use mixed_source_review::{
+    load_mixed_source_comparison, MixedSourceComparison,
+    MixedSourceReviewError, SemanticComparison, GenealogyStatus,
+    ContextVisibility,
+};
+pub use transcript_chat_correspondence::{
+    persist_exact_transcript_chat_quote, TranscriptChatExactQuote,
+    TranscriptNativeEvent, TranscriptChatCorrespondenceReceipt,
+    TranscriptChatCorrespondenceError,
+};
+pub use tircorder_session_bridge::{
+    plan_tircorder_sessions, compile_tircorder_session_lossless,
+    persist_tircorder_session, reopen_tircorder_session,
+    prepare_tircorder_parser_run, finalize_tircorder_parser_run,
+    TircorderPacket, TircorderSession, TircorderUtterance, TircorderWord,
+    TircorderSentenceSplit, TircorderSourcePlan, TircorderBridgeError,
+    TIRCORDER_SESSION_BRIDGE_VERSION, TIRCORDER_PROVENANCE_SQL,
+};
+pub use whisperx_source_adapter::{
+    plan_whisperx_source, compile_whisperx_source_lossless,
+    persist_whisperx_source_plan, reopen_whisperx_source_plan,
+    prepare_whisperx_parser_run, compile_whisperx_from_parser_run,
+    finalize_whisperx_parser_run,
+    WhisperxExecutionEnvelope, WhisperxSegment, WhisperxSourceError,
+    WhisperxSourcePlan, WHISPERX_PROVENANCE_SQL,
+};
+pub use chat_source_fold::{
+    persist_chat_source_join, load_chat_source_joins_for_message,
+    ChatSourceJoin, ChatSourceJoinError, SourceJoinType,
+    CHAT_SOURCE_JOIN_SQL,
 };
 pub use jmail_adapter::{
     jmail_record_to_mail_source, segment_jmail_body, JmailAdapterError,

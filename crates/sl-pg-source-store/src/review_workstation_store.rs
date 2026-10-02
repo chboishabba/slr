@@ -28,6 +28,8 @@ fn kind_db(kind: ReviewItemKind) -> &'static str {
         ReviewItemKind::ResearchAcquisition => "research_acquisition",
         ReviewItemKind::LegalTreatment => "legal_treatment",
         ReviewItemKind::ScopeHandoff => "scope_handoff",
+        ReviewItemKind::SourceCorrespondence => "source_correspondence",
+        ReviewItemKind::OntologyDiagnostic => "ontology_diagnostic",
     }
 }
 
@@ -42,6 +44,8 @@ fn kind_from_db(value: &str) -> Result<ReviewItemKind, ReviewWorkstationStoreErr
         "research_acquisition" => Ok(ReviewItemKind::ResearchAcquisition),
         "legal_treatment" => Ok(ReviewItemKind::LegalTreatment),
         "scope_handoff" => Ok(ReviewItemKind::ScopeHandoff),
+        "source_correspondence" => Ok(ReviewItemKind::SourceCorrespondence),
+        "ontology_diagnostic" => Ok(ReviewItemKind::OntologyDiagnostic),
         _ => Err(ReviewWorkstationStoreError::ExistingRowConflict),
     }
 }
@@ -451,6 +455,15 @@ fn persist_review_receipt_with_client(
     Ok(())
 }
 
+/// Read one S29 item by its durable reference without enumerating the queue.
+pub fn load_review_item(
+    config: &DatabaseConfig,
+    item_ref: &str,
+) -> Result<Option<ReviewItem>, ReviewWorkstationStoreError> {
+    let mut client = Client::connect(config.database_url(), NoTls)?;
+    load_review_item_with_client(&mut client, item_ref)
+}
+
 pub fn load_review_queue(
     config: &DatabaseConfig,
 ) -> Result<Vec<ReviewItem>, ReviewWorkstationStoreError> {
@@ -607,6 +620,8 @@ mod tests {
             ReviewItemKind::ResearchAcquisition,
             ReviewItemKind::LegalTreatment,
             ReviewItemKind::ScopeHandoff,
+            ReviewItemKind::SourceCorrespondence,
+            ReviewItemKind::OntologyDiagnostic,
         ] {
             assert_eq!(kind_from_db(kind_db(kind)).unwrap(), kind);
         }

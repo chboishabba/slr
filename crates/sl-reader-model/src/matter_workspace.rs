@@ -234,6 +234,27 @@ pub fn project_matter_workspace(
 
     let mut review_queue = input.review_queue.clone();
     review_queue.items.retain(|item| {
+        // Correspondence metadata itself discloses that *both* sources
+        // exist and were compared. An individually visible item or one
+        // visible endpoint cannot authorize the other source to leak into
+        // a recipient-scoped Matter. Require both explicit source members.
+        if item.item_kind ==
+            sensiblaw_core::review_workstation::ReviewItemKind::SourceCorrespondence
+        {
+            return item.source_refs.len() == 2 &&
+                item.source_refs.iter().all(|reference|
+                    visible.contains(reference.as_str()));
+        }
+        if item.item_kind ==
+            sensiblaw_core::review_workstation::ReviewItemKind::OntologyDiagnostic
+        {
+            // Diagnostic witnesses may identify other, more tightly scoped
+            // native statements. Do not disclose their existence from an
+            // individually visible review-item reference.
+            return !item.source_refs.is_empty() &&
+                item.source_refs.iter().all(|reference|
+                    visible.contains(reference.as_str()));
+        }
         visible.contains(item.review_item_ref.as_str())
             || visible.contains(item.semantic_ref.as_str())
             || item
@@ -366,6 +387,58 @@ mod tests {
         assert!(!projection.canonical_world_mutated);
         assert!(!projection.creates_semantic_authority);
         assert!(!projection.claim_truth_promoted);
+    }
+
+    #[test]
+    fn source_correspondence_review_requires_both_visible_native_sources() {
+        use sensiblaw_core::review_workstation::{
+            ReviewAction, ReviewItem, ReviewItemKind, ReviewStatus,
+        };
+        let relation=ReviewItem {
+            review_item_ref:"review-item:relation:1".into(),
+            semantic_ref:"candidate-correspondence:1".into(),
+            item_kind:ReviewItemKind::SourceCorrespondence,
+            reason:"candidate relation".into(),
+            provenance_refs:vec!["pnf:source-pair".into()],
+            source_refs:vec!["source:a".into(),"source:private".into()],
+            current_status:ReviewStatus::Pending,
+            available_actions:vec![ReviewAction::Abstain],
+            affected_consumer_refs:vec!["scope:matter:1".into()],
+            candidate_only:true,creates_semantic_authority:false,
+            applicability_promoted:false,claim_truth_promoted:false,
+        };
+        let mut input=MatterWorkspaceInput {
+            matter_ref:"matter:1".into(),
+            context:context(),
+            context_coordinates:vec![
+                coordinate("review-item:relation:1"),
+                coordinate("source:a"),
+            ],
+            source_traces:vec![],
+            event_timeline:ChronologyProjection::default(),
+            knowledge_timeline:vec![],
+            operational_timeline:OperationalTimelineProjection::default(),
+            operational_outstanding:OperationalOutstandingProjection::default(),
+            join_proposals:EventDiscoveryProjection::default(),
+            review_queue:ReviewQueueProjection {
+                items:vec![relation],
+                count_by_kind:Default::default(),
+                count_by_status:Default::default(),
+                candidate_only:true,creates_semantic_authority:false,
+                applicability_promoted:false,claim_truth_promoted:false,
+            },
+            legal_proof_refs:vec![],research_refs:vec![],
+            work_product_refs:vec![],handoff_refs:vec![],
+        };
+        let scoped=project_matter_workspace(&input).unwrap();
+        assert!(scoped.review_queue.items.is_empty());
+        assert_eq!(scoped.review_queue.count_by_kind.len(),0);
+        // Only an explicitly included second source permits viewing the
+        // correspondence. A visible item ref alone is insufficient.
+        input.context_coordinates.push(coordinate("source:private"));
+        let permitted=project_matter_workspace(&input).unwrap();
+        assert_eq!(permitted.review_queue.items.len(),1);
+        assert!(!permitted.creates_semantic_authority);
     }
 
     #[test]
