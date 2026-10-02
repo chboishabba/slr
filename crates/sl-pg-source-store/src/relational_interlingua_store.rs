@@ -145,7 +145,7 @@ pub fn persist_relational_comparison(
 }
 pub fn load_relational_comparison(
     config:&DatabaseConfig,comparison_ref:&str,
-)->Result<Option<DurableRelationalComparison,DurableRelationalError>{
+)->Result<Option<DurableRelationalComparison>,DurableRelationalError>{
     let mut client=Client::connect(config.database_url(),NoTls)?;
     let Some(row)=client.query_opt(
         "SELECT left_source_revision_ref,right_source_revision_ref,

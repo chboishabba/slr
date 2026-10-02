@@ -96,7 +96,7 @@ pub use relational_interlingua_store::{
     load_relational_comparison,
 };
 pub use relational_interlingua::{
-    RELATIONAL_INTERLINGUA_SCHEMA, SourceFamily, RelationalObservation,
+    RELATIONAL_INTERLINGUA_SCHEMA, SourceFamily as RelationalSourceFamily, RelationalObservation,
     RoleBinding, RoleTypeHypothesis, RoleTypeDemand, ObservationContext,
     Polarity, RelationalConsumer,
     LicensedAlignment, AlignmentDirection, ComparisonFinding,

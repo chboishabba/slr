@@ -51,6 +51,25 @@ pub struct RoleBinding {
     /// Source-local index disambiguates e.g. two co-agents.
     pub occurrence: u32,
 }
+/// A source-backed type hypothesis for one exact role occurrence.  It remains
+/// a candidate coordinate: consumers may impose a typed contract, but this
+/// record does not retype the source or establish any global ontology fact.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RoleTypeHypothesis {
+    pub role_ref: String,
+    pub occurrence: u32,
+    pub candidate_type_ref: String,
+    pub witness_ref: String,
+}
+
+/// A consumer-specific requirement for a role type.  Failure to satisfy it
+/// becomes residual pressure; it never changes the producer's type record.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RoleTypeDemand {
+    pub role_ref: String,
+    pub required_type_ref: String,
+    pub contract_ref: String,
+}
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct ObservationContext {
     pub scope_ref: Option<String>,

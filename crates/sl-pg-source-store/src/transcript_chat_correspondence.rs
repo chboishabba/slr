@@ -80,14 +80,14 @@ pub fn persist_exact_transcript_chat_quote(
             let p = crate::reopen_whisperx_source_plan(config,&request.transcript_revision_ref)?;
             let seg = p.native.segments.get(*ordinal)
                 .ok_or(TranscriptChatCorrespondenceError::UnknownNativeEvent)?;
-            (seg.text.as_str(), "whisperx_transcript",
+            (seg.text.clone(), "whisperx_transcript",
              format!("whisperx-segment:{ordinal}"))
         }
         TranscriptNativeEvent::TircorderUtterance { utterance_id } => {
             let p = crate::reopen_tircorder_session(config,&request.transcript_revision_ref)?;
             let utt = p.native.utterances.iter().find(|u|&u.utterance_id==utterance_id)
                 .ok_or(TranscriptChatCorrespondenceError::UnknownNativeEvent)?;
-            (utt.text.as_str(),"tircorder_utterance",
+            (utt.text.clone(),"tircorder_utterance",
              format!("tircorder-utterance:{utterance_id}"))
         }
     };

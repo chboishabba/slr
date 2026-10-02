@@ -608,6 +608,10 @@ mod tests {
     use sensiblaw_core::source_ingest::{
         DocumentRegion, IngestRoleClass, SourceFamily, SourceIngestEnvelope,
     };
+    use crate::{
+        CandidatePnfBatch, CandidatePnfFactor, CandidatePnfRole, ExactSourceSpan,
+        SourceStatementEnvelope, StatementCandidatePnf, StatementOrigin,
+    };
 
     fn document() -> LongDocumentSource {
         LongDocumentSource {
@@ -656,6 +660,44 @@ mod tests {
             semantic_candidate_region_count: 1,
             compiled_statement_count: 1,
             candidate_pnf_count: 1,
+            compiled: vec![StatementCandidatePnf {
+                statement: SourceStatementEnvelope {
+                    statement_ref: "statement:1".into(),
+                    document_ref: "book:fixture".into(),
+                    source_revision_ref: "revision:fixture".into(),
+                    span: ExactSourceSpan {
+                        span_ref: "sentence:1".into(), start_char: 0, end_char: 10,
+                    },
+                    literal_text: "fixture text".into(),
+                    origin: StatementOrigin::InitialIntake,
+                    candidate_only: true,
+                    creates_semantic_authority: false,
+                    applicability_promoted: false,
+                    claim_truth_promoted: false,
+                },
+                pnf: CandidatePnfBatch {
+                    exact_span_ref: "sentence:1".into(),
+                    candidates: vec![CandidatePnfFactor {
+                        candidate_ref: "candidate:1".into(),
+                        role: CandidatePnfRole::Other,
+                        source_start_char: 0,
+                        source_end_char: 10,
+                        surface: "fixture text".into(),
+                        lemma: "fixture".into(),
+                        dependency_ref: "dep:root".into(),
+                        candidate_only: true,
+                    }],
+                    proposition_support_paid: false,
+                    applicability_paid: false,
+                    claim_truth_paid: false,
+                },
+                parser_receipt_ref: "parser:1".into(),
+                candidate_only: true,
+                semantic_admission_paid: false,
+                proposition_support_paid: false,
+                applicability_paid: false,
+                claim_truth_paid: false,
+            }],
             residuals: vec![],
             assignments: vec![
                 crate::RegionCompilationAssignment {

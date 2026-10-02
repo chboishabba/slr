@@ -6,4 +6,4 @@
 // long-document example while source-family adapters converge on the generic
 // compile-source surface.  Keeping this as an include avoids a second CLI
 // implementation and preserves the old example as a compatibility entry point.
-include!("scale1_long_document_impl.rs");
+include!("support/scale1_long_document_impl.rs");

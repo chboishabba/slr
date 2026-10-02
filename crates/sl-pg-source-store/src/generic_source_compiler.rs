@@ -303,6 +303,10 @@ pub struct LosslessBulkSourceCompilation {
     pub semantic_candidate_region_count: usize,
     pub compiled_statement_count: usize,
     pub candidate_pnf_count: usize,
+    /// Exact successful products, retained alongside the exhaustive region
+    /// partition so the existing M12 persistence owner can durably reopen
+    /// them.  Parser failures remain represented only by residuals.
+    pub compiled: Vec<StatementCandidatePnf>,
     pub residuals: Vec<RegionCompilationResidual>,
     pub assignments: Vec<RegionCompilationAssignment>,
     pub transport_or_nonsemantic_region_count: usize,
@@ -359,6 +363,7 @@ impl LosslessBulkSourceCompilation {
             && self.assignments.len() == self.exact_region_count
             && unique.len() == self.exact_region_count
             && compiled_assignments == self.compiled_statement_count
+            && self.compiled.len() == self.compiled_statement_count
             && residual_assignments == self.residuals.len()
             && compiled_assignments + residual_assignments
                 == self.semantic_candidate_region_count
@@ -585,6 +590,7 @@ pub fn compile_source_regions_lossless<P: CandidatePnfProducer>(
         semantic_candidate_region_count: semantic_count,
         compiled_statement_count: compiled.len(),
         candidate_pnf_count,
+        compiled,
         residuals,
         assignments,
         transport_or_nonsemantic_region_count: regions.len() - semantic_count,

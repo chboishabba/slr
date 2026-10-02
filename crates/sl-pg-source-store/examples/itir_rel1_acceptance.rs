@@ -15,7 +15,7 @@ use sensiblaw_pg_source_store::{
     BoundedRepairCandidate, ComparisonFinding, ContractResult,
     RelationalConsumer, RelationalObservation, ResidualKind,
     RuntimeWitnessCertificate, RuntimeWitnessKind, ScopedIncidence,
-    ScopedPairEvidence, SingleValueContract, SourceFamily,
+    ScopedPairEvidence, SingleValueContract, RelationalSourceFamily,
 };
 use std::{collections::BTreeSet,env,fs,process};
 
@@ -166,17 +166,17 @@ fn run()->Result<(),String>{
         return Err("REL-1B requires three source cases, a negative control, a scoped contract case and a repair case".into());
     }
     let wiki_text=suite.cases.iter().any(|c|
-        (c.left.source_family==SourceFamily::Wikidata
-            &&c.right.source_family==SourceFamily::Wikipedia)
-        ||(c.left.source_family==SourceFamily::Wikipedia
-            &&c.right.source_family==SourceFamily::Wikidata));
+        (c.left.source_family==RelationalSourceFamily::Wikidata
+            &&c.right.source_family==RelationalSourceFamily::Wikipedia)
+        ||(c.left.source_family==RelationalSourceFamily::Wikipedia
+            &&c.right.source_family==RelationalSourceFamily::Wikidata));
     let biomedical=suite.cases.iter().any(|c|
-        c.left.source_family==SourceFamily::Biomedical
-            &&c.right.source_family==SourceFamily::Biomedical
+        c.left.source_family==RelationalSourceFamily::Biomedical
+            &&c.right.source_family==RelationalSourceFamily::Biomedical
             &&c.left.source_revision_ref!=c.right.source_revision_ref);
     let multilingual=suite.cases.iter().any(|c|
-        c.left.source_family==SourceFamily::Wikipedia
-            &&c.right.source_family==SourceFamily::Wikipedia
+        c.left.source_family==RelationalSourceFamily::Wikipedia
+            &&c.right.source_family==RelationalSourceFamily::Wikipedia
             &&c.left.context.language_ref.is_some()
             &&c.right.context.language_ref.is_some()
             &&c.left.context.language_ref!=c.right.context.language_ref);
@@ -282,7 +282,7 @@ fn run()->Result<(),String>{
             Ok(CaseReceipt{
                 case_ref:&case.case_ref,status:if good{"pass"}else{"fail"},
                 comparison_ref:actual.comparison_ref.clone(),
-                finding:actual.finding,
+                finding:actual.finding.clone(),
                 observed_residual_kinds:found.into_iter().collect(),
                 source_digest_matched:digest_match,
                 exact_pg_reopen:actual==pure,
