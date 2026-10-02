@@ -1,0 +1,93 @@
+{
+  "schema": "itir.rel1.fixture-acquisition.template.v1",
+  "template_only": true,
+  "fixture_set_ref": "REPLACE_WITH_INDEPENDENT_FIXTURE_SET_REF",
+  "cases": [
+    {
+      "case_ref": "REPLACE_WIKIDATA_TEXT_CASE",
+      "purpose": "wikidata_text",
+      "left": {
+        "source_revision_ref": "REPLACE_EXISTING_PG_SOURCE_REVISION",
+        "expected_sha256": "sha256:REPLACE",
+        "expected_native_family": "wikidata",
+        "acquisition_receipt_ref": "REPLACE_INDEPENDENT_ACQUISITION_RECEIPT",
+        "parser_or_adapter_receipt_ref": "REPLACE_NATIVE_ADAPTER_RECEIPT",
+        "revision_locator_ref": "REPLACE_WIKIDATA_REVISION_OR_ENTITY_STATEMENT_LOCATOR"
+      },
+      "right": {
+        "source_revision_ref": "REPLACE_EXISTING_PG_SOURCE_REVISION",
+        "expected_sha256": "sha256:REPLACE",
+        "expected_native_family": "web",
+        "acquisition_receipt_ref": "REPLACE_INDEPENDENT_ACQUISITION_RECEIPT",
+        "parser_or_adapter_receipt_ref": "REPLACE_PNF_PRODUCER_RECEIPT",
+        "revision_locator_ref": "REPLACE_PROSE_REVISION_OR_PUBLICATION_LOCATOR"
+      },
+      "consumer_ref": "REPLACE_MATTER_OR_CONSUMER_REF",
+      "alignment_licence_refs": [
+        "REPLACE_REVIEWED_ALIGNMENT_LICENCE"
+      ],
+      "producer_receipt_refs": [
+        "REPLACE_PRODUCER_RECEIPT"
+      ],
+      "negative_control": true
+    },
+    {
+      "case_ref": "REPLACE_BIOMEDICAL_CASE",
+      "purpose": "biomedical_cross_species",
+      "left": {
+        "source_revision_ref": "REPLACE",
+        "expected_sha256": "sha256:REPLACE",
+        "expected_native_family": "document",
+        "acquisition_receipt_ref": "REPLACE",
+        "parser_or_adapter_receipt_ref": "REPLACE",
+        "revision_locator_ref": "REPLACE_PUBLICATION_AND_VERSION"
+      },
+      "right": {
+        "source_revision_ref": "REPLACE",
+        "expected_sha256": "sha256:REPLACE",
+        "expected_native_family": "document",
+        "acquisition_receipt_ref": "REPLACE",
+        "parser_or_adapter_receipt_ref": "REPLACE",
+        "revision_locator_ref": "REPLACE_PUBLICATION_AND_VERSION"
+      },
+      "consumer_ref": "REPLACE",
+      "alignment_licence_refs": [
+        "REPLACE_CROSS_SPECIES_LICENCE"
+      ],
+      "producer_receipt_refs": [
+        "REPLACE_LEFT_RECEIPT",
+        "REPLACE_RIGHT_RECEIPT"
+      ],
+      "negative_control": false
+    },
+    {
+      "case_ref": "REPLACE_MULTILINGUAL_WIKIPEDIA_CASE",
+      "purpose": "multilingual_wikipedia",
+      "left": {
+        "source_revision_ref": "REPLACE",
+        "expected_sha256": "sha256:REPLACE",
+        "expected_native_family": "wiki",
+        "acquisition_receipt_ref": "REPLACE",
+        "parser_or_adapter_receipt_ref": "REPLACE",
+        "revision_locator_ref": "REPLACE_LANGUAGE_AND_REVISION_ID"
+      },
+      "right": {
+        "source_revision_ref": "REPLACE",
+        "expected_sha256": "sha256:REPLACE",
+        "expected_native_family": "wiki",
+        "acquisition_receipt_ref": "REPLACE",
+        "parser_or_adapter_receipt_ref": "REPLACE",
+        "revision_locator_ref": "REPLACE_LANGUAGE_AND_REVISION_ID"
+      },
+      "consumer_ref": "REPLACE",
+      "alignment_licence_refs": [
+        "REPLACE_TRANSLATION_OR_ROLE_ALIGNMENT_LICENCE"
+      ],
+      "producer_receipt_refs": [
+        "REPLACE_LEFT_RECEIPT",
+        "REPLACE_RIGHT_RECEIPT"
+      ],
+      "negative_control": false
+    }
+  ]
+}
