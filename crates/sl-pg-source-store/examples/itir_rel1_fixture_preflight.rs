@@ -49,8 +49,12 @@ struct SourceCheck {
     source_revision_ref:String,
     expected_sha256:String,
     observed_sha256:Option<String>,
+    expected_native_family:String,
+    observed_native_family:Option<String>,
+    acquisition_receipt_matches:Option<bool>,
     found:bool,
     digest_matches:bool,
+    family_matches:bool,
     native_store:String,
     missing_coordinates:Vec<String>,
 }
@@ -87,9 +91,9 @@ fn digest(bytes:&[u8])->String{
     format!("sha256:{:x}",Sha256::digest(bytes))
 }
 fn source_bytes(client:&mut Client,revision:&str)
-    ->Result<Option<(Vec<u8>,String)>,postgres::Error>{
+    ->Result<Option<(Vec<u8>,String,Option<String>,Option<String>)>,postgres::Error>{
     if let Some(row)=client.query_opt(
-        "SELECT c.payload
+        "SELECT c.payload,r.source_family_ref,r.acquisition_receipt_ref
          FROM ingest.generic_source_revision r
          JOIN corpus.document d ON d.document_ref=r.document_ref
          JOIN corpus.canonical_content c ON c.canonical_ref=d.canonical_ref
@@ -100,7 +104,10 @@ fn source_bytes(client:&mut Client,revision:&str)
            AND r.claim_truth_promoted=FALSE",
         &[&revision],
     )?{
-        return Ok(Some((row.get::<_,Vec<u8>>(0),"generic_source".into())));
+        return Ok(Some((
+            row.get::<_,Vec<u8>>(0),"generic_source".into(),
+            Some(row.get::<_,String>(1)),Some(row.get::<_,String>(2)),
+        )));
     }
     if let Some(row)=client.query_opt(
         "SELECT c.payload
@@ -115,7 +122,10 @@ fn source_bytes(client:&mut Client,revision:&str)
          LIMIT 1",
         &[&revision],
     )?{
-        return Ok(Some((row.get::<_,Vec<u8>>(0),"chat_archive".into())));
+        return Ok(Some((
+            row.get::<_,Vec<u8>>(0),"chat_archive".into(),
+            Some("chat".into()),None,
+        )));
     }
     Ok(None)
 }
@@ -133,16 +143,23 @@ fn check_source(client:&mut Client,r:&SourceRequirement)
         if !valid(value){missing.push(name.into());}
     }
     let found=source_bytes(client,&r.source_revision_ref).map_err(|e|e.to_string())?;
-    let (observed,native_store)=match found{
-        Some((bytes,store))=>(Some(digest(&bytes)),store),
-        None=>(None,"missing".into()),
+    let (observed,native_store,observed_family,stored_acquisition)=match found{
+        Some((bytes,store,family,acquisition))=>
+            (Some(digest(&bytes)),store,family,acquisition),
+        None=>(None,"missing".into(),None,None),
     };
     let digest_matches=observed.as_deref()==Some(r.expected_sha256.as_str());
+    let family_matches=observed_family.as_deref()==Some(r.expected_native_family.as_str());
+    let acquisition_receipt_matches=stored_acquisition.as_ref()
+        .map(|stored|stored==&r.acquisition_receipt_ref);
     Ok(SourceCheck{
         source_revision_ref:r.source_revision_ref.clone(),
         expected_sha256:r.expected_sha256.clone(),
         observed_sha256:observed,
-        found:native_store!="missing",digest_matches,native_store,
+        expected_native_family:r.expected_native_family.clone(),
+        observed_native_family:observed_family,
+        acquisition_receipt_matches,
+        found:native_store!="missing",digest_matches,family_matches,native_store,
         missing_coordinates:missing,
     })
 }
@@ -167,6 +184,9 @@ fn run()->Result<(),String>{
         let producers=!case.producer_receipt_refs.is_empty()
             &&case.producer_receipt_refs.iter().all(|x|valid(x));
         let ready=left.found&&right.found&&left.digest_matches&&right.digest_matches
+            &&left.family_matches&&right.family_matches
+            &&left.acquisition_receipt_matches.unwrap_or(true)
+            &&right.acquisition_receipt_matches.unwrap_or(true)
             &&left.missing_coordinates.is_empty()&&right.missing_coordinates.is_empty()
             &&valid(&case.consumer_ref)&&licences&&producers;
         cases.push(CaseCheck{
