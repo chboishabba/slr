@@ -83,8 +83,8 @@ pub fn persist_acquisition_queue(
         .any(|r|r.obligation_ref==obligation.residual_obligation_ref)
         || obligation.source_revision_refs!={
             let mut refs=vec![
-                comparison.comparison.left_observation_ref.clone(),
-                comparison.comparison.right_observation_ref.clone(),
+                comparison.left.source_revision_ref.clone(),
+                comparison.right.source_revision_ref.clone(),
             ];
             refs.sort();refs.dedup();refs
         }
