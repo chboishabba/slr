@@ -139,6 +139,7 @@ fn valid(s:&str)->bool{!s.trim().is_empty()}
 pub fn obligation_from_residual(
     comparison:&RelationalComparison,
     residual:&ComparisonResidual,
+    mut source_revision_refs:Vec<String>,
     target_description:&str,
     authority_or_access_constraint_ref:&str,
     dependency_target_refs:Vec<String>,
@@ -147,19 +148,20 @@ pub fn obligation_from_residual(
         ||!valid(&residual.obligation_ref)
         ||!valid(target_description)
         ||!valid(authority_or_access_constraint_ref)
+        ||source_revision_refs.len()<2
+        ||source_revision_refs.iter().any(|s|!valid(s))
     {return Err(InvestigationAcquisitionError::InvalidIdentity);}
-    let mut sources=vec![
-        comparison.left_observation_ref.clone(),
-        comparison.right_observation_ref.clone(),
-    ];
-    sources.sort();sources.dedup();
+    source_revision_refs.sort();source_revision_refs.dedup();
+    if source_revision_refs.len()<2{
+        return Err(InvestigationAcquisitionError::InvalidIdentity);
+    }
     Ok(AcquisitionObligation{
         obligation_ref:format!(
             "acquisition:{}:{}",
             comparison.comparison_ref,residual.obligation_ref),
         comparison_ref:comparison.comparison_ref.clone(),
         residual_obligation_ref:residual.obligation_ref.clone(),
-        source_revision_refs:sources,
+        source_revision_refs,
         target_description:target_description.into(),
         current_availability:RecordAvailability::NotLocated,
         authority_or_access_constraint_ref:authority_or_access_constraint_ref.into(),
@@ -335,7 +337,8 @@ mod tests{
         obligation_from_residual(&comparison(),&ComparisonResidual{
             kind:ResidualKind::MissingProvenance,left_ref:None,right_ref:None,
             obligation_ref:"missing:original-record".into(),
-        },"obtain original record","lawful-access:public-records",
+        },vec!["revision:a".into(),"revision:b".into()],
+        "obtain original record","lawful-access:public-records",
         vec!["assessment:case".into()]).unwrap()
     }
     fn route(id:&str,gain:u32,cost:u32)->AcquisitionRouteCandidate{
