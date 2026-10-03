@@ -105,11 +105,11 @@ struct RouteSpec {
     #[serde(default)]
     independence_receipt_ref: Option<String>,
     duplicate_relation: DuplicateRelation,
-    information_gain: i64,
-    dependency_closure_impact: i64,
-    residual_coverage: i64,
-    provenance_novelty: i64,
-    acquisition_cost: i64,
+    information_gain: u32,
+    dependency_closure_impact: u32,
+    residual_coverage: u32,
+    provenance_novelty: u32,
+    acquisition_cost: u32,
     axis_estimation_receipt_ref: String,
 }
 
