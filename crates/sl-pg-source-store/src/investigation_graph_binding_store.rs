@@ -4,6 +4,7 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 use crate::{load_acquisition_queue, DatabaseConfig, InvestigationStoreError};
+use sensiblaw_reader_model::PersistedWorkbenchProjection;
 use super::investigation_graph_binding::{
     InvestigationGraphBinding, InvestigationGraphBindingError, INV_GRAPH_BINDING_SCHEMA,
 };
@@ -29,6 +30,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS investigation_graph_binding_obligation_project
   ON semantic.investigation_graph_binding(obligation_ref, projection_ref);
 "#;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BoundInvestigationGraphProjection {
+    pub binding: InvestigationGraphBinding,
+    pub projection: PersistedWorkbenchProjection,
+}
+
 #[derive(Debug, Error)]
 pub enum InvestigationGraphBindingStoreError {
     #[error(transparent)]
@@ -39,6 +46,8 @@ pub enum InvestigationGraphBindingStoreError {
     Investigation(#[from] InvestigationStoreError),
     #[error(transparent)]
     Binding(#[from] InvestigationGraphBindingError),
+    #[error(transparent)]
+    Projection(#[from] super::legacy::WorkbenchProjectionError),
     #[error("graph binding owner or persisted projection is missing/inconsistent")]
     WrongOwner,
     #[error("immutable graph binding changed on replay")]
@@ -167,4 +176,36 @@ pub fn load_investigation_graph_binding_for_obligation(
     };
     let binding_ref: String = row.get(0);
     load_investigation_graph_binding(config, &binding_ref)
+}
+
+/// Reopen a graph already bound to this INV obligation. Persistence and
+/// projection lookup stay in SLR; UI consumers receive typed rows only.
+pub fn load_bound_investigation_graph_projection(
+    config: &DatabaseConfig,
+    obligation_ref: &str,
+    matter_ref: &str,
+) -> Result<Option<BoundInvestigationGraphProjection>, InvestigationGraphBindingStoreError> {
+    let Some(binding) = load_investigation_graph_binding_for_obligation(config, obligation_ref)?
+    else {
+        return Ok(None);
+    };
+    if binding.matter_ref != matter_ref {
+        return Err(InvestigationGraphBindingStoreError::WrongOwner);
+    }
+    let mut client = Client::connect(config.database_url(), NoTls)?;
+    let projection = super::legacy::load_persisted_workbench_projection(
+        &mut client,
+        &binding.projection_ref,
+        matter_ref,
+    )?;
+    if projection.legal_follow_graph.projection_ref != binding.projection_ref
+        || !projection.legal_follow_graph.derived_only
+        || !projection.legal_follow_graph.challengeable
+        || projection.creates_semantic_authority
+        || projection.creates_claim_truth
+        || projection.pays_residual
+    {
+        return Err(InvestigationGraphBindingStoreError::WrongOwner);
+    }
+    Ok(Some(BoundInvestigationGraphProjection { binding, projection }))
 }
