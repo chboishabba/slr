@@ -18,6 +18,10 @@ pub use investigation_graph_binding::*;
 mod investigation_graph_binding_store;
 pub use investigation_graph_binding_store::*;
 
+#[path = "persisted_relational_observation.rs"]
+mod persisted_relational_observation;
+pub use persisted_relational_observation::*;
+
 pub use crate::investigation_acquisition::{
     AxisRelation, ParetoAxisRelation, ParetoDominanceWitness,
     RouteFrontierDisposition, RouteDispositionReceipt, PotentialReopeningCone,
