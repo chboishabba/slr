@@ -64,6 +64,8 @@ struct CaseReceipt {
     right_source_revision_ref:String,
     left_family:RelationalSourceFamily,
     right_family:RelationalSourceFamily,
+    left_language_ref:Option<String>,
+    right_language_ref:Option<String>,
     finding:ComparisonFinding,
     residual_kinds:Vec<ResidualKind>,
     persisted_native_products_only:bool,
@@ -110,8 +112,11 @@ fn validate_shape(receipts:&[CaseReceipt])->Result<(),String>{
     if !receipts.iter().any(|r|r.purpose==Purpose::MultilingualWikipedia
         &&r.left_family==RelationalSourceFamily::Wikipedia
         &&r.right_family==RelationalSourceFamily::Wikipedia
-        &&r.left_source_revision_ref!=r.right_source_revision_ref) {
-        return Err("REL-1C lacks two-revision multilingual Wikipedia case".into());
+        &&r.left_source_revision_ref!=r.right_source_revision_ref
+        &&r.left_language_ref.is_some()
+        &&r.right_language_ref.is_some()
+        &&r.left_language_ref!=r.right_language_ref) {
+        return Err("REL-1C lacks two persisted Wikipedia views with distinct explicit language coordinates".into());
     }
     if !receipts.iter().any(|r|r.purpose==Purpose::NegativeControl) {
         return Err("REL-1C lacks a negative control".into());
@@ -135,6 +140,16 @@ fn run()->Result<(),String>{
         if left.source_revision_ref==right.source_revision_ref {
             return Err(format!("{} reuses one source revision on both sides",case.case_ref));
         }
+        if case.purpose==Purpose::MultilingualWikipedia
+            &&(left.source_family!=RelationalSourceFamily::Wikipedia
+                ||right.source_family!=RelationalSourceFamily::Wikipedia
+                ||left.context.language_ref.is_none()
+                ||right.context.language_ref.is_none()
+                ||left.context.language_ref==right.context.language_ref) {
+            return Err(format!(
+                "{} is labelled multilingual but does not carry two distinct explicit persisted language coordinates",
+                case.case_ref));
+        }
         let persisted=persist_relational_comparison(&config,&left,&right,&case.consumer)
             .map_err(|e|e.to_string())?;
         if persisted.comparison.finding!=case.expected_finding {
@@ -156,6 +171,8 @@ fn run()->Result<(),String>{
             left_source_revision_ref:left.source_revision_ref,
             right_source_revision_ref:right.source_revision_ref,
             left_family:left.source_family,right_family:right.source_family,
+            left_language_ref:left.context.language_ref,
+            right_language_ref:right.context.language_ref,
             finding:persisted.comparison.finding,residual_kinds:found,
             persisted_native_products_only:true,exact_pg_reopen:true,
             creates_semantic_authority:false,claim_truth_promoted:false,
