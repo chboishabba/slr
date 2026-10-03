@@ -10,6 +10,14 @@ pub use governance_control_case::*;
 mod governance_control_case_store;
 pub use governance_control_case_store::*;
 
+#[path = "investigation_graph_binding.rs"]
+mod investigation_graph_binding;
+pub use investigation_graph_binding::*;
+
+#[path = "investigation_graph_binding_store.rs"]
+mod investigation_graph_binding_store;
+pub use investigation_graph_binding_store::*;
+
 pub use crate::investigation_acquisition::{
     AxisRelation, ParetoAxisRelation, ParetoDominanceWitness,
     RouteFrontierDisposition, RouteDispositionReceipt, PotentialReopeningCone,
