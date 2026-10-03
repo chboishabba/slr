@@ -22,6 +22,10 @@ pub use investigation_graph_binding_store::*;
 mod persisted_relational_observation;
 pub use persisted_relational_observation::*;
 
+#[path = "reviewed_legal_follow_projection.rs"]
+mod reviewed_legal_follow_projection;
+pub use reviewed_legal_follow_projection::*;
+
 pub use crate::investigation_acquisition::{
     AxisRelation, ParetoAxisRelation, ParetoDominanceWitness,
     RouteFrontierDisposition, RouteDispositionReceipt, PotentialReopeningCone,
