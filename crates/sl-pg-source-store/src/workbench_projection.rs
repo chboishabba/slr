@@ -26,6 +26,10 @@ pub use reviewed_evidence::*;
 mod acceptance_control_store;
 pub use acceptance_control_store::*;
 
+#[path = "acceptance_reopen_store.rs"]
+mod acceptance_reopen_store;
+pub use acceptance_reopen_store::*;
+
 pub use crate::investigation_acquisition::{
     AxisRelation, ParetoAxisRelation, ParetoDominanceWitness,
     RouteFrontierDisposition, RouteDispositionReceipt, PotentialReopeningCone,
