@@ -11,6 +11,8 @@ mod scoped_soft_type;
 mod bounded_repair_assessment;
 mod runtime_witness_certificate;
 mod repair_vector;
+mod investigation_acquisition;
+mod investigation_acquisition_store;
 mod candidate_pnf_store;
 mod corpus_reconciliation_store;
 mod reconciliation_review_store;
@@ -72,6 +74,20 @@ pub use cache_first::{
     resolve_cache_first, AcquiredSourceBundle, CacheFirstAcquirer, CacheFirstError,
     CacheFirstResolution, CacheLookupDemand, CachedResolvedDocument,
     ExactResolutionReceiptOwned, ResolvedExternalDocumentOwned,
+};
+pub use investigation_acquisition_store::{
+    INVESTIGATION_ACQUISITION_SQL, DurableAcquisitionQueue,
+    InvestigationStoreError, persist_acquisition_queue,
+    load_acquisition_queue, persist_acquisition_update,
+};
+pub use investigation_acquisition::{
+    RecordAvailability, AccessDisposition, EvidenceIndependence,
+    DuplicateRelation, AcquisitionObligation, AcquisitionRouteCandidate,
+    AcquisitionPriorityReceipt, AcquisitionUpdate,
+    SelectiveReopeningReceipt, InvestigationAcquisitionError,
+    obligation_from_residual, weakly_dominates,
+    acquisition_pareto_frontier, apply_acquisition_update,
+    selective_reopening,
 };
 pub use repair_vector::{
     RepairConsumerOutcome, RepairVectorEntry, RepairVectorConsumerReceipt,
