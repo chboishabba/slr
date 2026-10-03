@@ -1,9 +1,9 @@
 //! Derived legal-follow graph projection over already-reviewed legal IR.
 //!
-//! This is intentionally not a rule engine.  It projects one persisted
+//! This is intentionally not a rule engine. It projects one persisted
 //! reviewed proposition/support coordinate into the existing legal-follow
 //! graph tables so downstream workbench consumers can inspect the source and
-//! provenance relation.  It creates no holding, applicability, claim truth,
+//! provenance relation. It creates no holding, applicability, claim truth,
 //! execution permission, or semantic authority.
 
 use postgres::{Client, NoTls};
@@ -11,6 +11,8 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 use crate::{DatabaseConfig, MaterializedLegalIrRefs, ReviewedPropositionSupport};
+
+const PROJECTION_CONTRACT: &str = "itir:reviewed-legal-follow:v1";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReviewedLegalFollowProjectionReceipt {
@@ -44,14 +46,27 @@ pub enum ReviewedLegalFollowProjectionError {
     ChangedReplay,
 }
 
-fn stable_ref(prefix: &str, parts: &[&str]) -> String {
+fn digest(parts: &[&str]) -> [u8; 32] {
     let mut hasher = Sha256::new();
     for part in parts {
         let bytes = part.as_bytes();
         hasher.update((bytes.len() as u64).to_be_bytes());
         hasher.update(bytes);
     }
-    format!("{prefix}:sha256:{:x}", hasher.finalize())
+    hasher.finalize().into()
+}
+
+fn stable_ref(prefix: &str, parts: &[&str]) -> String {
+    format!("{prefix}:sha256:{}", hex(&digest(parts)))
+}
+
+fn hex(bytes: &[u8]) -> String {
+    let mut out = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        use std::fmt::Write;
+        let _ = write!(&mut out, "{byte:02x}");
+    }
+    out
 }
 
 fn table_exists(client: &mut Client, name: &str) -> Result<bool, postgres::Error> {
@@ -103,8 +118,8 @@ fn verify_legal_ir(
 }
 
 /// Persist a minimal, exact, challengeable graph projection of the reviewed
-/// support relation.  The edge means only “this reviewed source observation
-/// is recorded as support for this reviewed proposition coordinate”.
+/// support relation. The edge means only “this reviewed source observation is
+/// recorded as support for this reviewed proposition coordinate”.
 pub fn persist_reviewed_legal_follow_projection(
     config: &DatabaseConfig,
     support: &ReviewedPropositionSupport,
@@ -126,6 +141,7 @@ pub fn persist_reviewed_legal_follow_projection(
     let projection_ref = stable_ref(
         "legal-follow-projection",
         &[
+            PROJECTION_CONTRACT,
             &refs.semantic_build_ref,
             &refs.projection_ref,
             &refs.observation_ref,
@@ -144,42 +160,63 @@ pub fn persist_reviewed_legal_follow_projection(
         "legal-follow-edge-reviewed-support",
         &[&projection_ref, &observation_node_ref, &proposition_node_ref],
     );
+    let payload = serde_json::json!({
+        "schema": PROJECTION_CONTRACT,
+        "source_revision_ref": support.source_revision_ref,
+        "exact_span_ref": support.exact_span_ref,
+        "reviewed_proposition_ref": support.proposition_ref,
+        "legal_ir_build_ref": refs.semantic_build_ref,
+        "legal_ir_projection_ref": refs.projection_ref,
+        "legal_ir_observation_ref": refs.observation_ref,
+        "legal_ir_graph_revision_ref": refs.graph_revision_ref,
+        "relation": "reviewed_source_support",
+        "creates_semantic_authority": false,
+        "creates_claim_truth": false,
+        "creates_applicability": false
+    });
+    let payload_text = serde_json::to_string(&payload)
+        .map_err(|_| ReviewedLegalFollowProjectionError::ChangedReplay)?;
+    let projection_sha256 = digest(&[
+        PROJECTION_CONTRACT,
+        &projection_ref,
+        &support.document_ref,
+        &payload_text,
+    ]);
+    let projection_sha256_vec = projection_sha256.to_vec();
 
     let mut tx = client.transaction()?;
     tx.execute(
         "INSERT INTO pnf_follow_projection
          (projection_ref, document_ref, projection_kind, authority_ceiling,
-          promotion_allowed, execution_allowed)
-         VALUES($1,$2,'legal_follow','derived_only_challengeable',FALSE,FALSE)
+          promotion_allowed, execution_allowed, payload, projection_sha256)
+         VALUES($1,$2,'legal_follow','derived_only_challengeable',FALSE,FALSE,$3::jsonb,$4)
          ON CONFLICT(projection_ref) DO NOTHING",
-        &[&projection_ref, &support.document_ref],
+        &[&projection_ref, &support.document_ref, &payload_text, &projection_sha256_vec],
     )?;
     tx.execute(
         "INSERT INTO pnf_follow_node
-         (node_ref, projection_ref, node_kind, label, document_ref,
+         (projection_ref, node_ref, node_kind, label, document_ref,
           factor_revision_ref, domain_ir_ref, source_record_ref)
-         VALUES($1,$2,'reviewed_proposition','Reviewed proposition',$3,NULL,$4,$5)
-         ON CONFLICT(node_ref) DO NOTHING",
+         VALUES($1,$2,'reviewed_proposition','Reviewed proposition',$3,NULL,NULL,$4)
+         ON CONFLICT(projection_ref,node_ref) DO NOTHING",
         &[
-            &proposition_node_ref,
             &projection_ref,
+            &proposition_node_ref,
             &support.document_ref,
-            &refs.graph_revision_ref,
             &support.source_revision_ref,
         ],
     )?;
     tx.execute(
         "INSERT INTO pnf_follow_node
-         (node_ref, projection_ref, node_kind, label, document_ref,
+         (projection_ref, node_ref, node_kind, label, document_ref,
           factor_revision_ref, domain_ir_ref, source_record_ref)
-         VALUES($1,$2,'reviewed_source_observation','Reviewed source observation',$3,$4,$5,$6)
-         ON CONFLICT(node_ref) DO NOTHING",
+         VALUES($1,$2,'reviewed_source_observation','Reviewed source observation',$3,$4,NULL,$5)
+         ON CONFLICT(projection_ref,node_ref) DO NOTHING",
         &[
-            &observation_node_ref,
             &projection_ref,
+            &observation_node_ref,
             &support.document_ref,
             &support.pnf_revision_ref,
-            &refs.observation_ref,
             &support.source_revision_ref,
         ],
     )?;
@@ -197,9 +234,9 @@ pub fn persist_reviewed_legal_follow_projection(
         ],
     )?;
     for (provenance_ref, evidence_ref) in [
-        (&refs.semantic_build_ref, Some(&support.source_revision_ref)),
-        (&refs.observation_ref, Some(&support.exact_span_ref)),
-        (&refs.graph_revision_ref, Some(&support.source_revision_ref)),
+        (&refs.semantic_build_ref, &support.source_revision_ref),
+        (&refs.observation_ref, &support.exact_span_ref),
+        (&refs.graph_revision_ref, &support.source_revision_ref),
     ] {
         tx.execute(
             "INSERT INTO pnf_follow_edge_provenance
@@ -212,7 +249,7 @@ pub fn persist_reviewed_legal_follow_projection(
 
     let projection = client.query_one(
         "SELECT document_ref, projection_kind, authority_ceiling,
-                promotion_allowed, execution_allowed
+                promotion_allowed, execution_allowed, projection_sha256
          FROM pnf_follow_projection WHERE projection_ref=$1",
         &[&projection_ref],
     )?;
@@ -233,6 +270,7 @@ pub fn persist_reviewed_legal_follow_projection(
         || projection.get::<_, String>(2) != "derived_only_challengeable"
         || projection.get::<_, bool>(3)
         || projection.get::<_, bool>(4)
+        || projection.get::<_, Vec<u8>>(5) != projection_sha256_vec
         || node_count != 2
         || edge_count != 1
     {
