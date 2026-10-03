@@ -22,6 +22,10 @@ pub use investigation_graph_binding_store::*;
 mod reviewed_evidence;
 pub use reviewed_evidence::*;
 
+#[path = "legal_source_manifestation.rs"]
+mod legal_source_manifestation;
+pub use legal_source_manifestation::*;
+
 #[path = "acceptance_control_store.rs"]
 mod acceptance_control_store;
 pub use acceptance_control_store::*;
