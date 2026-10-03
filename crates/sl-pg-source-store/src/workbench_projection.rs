@@ -18,6 +18,14 @@ pub use investigation_graph_binding::*;
 mod investigation_graph_binding_store;
 pub use investigation_graph_binding_store::*;
 
+#[path = "reviewed_evidence_store.rs"]
+mod reviewed_evidence_store;
+pub use reviewed_evidence_store::*;
+
+#[path = "acceptance_control_store.rs"]
+mod acceptance_control_store;
+pub use acceptance_control_store::*;
+
 pub use crate::investigation_acquisition::{
     AxisRelation, ParetoAxisRelation, ParetoDominanceWitness,
     RouteFrontierDisposition, RouteDispositionReceipt, PotentialReopeningCone,
