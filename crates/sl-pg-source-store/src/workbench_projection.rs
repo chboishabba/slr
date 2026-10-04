@@ -38,10 +38,6 @@ pub use provider_materialization_bridge::*;
 mod provider_materialization_resolution;
 pub use provider_materialization_resolution::*;
 
-#[path = "oalc_hf_jsonl_acquirer.rs"]
-mod oalc_hf_jsonl_acquirer;
-pub use oalc_hf_jsonl_acquirer::*;
-
 #[path = "provider_legal_source_registration.rs"]
 mod provider_legal_source_registration;
 pub use provider_legal_source_registration::*;
