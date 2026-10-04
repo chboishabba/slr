@@ -13,9 +13,9 @@ use std::{env, process};
 
 use sensiblaw_governed_legal_provider::{
     resolve_oalc_dataset_revision, run_pinned_oalc_stream, OalcCaseFollowError,
-    OalcCitationMatch, PinnedOalcStreamRequest, OALC_DATASET_ID, OALC_PROVIDER_PROFILE,
-    OALC_SPLIT,
+    OalcCitationMatch, PinnedOalcStreamRequest, OALC_DATASET_ID, OALC_SPLIT,
 };
+use sensiblaw_legal_follow_plan::OALC_PROVIDER_PROFILE;
 use sensiblaw_pg_source_store::{
     load_database_config, load_provider_materialization, materialization_ref_for_demand,
     persist_provider_legal_source_registration, resolve_provider_materialization,
