@@ -205,7 +205,11 @@ fn run() -> Result<(), String> {
     .map_err(|error| error.to_string())?;
     let binding = persist_investigation_graph_binding(&config, &binding)
         .map_err(|error| error.to_string())?;
-    let bound = load_bound_investigation_graph_projection(&config, &obligation.obligation_ref)
+    let bound = load_bound_investigation_graph_projection(
+        &config,
+        &obligation.obligation_ref,
+        &request.matter_ref,
+    )
         .map_err(|error| error.to_string())?
         .ok_or_else(|| "persisted investigation graph did not reopen".to_owned())?;
     if bound.binding != binding
