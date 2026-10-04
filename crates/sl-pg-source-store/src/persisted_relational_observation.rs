@@ -1,14 +1,15 @@
-//! Persisted-source bridge into the generic relational interlingua.
+//! Empirical-source bridges into the relational interlingua.
 //!
-//! A REL observation used for empirical acceptance must be reconstructible
-//! from a persisted candidate-PNF batch and its owning persisted source
-//! statement.  This module deliberately does not accept role/filler data from
-//! an acceptance JSON packet.
+//! Acceptance observations are reconstructed from durable parser/native
+//! products. Callers may choose an already-persisted predicate/statement and
+//! supply consumer context, but may not author role/filler structure in the
+//! acceptance packet.
 
 use thiserror::Error;
 
 use crate::{
-    load_candidate_pnf_batch, load_source_statement, observation_from_candidate_pnf,
+    load_candidate_pnf_batch, load_ontology_diagnostic, load_source_statement,
+    observation_from_candidate_pnf, observation_from_native_wikidata,
     CandidatePnfBatch, CandidatePnfRole, DatabaseConfig, ObservationContext,
     RelationalComparisonError, RelationalObservation, RelationalSourceFamily,
 };
@@ -23,12 +24,23 @@ pub struct PersistedRelationalObservationRequest {
     pub provenance_refs: Vec<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PersistedWikidataObservationRequest {
+    pub diagnostic_ref: String,
+    pub native_statement_ref: String,
+    pub observation_ref: String,
+    pub context: ObservationContext,
+    pub provenance_refs: Vec<String>,
+}
+
 #[derive(Debug, Error)]
 pub enum PersistedRelationalObservationError {
     #[error(transparent)]
     CandidateStore(#[from] crate::CandidatePnfStoreError),
     #[error(transparent)]
     StatementStore(#[from] crate::StatementTraceStoreError),
+    #[error(transparent)]
+    OntologyStore(#[from] crate::OntologyReviewError),
     #[error(transparent)]
     Relational(#[from] RelationalComparisonError),
     #[error("persisted candidate batch does not exist")]
@@ -37,18 +49,14 @@ pub enum PersistedRelationalObservationError {
     MissingStatement,
     #[error("persisted candidate batch and source statement disagree on exact span")]
     WrongSpanOwner,
-    #[error("persisted candidate batch crossed candidate/non-promotion boundary")]
+    #[error("persisted candidate/native source crossed candidate/non-promotion boundary")]
     PromotionBoundary,
     #[error("selected predicate is not a persisted predicate candidate in this batch")]
     MissingPredicate,
+    #[error("selected native Wikidata statement is absent from the persisted diagnostic packet")]
+    MissingNativeStatement,
 }
 
-/// Reconstruct one relational observation from durable candidate-PNF state.
-///
-/// The observation's source revision, exact span, parser receipt, factors and
-/// predicate identity all originate in persisted state.  The caller may only
-/// supply consumer-context metadata and the choice of one already-persisted
-/// predicate candidate.
 pub fn relational_observation_from_persisted_pnf(
     config: &DatabaseConfig,
     request: &PersistedRelationalObservationRequest,
@@ -57,7 +65,6 @@ pub fn relational_observation_from_persisted_pnf(
         .ok_or(PersistedRelationalObservationError::MissingBatch)?;
     let statement = load_source_statement(config, &batch.statement_ref)?
         .ok_or(PersistedRelationalObservationError::MissingStatement)?;
-
     if statement.exact_span_ref != batch.exact_span_ref {
         return Err(PersistedRelationalObservationError::WrongSpanOwner);
     }
@@ -80,21 +87,18 @@ pub fn relational_observation_from_persisted_pnf(
     }) {
         return Err(PersistedRelationalObservationError::MissingPredicate);
     }
-
     let reconstructed = CandidatePnfBatch {
         exact_span_ref: batch.exact_span_ref.clone(),
         candidates: batch.factors.clone(),
-        proposition_support_paid: batch.proposition_support_paid,
-        applicability_paid: batch.applicability_paid,
-        claim_truth_paid: batch.claim_truth_paid,
+        proposition_support_paid: false,
+        applicability_paid: false,
+        claim_truth_paid: false,
     };
-    let mut provenance_refs = request.provenance_refs.clone();
-    provenance_refs.push(request.batch_ref.clone());
-    provenance_refs.push(batch.parser_receipt_ref.clone());
-    provenance_refs.sort();
-    provenance_refs.dedup();
-
-    observation_from_candidate_pnf(
+    let mut provenance = request.provenance_refs.clone();
+    provenance.extend([request.batch_ref.clone(), batch.parser_receipt_ref.clone()]);
+    provenance.sort();
+    provenance.dedup();
+    Ok(observation_from_candidate_pnf(
         &statement.source_revision_ref,
         request.source_family,
         &request.observation_ref,
@@ -102,7 +106,45 @@ pub fn relational_observation_from_persisted_pnf(
         &request.selected_predicate_candidate_ref,
         &reconstructed,
         request.context.clone(),
-        provenance_refs,
-    )
-    .map_err(Into::into)
+        provenance,
+    )?)
+}
+
+pub fn relational_observation_from_persisted_wikidata(
+    config: &DatabaseConfig,
+    request: &PersistedWikidataObservationRequest,
+) -> Result<RelationalObservation, PersistedRelationalObservationError> {
+    let read = load_ontology_diagnostic(config, &request.diagnostic_ref)?;
+    if read.creates_semantic_authority
+        || read.grants_wikidata_edit_authority
+        || !read.packet.candidate_only
+        || read.packet.creates_semantic_authority
+        || read.packet.claim_truth_promoted
+        || read.packet.grants_wikidata_edit_authority
+    {
+        return Err(PersistedRelationalObservationError::PromotionBoundary);
+    }
+    let statement = read
+        .packet
+        .witnesses
+        .iter()
+        .flat_map(|w| w.native_statements.iter())
+        .find(|s| s.statement_ref == request.native_statement_ref)
+        .ok_or(PersistedRelationalObservationError::MissingNativeStatement)?;
+    let mut provenance = request.provenance_refs.clone();
+    provenance.extend([
+        request.diagnostic_ref.clone(),
+        read.packet.producer_receipt_ref.clone(),
+        read.packet.source_snapshot_digest_ref.clone(),
+        statement.statement_revision_ref.clone(),
+    ]);
+    provenance.sort();
+    provenance.dedup();
+    Ok(observation_from_native_wikidata(
+        &read.packet.source_revision_ref,
+        statement,
+        &read.packet.producer_receipt_ref,
+        provenance,
+        request.context.clone(),
+    )?)
 }
