@@ -42,6 +42,10 @@ pub use provider_materialization_resolution::*;
 mod provider_legal_source_registration;
 pub use provider_legal_source_registration::*;
 
+#[path = "provider_exact_slice.rs"]
+mod provider_exact_slice;
+pub use provider_exact_slice::*;
+
 #[path = "reviewed_legal_evidence_materializer.rs"]
 mod reviewed_legal_evidence_materializer;
 pub use reviewed_legal_evidence_materializer::*;
