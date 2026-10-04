@@ -63,7 +63,7 @@ pub fn resolve_provider_materialization<A: CacheFirstAcquirer>(
 ) -> Result<ProviderMaterializationResolution, ProviderMaterializationResolutionError<A::Error>> {
     install_provider_materialization_schema(config)?;
 
-    if let Some(reference) = materialization_ref_for_demand(config, demand)? {
+    if let Some(reference) = materialization_ref_for_demand(config, demand, split_ref)? {
         let persisted = load_provider_materialization(config, &reference)?;
         if persisted.bytes_resident {
             let canonical_text = load_resident_text(config, &persisted)?;
@@ -146,7 +146,8 @@ pub fn resolve_provider_materialization<A: CacheFirstAcquirer>(
 pub fn materialization_ref_for_demand(
     config: &DatabaseConfig,
     demand: &CacheLookupDemand<'_>,
-) -> Result<Option<String>, ProviderMaterializationResolutionError<std::convert::Infallible>> {
+    split_ref: &str,
+) -> Result<Option<String>, postgres::Error> {
     let mut client = Client::connect(config.database_url(), NoTls)?;
     let row = client.query_opt(
         r#"SELECT m.materialization_ref
@@ -159,6 +160,7 @@ pub fn materialization_ref_for_demand(
              AND r.requested_source_role_ref=$4
              AND r.requested_authority_level_ref=$5
              AND r.requested_temporal_ref IS NOT DISTINCT FROM $6
+             AND m.split_ref=$7
              AND r.exact_demand_match=TRUE
            ORDER BY r.created_at DESC
            LIMIT 1"#,
@@ -169,6 +171,7 @@ pub fn materialization_ref_for_demand(
             &demand.source_role_ref,
             &demand.authority_level_ref,
             &demand.temporal_ref,
+            &split_ref,
         ],
     )?;
     Ok(row.map(|row| row.get(0)))
