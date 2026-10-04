@@ -9,9 +9,9 @@ use thiserror::Error;
 
 use crate::{
     load_candidate_pnf_batch, load_ontology_diagnostic, load_source_statement,
-    observation_from_candidate_pnf, observation_from_native_wikidata,
-    CandidatePnfBatch, CandidatePnfRole, DatabaseConfig, ObservationContext,
-    RelationalComparisonError, RelationalObservation, RelationalSourceFamily,
+    observation_from_candidate_pnf, observation_from_native_wikidata, CandidatePnfBatch,
+    CandidatePnfRole, DatabaseConfig, ObservationContext, RelationalComparisonError,
+    RelationalObservation, RelationalSourceFamily,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -55,6 +55,8 @@ pub enum PersistedRelationalObservationError {
     MissingPredicate,
     #[error("selected native Wikidata statement is absent from the persisted diagnostic packet")]
     MissingNativeStatement,
+    #[error("persisted native Wikidata diagnostic does not exist")]
+    MissingDiagnostic,
 }
 
 pub fn relational_observation_from_persisted_pnf(
@@ -114,7 +116,8 @@ pub fn relational_observation_from_persisted_wikidata(
     config: &DatabaseConfig,
     request: &PersistedWikidataObservationRequest,
 ) -> Result<RelationalObservation, PersistedRelationalObservationError> {
-    let read = load_ontology_diagnostic(config, &request.diagnostic_ref)?;
+    let read = load_ontology_diagnostic(config, &request.diagnostic_ref)?
+        .ok_or(PersistedRelationalObservationError::MissingDiagnostic)?;
     if read.creates_semantic_authority
         || read.grants_wikidata_edit_authority
         || !read.packet.candidate_only
