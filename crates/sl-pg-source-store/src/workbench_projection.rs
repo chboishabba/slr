@@ -26,6 +26,10 @@ pub use reviewed_evidence::*;
 mod legal_source_manifestation;
 pub use legal_source_manifestation::*;
 
+#[path = "provider_materialization.rs"]
+mod provider_materialization;
+pub use provider_materialization::*;
+
 #[path = "reviewed_legal_evidence_materializer.rs"]
 mod reviewed_legal_evidence_materializer;
 pub use reviewed_legal_evidence_materializer::*;
