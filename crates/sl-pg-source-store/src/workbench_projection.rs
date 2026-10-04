@@ -18,6 +18,30 @@ pub use investigation_graph_binding::*;
 mod investigation_graph_binding_store;
 pub use investigation_graph_binding_store::*;
 
+#[path = "reviewed_evidence.rs"]
+mod reviewed_evidence;
+pub use reviewed_evidence::*;
+
+#[path = "legal_source_manifestation.rs"]
+mod legal_source_manifestation;
+pub use legal_source_manifestation::*;
+
+#[path = "reviewed_legal_evidence_materializer.rs"]
+mod reviewed_legal_evidence_materializer;
+pub use reviewed_legal_evidence_materializer::*;
+
+#[path = "reviewed_legal_evidence_request.rs"]
+mod reviewed_legal_evidence_request;
+pub use reviewed_legal_evidence_request::*;
+
+#[path = "acceptance_control_store.rs"]
+mod acceptance_control_store;
+pub use acceptance_control_store::*;
+
+#[path = "acceptance_reopen_store.rs"]
+mod acceptance_reopen_store;
+pub use acceptance_reopen_store::*;
+
 pub use crate::investigation_acquisition::{
     AxisRelation, ParetoAxisRelation, ParetoDominanceWitness,
     RouteFrontierDisposition, RouteDispositionReceipt, PotentialReopeningCone,
