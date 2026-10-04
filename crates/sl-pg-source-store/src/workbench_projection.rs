@@ -34,6 +34,10 @@ pub use provider_materialization::*;
 mod provider_materialization_bridge;
 pub use provider_materialization_bridge::*;
 
+#[path = "provider_materialization_resolution.rs"]
+mod provider_materialization_resolution;
+pub use provider_materialization_resolution::*;
+
 #[path = "reviewed_legal_evidence_materializer.rs"]
 mod reviewed_legal_evidence_materializer;
 pub use reviewed_legal_evidence_materializer::*;
