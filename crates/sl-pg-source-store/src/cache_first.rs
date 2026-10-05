@@ -167,7 +167,18 @@ impl<E> From<CacheLookupError> for CacheFirstError<E> {
     }
 }
 
+fn canonical_text_from_nullable_payload(
+    payload: Option<Vec<u8>>,
+) -> Result<Option<String>, CacheLookupError> {
+    payload
+        .map(|bytes| String::from_utf8(bytes).map_err(CacheLookupError::InvalidCanonicalText))
+        .transpose()
+}
+
 impl PostgresSourceStore {
+    /// Reopen an exact persisted source only when its canonical bytes are
+    /// resident. Provider-backed evicted rows remain durable, but appear as a
+    /// cache miss here so callers never decode SQL NULL as `Vec<u8>`.
     pub fn lookup_exact_source(
         &mut self,
         demand: &CacheLookupDemand<'_>,
@@ -235,9 +246,10 @@ impl PostgresSourceStore {
             other => return Err(CacheLookupError::InvalidResolutionPath(other.to_owned())),
         };
 
-        let canonical_bytes: Vec<u8> = row.get(14);
-        let canonical_text = String::from_utf8(canonical_bytes)
-            .map_err(CacheLookupError::InvalidCanonicalText)?;
+        let canonical_bytes: Option<Vec<u8>> = row.get(14);
+        let Some(canonical_text) = canonical_text_from_nullable_payload(canonical_bytes)? else {
+            return Ok(None);
+        };
 
         Ok(Some(CachedResolvedDocument {
             document_ref: row.get(0),
