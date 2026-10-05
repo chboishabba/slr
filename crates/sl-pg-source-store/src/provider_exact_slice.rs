@@ -171,4 +171,23 @@ mod tests {
         assert_eq!(ProviderExactSliceError::RefMismatch.to_string(),
             "persisted exact source refs disagree with the owning provider materialisation");
     }
+
+    #[test]
+    fn exact_slice_resolution_must_match_materialisation_acquisition_receipt() {
+        assert!(resolution_belongs_to_materialization(
+            "receipt:oalc:pinned",
+            "receipt:oalc:pinned",
+            true
+        ));
+        assert!(!resolution_belongs_to_materialization(
+            "receipt:oalc:pinned",
+            "receipt:oalc:later",
+            true
+        ));
+        assert!(!resolution_belongs_to_materialization(
+            "receipt:oalc:pinned",
+            "receipt:oalc:pinned",
+            false
+        ));
+    }
 }
