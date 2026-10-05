@@ -624,7 +624,7 @@ struct RevisionBinding {
     resolution_evidence_ref: Option<String>,
 }
 
-fn provider_revision_lock_key(identity: &ProviderMaterializationIdentity) -> i64 {
+pub(super) fn provider_revision_lock_key(identity: &ProviderMaterializationIdentity) -> i64 {
     let digest = framed_digest(&[
         &identity.provider_ref,
         &identity.dataset_ref,
