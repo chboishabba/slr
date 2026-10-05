@@ -1,26 +1,25 @@
 //! Provider-pinned, eviction-safe source materialisation.
 //!
-//! This is the runtime counterpart of the distributed legal-corpus boundary:
-//! provider discovery may navigate without resident full text; quotation/parser/
-//! review actions require an exact materialisation whose bytes reproduce the
-//! durable provider pin and canonical digest.  Full source bytes are cache state,
-//! not semantic/legal authority and not a required permanent archive.
+//! Provider discovery may navigate without resident full text. Exact quotation,
+//! parser and review actions require an exact materialisation whose bytes
+//! reproduce the durable provider pin and canonical digest. Full source bytes
+//! are cache state, not semantic/legal authority and not a required archive.
 
-use postgres::{Client, NoTls};
+use postgres::{Client, NoTls, Transaction};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 use crate::{
-    DatabaseConfig, ExactResolutionReceipt, PersistedSourceRefs, PostgresSourceStore,
-    ResolvedExternalDocument, SourceSlice, SourceStoreError,
+    DatabaseConfig, ExactResolutionReceipt, PostgresSourceStore, ResolvedExternalDocument,
+    SourceSlice, SourceStoreError,
 };
 
 pub const PROVIDER_MATERIALIZATION_SCHEMA_SQL: &str = r#"
 CREATE SCHEMA IF NOT EXISTS source_provenance;
 
--- OALC/provider documents may be re-materialised from an immutable upstream pin.
--- The canonical row therefore retains identity/digest/length when cache bytes are
--- evicted. Existing resident/local sources continue to keep payloads normally.
+-- Provider-backed documents can be re-materialised from an immutable upstream
+-- pin. Identity/digest/length therefore remain when resident cache bytes are
+-- evicted. Existing retained/local sources continue to keep payloads normally.
 ALTER TABLE corpus.canonical_content ALTER COLUMN payload DROP NOT NULL;
 
 CREATE TABLE IF NOT EXISTS source_provenance.provider_materialization (
@@ -115,6 +114,8 @@ pub enum ProviderMaterializationError {
     EmptyCoordinate(&'static str),
     #[error("provider revision is not immutable: {0}")]
     MutableProviderRevision(String),
+    #[error("OALC/HF provider revision is not a commit-like immutable pin: {0}")]
+    UnverifiableOalcRevision(String),
     #[error("provider materialisation requires an exact source-resolution receipt")]
     NonExactResolution,
     #[error("provider materialisation identity disagrees with the acquired document: {0}")]
@@ -123,6 +124,8 @@ pub enum ProviderMaterializationError {
     RematerializationDigestMismatch,
     #[error("persisted provider materialisation changed under the same immutable identity")]
     ExistingRowConflict,
+    #[error("persisted source revision does not match the provider pin/document/digest/resolution")]
+    RevisionBindingConflict,
     #[error("provider materialisation not found: {0}")]
     NotFound(String),
     #[error("full source bytes are not resident; strict action requires exact re-materialisation")]
@@ -145,6 +148,15 @@ fn required(name: &'static str, value: &str) -> Result<(), ProviderMaterializati
     }
 }
 
+fn is_hex_commit_pin(value: &str) -> bool {
+    matches!(value.len(), 40 | 64) && value.bytes().all(|byte| byte.is_ascii_hexdigit())
+}
+
+/// Validate only source immutability/identity syntax. This grants no authority.
+/// OALC/HF revisions are Git/Hugging-Face revisions, so their production pin is
+/// required to be a 40- or 64-hex commit-like identifier. Other providers may
+/// use provider-native immutable identifiers after the generic mutable aliases
+/// are rejected.
 pub fn validate_provider_pin(
     identity: &ProviderMaterializationIdentity,
 ) -> Result<(), ProviderMaterializationError> {
@@ -161,7 +173,9 @@ pub fn validate_provider_pin(
     ] {
         required(name, value)?;
     }
-    let normalized = identity.dataset_revision_ref.trim().to_ascii_lowercase();
+
+    let revision = identity.dataset_revision_ref.trim();
+    let normalized = revision.to_ascii_lowercase();
     let mutable = matches!(normalized.as_str(), "main" | "master" | "latest" | "head")
         || normalized.starts_with("refs/heads/")
         || normalized.ends_with(":latest");
@@ -170,13 +184,27 @@ pub fn validate_provider_pin(
             identity.dataset_revision_ref.clone(),
         ));
     }
+
+    let provider = identity.provider_ref.to_ascii_lowercase();
+    let dataset = identity.dataset_ref.to_ascii_lowercase();
+    let is_oalc_hf = provider.contains("oalc")
+        || provider.contains("huggingface")
+        || provider.contains("hf")
+        || dataset == "isaacus/open-australian-legal-corpus";
+    if is_oalc_hf && !is_hex_commit_pin(revision) {
+        return Err(ProviderMaterializationError::UnverifiableOalcRevision(
+            identity.dataset_revision_ref.clone(),
+        ));
+    }
     Ok(())
 }
 
+/// SHA-256 of the exact resident canonical UTF-8 bytes.
 pub fn canonical_sha256_hex(text: &str) -> String {
     hex(&sha256(text.as_bytes()))
 }
 
+/// Stable materialisation identity over immutable provider coordinates + bytes.
 pub fn canonical_provider_materialization_ref(
     identity: &ProviderMaterializationIdentity,
     canonical_sha256_hex: &str,
@@ -199,6 +227,7 @@ pub fn canonical_provider_materialization_ref(
     Ok(format!("provider-materialization:sha256:{}", hex(&value)))
 }
 
+/// Strict re-materialisation check; changed bytes under one pin fail closed.
 pub fn verify_provider_rematerialization(
     expected_sha256_hex: &str,
     canonical_text: &str,
@@ -210,6 +239,9 @@ pub fn verify_provider_rematerialization(
     }
 }
 
+/// Install the provider cache metadata extension. The canonical payload becomes
+/// nullable because provider bytes are cache state; legacy readers must treat a
+/// NULL payload as non-resident rather than as a missing durable source.
 pub fn install_provider_materialization_schema(
     config: &DatabaseConfig,
 ) -> Result<(), ProviderMaterializationError> {
@@ -220,10 +252,11 @@ pub fn install_provider_materialization_schema(
 
 /// Persist a newly acquired exact source under an immutable provider pin.
 ///
-/// `canonical_text` is initially resident only so exact spans/parsers/review can
-/// consume it. Call `evict_provider_materialization_bytes` once derived durable
-/// coordinates have been paid. Re-acquisition must use the same immutable pin
-/// and reproduce the stored digest before bytes can become resident again.
+/// The session advisory lock uses the legacy external-source uniqueness key,
+/// deliberately excluding `split_ref`, because the legacy table also excludes
+/// split. This serialises competing first writers before their source revision
+/// can be reused. The returned revision/document/digest/resolution are then
+/// revalidated before the provider materialisation is accepted.
 pub fn persist_provider_materialization(
     config: &DatabaseConfig,
     identity: &ProviderMaterializationIdentity,
@@ -241,37 +274,30 @@ pub fn persist_provider_materialization(
     let digest_hex = canonical_sha256_hex(document.canonical_text);
     let materialization_ref = canonical_provider_materialization_ref(identity, &digest_hex)?;
 
-    // Before the legacy exact-source writer sees the bytes, check whether this
-    // immutable provider/version identity already owns a different digest.
-    let mut client = Client::connect(config.database_url(), NoTls)?;
-    if let Some(existing) = existing_pin_digest(&mut client, identity)? {
-        if existing != digest_hex {
+    // Hold this connection for the full transition. Session advisory locks are
+    // released automatically if any later error drops the connection.
+    let mut guard = Client::connect(config.database_url(), NoTls)?;
+    let lock_key = provider_revision_lock_key(identity);
+    guard.query_one("SELECT pg_advisory_lock($1)", &[&lock_key])?;
+
+    if let Some(binding) = existing_revision_binding(&mut guard, identity)? {
+        if binding.canonical_sha256_hex != digest_hex {
             return Err(ProviderMaterializationError::RematerializationDigestMismatch);
         }
-        rehydrate_matching_canonical_payload(&mut client, identity, document.canonical_text)?;
+        rehydrate_matching_canonical_payload(&mut guard, identity, document.canonical_text)?;
     }
-    drop(client);
 
     let mut store = PostgresSourceStore::connect(config)?;
     let refs = store.persist_resolved_source(document, resolution, slices)?;
 
-    let mut client = Client::connect(config.database_url(), NoTls)?;
-    let canonical = client.query_one(
-        r#"SELECT d.canonical_ref, encode(c.content_sha256,'hex'), c.uncompressed_byte_length,
-                  (c.payload IS NOT NULL)
-           FROM corpus.document d
-           JOIN corpus.canonical_content c ON c.canonical_ref=d.canonical_ref
-           WHERE d.document_ref=$1"#,
-        &[&refs.document_ref],
+    let binding = revision_binding_for_refs(
+        &mut guard,
+        &refs.external_source_revision_ref,
+        &refs.source_resolution_ref,
     )?;
-    let canonical_ref: String = canonical.get(0);
-    let reopened_digest: String = canonical.get(1);
-    let byte_length: i64 = canonical.get(2);
-    if reopened_digest != digest_hex {
-        return Err(ProviderMaterializationError::RematerializationDigestMismatch);
-    }
+    validate_revision_binding(identity, document, resolution, &refs.document_ref, &digest_hex, &binding)?;
 
-    client.execute(
+    guard.execute(
         r#"INSERT INTO source_provenance.provider_materialization
            (materialization_ref,external_source_revision_ref,document_ref,canonical_ref,
             provider_ref,dataset_ref,dataset_revision_ref,split_ref,external_version_ref,
@@ -286,7 +312,7 @@ pub fn persist_provider_materialization(
             &materialization_ref,
             &refs.external_source_revision_ref,
             &refs.document_ref,
-            &canonical_ref,
+            &binding.canonical_ref,
             &identity.provider_ref,
             &identity.dataset_ref,
             &identity.dataset_revision_ref,
@@ -298,7 +324,7 @@ pub fn persist_provider_materialization(
             &identity.source_url,
             &identity.acquisition_receipt_ref,
             &digest_hex,
-            &byte_length,
+            &binding.canonical_byte_length,
         ],
     )?;
 
@@ -306,14 +332,17 @@ pub fn persist_provider_materialization(
     if reopened.identity != *identity
         || reopened.external_source_revision_ref != refs.external_source_revision_ref
         || reopened.document_ref != refs.document_ref
-        || reopened.canonical_ref != canonical_ref
+        || reopened.canonical_ref != binding.canonical_ref
         || reopened.canonical_sha256_hex != digest_hex
     {
         return Err(ProviderMaterializationError::ExistingRowConflict);
     }
+
+    guard.query_one("SELECT pg_advisory_unlock($1)", &[&lock_key])?;
     Ok(reopened)
 }
 
+/// Reopen durable materialisation metadata regardless of byte residency.
 pub fn load_provider_materialization(
     config: &DatabaseConfig,
     materialization_ref: &str,
@@ -380,20 +409,30 @@ pub fn load_provider_materialization(
     })
 }
 
-/// Remove only the re-materialisable canonical payload. Provider pin, digest,
-/// document/revision identity, exact spans, acquisition receipts and all derived
-/// semantic/review/legal coordinates remain durable.
+/// Remove only re-materialisable cache bytes. The canonical row is locked before
+/// checking whether a retained/local document shares it, so the ownership check
+/// and payload removal form one atomic lifecycle transition.
 pub fn evict_provider_materialization_bytes(
     config: &DatabaseConfig,
     materialization_ref: &str,
 ) -> Result<PersistedProviderMaterialization, ProviderMaterializationError> {
     let persisted = load_provider_materialization(config, materialization_ref)?;
     let mut client = Client::connect(config.database_url(), NoTls)?;
+    let mut tx = client.transaction()?;
 
-    // Fail closed if the content-addressed canonical row is also used by a
-    // non-provider/local document. Eviction must never punch a hole in a local
-    // retained source merely because its bytes happen to hash identically.
-    let shared: bool = client
+    let row = tx.query_one(
+        r#"SELECT encode(content_sha256,'hex')
+           FROM corpus.canonical_content
+           WHERE canonical_ref=$1
+           FOR UPDATE"#,
+        &[&persisted.canonical_ref],
+    )?;
+    let digest: String = row.get(0);
+    if digest != persisted.canonical_sha256_hex {
+        return Err(ProviderMaterializationError::ExistingRowConflict);
+    }
+
+    let shared: bool = tx
         .query_one(
             r#"SELECT EXISTS(
                  SELECT 1 FROM corpus.document d
@@ -409,15 +448,17 @@ pub fn evict_provider_materialization_bytes(
         return Err(ProviderMaterializationError::SharedCanonicalPayload);
     }
 
-    client.execute(
+    tx.execute(
         "UPDATE corpus.canonical_content SET payload=NULL WHERE canonical_ref=$1",
         &[&persisted.canonical_ref],
     )?;
+    tx.commit()?;
     load_provider_materialization(config, materialization_ref)
 }
 
-/// Reinstall bytes only after exact pin and digest agreement. This is the
-/// eviction-safe reopen gate used before quotation/parser/review actions.
+/// Reinstall bytes only after exact pin/digest agreement. The canonical row is
+/// locked and its immutable content digest rechecked in the same transaction as
+/// the payload update.
 pub fn rehydrate_provider_materialization(
     config: &DatabaseConfig,
     materialization_ref: &str,
@@ -430,8 +471,21 @@ pub fn rehydrate_provider_materialization(
         return Err(ProviderMaterializationError::ExistingRowConflict);
     }
     verify_provider_rematerialization(&persisted.canonical_sha256_hex, canonical_text)?;
+
     let mut client = Client::connect(config.database_url(), NoTls)?;
-    client.execute(
+    let mut tx = client.transaction()?;
+    let row = tx.query_one(
+        r#"SELECT encode(content_sha256,'hex')
+           FROM corpus.canonical_content
+           WHERE canonical_ref=$1
+           FOR UPDATE"#,
+        &[&persisted.canonical_ref],
+    )?;
+    let digest: String = row.get(0);
+    if digest != persisted.canonical_sha256_hex {
+        return Err(ProviderMaterializationError::ExistingRowConflict);
+    }
+    tx.execute(
         "UPDATE corpus.canonical_content SET payload=$2, uncompressed_byte_length=$3 WHERE canonical_ref=$1",
         &[
             &persisted.canonical_ref,
@@ -439,12 +493,11 @@ pub fn rehydrate_provider_materialization(
             &(canonical_text.len() as i64),
         ],
     )?;
+    tx.commit()?;
     load_provider_materialization(config, materialization_ref)
 }
 
-/// Reopen an already persisted exact source slice. The slice is usable only
-/// while exact bytes are resident; after eviction callers must re-materialise
-/// the pinned provider record first.
+/// Reopen a persisted exact source slice only while verified bytes are resident.
 pub fn load_provider_slice_text(
     config: &DatabaseConfig,
     materialization_ref: &str,
@@ -473,8 +526,10 @@ pub fn load_provider_slice_text(
     let payload = payload.ok_or(ProviderMaterializationError::BytesNotResident)?;
     let start: i32 = row.get(0);
     let end: i32 = row.get(1);
-    let start = usize::try_from(start).map_err(|_| ProviderMaterializationError::WrongSliceOwner(source_slice_ref.to_owned()))?;
-    let end = usize::try_from(end).map_err(|_| ProviderMaterializationError::WrongSliceOwner(source_slice_ref.to_owned()))?;
+    let start = usize::try_from(start)
+        .map_err(|_| ProviderMaterializationError::WrongSliceOwner(source_slice_ref.to_owned()))?;
+    let end = usize::try_from(end)
+        .map_err(|_| ProviderMaterializationError::WrongSliceOwner(source_slice_ref.to_owned()))?;
     if start >= end || end > payload.len() {
         return Err(ProviderMaterializationError::WrongSliceOwner(source_slice_ref.to_owned()));
     }
@@ -528,12 +583,50 @@ fn validate_identity(
     Ok(())
 }
 
-fn existing_pin_digest(
+#[derive(Debug)]
+struct RevisionBinding {
+    external_source_revision_ref: String,
+    document_ref: String,
+    canonical_ref: String,
+    canonical_sha256_hex: String,
+    canonical_byte_length: i64,
+    provider_ref: String,
+    dataset_ref: String,
+    dataset_revision_ref: String,
+    external_version_ref: String,
+    citation: String,
+    source_ref: String,
+    jurisdiction_ref: String,
+    source_url: Option<String>,
+    source_resolution_ref: Option<String>,
+    exact_demand_match: Option<bool>,
+    resolution_evidence_ref: Option<String>,
+}
+
+fn provider_revision_lock_key(identity: &ProviderMaterializationIdentity) -> i64 {
+    let digest = framed_digest(&[
+        &identity.provider_ref,
+        &identity.dataset_ref,
+        &identity.dataset_revision_ref,
+        &identity.external_version_ref,
+        &identity.citation,
+        &identity.jurisdiction_ref,
+    ]);
+    i64::from_be_bytes([
+        digest[0], digest[1], digest[2], digest[3],
+        digest[4], digest[5], digest[6], digest[7],
+    ])
+}
+
+fn existing_revision_binding(
     client: &mut Client,
     identity: &ProviderMaterializationIdentity,
-) -> Result<Option<String>, ProviderMaterializationError> {
+) -> Result<Option<RevisionBinding>, ProviderMaterializationError> {
     let row = client.query_opt(
-        r#"SELECT encode(c.content_sha256,'hex')
+        r#"SELECT r.external_source_revision_ref,r.document_ref,d.canonical_ref,
+                  encode(c.content_sha256,'hex'),c.uncompressed_byte_length,
+                  r.provider_ref,r.dataset_ref,r.dataset_revision_ref,r.external_version_ref,
+                  r.citation,r.source_ref,r.jurisdiction_ref,r.source_url
            FROM corpus.external_source_revision r
            JOIN corpus.document d ON d.document_ref=r.document_ref
            JOIN corpus.canonical_content c ON c.canonical_ref=d.canonical_ref
@@ -548,7 +641,95 @@ fn existing_pin_digest(
             &identity.jurisdiction_ref,
         ],
     )?;
-    Ok(row.map(|row| row.get(0)))
+    Ok(row.map(|row| RevisionBinding {
+        external_source_revision_ref: row.get(0),
+        document_ref: row.get(1),
+        canonical_ref: row.get(2),
+        canonical_sha256_hex: row.get(3),
+        canonical_byte_length: row.get(4),
+        provider_ref: row.get(5),
+        dataset_ref: row.get(6),
+        dataset_revision_ref: row.get(7),
+        external_version_ref: row.get(8),
+        citation: row.get(9),
+        source_ref: row.get(10),
+        jurisdiction_ref: row.get(11),
+        source_url: row.get(12),
+        source_resolution_ref: None,
+        exact_demand_match: None,
+        resolution_evidence_ref: None,
+    }))
+}
+
+fn revision_binding_for_refs(
+    client: &mut Client,
+    revision_ref: &str,
+    resolution_ref: &str,
+) -> Result<RevisionBinding, ProviderMaterializationError> {
+    let row = client.query_opt(
+        r#"SELECT r.external_source_revision_ref,r.document_ref,d.canonical_ref,
+                  encode(c.content_sha256,'hex'),c.uncompressed_byte_length,
+                  r.provider_ref,r.dataset_ref,r.dataset_revision_ref,r.external_version_ref,
+                  r.citation,r.source_ref,r.jurisdiction_ref,r.source_url,
+                  s.source_resolution_ref,s.exact_demand_match,s.resolution_evidence_ref
+           FROM corpus.external_source_revision r
+           JOIN corpus.document d ON d.document_ref=r.document_ref
+           JOIN corpus.canonical_content c ON c.canonical_ref=d.canonical_ref
+           JOIN evidence.external_source_resolution s
+             ON s.external_source_revision_ref=r.external_source_revision_ref
+           WHERE r.external_source_revision_ref=$1 AND s.source_resolution_ref=$2"#,
+        &[&revision_ref, &resolution_ref],
+    )?.ok_or(ProviderMaterializationError::RevisionBindingConflict)?;
+    Ok(RevisionBinding {
+        external_source_revision_ref: row.get(0),
+        document_ref: row.get(1),
+        canonical_ref: row.get(2),
+        canonical_sha256_hex: row.get(3),
+        canonical_byte_length: row.get(4),
+        provider_ref: row.get(5),
+        dataset_ref: row.get(6),
+        dataset_revision_ref: row.get(7),
+        external_version_ref: row.get(8),
+        citation: row.get(9),
+        source_ref: row.get(10),
+        jurisdiction_ref: row.get(11),
+        source_url: row.get(12),
+        source_resolution_ref: Some(row.get(13)),
+        exact_demand_match: Some(row.get(14)),
+        resolution_evidence_ref: Some(row.get(15)),
+    })
+}
+
+fn validate_revision_binding(
+    identity: &ProviderMaterializationIdentity,
+    document: &ResolvedExternalDocument<'_>,
+    resolution: &ExactResolutionReceipt<'_>,
+    returned_document_ref: &str,
+    expected_digest: &str,
+    binding: &RevisionBinding,
+) -> Result<(), ProviderMaterializationError> {
+    let ok = binding.document_ref == returned_document_ref
+        && binding.provider_ref == identity.provider_ref
+        && binding.dataset_ref == identity.dataset_ref
+        && binding.dataset_revision_ref == identity.dataset_revision_ref
+        && binding.external_version_ref == identity.external_version_ref
+        && binding.citation == identity.citation
+        && binding.source_ref == identity.source_ref
+        && binding.jurisdiction_ref == identity.jurisdiction_ref
+        && binding.source_url.as_deref() == document.source_url
+        && binding.canonical_sha256_hex == expected_digest
+        && binding.source_resolution_ref.as_deref() == Some(resolution_source_ref(binding).as_str())
+        && binding.exact_demand_match == Some(true)
+        && binding.resolution_evidence_ref.as_deref() == Some(resolution.resolution_evidence_ref);
+    if ok {
+        Ok(())
+    } else {
+        Err(ProviderMaterializationError::RevisionBindingConflict)
+    }
+}
+
+fn resolution_source_ref(binding: &RevisionBinding) -> String {
+    binding.source_resolution_ref.clone().unwrap_or_default()
 }
 
 fn rehydrate_matching_canonical_payload(
@@ -643,5 +824,16 @@ mod tests {
             validate_provider_pin(&value),
             Err(ProviderMaterializationError::MutableProviderRevision(_))
         ));
+    }
+
+    #[test]
+    fn legacy_revision_lock_key_is_split_independent() {
+        let left = identity();
+        let mut right = left.clone();
+        right.split_ref = "validation".into();
+        assert_eq!(provider_revision_lock_key(&left), provider_revision_lock_key(&right));
+
+        right.external_version_ref = "case:[2003] HCA 2".into();
+        assert_ne!(provider_revision_lock_key(&left), provider_revision_lock_key(&right));
     }
 }
