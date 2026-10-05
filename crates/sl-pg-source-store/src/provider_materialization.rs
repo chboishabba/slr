@@ -255,8 +255,10 @@ pub fn install_provider_materialization_schema(
 /// The session advisory lock uses the legacy external-source uniqueness key,
 /// deliberately excluding `split_ref`, because the legacy table also excludes
 /// split. This serialises competing first writers before their source revision
-/// can be reused. The returned revision/document/digest/resolution are then
-/// revalidated before the provider materialisation is accepted.
+/// can be reused. Eviction and direct rehydration take the same session lock,
+/// so the resident-byte lifecycle cannot interleave with this persistence path.
+/// The returned revision/document/digest/resolution are revalidated before the
+/// provider materialisation is accepted.
 pub fn persist_provider_materialization(
     config: &DatabaseConfig,
     identity: &ProviderMaterializationIdentity,
@@ -419,15 +421,19 @@ pub fn load_provider_materialization(
     })
 }
 
-/// Remove only re-materialisable cache bytes. The canonical row is locked before
-/// checking whether a retained/local document shares it, so the ownership check
-/// and payload removal form one atomic lifecycle transition.
+/// Remove only re-materialisable cache bytes. This operation takes the same
+/// provider-revision session lock as persistence/rehydration, then row-locks the
+/// canonical payload while checking whether a retained/local document shares
+/// it. Ownership check and payload removal are therefore one serialized
+/// lifecycle transition.
 pub fn evict_provider_materialization_bytes(
     config: &DatabaseConfig,
     materialization_ref: &str,
 ) -> Result<PersistedProviderMaterialization, ProviderMaterializationError> {
     let persisted = load_provider_materialization(config, materialization_ref)?;
     let mut client = Client::connect(config.database_url(), NoTls)?;
+    let lock_key = provider_revision_lock_key(&persisted.identity);
+    client.query_one("SELECT pg_advisory_lock($1)", &[&lock_key])?;
     let mut tx = client.transaction()?;
 
     let row = tx.query_one(
@@ -463,12 +469,14 @@ pub fn evict_provider_materialization_bytes(
         &[&persisted.canonical_ref],
     )?;
     tx.commit()?;
+    client.query_one("SELECT pg_advisory_unlock($1)", &[&lock_key])?;
     load_provider_materialization(config, materialization_ref)
 }
 
-/// Reinstall bytes only after exact pin/digest agreement. The canonical row is
-/// locked and its immutable content digest rechecked in the same transaction as
-/// the payload update.
+/// Reinstall bytes only after exact pin/digest agreement. This operation takes
+/// the same provider-revision session lock as persistence/eviction, then locks
+/// the canonical row and rechecks its immutable digest in the same transaction
+/// as the payload update.
 pub fn rehydrate_provider_materialization(
     config: &DatabaseConfig,
     materialization_ref: &str,
@@ -483,6 +491,8 @@ pub fn rehydrate_provider_materialization(
     verify_provider_rematerialization(&persisted.canonical_sha256_hex, canonical_text)?;
 
     let mut client = Client::connect(config.database_url(), NoTls)?;
+    let lock_key = provider_revision_lock_key(&persisted.identity);
+    client.query_one("SELECT pg_advisory_lock($1)", &[&lock_key])?;
     let mut tx = client.transaction()?;
     let row = tx.query_one(
         r#"SELECT encode(content_sha256,'hex')
@@ -504,6 +514,7 @@ pub fn rehydrate_provider_materialization(
         ],
     )?;
     tx.commit()?;
+    client.query_one("SELECT pg_advisory_unlock($1)", &[&lock_key])?;
     load_provider_materialization(config, materialization_ref)
 }
 
