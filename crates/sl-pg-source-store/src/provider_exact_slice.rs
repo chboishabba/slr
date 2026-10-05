@@ -38,10 +38,20 @@ pub enum ProviderExactSliceError {
     RefMismatch,
 }
 
+fn resolution_belongs_to_materialization(
+    acquisition_receipt_ref: &str,
+    resolution_evidence_ref: &str,
+    exact_demand_match: bool,
+) -> bool {
+    exact_demand_match && acquisition_receipt_ref == resolution_evidence_ref
+}
+
 /// Persist exact slices only after the provider materialisation's canonical
-/// bytes are resident and digest-verified. The legacy writer is reused for the
-/// span rows, then its returned document/revision ownership is checked against
-/// the durable provider materialisation.
+/// bytes are resident and digest-verified. The exact source-resolution is
+/// reopened by the materialisation's persisted acquisition receipt, never by
+/// "latest receipt" ordering. The legacy writer is then reused for span rows,
+/// and its returned document/revision ownership is checked against the durable
+/// provider materialisation.
 pub fn persist_provider_exact_slices(
     config: &DatabaseConfig,
     materialization_ref: &str,
@@ -94,8 +104,13 @@ pub fn persist_provider_exact_slices(
                       network_request_count,resolver_ref,resolution_evidence_ref
                FROM evidence.external_source_resolution
                WHERE external_source_revision_ref=$1
+                 AND resolution_evidence_ref=$2
+                 AND exact_demand_match=TRUE
                ORDER BY created_at DESC LIMIT 1"#,
-            &[&materialization.external_source_revision_ref],
+            &[
+                &materialization.external_source_revision_ref,
+                &materialization.identity.acquisition_receipt_ref,
+            ],
         )?
         .ok_or(ProviderExactSliceError::MissingResolution)?;
 
@@ -112,6 +127,13 @@ pub fn persist_provider_exact_slices(
     let network_request_count: i64 = receipt_row.get(10);
     let resolver_ref: String = receipt_row.get(11);
     let resolution_evidence_ref: String = receipt_row.get(12);
+    if !resolution_belongs_to_materialization(
+        &materialization.identity.acquisition_receipt_ref,
+        &resolution_evidence_ref,
+        exact_demand_match,
+    ) {
+        return Err(ProviderExactSliceError::MissingResolution);
+    }
     drop(client);
 
     let document_type_ref: String = source_row.get(0);
