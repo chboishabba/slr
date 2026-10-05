@@ -34,8 +34,14 @@ pub enum ProviderExactSliceError {
     UnknownResolutionPath(String),
     #[error("persisted exact source-resolution owner is missing")]
     MissingResolution,
+    #[error("persisted exact source refs disagree with the owning provider materialisation")]
+    RefMismatch,
 }
 
+/// Persist exact slices only after the provider materialisation's canonical
+/// bytes are resident and digest-verified. The legacy writer is reused for the
+/// span rows, then its returned document/revision ownership is checked against
+/// the durable provider materialisation.
 pub fn persist_provider_exact_slices(
     config: &DatabaseConfig,
     materialization_ref: &str,
@@ -144,7 +150,7 @@ pub fn persist_provider_exact_slices(
     if refs.document_ref != materialization.document_ref
         || refs.external_source_revision_ref != materialization.external_source_revision_ref
     {
-        return Err(ProviderExactSliceError::MissingResolution);
+        return Err(ProviderExactSliceError::RefMismatch);
     }
     Ok(refs)
 }
