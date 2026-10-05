@@ -31,6 +31,23 @@ fn provider_pin_requires_an_immutable_revision() {
 }
 
 #[test]
+fn oalc_hf_pin_requires_a_commit_like_revision_not_an_arbitrary_branch_name() {
+    for mutable_or_unverifiable in ["feature/provider-pin", "release-2026", "v1.2.3", "refs/tags/current"] {
+        let mut value = identity();
+        value.dataset_revision_ref = mutable_or_unverifiable.into();
+        assert!(
+            validate_provider_pin(&value).is_err(),
+            "accepted non-commit OALC/HF pin {mutable_or_unverifiable:?}"
+        );
+    }
+
+    let mut sha256 = identity();
+    sha256.dataset_revision_ref =
+        "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".into();
+    assert!(validate_provider_pin(&sha256).is_ok());
+}
+
+#[test]
 fn materialization_identity_is_content_addressed_but_provider_pinned() {
     let value = identity();
     let digest = canonical_sha256_hex("exact provider bytes");
