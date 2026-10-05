@@ -5,7 +5,7 @@
 //! reproduce the durable provider pin and canonical digest. Full source bytes
 //! are cache state, not semantic/legal authority and not a required archive.
 
-use postgres::{Client, NoTls, Transaction};
+use postgres::{Client, NoTls};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
@@ -189,7 +189,7 @@ pub fn validate_provider_pin(
     let dataset = identity.dataset_ref.to_ascii_lowercase();
     let is_oalc_hf = provider.contains("oalc")
         || provider.contains("huggingface")
-        || provider.contains("hf")
+        || provider.ends_with(":hf")
         || dataset == "isaacus/open-australian-legal-corpus";
     if is_oalc_hf && !is_hex_commit_pin(revision) {
         return Err(ProviderMaterializationError::UnverifiableOalcRevision(
@@ -284,6 +284,7 @@ pub fn persist_provider_materialization(
         if binding.canonical_sha256_hex != digest_hex {
             return Err(ProviderMaterializationError::RematerializationDigestMismatch);
         }
+        validate_existing_revision_identity(identity, document, &binding)?;
         rehydrate_matching_canonical_payload(&mut guard, identity, document.canonical_text)?;
     }
 
@@ -295,7 +296,16 @@ pub fn persist_provider_materialization(
         &refs.external_source_revision_ref,
         &refs.source_resolution_ref,
     )?;
-    validate_revision_binding(identity, document, resolution, &refs.document_ref, &digest_hex, &binding)?;
+    validate_revision_binding(
+        identity,
+        document,
+        resolution,
+        &refs.external_source_revision_ref,
+        &refs.document_ref,
+        &refs.source_resolution_ref,
+        &digest_hex,
+        &binding,
+    )?;
 
     guard.execute(
         r#"INSERT INTO source_provenance.provider_materialization
@@ -700,15 +710,39 @@ fn revision_binding_for_refs(
     })
 }
 
+fn validate_existing_revision_identity(
+    identity: &ProviderMaterializationIdentity,
+    document: &ResolvedExternalDocument<'_>,
+    binding: &RevisionBinding,
+) -> Result<(), ProviderMaterializationError> {
+    let ok = binding.provider_ref == identity.provider_ref
+        && binding.dataset_ref == identity.dataset_ref
+        && binding.dataset_revision_ref == identity.dataset_revision_ref
+        && binding.external_version_ref == identity.external_version_ref
+        && binding.citation == identity.citation
+        && binding.source_ref == identity.source_ref
+        && binding.jurisdiction_ref == identity.jurisdiction_ref
+        && binding.source_url.as_deref() == document.source_url;
+    if ok {
+        Ok(())
+    } else {
+        Err(ProviderMaterializationError::RevisionBindingConflict)
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 fn validate_revision_binding(
     identity: &ProviderMaterializationIdentity,
     document: &ResolvedExternalDocument<'_>,
     resolution: &ExactResolutionReceipt<'_>,
-    returned_document_ref: &str,
+    expected_revision_ref: &str,
+    expected_document_ref: &str,
+    expected_resolution_ref: &str,
     expected_digest: &str,
     binding: &RevisionBinding,
 ) -> Result<(), ProviderMaterializationError> {
-    let ok = binding.document_ref == returned_document_ref
+    let ok = binding.external_source_revision_ref == expected_revision_ref
+        && binding.document_ref == expected_document_ref
         && binding.provider_ref == identity.provider_ref
         && binding.dataset_ref == identity.dataset_ref
         && binding.dataset_revision_ref == identity.dataset_revision_ref
@@ -718,7 +752,7 @@ fn validate_revision_binding(
         && binding.jurisdiction_ref == identity.jurisdiction_ref
         && binding.source_url.as_deref() == document.source_url
         && binding.canonical_sha256_hex == expected_digest
-        && binding.source_resolution_ref.as_deref() == Some(resolution_source_ref(binding).as_str())
+        && binding.source_resolution_ref.as_deref() == Some(expected_resolution_ref)
         && binding.exact_demand_match == Some(true)
         && binding.resolution_evidence_ref.as_deref() == Some(resolution.resolution_evidence_ref);
     if ok {
@@ -726,10 +760,6 @@ fn validate_revision_binding(
     } else {
         Err(ProviderMaterializationError::RevisionBindingConflict)
     }
-}
-
-fn resolution_source_ref(binding: &RevisionBinding) -> String {
-    binding.source_resolution_ref.clone().unwrap_or_default()
 }
 
 fn rehydrate_matching_canonical_payload(
