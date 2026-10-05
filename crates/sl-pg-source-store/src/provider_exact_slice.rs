@@ -159,4 +159,10 @@ mod tests {
             as fn(&DatabaseConfig, &str, &[SourceSlice<'_>])
                 -> Result<PersistedSourceRefs, ProviderExactSliceError>;
     }
+
+    #[test]
+    fn ref_mismatch_has_a_dedicated_diagnostic() {
+        assert_eq!(ProviderExactSliceError::RefMismatch.to_string(),
+            "persisted exact source refs disagree with the owning provider materialisation");
+    }
 }
