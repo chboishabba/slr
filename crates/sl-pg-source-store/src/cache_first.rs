@@ -382,4 +382,13 @@ mod tests {
         assert_eq!(acquirer.calls, 1);
         assert_eq!(bundle.receipt.receipt_authority_ref, "source-observation-only");
     }
+
+    #[test]
+    fn evicted_provider_payload_is_a_cache_miss_not_a_decode_failure() {
+        assert_eq!(canonical_text_from_nullable_payload(None).unwrap(), None);
+        assert_eq!(
+            canonical_text_from_nullable_payload(Some(b"resident".to_vec())).unwrap(),
+            Some("resident".to_owned())
+        );
+    }
 }
