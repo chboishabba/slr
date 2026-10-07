@@ -4,6 +4,11 @@
 //! exact provider source/span ancestry while entering the already-existing M12
 //! candidate spine. It cannot assign evidence role, normative order,
 //! applicability, proposition support or claim truth.
+//!
+//! Provider/OALC `corpus.span` coordinates deliberately retain the historical
+//! legal-source UTF-8 byte-offset ABI. The generic long-document lane has a
+//! separate character-coordinate ancestry path in `statement_trace_store`.
+//! Do not silently translate one coordinate system into the other.
 
 use postgres::{Client, NoTls};
 use sha2::{Digest, Sha256};
@@ -25,6 +30,7 @@ pub struct ProviderCandidatePnfReceipt {
     pub candidate_batch_ref: String,
     pub parser_receipt_ref: String,
     pub candidate_factor_count: usize,
+    pub byte_coordinate_contract: bool,
     pub candidate_only: bool,
     pub creates_semantic_authority: bool,
     pub proposition_support_paid: bool,
@@ -52,8 +58,8 @@ pub enum ProviderCandidatePnfError {
     MissingSourceSlice,
     #[error("persisted source slice does not belong to the provider materialisation")]
     SourceSliceOwnerMismatch,
-    #[error("persisted source slice has invalid character coordinates")]
-    InvalidCharacterSpan,
+    #[error("persisted source slice has invalid UTF-8 byte coordinates")]
+    InvalidByteSpan,
     #[error("persisted source slice digest does not match the exact literal")]
     SliceDigestMismatch,
     #[error("parser receipt reference is empty")]
@@ -62,45 +68,29 @@ pub enum ProviderCandidatePnfError {
     ReopenMismatch,
 }
 
-fn literal_for_char_span(text: &str, start: u32, end: u32) -> Option<&str> {
+fn literal_for_byte_span(text: &str, start: u32, end: u32) -> Option<&str> {
     if start >= end {
         return None;
     }
     let start = usize::try_from(start).ok()?;
     let end = usize::try_from(end).ok()?;
-    let mut start_byte = None;
-    let mut end_byte = None;
-    for (index, (byte, _)) in text.char_indices().enumerate() {
-        if index == start {
-            start_byte = Some(byte);
-        }
-        if index == end {
-            end_byte = Some(byte);
-            break;
-        }
+    if end > text.len() || !text.is_char_boundary(start) || !text.is_char_boundary(end) {
+        return None;
     }
-    let char_count = text.chars().count();
-    if start == char_count {
-        start_byte = Some(text.len());
-    }
-    if end == char_count {
-        end_byte = Some(text.len());
-    }
-    let (start_byte, end_byte) = (start_byte?, end_byte?);
-    (start_byte < end_byte).then(|| &text[start_byte..end_byte])
+    Some(&text[start..end])
 }
 
 fn sha256_bytes(value: &[u8]) -> [u8; 32] {
     Sha256::digest(value).into()
 }
 
-/// Reopen one exact provider-backed slice and persist it through the existing
-/// immutable source-statement and candidate-PNF stores.
+/// Reopen one exact provider-backed legal/source slice and persist it through
+/// the existing immutable source-statement and candidate-PNF stores.
 ///
 /// The provider payload must still be resident and must reproduce the durable
 /// materialisation digest. The selected source-slice digest is independently
-/// checked over its exact literal before the parser is called. Review and all
-/// higher-authority payments remain downstream.
+/// checked over its exact UTF-8 byte slice before the parser is called. Review
+/// and all higher-authority payments remain downstream.
 pub fn persist_provider_slice_candidate_pnf<P: CandidatePnfProducer>(
     config: &DatabaseConfig,
     materialization_ref: &str,
@@ -149,11 +139,11 @@ pub fn persist_provider_slice_candidate_pnf<P: CandidatePnfProducer>(
     verify_provider_rematerialization(&materialization.canonical_sha256_hex, &canonical_text)?;
 
     let start = u32::try_from(start_i32)
-        .map_err(|_| ProviderCandidatePnfError::InvalidCharacterSpan)?;
+        .map_err(|_| ProviderCandidatePnfError::InvalidByteSpan)?;
     let end = u32::try_from(end_i32)
-        .map_err(|_| ProviderCandidatePnfError::InvalidCharacterSpan)?;
-    let literal = literal_for_char_span(&canonical_text, start, end)
-        .ok_or(ProviderCandidatePnfError::InvalidCharacterSpan)?;
+        .map_err(|_| ProviderCandidatePnfError::InvalidByteSpan)?;
+    let literal = literal_for_byte_span(&canonical_text, start, end)
+        .ok_or(ProviderCandidatePnfError::InvalidByteSpan)?;
     if slice_sha256.as_slice() != sha256_bytes(literal.as_bytes()).as_slice() {
         return Err(ProviderCandidatePnfError::SliceDigestMismatch);
     }
@@ -205,6 +195,7 @@ pub fn persist_provider_slice_candidate_pnf<P: CandidatePnfProducer>(
         candidate_batch_ref: persisted_batch.batch_ref,
         parser_receipt_ref: persisted_batch.parser_receipt_ref,
         candidate_factor_count: persisted_batch.factors.len(),
+        byte_coordinate_contract: true,
         candidate_only: true,
         creates_semantic_authority: false,
         proposition_support_paid: false,
@@ -242,11 +233,13 @@ mod tests {
     }
 
     #[test]
-    fn unicode_character_span_is_not_treated_as_byte_span() {
-        assert_eq!(literal_for_char_span("Aé中Z", 1, 3), Some("é中"));
-        assert_eq!(literal_for_char_span("Aé中Z", 2, 4), Some("中Z"));
-        assert_eq!(literal_for_char_span("Aé中Z", 3, 3), None);
-        assert_eq!(literal_for_char_span("Aé中Z", 3, 5), None);
+    fn provider_legal_span_preserves_utf8_byte_coordinate_contract() {
+        let text = "Aé中Z";
+        // UTF-8 byte layout: A=[0,1), é=[1,3), 中=[3,6), Z=[6,7).
+        assert_eq!(literal_for_byte_span(text, 1, 6), Some("é中"));
+        assert_eq!(literal_for_byte_span(text, 3, 7), Some("中Z"));
+        assert_eq!(literal_for_byte_span(text, 2, 6), None);
+        assert_eq!(literal_for_byte_span(text, 3, 8), None);
     }
 
     #[test]
@@ -258,12 +251,14 @@ mod tests {
             candidate_batch_ref: "pnf-batch:1".into(),
             parser_receipt_ref: "parser:1".into(),
             candidate_factor_count: 1,
+            byte_coordinate_contract: true,
             candidate_only: true,
             creates_semantic_authority: false,
             proposition_support_paid: false,
             applicability_promoted: false,
             claim_truth_promoted: false,
         };
+        assert!(receipt.byte_coordinate_contract);
         assert!(receipt.candidate_only);
         assert!(!receipt.creates_semantic_authority);
         assert!(!receipt.proposition_support_paid);
