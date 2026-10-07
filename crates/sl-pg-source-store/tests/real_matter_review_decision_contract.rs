@@ -1,6 +1,8 @@
 use sensiblaw_pg_source_store::{
     DecisionBackedReviewedLegalEvidenceError, DecisionBackedReviewedLegalEvidenceSelection,
     LegalEvidenceReviewDecisionDraft, LegalEvidenceReviewDecisionError,
+    RealMatterReviewGateDraft, RealMatterReviewGateReceipt,
+    RealMatterReviewedResumeError, RealMatterReviewedResumeReceipt,
     LEGAL_EVIDENCE_REVIEW_DECISION_SCHEMA_SQL,
 };
 
@@ -43,4 +45,20 @@ fn production_selection_does_not_expose_role_or_normative_order_fields() {
 
     let _ = std::any::TypeId::of::<LegalEvidenceReviewDecisionError>();
     let _ = std::any::TypeId::of::<DecisionBackedReviewedLegalEvidenceError>();
+}
+
+#[test]
+fn real_matter_public_surface_has_prepare_and_resume_receipts() {
+    let draft = RealMatterReviewGateDraft {
+        observation_ref: "observation:1".into(),
+        consumer_ref: "matter:1".into(),
+        reason: "genuine provider-backed legal evidence requires human review".into(),
+        source_manifestation_ref: "legal-source-manifestation:1".into(),
+        candidate_pnf_batch_ref: "candidate-pnf-batch:1".into(),
+        candidate_factor_ref: "candidate:1".into(),
+    };
+    assert_eq!(draft.consumer_ref, "matter:1");
+    let _ = std::any::TypeId::of::<RealMatterReviewGateReceipt>();
+    let _ = std::any::TypeId::of::<RealMatterReviewedResumeReceipt>();
+    let _ = std::any::TypeId::of::<RealMatterReviewedResumeError>();
 }
