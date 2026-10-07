@@ -1,6 +1,7 @@
 use sensiblaw_pg_source_store::{
     canonical_provider_materialization_ref, canonical_sha256_hex,
     validate_provider_pin, verify_provider_rematerialization,
+    ProviderCandidatePnfError, ProviderCandidatePnfReceipt,
     ProviderMaterializationIdentity, ProviderMaterializationPolicy,
 };
 
@@ -77,4 +78,33 @@ fn default_policy_is_ephemeral_and_non_promoting() {
     assert!(!policy.creates_legal_authority);
     assert!(!policy.promotes_applicability);
     assert!(!policy.promotes_claim_truth);
+}
+
+#[test]
+fn provider_candidate_pnf_public_contract_remains_non_promoting() {
+    let receipt = ProviderCandidatePnfReceipt {
+        materialization_ref: "provider-materialization:fixture".into(),
+        source_slice_ref: "source-slice:fixture".into(),
+        statement_ref: "statement:fixture".into(),
+        candidate_batch_ref: "candidate-pnf-batch:fixture".into(),
+        parser_receipt_ref: "parser:fixture".into(),
+        candidate_factor_count: 1,
+        byte_coordinate_contract: true,
+        candidate_only: true,
+        creates_semantic_authority: false,
+        proposition_support_paid: false,
+        applicability_promoted: false,
+        claim_truth_promoted: false,
+    };
+    assert!(receipt.byte_coordinate_contract);
+    assert!(receipt.candidate_only);
+    assert!(!receipt.creates_semantic_authority);
+    assert!(!receipt.proposition_support_paid);
+    assert!(!receipt.applicability_promoted);
+    assert!(!receipt.claim_truth_promoted);
+
+    assert_eq!(
+        ProviderCandidatePnfError::BytesNotResident.to_string(),
+        "provider bytes are evicted; candidate-PNF compilation requires verified resident bytes"
+    );
 }
