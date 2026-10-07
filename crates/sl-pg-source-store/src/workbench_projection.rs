@@ -74,6 +74,22 @@ pub use reviewed_legal_evidence_decision_request::*;
 mod real_matter_review_resume;
 pub use real_matter_review_resume::*;
 
+#[path = "matter_controversy.rs"]
+mod matter_controversy;
+pub use matter_controversy::*;
+
+#[path = "matter_controversy_query.rs"]
+mod matter_controversy_query;
+pub use matter_controversy_query::*;
+
+#[path = "matter_reverse_proof.rs"]
+mod matter_reverse_proof;
+pub use matter_reverse_proof::*;
+
+#[path = "matter_controversy_projection.rs"]
+mod matter_controversy_projection;
+pub use matter_controversy_projection::*;
+
 #[path = "acceptance_control_store.rs"]
 mod acceptance_control_store;
 pub use acceptance_control_store::*;
