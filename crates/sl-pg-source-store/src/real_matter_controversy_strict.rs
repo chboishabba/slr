@@ -1,9 +1,9 @@
 //! Replay-strict public materialiser for REAL-MATTER controversy.
 //!
 //! The low-level constructor is idempotent and may encounter already-existing
-//! rows. This public wrapper reopens every controversy child after construction
-//! and proves the persisted meaning still equals the caller's reviewed/typed
-//! request before returning a receipt.
+//! rows. This production wrapper reopens every controversy child after
+//! construction and proves the persisted meaning still equals the caller's
+//! reviewed/typed request before returning a receipt.
 
 use thiserror::Error;
 
@@ -25,7 +25,7 @@ pub enum RealMatterControversyMaterializationError {
     PersistedMeaningMismatch,
 }
 
-pub fn materialize_real_matter_controversy(
+pub fn materialize_real_matter_controversy_strict(
     config: &DatabaseConfig,
     draft: &raw::RealMatterControversyDraft,
 ) -> Result<raw::RealMatterControversyReceipt, RealMatterControversyMaterializationError> {
