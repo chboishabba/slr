@@ -15,17 +15,19 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 use crate::{
-    canonical_statement_ref, compile_statement_pnf, load_provider_materialization,
-    persist_source_statement, persist_statement_candidate_pnf,
+    canonical_statement_ref, compile_statement_pnf, load_provider_legal_source_registration,
+    load_provider_materialization, persist_source_statement, persist_statement_candidate_pnf,
     verify_provider_rematerialization, CandidatePnfProducer, CandidatePnfStoreError,
-    DatabaseConfig, ExactSourceSpan, ProviderMaterializationError, SourceStatementEnvelope,
-    StatementOrigin, StatementPnfSpineError, StatementTraceStoreError,
+    DatabaseConfig, ExactSourceSpan, ProviderLegalSourceRegistrationError,
+    ProviderMaterializationError, SourceStatementEnvelope, StatementOrigin,
+    StatementPnfSpineError, StatementTraceStoreError,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProviderCandidatePnfReceipt {
     pub materialization_ref: String,
     pub source_slice_ref: String,
+    pub legal_source_revision_ref: String,
     pub statement_ref: String,
     pub candidate_batch_ref: String,
     pub parser_receipt_ref: String,
@@ -43,6 +45,8 @@ pub enum ProviderCandidatePnfError {
     #[error(transparent)]
     Provider(#[from] ProviderMaterializationError),
     #[error(transparent)]
+    LegalSource(#[from] ProviderLegalSourceRegistrationError),
+    #[error(transparent)]
     Postgres(#[from] postgres::Error),
     #[error(transparent)]
     Compile(#[from] StatementPnfSpineError),
@@ -54,6 +58,8 @@ pub enum ProviderCandidatePnfError {
     BytesNotResident,
     #[error("resident provider payload is not valid UTF-8")]
     InvalidUtf8,
+    #[error("provider materialisation and curated legal-source registration disagree")]
+    LegalSourceRegistrationMismatch,
     #[error("persisted provider source slice does not exist")]
     MissingSourceSlice,
     #[error("persisted source slice does not belong to the provider materialisation")]
@@ -88,9 +94,11 @@ fn sha256_bytes(value: &[u8]) -> [u8; 32] {
 /// the existing immutable source-statement and candidate-PNF stores.
 ///
 /// The provider payload must still be resident and must reproduce the durable
-/// materialisation digest. The selected source-slice digest is independently
-/// checked over its exact UTF-8 byte slice before the parser is called. Review
-/// and all higher-authority payments remain downstream.
+/// materialisation digest. A curated, non-promoting provider legal-source
+/// registration must already exist for the same materialisation/revision. The
+/// selected source-slice digest is independently checked over its exact UTF-8
+/// byte slice before the parser is called. Review and all higher-authority
+/// payments remain downstream.
 pub fn persist_provider_slice_candidate_pnf<P: CandidatePnfProducer>(
     config: &DatabaseConfig,
     materialization_ref: &str,
@@ -104,6 +112,24 @@ pub fn persist_provider_slice_candidate_pnf<P: CandidatePnfProducer>(
     let materialization = load_provider_materialization(config, materialization_ref)?;
     if !materialization.bytes_resident {
         return Err(ProviderCandidatePnfError::BytesNotResident);
+    }
+
+    let legal = load_provider_legal_source_registration(
+        config,
+        &materialization.external_source_revision_ref,
+    )?;
+    if legal.materialization_ref != materialization.materialization_ref
+        || legal.source_revision_ref != materialization.external_source_revision_ref
+        || legal.document_ref != materialization.document_ref
+        || legal.canonical_text_sha256 != materialization.canonical_sha256_hex
+        || !legal.compile_eligible
+        || legal.bytes_residency_required_for_identity
+        || legal.creates_semantic_authority
+        || legal.creates_legal_authority
+        || legal.applicability_promoted
+        || legal.claim_truth_promoted
+    {
+        return Err(ProviderCandidatePnfError::LegalSourceRegistrationMismatch);
     }
 
     let mut client = Client::connect(config.database_url(), NoTls)?;
@@ -172,7 +198,7 @@ pub fn persist_provider_slice_candidate_pnf<P: CandidatePnfProducer>(
     let persisted_batch = persist_statement_candidate_pnf(config, &candidate)?;
 
     if persisted_statement.statement_ref != candidate.statement.statement_ref
-        || persisted_statement.source_revision_ref != candidate.statement.source_revision_ref
+        || persisted_statement.source_revision_ref != legal.source_revision_ref
         || persisted_statement.exact_span_ref != candidate.statement.span.span_ref
         || persisted_statement.literal_text != candidate.statement.literal_text
         || persisted_batch.statement_ref != candidate.statement.statement_ref
@@ -191,6 +217,7 @@ pub fn persist_provider_slice_candidate_pnf<P: CandidatePnfProducer>(
     Ok(ProviderCandidatePnfReceipt {
         materialization_ref: materialization.materialization_ref,
         source_slice_ref: source_slice_ref.to_owned(),
+        legal_source_revision_ref: legal.source_revision_ref,
         statement_ref: persisted_statement.statement_ref,
         candidate_batch_ref: persisted_batch.batch_ref,
         parser_receipt_ref: persisted_batch.parser_receipt_ref,
@@ -247,6 +274,7 @@ mod tests {
         let receipt = ProviderCandidatePnfReceipt {
             materialization_ref: "provider-materialization:1".into(),
             source_slice_ref: "source-slice:1".into(),
+            legal_source_revision_ref: "external-source-revision:1".into(),
             statement_ref: "statement:1".into(),
             candidate_batch_ref: "pnf-batch:1".into(),
             parser_receipt_ref: "parser:1".into(),
