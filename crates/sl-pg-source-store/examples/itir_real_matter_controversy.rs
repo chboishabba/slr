@@ -1,5 +1,5 @@
 use sensiblaw_pg_source_store::{
-    load_database_config, materialize_real_matter_controversy, DisagreementKind,
+    load_database_config, materialize_real_matter_controversy_strict, DisagreementKind,
     ProceduralGoal, RealMatterControversyDraft, ResponseMode,
 };
 
@@ -70,7 +70,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     let config = load_database_config(None)?;
-    let receipt = materialize_real_matter_controversy(
+    let receipt = materialize_real_matter_controversy_strict(
         &config,
         &RealMatterControversyDraft {
             matter_ref: args[0].clone(),
