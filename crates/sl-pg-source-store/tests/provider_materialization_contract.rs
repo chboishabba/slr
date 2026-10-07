@@ -85,6 +85,7 @@ fn provider_candidate_pnf_public_contract_remains_non_promoting() {
     let receipt = ProviderCandidatePnfReceipt {
         materialization_ref: "provider-materialization:fixture".into(),
         source_slice_ref: "source-slice:fixture".into(),
+        legal_source_revision_ref: "external-source-revision:fixture".into(),
         statement_ref: "statement:fixture".into(),
         candidate_batch_ref: "candidate-pnf-batch:fixture".into(),
         parser_receipt_ref: "parser:fixture".into(),
