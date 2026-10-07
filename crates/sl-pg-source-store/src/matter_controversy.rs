@@ -171,6 +171,11 @@ pub struct MatterObligationDraft {
 pub struct MatterControversyDraft {
     pub controversy_ref: String,
     pub matter_ref: String,
+    /// Procedural/evidence stage of this immutable controversy snapshot.
+    pub stage_ref: String,
+    /// Optional immediately prior controversy snapshot for the same Matter.
+    /// Historical packets are never rewritten when the stage advances.
+    pub supersedes_controversy_ref: Option<String>,
     pub root_proposition_ref: String,
     pub propositions: Vec<MatterPropositionDraft>,
     pub responses: Vec<MatterResponseDraft>,
@@ -206,6 +211,8 @@ pub enum MatterControversyError {
     ResidualMismatch,
     #[error("proof obligation is malformed")]
     ObligationMismatch,
+    #[error("controversy supersession does not reopen an earlier snapshot of the same Matter")]
+    HistoryMismatch,
     #[error("reviewed-evidence owner does not reopen exactly: {0}")]
     ReviewedEvidenceMismatch(String),
     #[error("REL residual owner does not reopen exactly: {0}")]
@@ -222,9 +229,17 @@ pub fn validate_matter_controversy_draft(
     for (name, value) in [
         ("controversy_ref", draft.controversy_ref.as_str()),
         ("matter_ref", draft.matter_ref.as_str()),
+        ("stage_ref", draft.stage_ref.as_str()),
         ("root_proposition_ref", draft.root_proposition_ref.as_str()),
     ] {
         required(name, value)?;
+    }
+    if draft
+        .supersedes_controversy_ref
+        .as_deref()
+        .is_some_and(|value| value.trim().is_empty() || value == draft.controversy_ref)
+    {
+        return Err(MatterControversyError::HistoryMismatch);
     }
     if draft.propositions.is_empty() {
         return Err(MatterControversyError::PropositionMismatch);
@@ -341,8 +356,9 @@ pub fn persist_matter_controversy(
     draft: &MatterControversyDraft,
 ) -> Result<PersistedMatterControversy, MatterControversyError> {
     validate_matter_controversy_draft(draft)?;
-    validate_external_owners(config, draft)?;
     install_matter_controversy_schema(config)?;
+    validate_history_owner(config, draft)?;
+    validate_external_owners(config, draft)?;
 
     let packet = PersistedMatterControversy {
         controversy: draft.clone(),
@@ -410,8 +426,30 @@ pub fn load_matter_controversy(
         return Err(MatterControversyError::ChangedReplay);
     }
     validate_matter_controversy_draft(&packet.controversy)?;
+    validate_history_owner(config, &packet.controversy)?;
     validate_external_owners(config, &packet.controversy)?;
     Ok(packet)
+}
+
+fn validate_history_owner(
+    config: &DatabaseConfig,
+    draft: &MatterControversyDraft,
+) -> Result<(), MatterControversyError> {
+    let Some(previous_ref) = draft.supersedes_controversy_ref.as_deref() else {
+        return Ok(());
+    };
+    let mut client = Client::connect(config.database_url(), NoTls)?;
+    let previous = client.query_opt(
+        "SELECT matter_ref FROM semantic.matter_controversy WHERE controversy_ref=$1",
+        &[&previous_ref],
+    )?;
+    let Some(previous) = previous else {
+        return Err(MatterControversyError::HistoryMismatch);
+    };
+    if previous.get::<_, String>(0) != draft.matter_ref {
+        return Err(MatterControversyError::HistoryMismatch);
+    }
+    Ok(())
 }
 
 fn validate_external_owners(
