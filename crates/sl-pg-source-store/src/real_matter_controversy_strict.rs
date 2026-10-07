@@ -5,22 +5,30 @@
 //! and proves the persisted meaning still equals the caller's reviewed/typed
 //! request before returning a receipt.
 
+use thiserror::Error;
+
 use crate::{
     load_legal_controversy_matter, load_legal_controversy_residual,
     load_legal_proof_obligation, load_reverse_legal_proof_search,
-    load_typed_response_edge, DatabaseConfig, ObligationKind,
+    load_typed_response_edge, DatabaseConfig, LegalControversyStoreError,
+    ObligationKind,
 };
 use super::real_matter_controversy as raw;
 
-pub use raw::{
-    RealMatterControversyDraft, RealMatterControversyError, RealMatterControversyReceipt,
-    reverse_search_real_matter_controversy,
-};
+#[derive(Debug, Error)]
+pub enum RealMatterControversyMaterializationError {
+    #[error(transparent)]
+    Construction(#[from] raw::RealMatterControversyError),
+    #[error(transparent)]
+    Store(#[from] LegalControversyStoreError),
+    #[error("persisted controversy meaning differs from the requested reviewed/typed coordinates")]
+    PersistedMeaningMismatch,
+}
 
 pub fn materialize_real_matter_controversy(
     config: &DatabaseConfig,
-    draft: &RealMatterControversyDraft,
-) -> Result<RealMatterControversyReceipt, RealMatterControversyError> {
+    draft: &raw::RealMatterControversyDraft,
+) -> Result<raw::RealMatterControversyReceipt, RealMatterControversyMaterializationError> {
     let receipt = raw::materialize_real_matter_controversy(config, draft)?;
 
     let matter = load_legal_controversy_matter(config, &receipt.controversy_ref)?;
@@ -31,7 +39,7 @@ pub fn materialize_real_matter_controversy(
         || !matter.residual_refs.contains(&receipt.residual_ref)
         || !matter.obligation_refs.contains(&receipt.obligation_ref)
     {
-        return Err(RealMatterControversyError::PersistedMeaningMismatch);
+        return Err(RealMatterControversyMaterializationError::PersistedMeaningMismatch);
     }
 
     let response = load_typed_response_edge(config, &receipt.response_ref)?;
@@ -46,7 +54,7 @@ pub fn materialize_real_matter_controversy(
         || response.applicability_promoted
         || response.claim_truth_promoted
     {
-        return Err(RealMatterControversyError::PersistedMeaningMismatch);
+        return Err(RealMatterControversyMaterializationError::PersistedMeaningMismatch);
     }
 
     let residual = load_legal_controversy_residual(config, &receipt.residual_ref)?;
@@ -63,7 +71,7 @@ pub fn materialize_real_matter_controversy(
         || residual.applicability_promoted
         || residual.claim_truth_promoted
     {
-        return Err(RealMatterControversyError::PersistedMeaningMismatch);
+        return Err(RealMatterControversyMaterializationError::PersistedMeaningMismatch);
     }
 
     let obligation = load_legal_proof_obligation(config, &receipt.obligation_ref)?;
@@ -79,7 +87,7 @@ pub fn materialize_real_matter_controversy(
         || obligation.applicability_promoted
         || obligation.claim_truth_promoted
     {
-        return Err(RealMatterControversyError::PersistedMeaningMismatch);
+        return Err(RealMatterControversyMaterializationError::PersistedMeaningMismatch);
     }
 
     let reverse = load_reverse_legal_proof_search(config, &receipt.reverse_ref)?;
@@ -95,7 +103,7 @@ pub fn materialize_real_matter_controversy(
         || reverse.applicability_promoted
         || reverse.claim_truth_promoted
     {
-        return Err(RealMatterControversyError::PersistedMeaningMismatch);
+        return Err(RealMatterControversyMaterializationError::PersistedMeaningMismatch);
     }
 
     Ok(receipt)
