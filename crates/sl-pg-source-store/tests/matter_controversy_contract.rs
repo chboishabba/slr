@@ -34,6 +34,8 @@ fn fixture() -> MatterControversyDraft {
     MatterControversyDraft {
         controversy_ref: "matter-controversy:mabo:real-1".into(),
         matter_ref: "matter:mabo:real-1".into(),
+        stage_ref: "stage:reviewed-miniature-controversy".into(),
+        supersedes_controversy_ref: None,
         root_proposition_ref: "prop:applicant:continuity".into(),
         propositions: vec![
             proposition(
@@ -102,12 +104,27 @@ fn typed_controversy_is_one_matter_and_not_boolean_negation() {
         .propositions
         .iter()
         .all(|p| !p.display_text.trim().is_empty()));
+    assert!(!fixture.stage_ref.trim().is_empty());
 }
 
 #[test]
 fn proposition_without_operator_readable_wording_fails_closed() {
     let mut fixture = fixture();
     fixture.propositions[0].display_text.clear();
+    assert!(validate_matter_controversy_draft(&fixture).is_err());
+}
+
+#[test]
+fn empty_stage_fails_closed() {
+    let mut fixture = fixture();
+    fixture.stage_ref.clear();
+    assert!(validate_matter_controversy_draft(&fixture).is_err());
+}
+
+#[test]
+fn dangling_proof_obligation_owner_fails_closed() {
+    let mut fixture = fixture();
+    fixture.obligations[0].required_by_ref = "missing:owner".into();
     assert!(validate_matter_controversy_draft(&fixture).is_err());
 }
 
@@ -127,6 +144,7 @@ fn reverse_search_targets_existing_residual_without_reopening_or_access_authorit
     )
     .expect("reverse proof projection");
     assert_eq!(search.controversy_ref, fixture.controversy_ref);
+    assert_eq!(search.target_proposition_ref, fixture.root_proposition_ref);
     assert_eq!(
         search.requested_discriminator_ref.as_deref(),
         Some("discriminator:recognition-v-creation")
