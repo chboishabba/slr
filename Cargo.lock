@@ -1144,6 +1144,7 @@ dependencies = [
  "sensiblaw-governed-legal-provider",
  "sensiblaw-legal-follow-plan",
  "sensiblaw-legal-runtime",
+ "sensiblaw-pg-source-store",
  "sensiblaw-proof-search-loop",
  "serde",
  "serde_json",
