@@ -1,7 +1,7 @@
 //! Durable carrier for the consumer-indexed relational comparator.
-//! Distinct source revisions must already exist in the native generic/chat
-//! stores. The database stores *candidates and residuals*; it does not store
-//! admitted identity or replace the existing S29 correspondence review.
+//! Distinct source revisions must already exist in a native generic/chat/legal
+//! source store. The database stores *candidates and residuals*; it does not
+//! store admitted identity or replace the existing S29 correspondence review.
 use postgres::{Client,NoTls};
 use serde::{Deserialize,Serialize};
 use sha2::{Digest,Sha256};
@@ -58,11 +58,11 @@ fn exists(client:&mut Client,name:&str)->Result<bool,postgres::Error>{
         .get::<_,Option<String>>(0).is_some())
 }
 /// Reopen and digest the actual native source bytes rather than merely
-/// confirming a claimed revision ID exists. Existing generic content
-/// integrity is already checked by its owner; chat uses its canonical
-/// payload through the document/canonical-content spine.
+/// confirming a claimed revision ID exists. Existing generic/legal integrity
+/// is checked against its owning digest; chat uses its canonical payload through
+/// the document/canonical-content spine.
 fn source_digest(client:&mut Client,revision:&str,
-    generic:bool,chat:bool)->Result<Option<String>,postgres::Error>{
+    generic:bool,chat:bool,legal:bool)->Result<Option<String>,postgres::Error>{
     let generic_row=if generic{
         client.query_opt(
             "SELECT c.payload,r.content_digest_ref FROM ingest.generic_source_revision r
@@ -78,11 +78,10 @@ fn source_digest(client:&mut Client,revision:&str,
         let bytes:Vec<u8>=row.get(0);
         let expected:String=row.get(1);
         let computed=format!("sha256:{:x}",Sha256::digest(&bytes));
-        // Source revision and canonical bytes must agree *before* they can
-        // enter the relational acceptance artefact.
         return Ok((expected==computed).then_some(computed));
     }
-    let row=if chat{
+
+    let chat_row=if chat{
         client.query_opt(
             "SELECT c.payload FROM corpus.chat_archive_message m
              JOIN corpus.document d ON d.document_ref=m.document_ref
@@ -93,10 +92,32 @@ fn source_digest(client:&mut Client,revision:&str,
              AND m.claim_truth_promoted=FALSE LIMIT 1",
             &[&revision])?
     }else{None};
-    Ok(row.map(|r|{
-        let bytes:Vec<u8>=r.get(0);
-        format!("sha256:{:x}",Sha256::digest(&bytes))
-    }))
+    if let Some(row)=chat_row {
+        let bytes:Vec<u8>=row.get(0);
+        return Ok(Some(format!("sha256:{:x}",Sha256::digest(&bytes))));
+    }
+
+    let legal_row=if legal{
+        client.query_opt(
+            "SELECT c.payload,l.canonical_text_sha256
+             FROM legal_source_revision l
+             JOIN corpus.document d ON d.document_ref=l.document_ref
+             JOIN corpus.canonical_content c ON c.canonical_ref=d.canonical_ref
+             WHERE l.source_revision_ref=$1 AND l.compile_eligible=TRUE
+             AND l.identity_promoted=FALSE
+             AND l.applicability_closed=FALSE
+             AND l.legal_truth_closed=FALSE",
+            &[&revision])?
+    }else{None};
+    if let Some(row)=legal_row {
+        let bytes:Vec<u8>=row.get(0);
+        let expected:String=row.get(1);
+        let computed_hex=format!("{:x}",Sha256::digest(&bytes));
+        let expected_hex=expected.strip_prefix("sha256:").unwrap_or(&expected);
+        return Ok((expected_hex==computed_hex)
+            .then_some(format!("sha256:{computed_hex}")));
+    }
+    Ok(None)
 }
 fn sha(s:&str)->String {
     format!("sha256:{:x}",Sha256::digest(s.as_bytes()))
@@ -114,9 +135,10 @@ pub fn persist_relational_comparison(
     let mut client=Client::connect(config.database_url(),NoTls)?;
     let generic=exists(&mut client,"ingest.generic_source_revision")?;
     let chat=exists(&mut client,"corpus.chat_archive_message")?;
-    let left_digest=source_digest(&mut client,&left.source_revision_ref,generic,chat)?
+    let legal=exists(&mut client,"legal_source_revision")?;
+    let left_digest=source_digest(&mut client,&left.source_revision_ref,generic,chat,legal)?
         .ok_or(DurableRelationalError::MissingSource)?;
-    let right_digest=source_digest(&mut client,&right.source_revision_ref,generic,chat)?
+    let right_digest=source_digest(&mut client,&right.source_revision_ref,generic,chat,legal)?
         .ok_or(DurableRelationalError::MissingSource)?;
     let result=DurableRelationalComparison{
         left:left.clone(),right:right.clone(),
@@ -173,11 +195,12 @@ pub fn load_relational_comparison(
     }
     let generic=exists(&mut client,"ingest.generic_source_revision")?;
     let chat=exists(&mut client,"corpus.chat_archive_message")?;
+    let legal=exists(&mut client,"legal_source_revision")?;
     for (rev,expected) in [
         (&data.left.source_revision_ref,&data.left_source_content_sha256),
         (&data.right.source_revision_ref,&data.right_source_content_sha256),
     ]{
-        let actual=source_digest(&mut client,rev,generic,chat)?
+        let actual=source_digest(&mut client,rev,generic,chat,legal)?
             .ok_or(DurableRelationalError::MissingSource)?;
         if actual!=*expected{
             return Err(DurableRelationalError::ChangedReplay);
