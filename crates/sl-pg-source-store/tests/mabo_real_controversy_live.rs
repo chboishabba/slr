@@ -25,10 +25,11 @@ fn live_oalc_mabo_forms_reviewed_adversarial_controversy_without_merits_promotio
         .iter()
         .all(|p| !p.source_ref.to_ascii_lowercase().contains("wikisource")),
         "the OALC specimen must not relabel the historical Wikisource source revision");
-    assert!(matter
-        .residuals
-        .iter()
-        .any(|r| !r.target_evidence_query.trim().is_empty()));
+    assert!(matter.residuals.iter().any(|r| {
+        r.relational_comparison_ref.is_some()
+            && r.relational_obligation_ref.is_some()
+            && !r.target_evidence_query.trim().is_empty()
+    }), "at least one unresolved controversy residual must reopen a genuine persisted REL comparison/obligation and target a bounded query");
 
     let reverse = project_matter_reverse_proof_search(
         matter,
