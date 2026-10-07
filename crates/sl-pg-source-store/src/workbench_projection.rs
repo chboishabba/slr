@@ -46,6 +46,10 @@ pub use provider_legal_source_registration::*;
 mod provider_exact_slice;
 pub use provider_exact_slice::*;
 
+#[path = "provider_candidate_pnf.rs"]
+mod provider_candidate_pnf;
+pub use provider_candidate_pnf::*;
+
 #[path = "reviewed_legal_evidence_materializer.rs"]
 mod reviewed_legal_evidence_materializer;
 pub use reviewed_legal_evidence_materializer::*;
