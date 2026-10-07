@@ -9,12 +9,14 @@ use sensiblaw_pg_source_store::{
 
 fn proposition(
     proposition_ref: &str,
+    display_text: &str,
     party: MatterPartyRole,
     status: MatterEpistemicStatus,
     normative_order_ref: &str,
 ) -> MatterPropositionDraft {
     MatterPropositionDraft {
         proposition_ref: proposition_ref.into(),
+        display_text: display_text.into(),
         matter_ref: "matter:mabo:real-1".into(),
         party,
         legal_role: MatterLegalRole::LegalProposition,
@@ -36,18 +38,21 @@ fn fixture() -> MatterControversyDraft {
         propositions: vec![
             proposition(
                 "prop:applicant:continuity",
+                "Applicant proposition concerning continuity of a pre-existing Indigenous normative order.",
                 MatterPartyRole::Applicant,
                 MatterEpistemicStatus::Supported,
                 "normative-order:meriam",
             ),
             proposition(
                 "prop:respondent:radical-title-effect",
+                "Respondent proposition concerning the municipal-law consequence attributed to radical title.",
                 MatterPartyRole::Respondent,
                 MatterEpistemicStatus::Disputed,
                 "normative-order:australian-municipal-law",
             ),
             proposition(
                 "prop:court:common-ground",
+                "Procedural proposition recorded as common ground for this miniature controversy.",
                 MatterPartyRole::Court,
                 MatterEpistemicStatus::Admitted,
                 "normative-order:australian-municipal-law",
@@ -93,6 +98,17 @@ fn typed_controversy_is_one_matter_and_not_boolean_negation() {
         .propositions
         .iter()
         .all(|p| p.matter_ref == fixture.matter_ref));
+    assert!(fixture
+        .propositions
+        .iter()
+        .all(|p| !p.display_text.trim().is_empty()));
+}
+
+#[test]
+fn proposition_without_operator_readable_wording_fails_closed() {
+    let mut fixture = fixture();
+    fixture.propositions[0].display_text.clear();
+    assert!(validate_matter_controversy_draft(&fixture).is_err());
 }
 
 #[test]
