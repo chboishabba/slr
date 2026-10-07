@@ -88,6 +88,8 @@ pub enum LegalEvidenceReviewDecisionError {
     EmptyCoordinate(&'static str),
     #[error("review receipt is not an accepted/qualified review of the declared observation")]
     ReviewReceiptMismatch,
+    #[error("review item does not bind the declared source, candidate, observation and consumer")]
+    ReviewItemMismatch,
     #[error("candidate batch/factor does not reopen as an unpaid candidate")]
     CandidateMismatch,
     #[error("source manifestation and candidate source do not identify the same source revision/document")]
@@ -137,6 +139,40 @@ pub fn persist_legal_evidence_review_decision(
         || review.get::<_, bool>(7)
     {
         return Err(LegalEvidenceReviewDecisionError::ReviewReceiptMismatch);
+    }
+
+    // The human receipt must belong to the exact review item prepared from this
+    // source/candidate pair. Same-observation receipt replay is not sufficient.
+    let review_item = client.query_opt(
+        r#"SELECT i.semantic_ref,i.item_kind_ref,i.current_status_ref,
+                  i.candidate_only,i.creates_semantic_authority,
+                  i.applicability_promoted,i.claim_truth_promoted,
+                  EXISTS(SELECT 1 FROM semantic.review_item_provenance p
+                         WHERE p.review_item_ref=i.review_item_ref AND p.provenance_ref=$2),
+                  EXISTS(SELECT 1 FROM semantic.review_item_provenance p
+                         WHERE p.review_item_ref=i.review_item_ref AND p.provenance_ref=$3),
+                  EXISTS(SELECT 1 FROM semantic.review_item_provenance p
+                         WHERE p.review_item_ref=i.review_item_ref AND p.provenance_ref=$4),
+                  EXISTS(SELECT 1 FROM semantic.review_item_consumer c
+                         WHERE c.review_item_ref=i.review_item_ref AND c.consumer_ref=$5)
+           FROM semantic.review_item i WHERE i.review_item_ref=$1"#,
+        &[&review_item_ref, &draft.source_manifestation_ref, &draft.candidate_pnf_batch_ref,
+          &draft.candidate_factor_ref, &draft.consumer_ref],
+    )?.ok_or(LegalEvidenceReviewDecisionError::ReviewItemMismatch)?;
+    let review_status: String = review_item.get(2);
+    if review_item.get::<_, String>(0) != draft.observation_ref
+        || review_item.get::<_, String>(1) != "observation"
+        || !matches!(review_status.as_str(), "accepted" | "qualified")
+        || !review_item.get::<_, bool>(3)
+        || review_item.get::<_, bool>(4)
+        || review_item.get::<_, bool>(5)
+        || review_item.get::<_, bool>(6)
+        || !review_item.get::<_, bool>(7)
+        || !review_item.get::<_, bool>(8)
+        || !review_item.get::<_, bool>(9)
+        || !review_item.get::<_, bool>(10)
+    {
+        return Err(LegalEvidenceReviewDecisionError::ReviewItemMismatch);
     }
 
     let candidate = client.query_opt(
