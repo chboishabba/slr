@@ -113,8 +113,8 @@ pub enum MatterObligationKind {
 pub struct MatterPropositionDraft {
     pub proposition_ref: String,
     /// Immutable operator-readable wording for this proposition in the
-    /// controversy packet. This is presentation-bearing source context, not a
-    /// truth label; exact source/review coordinates remain independently owned.
+    /// controversy packet. This is a navigation/display rendering of the
+    /// proposition coordinate, not a substitute for its source/review owner.
     pub display_text: String,
     pub matter_ref: String,
     pub party: MatterPartyRole,
@@ -122,7 +122,8 @@ pub struct MatterPropositionDraft {
     pub epistemic_status: MatterEpistemicStatus,
     /// Existing source revision or other persisted source coordinate.
     pub source_ref: String,
-    /// When present this must reopen as reviewed evidence owned by this Matter.
+    /// When present this must reopen as reviewed evidence owning this exact
+    /// proposition, source revision, Matter consumer and normative order.
     pub reviewed_evidence_ref: Option<String>,
     pub evidence_kind: MatterEvidenceKind,
     pub temporal_ref: String,
@@ -145,7 +146,8 @@ pub struct MatterControversyResidualDraft {
     pub applicant_proposition_ref: String,
     pub respondent_proposition_ref: String,
     pub unresolved_question: String,
-    /// Optional link to an already persisted REL comparison/residual.
+    /// Optional link to an already persisted REL comparison/residual. If set,
+    /// the comparison must reopen over the exact two proposition source refs.
     pub relational_comparison_ref: Option<String>,
     pub relational_obligation_ref: Option<String>,
     pub requested_discriminator_ref: String,
@@ -159,6 +161,8 @@ pub struct MatterObligationDraft {
     pub obligation_ref: String,
     pub proposition_ref: String,
     pub kind: MatterObligationKind,
+    /// Must be an existing proposition, response or controversy residual in
+    /// this packet; dangling obligation ownership fails closed.
     pub required_by_ref: String,
     pub discharge_ref: Option<String>,
 }
@@ -307,8 +311,12 @@ pub fn validate_matter_controversy_draft(
         ] {
             required(name, value)?;
         }
+        let known_owner = proposition_refs.contains(&obligation.required_by_ref)
+            || response_refs.contains(&obligation.required_by_ref)
+            || residual_refs.contains(&obligation.required_by_ref);
         if !obligation_refs.insert(obligation.obligation_ref.clone())
             || !proposition_refs.contains(&obligation.proposition_ref)
+            || !known_owner
             || obligation
                 .discharge_ref
                 .as_deref()
@@ -417,6 +425,7 @@ fn validate_external_owners(
         let reviewed = load_reviewed_evidence_coordinate(config, reviewed_ref)
             .map_err(|error| MatterControversyError::ReviewedEvidenceMismatch(error.to_string()))?;
         if reviewed.consumer_ref != draft.matter_ref
+            || reviewed.proposition_ref != proposition.proposition_ref
             || reviewed.source_revision_ref != proposition.source_ref
             || reviewed.normative_order_ref != proposition.normative_order_ref
             || !reviewed.candidate_only
@@ -442,9 +451,23 @@ fn validate_external_owners(
             .ok_or_else(|| {
                 MatterControversyError::RelationalResidualMismatch(comparison_ref.to_owned())
             })?;
+        let applicant_source = proposition_by_ref(draft, &residual.applicant_proposition_ref)
+            .ok_or(MatterControversyError::ResidualMismatch)?
+            .source_ref
+            .as_str();
+        let respondent_source = proposition_by_ref(draft, &residual.respondent_proposition_ref)
+            .ok_or(MatterControversyError::ResidualMismatch)?
+            .source_ref
+            .as_str();
+        let comparison_sources_match =
+            (comparison.left.source_revision_ref == applicant_source
+                && comparison.right.source_revision_ref == respondent_source)
+                || (comparison.left.source_revision_ref == respondent_source
+                    && comparison.right.source_revision_ref == applicant_source);
         if comparison.comparison.comparison_ref != comparison_ref
             || comparison.comparison.creates_semantic_authority
             || comparison.comparison.claim_truth_promoted
+            || !comparison_sources_match
             || !comparison
                 .comparison
                 .residuals
@@ -457,6 +480,16 @@ fn validate_external_owners(
         }
     }
     Ok(())
+}
+
+fn proposition_by_ref<'a>(
+    draft: &'a MatterControversyDraft,
+    proposition_ref: &str,
+) -> Option<&'a MatterPropositionDraft> {
+    draft
+        .propositions
+        .iter()
+        .find(|proposition| proposition.proposition_ref == proposition_ref)
 }
 
 fn required(name: &'static str, value: &str) -> Result<(), MatterControversyError> {
