@@ -64,13 +64,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     let response_mode = parse_response(&args[7]).unwrap_or_else(|| usage());
     let disagreement_kind = parse_disagreement(&args[8]).unwrap_or_else(|| usage());
-    let procedural_goal = args
-        .get(12)
-        .map(String::as_str)
-        .map(parse_goal)
-        .transpose()
-        .unwrap_or_else(|| usage())
-        .unwrap_or(ProceduralGoal::DecideEvidenceNeeded);
+    let procedural_goal = match args.get(12) {
+        Some(value) => parse_goal(value).unwrap_or_else(|| usage()),
+        None => ProceduralGoal::DecideEvidenceNeeded,
+    };
 
     let config = load_database_config(None)?;
     let receipt = materialize_real_matter_controversy(
