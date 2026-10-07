@@ -112,6 +112,10 @@ pub enum MatterObligationKind {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MatterPropositionDraft {
     pub proposition_ref: String,
+    /// Immutable operator-readable wording for this proposition in the
+    /// controversy packet. This is presentation-bearing source context, not a
+    /// truth label; exact source/review coordinates remain independently owned.
+    pub display_text: String,
     pub matter_ref: String,
     pub party: MatterPartyRole,
     pub legal_role: MatterLegalRole,
@@ -226,6 +230,7 @@ pub fn validate_matter_controversy_draft(
     for proposition in &draft.propositions {
         for (name, value) in [
             ("proposition_ref", proposition.proposition_ref.as_str()),
+            ("display_text", proposition.display_text.as_str()),
             ("proposition_matter_ref", proposition.matter_ref.as_str()),
             ("source_ref", proposition.source_ref.as_str()),
             ("temporal_ref", proposition.temporal_ref.as_str()),
