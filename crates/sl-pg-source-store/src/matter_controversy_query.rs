@@ -3,6 +3,8 @@
 //! Workbench consumers select by the active persisted Matter rather than an
 //! environment variable or caller-authored controversy manifest. Every row is
 //! reopened through the canonical controversy loader before it is returned.
+//! Absence of the optional controversy table means the Matter has no persisted
+//! controversy yet; it is not an error and must not block the existing Matter.
 
 use postgres::{Client, NoTls};
 
@@ -19,6 +21,15 @@ pub fn load_matter_controversies_for_matter(
         return Err(MatterControversyError::EmptyCoordinate("matter_ref"));
     }
     let mut client = Client::connect(config.database_url(), NoTls)?;
+    let table_present: bool = client
+        .query_one(
+            "SELECT to_regclass('semantic.matter_controversy') IS NOT NULL",
+            &[],
+        )?
+        .get(0);
+    if !table_present {
+        return Ok(vec![]);
+    }
     let rows = client.query(
         r#"SELECT controversy_ref
            FROM semantic.matter_controversy
