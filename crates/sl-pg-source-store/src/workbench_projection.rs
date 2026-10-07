@@ -78,6 +78,10 @@ pub use real_matter_review_resume::*;
 mod matter_controversy;
 pub use matter_controversy::*;
 
+#[path = "matter_controversy_query.rs"]
+mod matter_controversy_query;
+pub use matter_controversy_query::*;
+
 #[path = "matter_reverse_proof.rs"]
 mod matter_reverse_proof;
 pub use matter_reverse_proof::*;
