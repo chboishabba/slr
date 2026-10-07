@@ -48,7 +48,7 @@ pub enum DurableRelationalError {
     Json(#[from]serde_json::Error),
     #[error(transparent)]
     Comparison(#[from]RelationalComparisonError),
-    #[error("canonical native source revision is missing")]
+    #[error("canonical native source revision is missing or strict source bytes are not resident")]
     MissingSource,
     #[error("comparison replay is inconsistent with persisted witness and scope")]
     ChangedReplay,
@@ -60,7 +60,8 @@ fn exists(client:&mut Client,name:&str)->Result<bool,postgres::Error>{
 /// Reopen and digest the actual native source bytes rather than merely
 /// confirming a claimed revision ID exists. Existing generic/legal integrity
 /// is checked against its owning digest; chat uses its canonical payload through
-/// the document/canonical-content spine.
+/// the document/canonical-content spine. A NULL canonical payload is an evicted
+/// provider cache state and therefore not eligible for this strict operation.
 fn source_digest(client:&mut Client,revision:&str,
     generic:bool,chat:bool,legal:bool)->Result<Option<String>,postgres::Error>{
     let generic_row=if generic{
@@ -75,7 +76,7 @@ fn source_digest(client:&mut Client,revision:&str,
             &[&revision])?
     }else{None};
     if let Some(row)=generic_row {
-        let bytes:Vec<u8>=row.get(0);
+        let Some(bytes)=row.get::<_,Option<Vec<u8>>>(0) else { return Ok(None); };
         let expected:String=row.get(1);
         let computed=format!("sha256:{:x}",Sha256::digest(&bytes));
         return Ok((expected==computed).then_some(computed));
@@ -93,7 +94,7 @@ fn source_digest(client:&mut Client,revision:&str,
             &[&revision])?
     }else{None};
     if let Some(row)=chat_row {
-        let bytes:Vec<u8>=row.get(0);
+        let Some(bytes)=row.get::<_,Option<Vec<u8>>>(0) else { return Ok(None); };
         return Ok(Some(format!("sha256:{:x}",Sha256::digest(&bytes))));
     }
 
@@ -110,7 +111,7 @@ fn source_digest(client:&mut Client,revision:&str,
             &[&revision])?
     }else{None};
     if let Some(row)=legal_row {
-        let bytes:Vec<u8>=row.get(0);
+        let Some(bytes)=row.get::<_,Option<Vec<u8>>>(0) else { return Ok(None); };
         let expected:String=row.get(1);
         let computed_hex=format!("{:x}",Sha256::digest(&bytes));
         let expected_hex=expected.strip_prefix("sha256:").unwrap_or(&expected);
