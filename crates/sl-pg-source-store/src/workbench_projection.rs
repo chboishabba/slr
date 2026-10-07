@@ -70,6 +70,10 @@ pub use reviewed_legal_evidence_request::*;
 mod reviewed_legal_evidence_decision_request;
 pub use reviewed_legal_evidence_decision_request::*;
 
+#[path = "real_matter_review_resume.rs"]
+mod real_matter_review_resume;
+pub use real_matter_review_resume::*;
+
 #[path = "acceptance_control_store.rs"]
 mod acceptance_control_store;
 pub use acceptance_control_store::*;
