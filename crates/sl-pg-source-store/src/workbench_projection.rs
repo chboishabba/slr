@@ -50,6 +50,10 @@ pub use provider_exact_slice::*;
 mod provider_candidate_pnf;
 pub use provider_candidate_pnf::*;
 
+#[path = "legal_evidence_review_decision.rs"]
+mod legal_evidence_review_decision;
+pub use legal_evidence_review_decision::*;
+
 #[path = "reviewed_legal_evidence_materializer.rs"]
 mod reviewed_legal_evidence_materializer;
 pub use reviewed_legal_evidence_materializer::*;
@@ -57,6 +61,10 @@ pub use reviewed_legal_evidence_materializer::*;
 #[path = "reviewed_legal_evidence_request.rs"]
 mod reviewed_legal_evidence_request;
 pub use reviewed_legal_evidence_request::*;
+
+#[path = "reviewed_legal_evidence_decision_request.rs"]
+mod reviewed_legal_evidence_decision_request;
+pub use reviewed_legal_evidence_decision_request::*;
 
 #[path = "acceptance_control_store.rs"]
 mod acceptance_control_store;
