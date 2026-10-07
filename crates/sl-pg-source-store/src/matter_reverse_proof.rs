@@ -24,6 +24,9 @@ pub enum MatterProceduralGoal {
 pub struct MatterReverseProofSearch {
     pub controversy_ref: String,
     pub matter_ref: String,
+    /// The persisted root proposition/result from which this projection works
+    /// backwards. The projector may expose obligations but may not change it.
+    pub target_proposition_ref: String,
     pub goal: MatterProceduralGoal,
     pub open_obligation_refs: Vec<String>,
     pub candidate_residual_refs: Vec<String>,
@@ -90,6 +93,7 @@ pub fn project_matter_reverse_proof_search(
     Ok(MatterReverseProofSearch {
         controversy_ref: controversy.controversy_ref.clone(),
         matter_ref: controversy.matter_ref.clone(),
+        target_proposition_ref: controversy.root_proposition_ref.clone(),
         goal,
         open_obligation_refs,
         candidate_residual_refs,
