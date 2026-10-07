@@ -78,6 +78,10 @@ pub use real_matter_review_resume::*;
 mod legal_controversy_store;
 pub use legal_controversy_store::*;
 
+#[path = "legal_controversy_strict_store.rs"]
+mod legal_controversy_strict_store;
+pub use legal_controversy_strict_store::*;
+
 #[path = "real_matter_controversy.rs"]
 mod real_matter_controversy;
 pub use real_matter_controversy::*;
