@@ -86,6 +86,10 @@ pub use legal_controversy_strict_store::*;
 mod real_matter_controversy;
 pub use real_matter_controversy::*;
 
+#[path = "real_matter_controversy_strict.rs"]
+mod real_matter_controversy_strict;
+pub use real_matter_controversy_strict::*;
+
 #[path = "acceptance_control_store.rs"]
 mod acceptance_control_store;
 pub use acceptance_control_store::*;
