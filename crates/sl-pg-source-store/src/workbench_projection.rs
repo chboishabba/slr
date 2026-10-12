@@ -106,6 +106,10 @@ pub use controversy_investigation::*;
 mod controversy_investigation_store;
 pub use controversy_investigation_store::*;
 
+#[path = "controversy_investigation_projection.rs"]
+mod controversy_investigation_projection;
+pub use controversy_investigation_projection::*;
+
 #[path = "controversy_investigation_error_bridge.rs"]
 mod controversy_investigation_error_bridge;
 
