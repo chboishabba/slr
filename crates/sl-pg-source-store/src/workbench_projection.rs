@@ -90,6 +90,22 @@ pub use real_matter_controversy::*;
 mod real_matter_controversy_strict;
 pub use real_matter_controversy_strict::*;
 
+#[path = "external_legal_system.rs"]
+mod external_legal_system;
+pub use external_legal_system::*;
+
+#[path = "external_legal_system_store.rs"]
+mod external_legal_system_store;
+pub use external_legal_system_store::*;
+
+#[path = "controversy_investigation.rs"]
+mod controversy_investigation;
+pub use controversy_investigation::*;
+
+#[path = "controversy_investigation_store.rs"]
+mod controversy_investigation_store;
+pub use controversy_investigation_store::*;
+
 #[path = "acceptance_control_store.rs"]
 mod acceptance_control_store;
 pub use acceptance_control_store::*;
