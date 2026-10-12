@@ -106,6 +106,9 @@ pub use controversy_investigation::*;
 mod controversy_investigation_store;
 pub use controversy_investigation_store::*;
 
+#[path = "controversy_investigation_error_bridge.rs"]
+mod controversy_investigation_error_bridge;
+
 #[path = "acceptance_control_store.rs"]
 mod acceptance_control_store;
 pub use acceptance_control_store::*;
