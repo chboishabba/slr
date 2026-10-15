@@ -1,32 +1,32 @@
 use sensiblaw_core::canonical_evidence::{
-    ConsumerAdequacyReceipt, ConsumerCounterexampleReceipt, ExpressiveAsymmetryReceipt,
-    PerturbationExpectation, RepresentationParityReceipt, SemanticPerturbationReceipt,
+    ConsumerAdequacyReceipt, ConsumerCounterexampleReceipt, ConsumerInformativenessReceipt,
+    DiscriminationHandoffReceipt, ExpressiveAsymmetryReceipt, PerturbationExpectation,
+    RepresentationDominanceReceipt, RepresentationParityReceipt, SemanticPerturbationReceipt,
 };
+
+fn adequacy(
+    representation_ref: &str,
+    consumer_ref: &str,
+    query_family_ref: &str,
+    description_length_rank: u64,
+) -> ConsumerAdequacyReceipt {
+    ConsumerAdequacyReceipt::new(
+        representation_ref,
+        consumer_ref,
+        query_family_ref,
+        format!("admission:{representation_ref}"),
+        [format!("factor:{representation_ref}:q1")],
+        true,
+        true,
+        Some(description_length_rank),
+    )
+    .unwrap()
+}
 
 #[test]
 fn parity_requires_admissible_and_consumer_adequate_both_sides() {
-    let left = ConsumerAdequacyReceipt::new(
-        "repr:simple",
-        "consumer:meaning",
-        "queries:meaning-v1",
-        "admission:left",
-        ["factor:left:q1"],
-        true,
-        true,
-        Some(1),
-    )
-    .unwrap();
-    let right = ConsumerAdequacyReceipt::new(
-        "repr:full",
-        "consumer:meaning",
-        "queries:meaning-v1",
-        "admission:right",
-        ["factor:right:q1"],
-        true,
-        true,
-        Some(5),
-    )
-    .unwrap();
+    let left = adequacy("repr:simple", "consumer:meaning", "queries:meaning-v1", 1);
+    let right = adequacy("repr:full", "consumer:meaning", "queries:meaning-v1", 5);
 
     let parity = RepresentationParityReceipt::new(left, right, "parity:reviewed").unwrap();
     assert!(parity.left.eligible());
@@ -92,4 +92,89 @@ fn perturbation_expectation_distinguishes_invariant_from_changed_semantics() {
     )
     .unwrap();
     assert!(changing.expectation_satisfied());
+}
+
+#[test]
+fn informativeness_is_query_indexed_and_allows_simple_surface_parity() {
+    let simple = adequacy("repr:simple", "consumer:meaning", "queries:meaning-v1", 1);
+    let full = adequacy("repr:full", "consumer:meaning", "queries:meaning-v1", 5);
+
+    let receipt = ConsumerInformativenessReceipt::new(
+        simple,
+        full,
+        ["distinction:direct-vs-preservation", "distinction:meaning-vs-application"],
+        ["distinction:direct-vs-preservation", "distinction:meaning-vs-application"],
+        "review:factorisation:simple-full",
+    )
+    .unwrap();
+
+    assert!(receipt.left_at_least_as_informative());
+    assert!(!receipt.creates_universal_superiority);
+    assert!(!receipt.promotes_claim_truth);
+}
+
+#[test]
+fn informativeness_rejects_mismatched_query_family() {
+    let simple = adequacy("repr:simple", "consumer:meaning", "queries:meaning-v1", 1);
+    let full = adequacy("repr:full", "consumer:meaning", "queries:quotation-v1", 5);
+
+    let error = ConsumerInformativenessReceipt::new(
+        simple,
+        full,
+        ["distinction:direct-vs-preservation"],
+        ["distinction:direct-vs-preservation"],
+        "review:factorisation:mismatch",
+    )
+    .unwrap_err();
+
+    assert_eq!(error.to_string(), "query family mismatch");
+}
+
+#[test]
+fn simpler_surface_can_strictly_dominate_without_becoming_universally_superior() {
+    let simple = adequacy("repr:simple", "consumer:meaning", "queries:meaning-v1", 1);
+    let elaborate = adequacy("repr:elaborate", "consumer:meaning", "queries:meaning-v1", 99);
+
+    let informativeness = ConsumerInformativenessReceipt::new(
+        simple,
+        elaborate,
+        ["distinction:purpose"],
+        ["distinction:purpose", "distinction:direct-vs-preservation"],
+        "review:factorisation:simple-elaborate",
+    )
+    .unwrap();
+    let dominance = RepresentationDominanceReceipt::new(
+        informativeness,
+        "distinction:direct-vs-preservation",
+        "receipt:simple:separator",
+        "receipt:elaborate:separator-missing",
+    )
+    .unwrap();
+
+    assert!(dominance.is_strict_for_declared_consumer());
+    assert!(!dominance.creates_universal_superiority);
+    assert!(!dominance.complexity_rank_creates_authority);
+    assert!(!dominance.promotes_claim_truth);
+}
+
+#[test]
+fn experiment_and_pareto_handoff_do_not_resolve_or_promote() {
+    let handoff = DiscriminationHandoffReceipt::new(
+        "consumer:meaning",
+        "queries:meaning-v1",
+        "residual:wide-vs-direct",
+        "experiment:discriminator:wide-vs-direct",
+        "investigation:obligation:primary-authority",
+        "pareto:frontier:five-axis",
+        "legal-follow:intent:smith",
+        "source-role:primary-law",
+        "jurisdiction:au-qld-hca",
+    )
+    .unwrap();
+
+    assert!(!handoff.experimental_design_creates_truth);
+    assert!(!handoff.pareto_priority_creates_truth);
+    assert!(!handoff.creates_access_authority);
+    assert!(!handoff.creates_legal_authority);
+    assert!(!handoff.resolves_residual);
 }
