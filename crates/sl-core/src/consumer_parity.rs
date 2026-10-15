@@ -1,4 +1,5 @@
 use std::collections::BTreeSet;
+use std::fmt;
 
 fn nonempty(name: &'static str, value: &str) -> Result<(), ConsumerParityError> {
     if value.trim().is_empty() {
@@ -280,6 +281,210 @@ impl SemanticPerturbationReceipt {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConsumerInformativenessReceipt {
+    pub left: ConsumerAdequacyReceipt,
+    pub right: ConsumerAdequacyReceipt,
+    pub right_preserved_distinction_refs: BTreeSet<String>,
+    pub left_preserved_distinction_refs: BTreeSet<String>,
+    pub reviewed_factorisation_receipt_ref: String,
+    pub creates_universal_superiority: bool,
+    pub promotes_claim_truth: bool,
+}
+
+impl ConsumerInformativenessReceipt {
+    pub fn new<RI, RS, LI, LS>(
+        left: ConsumerAdequacyReceipt,
+        right: ConsumerAdequacyReceipt,
+        right_preserved_distinction_refs: RI,
+        left_preserved_distinction_refs: LI,
+        reviewed_factorisation_receipt_ref: impl Into<String>,
+    ) -> Result<Self, ConsumerParityError>
+    where
+        RI: IntoIterator<Item = RS>,
+        RS: Into<String>,
+        LI: IntoIterator<Item = LS>,
+        LS: Into<String>,
+    {
+        left.validate()?;
+        right.validate()?;
+        if left.consumer_ref != right.consumer_ref {
+            return Err(ConsumerParityError::ConsumerMismatch);
+        }
+        if left.query_family_ref != right.query_family_ref {
+            return Err(ConsumerParityError::QueryFamilyMismatch);
+        }
+        if !left.eligible() || !right.eligible() {
+            return Err(ConsumerParityError::IneligibleRepresentation);
+        }
+        let right_preserved_distinction_refs: BTreeSet<String> = right_preserved_distinction_refs
+            .into_iter()
+            .map(Into::into)
+            .collect();
+        let left_preserved_distinction_refs: BTreeSet<String> = left_preserved_distinction_refs
+            .into_iter()
+            .map(Into::into)
+            .collect();
+        if right_preserved_distinction_refs
+            .iter()
+            .chain(left_preserved_distinction_refs.iter())
+            .any(|value| value.trim().is_empty())
+        {
+            return Err(ConsumerParityError::EmptyDistinctionReference);
+        }
+        let reviewed_factorisation_receipt_ref = reviewed_factorisation_receipt_ref.into();
+        nonempty(
+            "reviewed_factorisation_receipt_ref",
+            &reviewed_factorisation_receipt_ref,
+        )?;
+        if !right_preserved_distinction_refs.is_subset(&left_preserved_distinction_refs) {
+            return Err(ConsumerParityError::InformativenessCoverageMissing);
+        }
+        Ok(Self {
+            left,
+            right,
+            right_preserved_distinction_refs,
+            left_preserved_distinction_refs,
+            reviewed_factorisation_receipt_ref,
+            creates_universal_superiority: false,
+            promotes_claim_truth: false,
+        })
+    }
+
+    pub fn left_at_least_as_informative(&self) -> bool {
+        self.right_preserved_distinction_refs
+            .is_subset(&self.left_preserved_distinction_refs)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RepresentationDominanceReceipt {
+    pub informativeness: ConsumerInformativenessReceipt,
+    pub separating_distinction_ref: String,
+    pub left_preserves_separator_receipt_ref: String,
+    pub right_fails_separator_receipt_ref: String,
+    pub creates_universal_superiority: bool,
+    pub complexity_rank_creates_authority: bool,
+    pub promotes_claim_truth: bool,
+}
+
+impl RepresentationDominanceReceipt {
+    pub fn new(
+        informativeness: ConsumerInformativenessReceipt,
+        separating_distinction_ref: impl Into<String>,
+        left_preserves_separator_receipt_ref: impl Into<String>,
+        right_fails_separator_receipt_ref: impl Into<String>,
+    ) -> Result<Self, ConsumerParityError> {
+        let separating_distinction_ref = separating_distinction_ref.into();
+        let left_preserves_separator_receipt_ref = left_preserves_separator_receipt_ref.into();
+        let right_fails_separator_receipt_ref = right_fails_separator_receipt_ref.into();
+        nonempty("separating_distinction_ref", &separating_distinction_ref)?;
+        nonempty(
+            "left_preserves_separator_receipt_ref",
+            &left_preserves_separator_receipt_ref,
+        )?;
+        nonempty(
+            "right_fails_separator_receipt_ref",
+            &right_fails_separator_receipt_ref,
+        )?;
+        if !informativeness.left_at_least_as_informative()
+            || !informativeness
+                .left_preserved_distinction_refs
+                .contains(&separating_distinction_ref)
+            || informativeness
+                .right_preserved_distinction_refs
+                .contains(&separating_distinction_ref)
+        {
+            return Err(ConsumerParityError::NoStrictSeparator);
+        }
+        Ok(Self {
+            informativeness,
+            separating_distinction_ref,
+            left_preserves_separator_receipt_ref,
+            right_fails_separator_receipt_ref,
+            creates_universal_superiority: false,
+            complexity_rank_creates_authority: false,
+            promotes_claim_truth: false,
+        })
+    }
+
+    pub fn is_strict_for_declared_consumer(&self) -> bool {
+        self.informativeness.left_at_least_as_informative()
+            && self
+                .informativeness
+                .left_preserved_distinction_refs
+                .contains(&self.separating_distinction_ref)
+            && !self
+                .informativeness
+                .right_preserved_distinction_refs
+                .contains(&self.separating_distinction_ref)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DiscriminationHandoffReceipt {
+    pub consumer_ref: String,
+    pub query_family_ref: String,
+    pub residual_ref: String,
+    pub discriminator_design_ref: String,
+    pub investigation_obligation_ref: String,
+    pub pareto_frontier_ref: String,
+    pub legal_follow_intent_ref: String,
+    pub source_role_ref: String,
+    pub jurisdiction_ref: String,
+    pub experimental_design_creates_truth: bool,
+    pub pareto_priority_creates_truth: bool,
+    pub creates_access_authority: bool,
+    pub creates_legal_authority: bool,
+    pub resolves_residual: bool,
+}
+
+impl DiscriminationHandoffReceipt {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        consumer_ref: impl Into<String>,
+        query_family_ref: impl Into<String>,
+        residual_ref: impl Into<String>,
+        discriminator_design_ref: impl Into<String>,
+        investigation_obligation_ref: impl Into<String>,
+        pareto_frontier_ref: impl Into<String>,
+        legal_follow_intent_ref: impl Into<String>,
+        source_role_ref: impl Into<String>,
+        jurisdiction_ref: impl Into<String>,
+    ) -> Result<Self, ConsumerParityError> {
+        let receipt = Self {
+            consumer_ref: consumer_ref.into(),
+            query_family_ref: query_family_ref.into(),
+            residual_ref: residual_ref.into(),
+            discriminator_design_ref: discriminator_design_ref.into(),
+            investigation_obligation_ref: investigation_obligation_ref.into(),
+            pareto_frontier_ref: pareto_frontier_ref.into(),
+            legal_follow_intent_ref: legal_follow_intent_ref.into(),
+            source_role_ref: source_role_ref.into(),
+            jurisdiction_ref: jurisdiction_ref.into(),
+            experimental_design_creates_truth: false,
+            pareto_priority_creates_truth: false,
+            creates_access_authority: false,
+            creates_legal_authority: false,
+            resolves_residual: false,
+        };
+        for (name, value) in [
+            ("consumer_ref", receipt.consumer_ref.as_str()),
+            ("query_family_ref", receipt.query_family_ref.as_str()),
+            ("residual_ref", receipt.residual_ref.as_str()),
+            ("discriminator_design_ref", receipt.discriminator_design_ref.as_str()),
+            ("investigation_obligation_ref", receipt.investigation_obligation_ref.as_str()),
+            ("pareto_frontier_ref", receipt.pareto_frontier_ref.as_str()),
+            ("legal_follow_intent_ref", receipt.legal_follow_intent_ref.as_str()),
+            ("source_role_ref", receipt.source_role_ref.as_str()),
+            ("jurisdiction_ref", receipt.jurisdiction_ref.as_str()),
+        ] {
+            nonempty(name, value)?;
+        }
+        Ok(receipt)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ConsumerParityError {
     EmptyCoordinate(&'static str),
     EmptyFactorisationReceipt,
@@ -289,4 +494,31 @@ pub enum ConsumerParityError {
     IneligibleRepresentation,
     NoExpressiveAsymmetry,
     CounterexampleDoesNotSeparateConsumer,
+    EmptyDistinctionReference,
+    InformativenessCoverageMissing,
+    NoStrictSeparator,
 }
+
+impl fmt::Display for ConsumerParityError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::EmptyCoordinate(name) => write!(f, "empty coordinate: {name}"),
+            Self::EmptyFactorisationReceipt => write!(f, "empty factorisation receipt"),
+            Self::AdequacyWithoutFactorisation => write!(f, "adequacy without factorisation"),
+            Self::ConsumerMismatch => write!(f, "consumer mismatch"),
+            Self::QueryFamilyMismatch => write!(f, "query family mismatch"),
+            Self::IneligibleRepresentation => write!(f, "ineligible representation"),
+            Self::NoExpressiveAsymmetry => write!(f, "no expressive asymmetry"),
+            Self::CounterexampleDoesNotSeparateConsumer => {
+                write!(f, "counterexample does not separate consumer outcomes")
+            }
+            Self::EmptyDistinctionReference => write!(f, "empty distinction reference"),
+            Self::InformativenessCoverageMissing => {
+                write!(f, "left representation does not preserve every right-side distinction")
+            }
+            Self::NoStrictSeparator => write!(f, "no strict consumer-relative separator"),
+        }
+    }
+}
+
+impl std::error::Error for ConsumerParityError {}
