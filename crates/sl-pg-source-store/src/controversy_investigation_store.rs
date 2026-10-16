@@ -11,16 +11,16 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 use crate::{
-    build_controversy_evidence_stage, controversy_acquisition_pareto_frontier,
-    controversy_obligation_from_parts, load_legal_controversy_matter,
-    load_legal_controversy_residual, load_legal_proof_obligation,
-    load_legal_proposition_fibre, load_reviewed_evidence_coordinate,
-    selective_reopening, validate_controversy_acquisition_update,
-    AcquisitionPriorityReceipt, AcquisitionRouteCandidate, AcquisitionUpdate,
-    ControversyAcquisitionObligation, ControversyEvidenceStage,
-    ControversyInvestigationError, ControversyReviewedEvidenceDischarge,
-    DatabaseConfig, LegalControversyStoreError, ReviewedEvidenceStoreError,
-    SelectiveReopeningReceipt,
+    build_controversy_evidence_stage, canonicalize_controversy_acquisition_routes,
+    controversy_acquisition_pareto_frontier, controversy_obligation_from_parts,
+    load_legal_controversy_matter, load_legal_controversy_residual,
+    load_legal_proof_obligation, load_legal_proposition_fibre,
+    load_reviewed_evidence_coordinate, selective_reopening,
+    validate_controversy_acquisition_update, AcquisitionPriorityReceipt,
+    AcquisitionRouteCandidate, AcquisitionUpdate, ControversyAcquisitionObligation,
+    ControversyEvidenceStage, ControversyInvestigationError,
+    ControversyReviewedEvidenceDischarge, DatabaseConfig, LegalControversyStoreError,
+    ReviewedEvidenceStoreError, SelectiveReopeningReceipt,
 };
 
 pub const CONTROVERSY_INVESTIGATION_SCHEMA_SQL: &str = r#"
@@ -65,7 +65,6 @@ CREATE TABLE IF NOT EXISTS legal_controversy.investigation_update (
 );
 CREATE TABLE IF NOT EXISTS legal_controversy.evidence_stage (
   stage_ref TEXT PRIMARY KEY,
-  stage_sequence BIGSERIAL UNIQUE,
   matter_ref TEXT NOT NULL,
   controversy_ref TEXT NOT NULL REFERENCES legal_controversy.matter(controversy_ref) ON DELETE CASCADE,
   legal_obligation_ref TEXT NOT NULL REFERENCES legal_controversy.proof_obligation(obligation_ref),
@@ -190,18 +189,7 @@ pub fn persist_controversy_investigation_queue(
         return Err(ControversyInvestigationStoreError::WrongOwner);
     }
 
-    // Persistence and reopen use one canonical route order. Callers are free to
-    // discover routes in any order, but immutable replay must not depend on that
-    // presentation accident.
-    let mut canonical_routes = routes.to_vec();
-    canonical_routes.sort_by(|left, right| left.route_ref.cmp(&right.route_ref));
-    if canonical_routes
-        .windows(2)
-        .any(|pair| pair[0].route_ref == pair[1].route_ref)
-    {
-        return Err(ControversyInvestigationError::InvalidIdentity.into());
-    }
-
+    let canonical_routes = canonicalize_controversy_acquisition_routes(routes)?;
     let priority = controversy_acquisition_pareto_frontier(obligation, &canonical_routes)?;
     let mut client = Client::connect(config.database_url(), NoTls)?;
     let obligation_json = serde_json::to_string(obligation)?;
@@ -286,6 +274,9 @@ pub fn load_controversy_investigation_queue(
             return Err(ControversyInvestigationStoreError::ChangedReplay);
         }
         routes.push(serde_json::from_str(&body)?);
+    }
+    if routes != canonicalize_controversy_acquisition_routes(&routes)? {
+        return Err(ControversyInvestigationStoreError::ChangedReplay);
     }
     let priority_row = client.query_one(
         r#"SELECT packet_sha256,packet_json,scalar_score_used,creates_semantic_authority,creates_decision
@@ -389,7 +380,38 @@ pub fn persist_controversy_acquisition_update(
             &reopening_json,
         ],
     )?;
-    Ok(reopening)
+
+    // Reopen the immutable row even after an insertion conflict. A repeated
+    // receipt is valid only when it is an exact replay of both the acquisition
+    // update and its selective-reopening receipt.
+    let persisted = client
+        .query_opt(
+            r#"SELECT update_sha256,update_json,reopening_sha256,reopening_json
+               FROM legal_controversy.investigation_update
+               WHERE obligation_ref=$1 AND acquisition_receipt_ref=$2"#,
+            &[&update.obligation_ref, &update.acquisition_receipt_ref],
+        )?
+        .ok_or(ControversyInvestigationStoreError::ChangedReplay)?;
+    let persisted_update_json: String = persisted.get(1);
+    let persisted_reopening_json: String = persisted
+        .get::<_, Option<String>>(3)
+        .ok_or(ControversyInvestigationStoreError::ChangedReplay)?;
+    if persisted_update_json != update_json
+        || persisted_reopening_json != reopening_json
+        || persisted.get::<_, String>(0) != digest(&persisted_update_json)
+        || persisted
+            .get::<_, Option<String>>(2)
+            .as_deref()
+            .is_none_or(|expected| expected != digest(&persisted_reopening_json))
+    {
+        return Err(ControversyInvestigationStoreError::ChangedReplay);
+    }
+    let persisted_reopening: SelectiveReopeningReceipt =
+        serde_json::from_str(&persisted_reopening_json)?;
+    if persisted_reopening != reopening {
+        return Err(ControversyInvestigationStoreError::ChangedReplay);
+    }
+    Ok(persisted_reopening)
 }
 
 pub fn persist_controversy_reviewed_evidence_stage(
