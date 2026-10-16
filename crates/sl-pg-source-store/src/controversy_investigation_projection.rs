@@ -62,7 +62,7 @@ pub fn load_controversy_investigation_status(
     for row in client.query(
         r#"SELECT stage_ref FROM legal_controversy.evidence_stage
            WHERE controversy_ref=$1 AND legal_obligation_ref=$2
-           ORDER BY stage_ref"#,
+           ORDER BY stage_sequence, stage_ref"#,
         &[&controversy_ref, &legal_obligation_ref],
     )? {
         let stage = load_controversy_evidence_stage(config, &row.get::<_, String>(0))?;
