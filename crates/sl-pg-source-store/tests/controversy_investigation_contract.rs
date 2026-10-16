@@ -143,6 +143,29 @@ fn open_controversy_obligation_becomes_targeted_non_scalar_acquisition_work() {
 }
 
 #[test]
+fn two_adversarial_fibres_may_share_one_source_revision() {
+    let (matter, residual, proof, fibres) = fixture();
+    let obligation = controversy_obligation_from_parts(
+        &matter,
+        &residual,
+        &proof,
+        &fibres,
+        vec!["source:same".into(), "source:same".into()],
+        "access:lawful-public-records",
+        vec![],
+    )
+    .expect("competing constructions of one source remain a valid controversy");
+
+    assert_eq!(obligation.source_revision_refs, vec!["source:same"]);
+    assert!(obligation
+        .dependency_target_refs
+        .contains(&"controversy:1".to_string()));
+    assert!(!obligation.creates_semantic_authority);
+    assert!(!obligation.creates_legal_authority);
+    assert!(!obligation.claim_truth_promoted);
+}
+
+#[test]
 fn acquired_source_requires_human_review_bound_to_the_exact_legal_obligation() {
     let (matter, residual, proof, fibres) = fixture();
     let obligation = controversy_obligation_from_parts(
