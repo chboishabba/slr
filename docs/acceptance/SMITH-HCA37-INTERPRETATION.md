@@ -16,6 +16,8 @@ The Smith specimen must retain opinion-level source identity.
 
 These propositions must not be flattened into a generic `HCA said` source coordinate where the proposition comes from separate reasons.
 
+The two reviewed constructions may legitimately reopen exact spans from the **same immutable judgment source revision**. Distinct proposition/review/span coordinates do not require fabricated duplicate source revisions. Conversely, sharing one judgment revision does **not** create two independent evidentiary witnesses: source identity, opinion/span identity, proposition identity and evidentiary independence remain separate coordinates.
+
 DASHI/SLR formal structures, representation tests, proof-search and acquisition machinery are repository constructions. Justice Lee, Two-Eyed Seeing/Kimmerer, intersectionality, Lacan/Irigaray, experimental-design and Pareto machinery retain their separate source/authority boundaries and are not legal authorities for Smith merely because their structural machinery is reused.
 
 ## Required persisted coordinates
@@ -77,7 +79,8 @@ A successful live receipt must:
 5. preserve the applicant/respondent normative-order refs supplied by explicit human-reviewed upstream state;
 6. make no claim that the two fixture constructions exhaust every semantically/logically compatible interpretation;
 7. make no claim that precedent search generates the interpretation universe;
-8. make no claim that the requested discriminator, investigative priority, or acquisition result itself decides statutory meaning.
+8. make no claim that the requested discriminator, investigative priority, or acquisition result itself decides statutory meaning;
+9. preserve same-source-vs-independent-witness separation when both constructions are reviewed from one immutable judgment revision.
 
 ## Companion max-cuts
 
