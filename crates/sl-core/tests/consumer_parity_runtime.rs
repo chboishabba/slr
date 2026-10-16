@@ -102,8 +102,14 @@ fn informativeness_is_query_indexed_and_allows_simple_surface_parity() {
     let receipt = ConsumerInformativenessReceipt::new(
         simple,
         full,
-        ["distinction:direct-vs-preservation", "distinction:meaning-vs-application"],
-        ["distinction:direct-vs-preservation", "distinction:meaning-vs-application"],
+        [
+            "distinction:direct-vs-preservation",
+            "distinction:meaning-vs-application",
+        ],
+        [
+            "distinction:direct-vs-preservation",
+            "distinction:meaning-vs-application",
+        ],
         "review:factorisation:simple-full",
     )
     .unwrap();
@@ -133,13 +139,21 @@ fn informativeness_rejects_mismatched_query_family() {
 #[test]
 fn simpler_surface_can_strictly_dominate_without_becoming_universally_superior() {
     let simple = adequacy("repr:simple", "consumer:meaning", "queries:meaning-v1", 1);
-    let elaborate = adequacy("repr:elaborate", "consumer:meaning", "queries:meaning-v1", 99);
+    let elaborate = adequacy(
+        "repr:elaborate",
+        "consumer:meaning",
+        "queries:meaning-v1",
+        99,
+    );
 
     let informativeness = ConsumerInformativenessReceipt::new(
         simple,
         elaborate,
         ["distinction:purpose"],
-        ["distinction:purpose", "distinction:direct-vs-preservation"],
+        [
+            "distinction:purpose",
+            "distinction:direct-vs-preservation",
+        ],
         "review:factorisation:simple-elaborate",
     )
     .unwrap();
@@ -155,6 +169,33 @@ fn simpler_surface_can_strictly_dominate_without_becoming_universally_superior()
     assert!(!dominance.creates_universal_superiority);
     assert!(!dominance.complexity_rank_creates_authority);
     assert!(!dominance.promotes_claim_truth);
+}
+
+#[test]
+fn strict_dominance_is_irreflexive_even_if_receipts_disagree_about_distinctions() {
+    let left = adequacy("repr:same", "consumer:meaning", "queries:meaning-v1", 1);
+    let right = adequacy("repr:same", "consumer:meaning", "queries:meaning-v1", 1);
+    let inconsistent = ConsumerInformativenessReceipt::new(
+        left,
+        right,
+        ["distinction:purpose"],
+        ["distinction:purpose", "distinction:separator"],
+        "review:factorisation:self",
+    )
+    .expect("non-strict informativeness may compare one representation coordinate");
+
+    let error = RepresentationDominanceReceipt::new(
+        inconsistent,
+        "distinction:separator",
+        "receipt:self:left",
+        "receipt:self:right-missing",
+    )
+    .expect_err("strict order must reject R > R");
+
+    assert_eq!(
+        error.to_string(),
+        "a representation cannot strictly dominate itself"
+    );
 }
 
 #[test]
