@@ -65,6 +65,7 @@ CREATE TABLE IF NOT EXISTS legal_controversy.investigation_update (
 );
 CREATE TABLE IF NOT EXISTS legal_controversy.evidence_stage (
   stage_ref TEXT PRIMARY KEY,
+  stage_sequence BIGSERIAL UNIQUE,
   matter_ref TEXT NOT NULL,
   controversy_ref TEXT NOT NULL REFERENCES legal_controversy.matter(controversy_ref) ON DELETE CASCADE,
   legal_obligation_ref TEXT NOT NULL REFERENCES legal_controversy.proof_obligation(obligation_ref),
@@ -84,6 +85,10 @@ CREATE TABLE IF NOT EXISTS legal_controversy.evidence_stage (
   applicability_promoted BOOLEAN NOT NULL CHECK (NOT applicability_promoted),
   claim_truth_promoted BOOLEAN NOT NULL CHECK (NOT claim_truth_promoted)
 );
+ALTER TABLE legal_controversy.evidence_stage
+  ADD COLUMN IF NOT EXISTS stage_sequence BIGSERIAL;
+CREATE UNIQUE INDEX IF NOT EXISTS controversy_evidence_stage_sequence_idx
+  ON legal_controversy.evidence_stage(stage_sequence);
 CREATE INDEX IF NOT EXISTS controversy_evidence_stage_lookup_idx
   ON legal_controversy.evidence_stage(controversy_ref, legal_obligation_ref);
 "#;
@@ -184,7 +189,20 @@ pub fn persist_controversy_investigation_queue(
     if rederived != *obligation {
         return Err(ControversyInvestigationStoreError::WrongOwner);
     }
-    let priority = controversy_acquisition_pareto_frontier(obligation, routes)?;
+
+    // Persistence and reopen use one canonical route order. Callers are free to
+    // discover routes in any order, but immutable replay must not depend on that
+    // presentation accident.
+    let mut canonical_routes = routes.to_vec();
+    canonical_routes.sort_by(|left, right| left.route_ref.cmp(&right.route_ref));
+    if canonical_routes
+        .windows(2)
+        .any(|pair| pair[0].route_ref == pair[1].route_ref)
+    {
+        return Err(ControversyInvestigationError::InvalidIdentity.into());
+    }
+
+    let priority = controversy_acquisition_pareto_frontier(obligation, &canonical_routes)?;
     let mut client = Client::connect(config.database_url(), NoTls)?;
     let obligation_json = serde_json::to_string(obligation)?;
     client.execute(
@@ -202,7 +220,7 @@ pub fn persist_controversy_investigation_queue(
             &obligation_json,
         ],
     )?;
-    for route in routes {
+    for route in &canonical_routes {
         let body = serde_json::to_string(route)?;
         client.execute(
             r#"INSERT INTO legal_controversy.investigation_route
@@ -216,14 +234,14 @@ pub fn persist_controversy_investigation_queue(
         r#"INSERT INTO legal_controversy.investigation_priority
            (obligation_ref,packet_sha256,packet_json,scalar_score_used,creates_semantic_authority,creates_decision)
            VALUES($1,$2,$3,FALSE,FALSE,FALSE)
-           ON CONFLICT(obligation_ref) DO UPDATE SET packet_sha256=EXCLUDED.packet_sha256,packet_json=EXCLUDED.packet_json"#,
+           ON CONFLICT(obligation_ref) DO NOTHING"#,
         &[&obligation.obligation_ref, &digest(&priority_json), &priority_json],
     )?;
     let reopened = load_controversy_investigation_queue(config, &obligation.obligation_ref)?
         .ok_or(ControversyInvestigationStoreError::ChangedReplay)?;
     let expected = DurableControversyInvestigationQueue {
         obligation: obligation.clone(),
-        routes: routes.to_vec(),
+        routes: canonical_routes,
         priority,
     };
     if reopened != expected {
@@ -490,7 +508,7 @@ pub fn load_latest_controversy_evidence_stage(
     let row = client.query_opt(
         r#"SELECT stage_ref FROM legal_controversy.evidence_stage
            WHERE controversy_ref=$1 AND legal_obligation_ref=$2
-           ORDER BY stage_ref DESC LIMIT 1"#,
+           ORDER BY stage_sequence DESC, stage_ref DESC LIMIT 1"#,
         &[&controversy_ref, &legal_obligation_ref],
     )?;
     match row {
