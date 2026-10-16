@@ -177,7 +177,11 @@ pub fn controversy_obligation_from_parts(
 
     source_revision_refs.sort();
     source_revision_refs.dedup();
-    if source_revision_refs.len() < 2 || source_revision_refs.iter().any(|r| !valid(r)) {
+    // Two adversarial proposition fibres may legitimately be grounded in the
+    // same source revision (for example, competing constructions of one
+    // judgment or instrument). Require source ancestry, not artificial source
+    // multiplicity.
+    if source_revision_refs.is_empty() || source_revision_refs.iter().any(|r| !valid(r)) {
         return Err(ControversyInvestigationError::InvalidIdentity);
     }
     dependency_target_refs.extend([
