@@ -262,6 +262,25 @@ fn validate_route(
     Ok(())
 }
 
+/// Canonical persistence order for controversy-owned acquisition routes.
+///
+/// Route order is presentation/discovery state, not semantic state. Exact
+/// replay therefore sorts by durable `route_ref` and rejects duplicate durable
+/// identities rather than making replay depend on caller order.
+pub fn canonicalize_controversy_acquisition_routes(
+    routes: &[AcquisitionRouteCandidate],
+) -> Result<Vec<AcquisitionRouteCandidate>, ControversyInvestigationError> {
+    let mut canonical = routes.to_vec();
+    canonical.sort_by(|left, right| left.route_ref.cmp(&right.route_ref));
+    if canonical
+        .windows(2)
+        .any(|pair| pair[0].route_ref == pair[1].route_ref)
+    {
+        return Err(ControversyInvestigationError::InvalidIdentity);
+    }
+    Ok(canonical)
+}
+
 /// Use the same direct mixed-orientation Pareto relation as REL/INV without
 /// pretending a legal controversy obligation is a REL comparison residual.
 pub fn controversy_acquisition_pareto_frontier(
