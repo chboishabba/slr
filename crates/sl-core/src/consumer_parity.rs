@@ -58,7 +58,11 @@ impl ConsumerAdequacyReceipt {
         nonempty("consumer_ref", &self.consumer_ref)?;
         nonempty("query_family_ref", &self.query_family_ref)?;
         nonempty("admissibility_receipt_ref", &self.admissibility_receipt_ref)?;
-        if self.factorisation_receipt_refs.iter().any(|value| value.trim().is_empty()) {
+        if self
+            .factorisation_receipt_refs
+            .iter()
+            .any(|value| value.trim().is_empty())
+        {
             return Err(ConsumerParityError::EmptyFactorisationReceipt);
         }
         if self.consumer_adequate && self.factorisation_receipt_refs.is_empty() {
@@ -146,10 +150,19 @@ impl ExpressiveAsymmetryReceipt {
         for (name, value) in [
             ("left_source_ref", receipt.left_source_ref.as_str()),
             ("right_source_ref", receipt.right_source_ref.as_str()),
-            ("shared_semantic_coordinate_ref", receipt.shared_semantic_coordinate_ref.as_str()),
+            (
+                "shared_semantic_coordinate_ref",
+                receipt.shared_semantic_coordinate_ref.as_str(),
+            ),
             ("left_complexity_ref", receipt.left_complexity_ref.as_str()),
-            ("right_complexity_ref", receipt.right_complexity_ref.as_str()),
-            ("factorisation_receipt_ref", receipt.factorisation_receipt_ref.as_str()),
+            (
+                "right_complexity_ref",
+                receipt.right_complexity_ref.as_str(),
+            ),
+            (
+                "factorisation_receipt_ref",
+                receipt.factorisation_receipt_ref.as_str(),
+            ),
         ] {
             nonempty(name, value)?;
         }
@@ -261,7 +274,10 @@ impl SemanticPerturbationReceipt {
             ("consumer_ref", receipt.consumer_ref.as_str()),
             ("before_outcome_ref", receipt.before_outcome_ref.as_str()),
             ("after_outcome_ref", receipt.after_outcome_ref.as_str()),
-            ("factorisation_receipt_ref", receipt.factorisation_receipt_ref.as_str()),
+            (
+                "factorisation_receipt_ref",
+                receipt.factorisation_receipt_ref.as_str(),
+            ),
         ] {
             nonempty(name, value)?;
         }
@@ -316,14 +332,16 @@ impl ConsumerInformativenessReceipt {
         if !left.eligible() || !right.eligible() {
             return Err(ConsumerParityError::IneligibleRepresentation);
         }
-        let right_preserved_distinction_refs: BTreeSet<String> = right_preserved_distinction_refs
-            .into_iter()
-            .map(Into::into)
-            .collect();
-        let left_preserved_distinction_refs: BTreeSet<String> = left_preserved_distinction_refs
-            .into_iter()
-            .map(Into::into)
-            .collect();
+        let right_preserved_distinction_refs: BTreeSet<String> =
+            right_preserved_distinction_refs
+                .into_iter()
+                .map(Into::into)
+                .collect();
+        let left_preserved_distinction_refs: BTreeSet<String> =
+            left_preserved_distinction_refs
+                .into_iter()
+                .map(Into::into)
+                .collect();
         if right_preserved_distinction_refs
             .iter()
             .chain(left_preserved_distinction_refs.iter())
@@ -386,6 +404,9 @@ impl RepresentationDominanceReceipt {
             "right_fails_separator_receipt_ref",
             &right_fails_separator_receipt_ref,
         )?;
+        if informativeness.left.representation_ref == informativeness.right.representation_ref {
+            return Err(ConsumerParityError::StrictSelfDominance);
+        }
         if !informativeness.left_at_least_as_informative()
             || !informativeness
                 .left_preserved_distinction_refs
@@ -408,7 +429,9 @@ impl RepresentationDominanceReceipt {
     }
 
     pub fn is_strict_for_declared_consumer(&self) -> bool {
-        self.informativeness.left_at_least_as_informative()
+        self.informativeness.left.representation_ref
+            != self.informativeness.right.representation_ref
+            && self.informativeness.left_at_least_as_informative()
             && self
                 .informativeness
                 .left_preserved_distinction_refs
@@ -471,10 +494,19 @@ impl DiscriminationHandoffReceipt {
             ("consumer_ref", receipt.consumer_ref.as_str()),
             ("query_family_ref", receipt.query_family_ref.as_str()),
             ("residual_ref", receipt.residual_ref.as_str()),
-            ("discriminator_design_ref", receipt.discriminator_design_ref.as_str()),
-            ("investigation_obligation_ref", receipt.investigation_obligation_ref.as_str()),
+            (
+                "discriminator_design_ref",
+                receipt.discriminator_design_ref.as_str(),
+            ),
+            (
+                "investigation_obligation_ref",
+                receipt.investigation_obligation_ref.as_str(),
+            ),
             ("pareto_frontier_ref", receipt.pareto_frontier_ref.as_str()),
-            ("legal_follow_intent_ref", receipt.legal_follow_intent_ref.as_str()),
+            (
+                "legal_follow_intent_ref",
+                receipt.legal_follow_intent_ref.as_str(),
+            ),
             ("source_role_ref", receipt.source_role_ref.as_str()),
             ("jurisdiction_ref", receipt.jurisdiction_ref.as_str()),
         ] {
@@ -497,6 +529,7 @@ pub enum ConsumerParityError {
     EmptyDistinctionReference,
     InformativenessCoverageMissing,
     NoStrictSeparator,
+    StrictSelfDominance,
 }
 
 impl fmt::Display for ConsumerParityError {
@@ -514,9 +547,15 @@ impl fmt::Display for ConsumerParityError {
             }
             Self::EmptyDistinctionReference => write!(f, "empty distinction reference"),
             Self::InformativenessCoverageMissing => {
-                write!(f, "left representation does not preserve every right-side distinction")
+                write!(
+                    f,
+                    "left representation does not preserve every right-side distinction"
+                )
             }
             Self::NoStrictSeparator => write!(f, "no strict consumer-relative separator"),
+            Self::StrictSelfDominance => {
+                write!(f, "a representation cannot strictly dominate itself")
+            }
         }
     }
 }
