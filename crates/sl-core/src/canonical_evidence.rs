@@ -134,7 +134,6 @@ mod tests {
     }
 }
 
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EvidenceSourceRevision {
     pub source_revision_ref: String,
@@ -386,3 +385,8 @@ mod substrate_tests {
         assert_eq!(revision.content_digest_ref, manifestation.content_digest_ref);
     }
 }
+
+// Consumer-relative representation parity is part of the canonical evidence
+// substrate rather than a source-family lane.  It consumes explicit admission
+// and factorisation receipts and does not promote claim truth.
+include!("consumer_parity.rs");
