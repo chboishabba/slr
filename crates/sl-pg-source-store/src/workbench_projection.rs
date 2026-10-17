@@ -129,6 +129,10 @@ pub use persisted_relational_observation::*;
 mod reviewed_legal_follow_projection;
 pub use reviewed_legal_follow_projection::*;
 
+#[path = "reviewed_representation_factorisation_store.rs"]
+mod reviewed_representation_factorisation_store;
+pub use reviewed_representation_factorisation_store::*;
+
 #[path = "matter_consumer_projection_store.rs"]
 mod matter_consumer_projection_store;
 pub use matter_consumer_projection_store::*;
