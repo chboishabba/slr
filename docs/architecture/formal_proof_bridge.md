@@ -43,7 +43,7 @@ A changed formal statement requires rerouting or an explicit equivalence/transpo
 
 ## Immutable replay
 
-All four durable bridge layers are replay-strict:
+The max-cut source audit found that idempotent inserts were not sufficient by themselves: a reused stable ref could preserve an older row while the caller supplied changed coordinates. The bridge therefore treats all four durable layers as replay-strict:
 
 ```text
 FormalProofDemand
