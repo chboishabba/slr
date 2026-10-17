@@ -84,6 +84,10 @@ fn demand_replay_checks_every_immutable_coordinate() {
     changed.source_revision_refs = vec!["source:other".into()];
     assert!(!demand_replay_matches(&original, &changed));
 
+    let mut changed = original.clone();
+    changed.creates_semantic_authority = true;
+    assert!(!demand_replay_matches(&original, &changed));
+
     assert!(demand_replay_matches(&original, &original));
 }
 
@@ -107,6 +111,10 @@ fn evidence_replay_checks_checker_artifact_and_dependency_coordinates() {
     changed.dependencies = vec!["dep:b".into()];
     assert!(!evidence_replay_matches(&original, &changed));
 
+    let mut changed = original.clone();
+    changed.claim_truth_promoted = true;
+    assert!(!evidence_replay_matches(&original, &changed));
+
     assert!(evidence_replay_matches(&original, &original));
 }
 
@@ -116,5 +124,10 @@ fn payment_replay_checks_exact_reopening_cone() {
     let mut changed = original.clone();
     changed.reopen_refs.push("dependent:extra".into());
     assert!(!payment_replay_matches(&original, &changed));
+
+    let mut changed = original.clone();
+    changed.applicability_promoted = true;
+    assert!(!payment_replay_matches(&original, &changed));
+
     assert!(payment_replay_matches(&original, &original));
 }
