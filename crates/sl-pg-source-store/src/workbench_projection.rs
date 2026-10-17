@@ -50,6 +50,10 @@ pub use provider_exact_slice::*;
 mod provider_candidate_pnf;
 pub use provider_candidate_pnf::*;
 
+#[path = "official_primary_extraction.rs"]
+mod official_primary_extraction;
+pub use official_primary_extraction::*;
+
 #[path = "real_matter_review_gate.rs"]
 mod real_matter_review_gate;
 pub use real_matter_review_gate::*;
@@ -120,6 +124,7 @@ pub use acceptance_control_store::*;
 #[path = "acceptance_reopen_store.rs"]
 mod acceptance_reopen_store;
 pub use acceptance_reopen_store::*;
+
 #[path = "persisted_relational_observation.rs"]
 mod persisted_relational_observation;
 pub use persisted_relational_observation::*;
@@ -127,6 +132,7 @@ pub use persisted_relational_observation::*;
 #[path = "reviewed_legal_follow_projection.rs"]
 mod reviewed_legal_follow_projection;
 pub use reviewed_legal_follow_projection::*;
+
 pub use crate::investigation_acquisition::{
     AxisRelation, ParetoAxisRelation, ParetoDominanceWitness,
     RouteFrontierDisposition, RouteDispositionReceipt, PotentialReopeningCone,
