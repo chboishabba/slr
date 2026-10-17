@@ -393,4 +393,6 @@ include!("consumer_parity.rs");
 
 // Bind those generic consumer-relative receipts to projections of one persisted
 // Matter/controversy without creating a second Matter or adjudicative state.
+// This remains a pure receipt layer: it does not persist or manufacture the
+// factorisation/admission evidence referenced by the supplied receipts.
 include!("matter_consumer_projection.rs");
