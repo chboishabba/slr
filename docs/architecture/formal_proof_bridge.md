@@ -52,7 +52,7 @@ FormalEvidenceReceiptInput
 FormalEvidencePayment
 ```
 
-The PostgreSQL path may still use idempotent `ON CONFLICT DO NOTHING`, but it must immediately reopen the row inside the same transaction and compare the **complete immutable Rust value**. Reusing a stable ref with changed consumer, residual, proposition, statement language, prover, DA51 coordinate, source-revision set, requested result kind, dependent set, route coordinates, artifact/checker/certification coordinates, evidence dependencies, authority flags, or selective-reopening cone fails with `ExistingRowConflict` before commit.
+The PostgreSQL path may still use idempotent `ON CONFLICT DO NOTHING`, but it immediately reopens the row inside the same transaction and compares the **complete immutable Rust value**. Reusing a stable ref with changed consumer, residual, proposition, statement language, prover, DA51 coordinate, source-revision set, requested result kind, dependent set, route coordinates, artifact/checker/certification coordinates, evidence dependencies, authority flags, or selective-reopening cone fails with `ExistingRowConflict` before commit.
 
 This is deliberately stronger than matching only the obligation and statement digest. A lookalike receipt cannot inherit a previous demand, independently certified evidence record, or payment.
 
