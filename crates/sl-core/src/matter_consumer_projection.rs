@@ -123,7 +123,20 @@ impl SameMatterInformativenessReceipt {
         if left.controversy_ref != right.controversy_ref {
             return Err(MatterConsumerProjectionError::ControversyMismatch);
         }
-        if informativeness.left != left.adequacy
+
+        // Re-run the canonical consumer-informativeness constructor rather than
+        // trusting a hand-built struct. This rechecks exact consumer/query
+        // identity, eligibility, non-empty factorisation ancestry and coverage.
+        let validated = ConsumerInformativenessReceipt::new(
+            informativeness.left.clone(),
+            informativeness.right.clone(),
+            informativeness.right_preserved_distinction_refs.clone(),
+            informativeness.left_preserved_distinction_refs.clone(),
+            informativeness.reviewed_factorisation_receipt_ref.clone(),
+        )
+        .map_err(|_| MatterConsumerProjectionError::InformativenessProjectionMismatch)?;
+        if validated != informativeness
+            || informativeness.left != left.adequacy
             || informativeness.right != right.adequacy
             || !informativeness.left_at_least_as_informative()
         {
