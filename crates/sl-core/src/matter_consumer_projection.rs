@@ -12,6 +12,8 @@
 // Switching persona cannot create a new Matter, change evidentiary status, or
 // confer adjudicative authority.
 
+use crate::canonical_evidence::{ConsumerAdequacyReceipt, ConsumerInformativenessReceipt};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MatterPersona {
     AffectedPerson,
