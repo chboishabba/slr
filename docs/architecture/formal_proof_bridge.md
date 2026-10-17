@@ -17,7 +17,8 @@ source/span
 -> independent checker receipt
 -> FormalEvidenceReceipt
 -> exact SLR demand/obligation/digest weld
--> dependency-scoped reopen
+-> formal evidence SourceCoordinate
+-> existing sparse_wake reverse-dependency engine
 -> ordinary SLR recurrence/payment
 ```
 
@@ -38,7 +39,28 @@ Formal evidence pays only the exact formal premise named by its demand when all 
 
 A changed formal statement requires rerouting or an explicit equivalence/transport receipt upstream. Symbol-name reuse, DA51 reuse, or artifact reuse is insufficient.
 
-The resulting payment only returns the demand's declared dependency-scoped `reopen_refs`; unrelated fibres stay closed.
+## Selective reopening
+
+`sensiblaw-formal-proof-reopen` owns no dependency graph. After exact formal payment, it projects the evidence ref to the existing:
+
+```text
+SourceCoordinate {
+  kind = Evidence,
+  stable_ref = formal evidence ref
+}
+```
+
+and delegates wake selection to `sensiblaw-evidential-reopen::sparse_wake`.
+
+Therefore:
+
+```text
+explicit reverse dependency -> matching consumer fibre may reopen
+missing dependency -> zero work
+unrelated dependency -> stays closed
+```
+
+The older `reopen_refs` field on the payment remains an explicit producer-side hint/audit coordinate; it is not allowed to bypass the canonical reverse-dependency graph.
 
 ## Authority firewalls
 
@@ -51,9 +73,10 @@ Aristotle candidate != certification
 artifact/CID/URI != proof
 formal proof != legal applicability
 formal proof != claim truth
+formal evidence wake != semantic/legal promotion
 ```
 
-Every demand is candidate-only and non-promoting. Every payment hard-codes `creates_legal_authority = false`, `applicability_promoted = false`, and `claim_truth_promoted = false`. Formal proof can discharge only the formal premise it was requested for; legal and factual promotion remain on their existing explicit SLR review/payment paths.
+Every demand is candidate-only and non-promoting. Every payment and reopen plan hard-code no legal authority, applicability, or claim-truth promotion. Formal proof can discharge only the formal premise it was requested for; legal and factual promotion remain on their existing explicit SLR review/payment paths.
 
 ## Cross-repo ownership
 
