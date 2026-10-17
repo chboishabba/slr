@@ -146,6 +146,32 @@ pub struct FormalEvidencePayment {
     pub claim_truth_promoted: bool,
 }
 
+#[must_use]
+pub fn demand_replay_matches(existing: &FormalProofDemand, incoming: &FormalProofDemand) -> bool {
+    existing == incoming
+}
+
+#[must_use]
+pub fn route_replay_matches(
+    existing: &FormalProofRouteReceiptInput,
+    incoming: &FormalProofRouteReceiptInput,
+) -> bool {
+    existing == incoming
+}
+
+#[must_use]
+pub fn evidence_replay_matches(
+    existing: &FormalEvidenceReceiptInput,
+    incoming: &FormalEvidenceReceiptInput,
+) -> bool {
+    existing == incoming
+}
+
+#[must_use]
+pub fn payment_replay_matches(existing: &FormalEvidencePayment, incoming: &FormalEvidencePayment) -> bool {
+    existing == incoming
+}
+
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum FormalProofBridgeError {
     #[error("empty bridge coordinate: {0}")]
@@ -274,6 +300,92 @@ fn require_existing_inputs(tx: &mut Transaction<'_>, demand: &FormalProofDemand)
     Ok(())
 }
 
+fn load_demand_tx(tx: &mut Transaction<'_>, demand_ref: &str) -> Result<FormalProofDemand, FormalProofBridgeError> {
+    let row = tx.query_one(
+        "SELECT obligation_ref,consumer_ref,pnf_revision_ref,residual_ref,proposition_ref,statement_digest,statement_language,target_prover,da51_address,source_revision_refs,requested_result_kind,dependent_refs,candidate_only,creates_semantic_authority,creates_legal_authority,applicability_promoted,claim_truth_promoted FROM formal_bridge.demand WHERE demand_ref=$1",
+        &[&demand_ref],
+    )?;
+    Ok(FormalProofDemand {
+        demand_ref: demand_ref.to_owned(),
+        obligation_ref: row.get(0),
+        consumer_ref: row.get(1),
+        pnf_revision_ref: row.get(2),
+        residual_ref: row.get(3),
+        proposition_ref: row.get(4),
+        statement_digest: row.get(5),
+        statement_language: row.get(6),
+        target_prover: row.get(7),
+        da51_address: row.get(8),
+        source_revision_refs: row.get(9),
+        requested_result_kind: row.get(10),
+        dependent_refs: row.get(11),
+        candidate_only: row.get(12),
+        creates_semantic_authority: row.get(13),
+        creates_legal_authority: row.get(14),
+        applicability_promoted: row.get(15),
+        claim_truth_promoted: row.get(16),
+    })
+}
+
+fn load_route_tx(tx: &mut Transaction<'_>, route_ref: &str) -> Result<FormalProofRouteReceiptInput, FormalProofBridgeError> {
+    let row = tx.query_one(
+        "SELECT demand_ref,obligation_ref,statement_digest,establishes_proof FROM formal_bridge.route_receipt WHERE route_ref=$1",
+        &[&route_ref],
+    )?;
+    Ok(FormalProofRouteReceiptInput {
+        route_ref: route_ref.to_owned(),
+        demand_ref: row.get(0),
+        obligation_ref: row.get(1),
+        statement_digest: row.get(2),
+        establishes_proof: row.get(3),
+    })
+}
+
+fn load_evidence_tx(tx: &mut Transaction<'_>, evidence_ref: &str) -> Result<FormalEvidenceReceiptInput, FormalProofBridgeError> {
+    let row = tx.query_one(
+        "SELECT demand_ref,obligation_ref,da51_address,producer,artifact_ref,artifact_digest,statement_digest,checker,checker_revision,source_revision,result_kind,certification_state,dependencies,establishes_formal_premise,creates_legal_authority,applicability_promoted,claim_truth_promoted FROM formal_bridge.evidence WHERE evidence_ref=$1",
+        &[&evidence_ref],
+    )?;
+    Ok(FormalEvidenceReceiptInput {
+        evidence_ref: evidence_ref.to_owned(),
+        demand_ref: row.get(0),
+        obligation_ref: row.get(1),
+        da51_address: row.get(2),
+        producer: row.get(3),
+        artifact_ref: row.get(4),
+        artifact_digest: row.get(5),
+        statement_digest: row.get(6),
+        checker: row.get(7),
+        checker_revision: row.get(8),
+        source_revision: row.get(9),
+        result_kind: row.get(10),
+        certification_state: row.get(11),
+        dependencies: row.get(12),
+        establishes_formal_premise: row.get(13),
+        creates_legal_authority: row.get(14),
+        applicability_promoted: row.get(15),
+        claim_truth_promoted: row.get(16),
+    })
+}
+
+fn load_payment_tx(tx: &mut Transaction<'_>, evidence_ref: &str) -> Result<FormalEvidencePayment, FormalProofBridgeError> {
+    let row = tx.query_one(
+        "SELECT demand_ref,obligation_ref,statement_digest,reopen_refs,formal_premise_paid,creates_legal_authority,applicability_promoted,claim_truth_promoted FROM formal_bridge.payment WHERE evidence_ref=$1",
+        &[&evidence_ref],
+    )?;
+    Ok(FormalEvidencePayment {
+        demand_ref: row.get(0),
+        obligation_ref: row.get(1),
+        evidence_ref: evidence_ref.to_owned(),
+        statement_digest: row.get(2),
+        reopen_refs: row.get(3),
+        formal_premise_paid: row.get(4),
+        creates_legal_authority: row.get(5),
+        applicability_promoted: row.get(6),
+        claim_truth_promoted: row.get(7),
+    })
+}
+
 pub fn persist_formal_demand(database_url: &str, demand: &FormalProofDemand) -> Result<(), FormalProofBridgeError> {
     demand.validate()?;
     let mut client = Client::connect(database_url, NoTls)?;
@@ -287,11 +399,8 @@ pub fn persist_formal_demand(database_url: &str, demand: &FormalProofDemand) -> 
         ON CONFLICT (demand_ref) DO NOTHING"#,
         &[&demand.demand_ref,&demand.obligation_ref,&demand.consumer_ref,&demand.pnf_revision_ref,&demand.residual_ref,&demand.proposition_ref,&demand.statement_digest,&demand.statement_language,&demand.target_prover,&demand.da51_address,&demand.source_revision_refs,&demand.requested_result_kind,&demand.dependent_refs],
     )?;
-    let row = tx.query_one("SELECT obligation_ref,pnf_revision_ref,statement_digest FROM formal_bridge.demand WHERE demand_ref=$1", &[&demand.demand_ref])?;
-    let got_obligation: String = row.get(0);
-    let got_pnf: String = row.get(1);
-    let got_digest: String = row.get(2);
-    if got_obligation != demand.obligation_ref || got_pnf != demand.pnf_revision_ref || got_digest != demand.statement_digest {
+    let loaded = load_demand_tx(&mut tx, &demand.demand_ref)?;
+    if !demand_replay_matches(&loaded, demand) {
         return Err(FormalProofBridgeError::ExistingRowConflict);
     }
     tx.commit()?;
@@ -310,6 +419,10 @@ pub fn persist_route_receipt(database_url: &str, route: &FormalProofRouteReceipt
     if obligation_ref != route.obligation_ref { return Err(FormalProofBridgeError::ObligationMismatch); }
     if statement_digest != route.statement_digest { return Err(FormalProofBridgeError::StatementDigestMismatch); }
     tx.execute("INSERT INTO formal_bridge.route_receipt (route_ref,demand_ref,obligation_ref,statement_digest,establishes_proof) VALUES ($1,$2,$3,$4,FALSE) ON CONFLICT (route_ref) DO NOTHING", &[&route.route_ref,&route.demand_ref,&route.obligation_ref,&route.statement_digest])?;
+    let loaded = load_route_tx(&mut tx, &route.route_ref)?;
+    if !route_replay_matches(&loaded, route) {
+        return Err(FormalProofBridgeError::ExistingRowConflict);
+    }
     tx.commit()?;
     Ok(())
 }
@@ -319,13 +432,7 @@ pub fn persist_and_validate_formal_evidence(database_url: &str, evidence: &Forma
     let mut client = Client::connect(database_url, NoTls)?;
     let mut tx = client.transaction()?;
     tx.batch_execute(FORMAL_PROOF_BRIDGE_SQL)?;
-    let row = tx.query_one(
-        "SELECT obligation_ref,consumer_ref,pnf_revision_ref,residual_ref,proposition_ref,statement_digest,statement_language,target_prover,da51_address,source_revision_refs,requested_result_kind,dependent_refs,candidate_only,creates_semantic_authority,creates_legal_authority,applicability_promoted,claim_truth_promoted FROM formal_bridge.demand WHERE demand_ref=$1",
-        &[&evidence.demand_ref],
-    )?;
-    let demand = FormalProofDemand {
-        demand_ref: evidence.demand_ref.clone(), obligation_ref: row.get(0), consumer_ref: row.get(1), pnf_revision_ref: row.get(2), residual_ref: row.get(3), proposition_ref: row.get(4), statement_digest: row.get(5), statement_language: row.get(6), target_prover: row.get(7), da51_address: row.get(8), source_revision_refs: row.get(9), requested_result_kind: row.get(10), dependent_refs: row.get(11), candidate_only: row.get(12), creates_semantic_authority: row.get(13), creates_legal_authority: row.get(14), applicability_promoted: row.get(15), claim_truth_promoted: row.get(16),
-    };
+    let demand = load_demand_tx(&mut tx, &evidence.demand_ref)?;
     let payment = validate_formal_evidence_payment(&demand, evidence)?;
     tx.execute(
         r#"INSERT INTO formal_bridge.evidence
@@ -334,10 +441,18 @@ pub fn persist_and_validate_formal_evidence(database_url: &str, evidence: &Forma
         ON CONFLICT (evidence_ref) DO NOTHING"#,
         &[&evidence.evidence_ref,&evidence.demand_ref,&evidence.obligation_ref,&evidence.da51_address,&evidence.producer,&evidence.artifact_ref,&evidence.artifact_digest,&evidence.statement_digest,&evidence.checker,&evidence.checker_revision,&evidence.source_revision,&evidence.result_kind,&evidence.certification_state,&evidence.dependencies],
     )?;
+    let loaded_evidence = load_evidence_tx(&mut tx, &evidence.evidence_ref)?;
+    if !evidence_replay_matches(&loaded_evidence, evidence) {
+        return Err(FormalProofBridgeError::ExistingRowConflict);
+    }
     tx.execute(
         "INSERT INTO formal_bridge.payment (evidence_ref,demand_ref,obligation_ref,statement_digest,reopen_refs,formal_premise_paid,creates_legal_authority,applicability_promoted,claim_truth_promoted) VALUES ($1,$2,$3,$4,$5,TRUE,FALSE,FALSE,FALSE) ON CONFLICT (evidence_ref) DO NOTHING",
         &[&payment.evidence_ref,&payment.demand_ref,&payment.obligation_ref,&payment.statement_digest,&payment.reopen_refs],
     )?;
+    let loaded_payment = load_payment_tx(&mut tx, &payment.evidence_ref)?;
+    if !payment_replay_matches(&loaded_payment, &payment) {
+        return Err(FormalProofBridgeError::ExistingRowConflict);
+    }
     tx.commit()?;
     Ok(payment)
 }
