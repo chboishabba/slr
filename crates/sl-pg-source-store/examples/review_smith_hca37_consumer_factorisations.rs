@@ -28,6 +28,13 @@ fn distinctions() -> BTreeSet<String> {
     .collect()
 }
 
+fn canonical_refs(mut values: Vec<String>) -> Vec<String> {
+    values.retain(|value| !value.trim().is_empty());
+    values.sort();
+    values.dedup();
+    values
+}
+
 fn required_arg(args: &[String], index: usize, name: &str) -> Result<String, String> {
     args.get(index)
         .cloned()
@@ -79,7 +86,7 @@ fn review_semantic_ref(
         semantic_ref: semantic_ref.to_owned(),
         item_kind: ReviewItemKind::SourceCorrespondence,
         reason: reason.to_owned(),
-        provenance_refs,
+        provenance_refs: canonical_refs(provenance_refs),
         source_refs: Vec::new(),
         current_status: ReviewStatus::Pending,
         available_actions: vec![
@@ -88,7 +95,7 @@ fn review_semantic_ref(
             ReviewAction::Qualify,
             ReviewAction::RequestEvidence,
         ],
-        affected_consumer_refs: vec![CONSUMER_REF.into(), matter_ref.to_owned()],
+        affected_consumer_refs: canonical_refs(vec![CONSUMER_REF.into(), matter_ref.to_owned()]),
         candidate_only: true,
         creates_semantic_authority: false,
         applicability_promoted: false,
