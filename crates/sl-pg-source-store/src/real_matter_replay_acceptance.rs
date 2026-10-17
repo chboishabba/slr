@@ -81,12 +81,28 @@ pub enum RealMatterReplayAcceptanceError {
     EmptyFixtureRef,
     #[error("replay count must be at least two")]
     InsufficientReplayCount,
+    #[error("replay count exceeds PostgreSQL INTEGER")]
+    ReplayCountOverflow,
     #[error("repeated strict materialisation produced different receipts")]
     ReplayMismatch,
     #[error("persisted replay acceptance receipt conflicts with immutable coordinates")]
     ExistingRowConflict,
     #[error("replay acceptance receipt not found: {0}")]
     NotFound(String),
+}
+
+#[must_use]
+pub fn replay_count_satisfies(stored: i32, requested: i32) -> bool {
+    stored >= requested && requested >= 2
+}
+
+pub fn checked_replay_count(
+    replay_count: usize,
+) -> Result<i32, RealMatterReplayAcceptanceError> {
+    if replay_count < 2 {
+        return Err(RealMatterReplayAcceptanceError::InsufficientReplayCount);
+    }
+    i32::try_from(replay_count).map_err(|_| RealMatterReplayAcceptanceError::ReplayCountOverflow)
 }
 
 fn fingerprint(receipt: &RealMatterControversyReceipt) -> String {
@@ -118,6 +134,33 @@ fn stable_acceptance_ref(fixture_ref: &str, fingerprint: &str) -> String {
     format!("real-matter-replay-acceptance:sha256:{:x}", hasher.finalize())
 }
 
+fn same_immutable_coordinates(
+    left: &RealMatterReplayAcceptanceReceipt,
+    right: &RealMatterReplayAcceptanceReceipt,
+) -> bool {
+    left.acceptance_ref == right.acceptance_ref
+        && left.fixture_ref == right.fixture_ref
+        && left.matter_ref == right.matter_ref
+        && left.controversy_ref == right.controversy_ref
+        && left.applicant_reviewed_evidence_ref == right.applicant_reviewed_evidence_ref
+        && left.respondent_reviewed_evidence_ref == right.respondent_reviewed_evidence_ref
+        && left.applicant_fibre_ref == right.applicant_fibre_ref
+        && left.respondent_fibre_ref == right.respondent_fibre_ref
+        && left.response_ref == right.response_ref
+        && left.residual_ref == right.residual_ref
+        && left.obligation_ref == right.obligation_ref
+        && left.reverse_ref == right.reverse_ref
+        && left.applicant_normative_order_ref == right.applicant_normative_order_ref
+        && left.respondent_normative_order_ref == right.respondent_normative_order_ref
+        && left.receipt_fingerprint_sha256 == right.receipt_fingerprint_sha256
+        && left.candidate_only == right.candidate_only
+        && left.replay_stable == right.replay_stable
+        && left.creates_semantic_authority == right.creates_semantic_authority
+        && left.creates_legal_authority == right.creates_legal_authority
+        && left.applicability_promoted == right.applicability_promoted
+        && left.claim_truth_promoted == right.claim_truth_promoted
+}
+
 pub fn install_real_matter_replay_acceptance_schema(
     config: &DatabaseConfig,
 ) -> Result<(), RealMatterReplayAcceptanceError> {
@@ -140,9 +183,7 @@ pub fn materialize_and_persist_real_matter_replay_acceptance(
     if fixture_ref.trim().is_empty() {
         return Err(RealMatterReplayAcceptanceError::EmptyFixtureRef);
     }
-    if replay_count < 2 {
-        return Err(RealMatterReplayAcceptanceError::InsufficientReplayCount);
-    }
+    let replay_count = checked_replay_count(replay_count)?;
     install_real_matter_replay_acceptance_schema(config)?;
 
     let first = materialize_real_matter_controversy_strict(config, draft)?;
@@ -154,8 +195,6 @@ pub fn materialize_and_persist_real_matter_replay_acceptance(
     }
     let receipt_fingerprint_sha256 = fingerprint(&first);
     let acceptance_ref = stable_acceptance_ref(fixture_ref, &receipt_fingerprint_sha256);
-    let replay_count = i32::try_from(replay_count)
-        .map_err(|_| RealMatterReplayAcceptanceError::InsufficientReplayCount)?;
     let expected = RealMatterReplayAcceptanceReceipt {
         acceptance_ref: acceptance_ref.clone(),
         fixture_ref: fixture_ref.to_owned(),
@@ -192,7 +231,10 @@ pub fn materialize_and_persist_real_matter_replay_acceptance(
             creates_legal_authority,applicability_promoted,claim_truth_promoted)
            VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,
                   TRUE,TRUE,FALSE,FALSE,FALSE,FALSE)
-           ON CONFLICT(acceptance_ref) DO NOTHING"#,
+           ON CONFLICT(acceptance_ref) DO UPDATE SET replay_count = GREATEST(
+             acceptance.real_matter_replay_receipt.replay_count,
+             EXCLUDED.replay_count
+           )"#,
         &[
             &expected.acceptance_ref,
             &expected.fixture_ref,
@@ -213,7 +255,9 @@ pub fn materialize_and_persist_real_matter_replay_acceptance(
         ],
     )?;
     let reopened = load_real_matter_replay_acceptance(config, &acceptance_ref)?;
-    if reopened != expected {
+    if !same_immutable_coordinates(&reopened, &expected)
+        || !replay_count_satisfies(reopened.replay_count, expected.replay_count)
+    {
         return Err(RealMatterReplayAcceptanceError::ExistingRowConflict);
     }
     Ok(reopened)
