@@ -11,8 +11,8 @@ fn a_stronger_stored_replay_count_satisfies_a_weaker_rerun_request() {
 
 #[test]
 fn replay_count_numeric_overflow_is_not_reported_as_insufficient_replay() {
-    assert_eq!(
-        checked_replay_count(usize::MAX).unwrap_err(),
-        RealMatterReplayAcceptanceError::ReplayCountOverflow,
-    );
+    assert!(matches!(
+        checked_replay_count(usize::MAX),
+        Err(RealMatterReplayAcceptanceError::ReplayCountOverflow)
+    ));
 }
