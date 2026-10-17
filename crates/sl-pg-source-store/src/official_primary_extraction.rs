@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS source_provenance.official_primary_extraction (
   extractor_path TEXT NOT NULL,
   extractor_function TEXT NOT NULL,
   extractor_license TEXT NOT NULL,
-  parameters_json JSONB NOT NULL,
+  parameters_json TEXT NOT NULL,
   output_sha256_hex TEXT NOT NULL,
   output_size_bytes BIGINT NOT NULL CHECK (output_size_bytes >= 0),
   authority_ref TEXT NOT NULL,
@@ -44,6 +44,9 @@ CREATE TABLE IF NOT EXISTS source_provenance.official_primary_extraction (
   UNIQUE(materialization_ref)
 );
 "#;
+
+const OALC_CREATOR_REPO: &str =
+    "https://github.com/isaacus-dev/open-australian-legal-corpus-creator";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OfficialPrimaryExtractionReceipt {
@@ -82,6 +85,8 @@ pub enum OfficialPrimaryExtractionError {
     Provider(#[from] ProviderMaterializationError),
     #[error("postgres error: {0}")]
     Postgres(#[from] postgres::Error),
+    #[error("serde JSON error: {0}")]
+    Json(#[from] serde_json::Error),
     #[error("empty extraction coordinate: {0}")]
     EmptyCoordinate(&'static str),
     #[error("invalid SHA-256 coordinate: {0}")]
@@ -92,6 +97,8 @@ pub enum OfficialPrimaryExtractionError {
     AuthorityEscalation,
     #[error("receipt does not describe an official HCA PDF")]
     WrongSourceProvider,
+    #[error("receipt does not name the pinned OALC creator implementation")]
+    WrongExtractor,
     #[error("receipt disagrees with provider materialisation: {0}")]
     MaterializationMismatch(&'static str),
     #[error("persisted extraction receipt conflicts with immutable coordinates")]
@@ -132,11 +139,22 @@ pub fn validate_official_primary_extraction_receipt(
     ] {
         required(name, value)?;
     }
+    let official_hca_url = receipt.source_url.starts_with("https://www.hcourt.gov.au/")
+        || receipt
+            .source_url
+            .starts_with("https://eresources.hcourt.gov.au/");
     if receipt.schema != "sensiblaw-official-primary-extraction/v1"
         || receipt.source_provider_ref != "provider:official-hca-pdf"
         || receipt.source_media_type != "application/pdf"
+        || !official_hca_url
     {
         return Err(OfficialPrimaryExtractionError::WrongSourceProvider);
+    }
+    if receipt.extractor_repo != OALC_CREATOR_REPO
+        || receipt.extractor_license != "MIT"
+        || receipt.extractor_function != "pdf2txt"
+    {
+        return Err(OfficialPrimaryExtractionError::WrongExtractor);
     }
     if !valid_hex(&receipt.source_sha256_hex, &[64]) {
         return Err(OfficialPrimaryExtractionError::InvalidSha256("source_sha256_hex"));
@@ -162,6 +180,7 @@ pub fn canonical_official_primary_extraction_ref(
     receipt: &OfficialPrimaryExtractionReceipt,
 ) -> Result<String, OfficialPrimaryExtractionError> {
     validate_official_primary_extraction_receipt(receipt)?;
+    let parameters_json = serde_json::to_string(&receipt.parameters)?;
     let mut hasher = Sha256::new();
     for value in [
         receipt.source_provider_ref.as_str(),
@@ -171,6 +190,7 @@ pub fn canonical_official_primary_extraction_ref(
         receipt.extractor_revision.as_str(),
         receipt.extractor_path.as_str(),
         receipt.extractor_function.as_str(),
+        parameters_json.as_str(),
         receipt.output_sha256_hex.as_str(),
     ] {
         hasher.update((value.len() as u64).to_be_bytes());
@@ -232,7 +252,7 @@ pub fn persist_official_primary_extraction(
     let extraction_ref = canonical_official_primary_extraction_ref(receipt)?;
     let source_size = i64::try_from(receipt.source_size_bytes)
         .map_err(|_| OfficialPrimaryExtractionError::ByteLengthOverflow)?;
-    let parameters = receipt.parameters.clone();
+    let parameters_json = serde_json::to_string(&receipt.parameters)?;
     let mut client = Client::connect(config.database_url(), NoTls)?;
     client.execute(
         r#"INSERT INTO source_provenance.official_primary_extraction
@@ -260,7 +280,7 @@ pub fn persist_official_primary_extraction(
             &receipt.extractor_path,
             &receipt.extractor_function,
             &receipt.extractor_license,
-            &parameters,
+            &parameters_json,
             &receipt.output_sha256_hex,
             &output_size,
             &receipt.authority,
@@ -300,6 +320,7 @@ pub fn load_official_primary_extraction(
 
     let source_size: i64 = row.get(7);
     let output_size: i64 = row.get(15);
+    let parameters_json: String = row.get(13);
     let receipt = OfficialPrimaryExtractionReceipt {
         schema: row.get(1),
         citation: row.get(2),
@@ -314,7 +335,7 @@ pub fn load_official_primary_extraction(
         extractor_path: row.get(10),
         extractor_function: row.get(11),
         extractor_license: row.get(12),
-        parameters: row.get(13),
+        parameters: serde_json::from_str(&parameters_json)?,
         output_sha256_hex: row.get(14),
         output_size_bytes: u64::try_from(output_size)
             .map_err(|_| OfficialPrimaryExtractionError::ByteLengthOverflow)?,
@@ -330,4 +351,62 @@ pub fn load_official_primary_extraction(
         materialization_ref: row.get(0),
         receipt,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn receipt() -> OfficialPrimaryExtractionReceipt {
+        OfficialPrimaryExtractionReceipt {
+            schema: "sensiblaw-official-primary-extraction/v1".into(),
+            citation: "Smith v Chief Executive, Queensland Corrective Services [2026] HCA 37".into(),
+            source_provider_ref: "provider:official-hca-pdf".into(),
+            source_url: "https://www.hcourt.gov.au/sites/default/files/eresources/2026-10-14/HCA/example.pdf".into(),
+            source_media_type: "application/pdf".into(),
+            source_sha256_hex: "a".repeat(64),
+            source_size_bytes: 123,
+            extractor_repo: OALC_CREATOR_REPO.into(),
+            extractor_revision: "dbdb9e3752394a87a9c966c9a9199f9685db9af2".into(),
+            extractor_path: "src/oalc_creator/ocr.py".into(),
+            extractor_function: "pdf2txt".into(),
+            extractor_license: "MIT".into(),
+            parameters: serde_json::json!({"pdf_scale": 2}),
+            output_sha256_hex: "b".repeat(64),
+            output_size_bytes: 456,
+            authority: "source-observation-only".into(),
+            creates_semantic_authority: false,
+            creates_legal_authority: false,
+            applicability_promoted: false,
+            claim_truth_promoted: false,
+        }
+    }
+
+    #[test]
+    fn official_pdf_receipt_is_non_promoting_and_content_addressed() {
+        let value = receipt();
+        validate_official_primary_extraction_receipt(&value).unwrap();
+        let reference = canonical_official_primary_extraction_ref(&value).unwrap();
+        assert!(reference.starts_with("official-primary-extraction:sha256:"));
+    }
+
+    #[test]
+    fn non_hca_url_cannot_be_relabeled_as_official_hca_pdf() {
+        let mut value = receipt();
+        value.source_url = "https://example.com/judgment.pdf".into();
+        assert!(matches!(
+            validate_official_primary_extraction_receipt(&value),
+            Err(OfficialPrimaryExtractionError::WrongSourceProvider)
+        ));
+    }
+
+    #[test]
+    fn authority_promotion_fails_closed() {
+        let mut value = receipt();
+        value.claim_truth_promoted = true;
+        assert!(matches!(
+            validate_official_primary_extraction_receipt(&value),
+            Err(OfficialPrimaryExtractionError::AuthorityEscalation)
+        ));
+    }
 }
