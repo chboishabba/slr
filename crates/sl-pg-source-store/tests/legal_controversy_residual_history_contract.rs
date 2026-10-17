@@ -28,7 +28,7 @@ fn supersession(
     predecessors: &[&str],
 ) -> ResidualSupersessionReceipt {
     ResidualSupersessionReceipt {
-        supersession_ref: "residual-supersession:test".into(),
+        supersession_ref: format!("residual-supersession:{}", successor.residual_ref),
         controversy_ref: "controversy:mabo".into(),
         lane_ref: residual_lane_ref(successor),
         successor_residual_ref: successor.residual_ref.clone(),
@@ -85,6 +85,19 @@ fn one_reviewed_successor_can_reconcile_multiple_legacy_heads_without_rewriting_
     )
     .expect("all legacy heads are retained as history beneath the reviewed successor");
     assert_eq!(refs, vec!["residual:c"]);
+}
+
+#[test]
+fn partial_reconciliation_of_three_same_lane_heads_remains_ambiguous() {
+    let first = residual("residual:a", "historical A");
+    let second = residual("residual:b", "historical B");
+    let successor = residual("residual:c", "reviewed refinement of A only");
+    let error = derive_current_residual_refs(
+        &[first, second, successor.clone()],
+        &[supersession(&successor, &["residual:a"])],
+    )
+    .unwrap_err();
+    assert_eq!(error, LegalControversyResidualHistoryError::AmbiguousResidualHead);
 }
 
 #[test]
