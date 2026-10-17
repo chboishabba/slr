@@ -15,8 +15,10 @@ use sensiblaw_core::canonical_evidence::{
 };
 
 use crate::{
-    install_legal_controversy_schema, load_legal_controversy_matter, DatabaseConfig,
-    LegalControversyStoreError,
+    install_legal_controversy_schema, install_reviewed_representation_factorisation_schema,
+    load_legal_controversy_matter, load_reviewed_informativeness_factorisation,
+    load_reviewed_representation_factorisation, DatabaseConfig, LegalControversyStoreError,
+    ReviewedRepresentationFactorisationStoreError,
 };
 
 pub const MATTER_CONSUMER_PROJECTION_SCHEMA_SQL: &str = r#"
@@ -54,7 +56,8 @@ CREATE TABLE IF NOT EXISTS consumer_projection.same_matter_informativeness (
     REFERENCES consumer_projection.matter_representation(projection_receipt_ref),
   right_preserved_distinction_refs TEXT[] NOT NULL,
   left_preserved_distinction_refs TEXT[] NOT NULL,
-  reviewed_factorisation_receipt_ref TEXT NOT NULL,
+  reviewed_factorisation_receipt_ref TEXT NOT NULL
+    REFERENCES consumer_projection.reviewed_informativeness_factorisation(reviewed_factorisation_receipt_ref),
   creates_universal_superiority BOOLEAN NOT NULL CHECK (NOT creates_universal_superiority),
   promotes_claim_truth BOOLEAN NOT NULL CHECK (NOT promotes_claim_truth),
   creates_new_matter BOOLEAN NOT NULL CHECK (NOT creates_new_matter),
@@ -70,10 +73,14 @@ pub enum MatterConsumerProjectionStoreError {
     Postgres(#[from] postgres::Error),
     #[error("legal controversy prerequisite failed: {0}")]
     LegalControversy(#[from] LegalControversyStoreError),
+    #[error("reviewed factorisation prerequisite failed: {0}")]
+    ReviewedFactorisation(#[from] ReviewedRepresentationFactorisationStoreError),
     #[error("invalid matter consumer projection receipt")]
     InvalidProjection,
     #[error("projection matter_ref does not match persisted controversy Matter")]
     MatterBindingMismatch,
+    #[error("reviewed factorisation evidence does not match the projection/informativeness coordinates")]
+    ReviewedFactorisationMismatch,
     #[error("persisted matter consumer projection row conflicts with immutable coordinates")]
     ExistingRowConflict,
     #[error("matter consumer projection row not found: {0}")]
@@ -135,10 +142,80 @@ fn require_persisted_matter_binding(
     Ok(())
 }
 
+fn require_reviewed_projection_factorisations(
+    config: &DatabaseConfig,
+    value: &MatterRepresentationProjection,
+) -> Result<(), MatterConsumerProjectionStoreError> {
+    if value.adequacy.factorisation_receipt_refs.is_empty() {
+        return Err(MatterConsumerProjectionStoreError::ReviewedFactorisationMismatch);
+    }
+    for factorisation_ref in &value.adequacy.factorisation_receipt_refs {
+        let reviewed = load_reviewed_representation_factorisation(config, factorisation_ref)?;
+        if reviewed.matter_ref != value.matter_ref
+            || reviewed.controversy_ref != value.controversy_ref
+            || reviewed.representation_ref != value.representation_ref
+            || reviewed.consumer_ref != value.adequacy.consumer_ref
+            || reviewed.query_family_ref != value.adequacy.query_family_ref
+            || reviewed.admissibility_receipt_ref != value.adequacy.admissibility_receipt_ref
+            || !reviewed.accepted
+            || !reviewed.candidate_only
+            || reviewed.creates_semantic_authority
+            || reviewed.creates_legal_authority
+            || reviewed.determines_credibility
+            || reviewed.enters_final_judgment
+            || reviewed.promotes_claim_truth
+        {
+            return Err(MatterConsumerProjectionStoreError::ReviewedFactorisationMismatch);
+        }
+    }
+    Ok(())
+}
+
+fn require_reviewed_informativeness_factorisation(
+    config: &DatabaseConfig,
+    value: &SameMatterInformativenessReceipt,
+) -> Result<(), MatterConsumerProjectionStoreError> {
+    let reviewed = load_reviewed_informativeness_factorisation(
+        config,
+        &value.informativeness.reviewed_factorisation_receipt_ref,
+    )?;
+    if reviewed.matter_ref != value.left.matter_ref
+        || reviewed.controversy_ref != value.left.controversy_ref
+        || reviewed.consumer_ref != value.informativeness.left.consumer_ref
+        || reviewed.query_family_ref != value.informativeness.left.query_family_ref
+        || reviewed.left_preserved_distinction_refs
+            != value.informativeness.left_preserved_distinction_refs
+        || reviewed.right_preserved_distinction_refs
+            != value.informativeness.right_preserved_distinction_refs
+        || !value
+            .left
+            .adequacy
+            .factorisation_receipt_refs
+            .contains(&reviewed.left_factorisation_receipt_ref)
+        || !value
+            .right
+            .adequacy
+            .factorisation_receipt_refs
+            .contains(&reviewed.right_factorisation_receipt_ref)
+        || !reviewed.accepted
+        || !reviewed.candidate_only
+        || reviewed.creates_universal_superiority
+        || reviewed.creates_semantic_authority
+        || reviewed.creates_legal_authority
+        || reviewed.determines_credibility
+        || reviewed.enters_final_judgment
+        || reviewed.promotes_claim_truth
+    {
+        return Err(MatterConsumerProjectionStoreError::ReviewedFactorisationMismatch);
+    }
+    Ok(())
+}
+
 pub fn install_matter_consumer_projection_schema(
     config: &DatabaseConfig,
 ) -> Result<(), MatterConsumerProjectionStoreError> {
     install_legal_controversy_schema(config)?;
+    install_reviewed_representation_factorisation_schema(config)?;
     let mut client = Client::connect(config.database_url(), NoTls)?;
     client.batch_execute(MATTER_CONSUMER_PROJECTION_SCHEMA_SQL)?;
     Ok(())
@@ -153,6 +230,7 @@ pub fn persist_matter_representation_projection(
         .map_err(|_| MatterConsumerProjectionStoreError::InvalidProjection)?;
     install_matter_consumer_projection_schema(config)?;
     require_persisted_matter_binding(config, &value.matter_ref, &value.controversy_ref)?;
+    require_reviewed_projection_factorisations(config, value)?;
 
     let factorisation_refs = vec_from_set(&value.adequacy.factorisation_receipt_refs);
     let rank = rank_to_db(value.adequacy.description_length_rank)?;
@@ -241,6 +319,7 @@ pub fn load_matter_representation_projection(
     {
         return Err(MatterConsumerProjectionStoreError::ExistingRowConflict);
     }
+    require_reviewed_projection_factorisations(config, &projection)?;
     Ok(projection)
 }
 
@@ -256,6 +335,7 @@ pub fn persist_same_matter_informativeness(
     )
     .map_err(|_| MatterConsumerProjectionStoreError::InvalidProjection)?;
 
+    require_reviewed_informativeness_factorisation(config, value)?;
     let left = persist_matter_representation_projection(config, &value.left)?;
     let right = persist_matter_representation_projection(config, &value.right)?;
     let right_distinctions = vec_from_set(&value.informativeness.right_preserved_distinction_refs);
@@ -342,6 +422,8 @@ pub fn load_same_matter_informativeness(
         return Err(MatterConsumerProjectionStoreError::ExistingRowConflict);
     }
 
-    SameMatterInformativenessReceipt::new(left, right, informativeness, receipt_ref.to_owned())
-        .map_err(|_| MatterConsumerProjectionStoreError::InvalidProjection)
+    let value = SameMatterInformativenessReceipt::new(left, right, informativeness, receipt_ref.to_owned())
+        .map_err(|_| MatterConsumerProjectionStoreError::InvalidProjection)?;
+    require_reviewed_informativeness_factorisation(config, &value)?;
+    Ok(value)
 }
