@@ -165,3 +165,48 @@ fn informativeness_binding_requires_exact_adequacy_ancestry() {
         MatterConsumerProjectionError::InformativenessProjectionMismatch
     );
 }
+
+#[test]
+fn hand_built_cross_consumer_informativeness_is_rejected() {
+    let left = MatterRepresentationProjection::new(
+        "matter:real",
+        "controversy:real",
+        MatterPersona::AffectedPerson,
+        "repr:simple",
+        adequacy("repr:simple", "consumer:affected-person"),
+        "projection:repr:simple",
+    )
+    .unwrap();
+    let right = MatterRepresentationProjection::new(
+        "matter:real",
+        "controversy:real",
+        MatterPersona::Expert,
+        "repr:expert",
+        adequacy("repr:expert", "consumer:expert"),
+        "projection:repr:expert",
+    )
+    .unwrap();
+
+    // Deliberately bypass ConsumerInformativenessReceipt::new to simulate a
+    // malformed decoded/constructed receipt with otherwise valid adequacy rows.
+    let informativeness = ConsumerInformativenessReceipt {
+        left: left.adequacy.clone(),
+        right: right.adequacy.clone(),
+        right_preserved_distinction_refs: ["distinction:a".to_owned()].into_iter().collect(),
+        left_preserved_distinction_refs: ["distinction:a".to_owned()].into_iter().collect(),
+        reviewed_factorisation_receipt_ref: "review:factorisation:malformed".into(),
+        creates_universal_superiority: false,
+        promotes_claim_truth: false,
+    };
+
+    assert_eq!(
+        SameMatterInformativenessReceipt::new(
+            left,
+            right,
+            informativeness,
+            "receipt:cross-consumer",
+        )
+        .unwrap_err(),
+        MatterConsumerProjectionError::InformativenessProjectionMismatch
+    );
+}
