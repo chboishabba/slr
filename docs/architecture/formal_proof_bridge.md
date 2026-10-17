@@ -107,3 +107,11 @@ Every demand is candidate-only and non-promoting. Every payment and reopen plan 
 ## Verification boundary
 
 The source includes unit/contract tests plus strict-replay regressions. Exact-head Cargo/PostgreSQL execution remains a separate verification payment whenever the execution environment cannot run those commands.
+
+Focused commands:
+
+```bash
+cargo test -p sensiblaw-formal-proof-bridge
+cargo test -p sensiblaw-pg-source-store --test formal_proof_bridge_contract
+cargo test -p sensiblaw-pg-source-store
+```
