@@ -1,5 +1,6 @@
 use sensiblaw_pg_source_store::{
-    measure_semantic_pnf_coverage, CandidatePnfFactor, CandidatePnfRole,
+    measure_semantic_pnf_coverage, semantic_pnf_coverage_is_consistent,
+    CandidatePnfFactor, CandidatePnfRole,
 };
 
 fn factor(reference: &str, role: CandidatePnfRole, lemma: &str, dependency: &str) -> CandidatePnfFactor {
@@ -44,6 +45,7 @@ fn full_semantic_multiset_match_is_exhaustive_despite_parser_debris() {
     assert_eq!(coverage.ignored_docx_nonsemantic_count, 0);
     assert!(coverage.semantic_factor_multiset_exact);
     assert!(coverage.closes_source_transformation_residual);
+    assert!(semantic_pnf_coverage_is_consistent(&coverage));
 }
 
 #[test]
@@ -60,6 +62,7 @@ fn one_missing_semantic_factor_keeps_transformation_residual_open() {
     assert_eq!(coverage.unmatched_docx_semantic_count, 0);
     assert!(!coverage.semantic_factor_multiset_exact);
     assert!(!coverage.closes_source_transformation_residual);
+    assert!(semantic_pnf_coverage_is_consistent(&coverage));
 }
 
 #[test]
@@ -74,4 +77,21 @@ fn multiplicity_is_semantic_not_set_membership() {
     assert_eq!(coverage.matched_semantic_factor_count, 1);
     assert_eq!(coverage.unmatched_pdf_semantic_count, 1);
     assert!(!coverage.semantic_factor_multiset_exact);
+    assert!(semantic_pnf_coverage_is_consistent(&coverage));
+}
+
+#[test]
+fn corrupted_exact_flag_with_unmatched_semantic_factor_fails_replay_validation() {
+    let pdf = vec![
+        factor("p1", CandidatePnfRole::Predicate, "include", "ROOT"),
+        factor("p2", CandidatePnfRole::Predicate, "assist", "relcl"),
+    ];
+    let docx = vec![factor("d1", CandidatePnfRole::Predicate, "include", "ROOT")];
+    let mut coverage = measure_semantic_pnf_coverage(&pdf, &docx);
+
+    coverage.semantic_factor_multiset_exact = true;
+    coverage.closes_source_transformation_residual = true;
+    coverage.requires_human_pnf_review = false;
+
+    assert!(!semantic_pnf_coverage_is_consistent(&coverage));
 }
