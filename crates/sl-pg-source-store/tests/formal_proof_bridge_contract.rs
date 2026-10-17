@@ -1,4 +1,4 @@
-use sensiblaw_pg_source_store::{
+use sensiblaw_formal_proof_bridge::{
     validate_formal_evidence_payment, FormalEvidenceReceiptInput, FormalProofBridgeError,
     FormalProofDemand, FormalProofRouteReceiptInput,
 };
@@ -50,7 +50,7 @@ fn evidence() -> FormalEvidenceReceiptInput {
 }
 
 #[test]
-fn formal_demand_requires_exact_identity_coordinates() {
+fn formal_demand_requires_existing_exact_obligation_and_pnf_revision_coordinates() {
     let mut d = demand();
     d.obligation_ref.clear();
     assert!(matches!(
