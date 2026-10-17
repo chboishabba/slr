@@ -102,6 +102,10 @@ pub use real_matter_controversy::*;
 mod real_matter_controversy_strict;
 pub use real_matter_controversy_strict::*;
 
+#[path = "real_matter_replay_acceptance.rs"]
+mod real_matter_replay_acceptance;
+pub use real_matter_replay_acceptance::*;
+
 #[path = "external_legal_system.rs"]
 mod external_legal_system;
 pub use external_legal_system::*;
