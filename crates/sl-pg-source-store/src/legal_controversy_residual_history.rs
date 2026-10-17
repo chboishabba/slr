@@ -1,13 +1,13 @@
 //! Immutable residual refinement/supersession for one persisted legal controversy.
 //!
 //! Residual rows remain historical facts about what the system represented at a
-//! particular reviewed stage.  A later residual never overwrites an earlier row.
-//! Instead, an explicit S29 review receipt may license a supersession edge.  The
+//! particular reviewed stage. A later residual never overwrites an earlier row.
+//! Instead, an explicit S29 review receipt may license a supersession edge. The
 //! operator-facing Matter projection is then derived as the unique unsuperseded
 //! residual head in each typed residual lane.
 //!
 //! This module deliberately does not infer "latest" from insertion order, hashes,
-//! lexical order, or timestamps.  Multiple unsuperseded heads in one lane are an
+//! lexical order, or timestamps. Multiple unsuperseded heads in one lane are an
 //! ambiguity and fail closed until a reviewed reconciliation is persisted.
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -213,7 +213,10 @@ pub fn derive_current_residual_refs(
         if residual.residual_ref.trim().is_empty() || residual.controversy_ref.trim().is_empty() {
             return Err(LegalControversyResidualHistoryError::EmptyCoordinate("residual_ref"));
         }
-        by_lane.entry(residual_lane_ref(residual)).or_default().push(residual);
+        by_lane
+            .entry(residual_lane_ref(residual))
+            .or_default()
+            .push(residual);
     }
 
     let mut superseded = BTreeSet::<String>::new();
@@ -304,6 +307,26 @@ fn require_review_receipt(
     Ok(())
 }
 
+fn historical_residuals_for_controversy(
+    config: &DatabaseConfig,
+    controversy_ref: &str,
+) -> Result<Vec<LegalControversyResidual>, LegalControversyResidualHistoryError> {
+    let matter = load_legal_controversy_matter(config, controversy_ref)
+        .map_err(|error| LegalControversyResidualHistoryError::Store(error.to_string()))?;
+    matter
+        .residual_refs
+        .iter()
+        .map(|reference| {
+            load_legal_controversy_residual(config, reference)
+                .map_err(|error| LegalControversyResidualHistoryError::Store(error.to_string()))
+        })
+        .collect()
+}
+
+/// Persist a reviewed supersession only if the proposed receipt already makes
+/// the complete controversy projection unambiguous. The preflight happens
+/// before any immutable row is inserted, so a partial reconciliation cannot
+/// leave durable state behind while returning an ambiguity error.
 pub fn persist_reviewed_residual_supersession(
     config: &DatabaseConfig,
     draft: &ResidualSupersessionDraft,
@@ -366,6 +389,24 @@ pub fn persist_reviewed_residual_supersession(
     };
     validate_receipt_shape(&expected)?;
 
+    let residuals = historical_residuals_for_controversy(config, &draft.controversy_ref)?;
+    let mut projected_supersessions =
+        load_residual_supersessions_for_controversy(config, &draft.controversy_ref)?;
+    if let Some(existing) = projected_supersessions
+        .iter()
+        .find(|receipt| receipt.supersession_ref == expected.supersession_ref)
+    {
+        if existing != &expected {
+            return Err(LegalControversyResidualHistoryError::ExistingRowConflict);
+        }
+    } else {
+        projected_supersessions.push(expected.clone());
+    }
+    // Crucially, prove the complete current projection before opening the write
+    // transaction. This catches a successor that supersedes only one of several
+    // legacy heads without committing that incomplete history edge.
+    let _ = derive_current_residual_refs(&residuals, &projected_supersessions)?;
+
     let mut client = Client::connect(config.database_url(), NoTls)?;
     let mut tx = client.transaction()?;
     tx.execute(
@@ -396,9 +437,9 @@ pub fn persist_reviewed_residual_supersession(
     if reopened != expected {
         return Err(LegalControversyResidualHistoryError::ExistingRowConflict);
     }
-
-    // The new receipt must actually make this lane unambiguous; otherwise the
-    // operator has reviewed only part of an already-branching history.
+    // Post-commit replay is a sanity check only; ambiguity was already paid in
+    // the preflight and therefore cannot be the cause of a partially persisted
+    // reconciliation.
     let _ = load_current_legal_controversy_residuals(config, &draft.controversy_ref)?;
     Ok(reopened)
 }
@@ -472,16 +513,7 @@ pub fn load_current_legal_controversy_residuals(
     config: &DatabaseConfig,
     controversy_ref: &str,
 ) -> Result<Vec<LegalControversyResidual>, LegalControversyResidualHistoryError> {
-    let matter = load_legal_controversy_matter(config, controversy_ref)
-        .map_err(|error| LegalControversyResidualHistoryError::Store(error.to_string()))?;
-    let residuals = matter
-        .residual_refs
-        .iter()
-        .map(|reference| {
-            load_legal_controversy_residual(config, reference)
-                .map_err(|error| LegalControversyResidualHistoryError::Store(error.to_string()))
-        })
-        .collect::<Result<Vec<_>, _>>()?;
+    let residuals = historical_residuals_for_controversy(config, controversy_ref)?;
     let supersessions = load_residual_supersessions_for_controversy(config, controversy_ref)?;
     let current_refs = derive_current_residual_refs(&residuals, &supersessions)?;
     let by_ref = residuals
@@ -499,7 +531,7 @@ pub fn load_current_legal_controversy_residuals(
         .collect()
 }
 
-/// Operator/reverse-search projection of a legal controversy.  The ordinary
+/// Operator/reverse-search projection of a legal controversy. The ordinary
 /// `load_legal_controversy_matter` remains the historical/audit loader and still
 /// exposes every immutable residual/obligation row.
 pub fn load_current_legal_controversy_matter(
@@ -513,7 +545,11 @@ pub fn load_current_legal_controversy_matter(
         .iter()
         .map(|residual| residual.residual_ref.clone())
         .collect::<BTreeSet<_>>();
-    let all_residual_refs = matter.residual_refs.iter().cloned().collect::<BTreeSet<_>>();
+    let all_residual_refs = matter
+        .residual_refs
+        .iter()
+        .cloned()
+        .collect::<BTreeSet<_>>();
     let historical_refs = all_residual_refs
         .difference(&current_refs)
         .cloned()
