@@ -1,14 +1,14 @@
 //! Exhaustive Predicate-PNF coverage for two official manifestations of one judgment.
 //!
 //! The earlier v2 overlap receipt proves compatibility around a selected
-//! predicate fibre.  This v3 receipt is the release-grade completeness claim:
+//! predicate fibre. This v3 receipt is the release-grade completeness claim:
 //! it compares the full multiset of every non-`Other` candidate PNF factor under
-//! the declared `(role, lemma, dependency)` projection.  Parser/OCR layout debris
+//! the declared `(role, lemma, dependency)` projection. Parser/OCR layout debris
 //! remains counted separately and cannot affect semantic equality.
 //!
 //! Exact exhaustive overlap may close only the source-transformation residual.
-//! It never creates a second witness, semantic/legal authority, applicability,
-//! or claim truth.
+//! It never creates a second source witness, semantic/legal authority,
+//! applicability, or claim truth.
 
 use std::collections::BTreeMap;
 
@@ -19,8 +19,7 @@ use thiserror::Error;
 use crate::{
     install_official_primary_manifestation_pnf_overlap_schema, load_candidate_pnf_batch,
     load_official_primary_manifestation_pnf_overlap, CandidatePnfFactor, CandidatePnfRole,
-    CandidatePnfStoreError, DatabaseConfig, ManifestationPnfOverlapDisposition,
-    OfficialPrimaryManifestationPnfOverlapError,
+    CandidatePnfStoreError, DatabaseConfig, OfficialPrimaryManifestationPnfOverlapError,
 };
 
 pub const EXHAUSTIVE_PNF_PROJECTION_REF: &str =
@@ -131,7 +130,10 @@ fn semantic_multiset(
     factors: &[CandidatePnfFactor],
 ) -> BTreeMap<(String, String, String), usize> {
     let mut counts = BTreeMap::new();
-    for factor in factors.iter().filter(|factor| factor.role != CandidatePnfRole::Other) {
+    for factor in factors
+        .iter()
+        .filter(|factor| factor.role != CandidatePnfRole::Other)
+    {
         *counts
             .entry((
                 role_tag(factor.role).to_owned(),
@@ -188,15 +190,51 @@ pub fn measure_semantic_pnf_coverage(
     }
 }
 
-fn count_i64(value: usize) -> Result<i64, OfficialPrimaryManifestationPnfExhaustiveOverlapError> {
-    i64::try_from(value).map_err(|_| OfficialPrimaryManifestationPnfExhaustiveOverlapError::CountOverflow)
+/// Validate the algebraic completeness claim independently of producer code.
+/// A corrupted persisted row cannot mark an incomplete multiset as exact.
+#[must_use]
+pub fn semantic_pnf_coverage_is_consistent(coverage: &SemanticPnfCoverage) -> bool {
+    let zero_unmatched = coverage.unmatched_pdf_semantic_count == 0
+        && coverage.unmatched_docx_semantic_count == 0;
+    let covers_both = coverage.matched_semantic_factor_count == coverage.pdf_semantic_factor_count
+        && coverage.matched_semantic_factor_count == coverage.docx_semantic_factor_count;
+    let exhaustive_exact = zero_unmatched && covers_both;
+
+    coverage.projection_ref == EXHAUSTIVE_PNF_PROJECTION_REF
+        && coverage.semantic_factor_multiset_exact == exhaustive_exact
+        && coverage.closes_source_transformation_residual == exhaustive_exact
+        && coverage.requires_human_pnf_review != exhaustive_exact
+        && !coverage.creates_legal_controversy
+        && !coverage.creates_semantic_authority
+        && !coverage.creates_legal_authority
+        && !coverage.applicability_promoted
+        && !coverage.claim_truth_promoted
+        && coverage.independent_source_count_increment == 0
+        && coverage.matched_semantic_factor_count + coverage.unmatched_pdf_semantic_count
+            == coverage.pdf_semantic_factor_count
+        && coverage.matched_semantic_factor_count + coverage.unmatched_docx_semantic_count
+            == coverage.docx_semantic_factor_count
+        && coverage.pdf_semantic_factor_count + coverage.ignored_pdf_nonsemantic_count
+            == coverage.pdf_parser_factor_count
+        && coverage.docx_semantic_factor_count + coverage.ignored_docx_nonsemantic_count
+            == coverage.docx_parser_factor_count
 }
 
-fn count_usize(value: i64) -> Result<usize, OfficialPrimaryManifestationPnfExhaustiveOverlapError> {
+fn count_i64(
+    value: usize,
+) -> Result<i64, OfficialPrimaryManifestationPnfExhaustiveOverlapError> {
+    i64::try_from(value)
+        .map_err(|_| OfficialPrimaryManifestationPnfExhaustiveOverlapError::CountOverflow)
+}
+
+fn count_usize(
+    value: i64,
+) -> Result<usize, OfficialPrimaryManifestationPnfExhaustiveOverlapError> {
     if value < 0 {
         return Err(OfficialPrimaryManifestationPnfExhaustiveOverlapError::ExistingRowConflict);
     }
-    usize::try_from(value).map_err(|_| OfficialPrimaryManifestationPnfExhaustiveOverlapError::CountOverflow)
+    usize::try_from(value)
+        .map_err(|_| OfficialPrimaryManifestationPnfExhaustiveOverlapError::CountOverflow)
 }
 
 fn stable_ref(overlap_ref: &str, coverage: &SemanticPnfCoverage) -> String {
@@ -236,18 +274,27 @@ pub fn install_official_primary_manifestation_pnf_exhaustive_overlap_schema(
 }
 
 /// Persist the exhaustive semantic-factor coverage for an already source-bound
-/// PDF↔DOCX overlap.  The base v2 receipt remains immutable historical evidence;
+/// PDF↔DOCX overlap. The base v2 receipt remains immutable historical evidence;
 /// this v3 receipt is a separate, stronger completeness claim.
 pub fn compare_and_persist_official_primary_manifestation_pnf_exhaustive_overlap(
     config: &DatabaseConfig,
     overlap_ref: &str,
-) -> Result<OfficialPrimaryManifestationPnfExhaustiveOverlapReceipt, OfficialPrimaryManifestationPnfExhaustiveOverlapError> {
+) -> Result<
+    OfficialPrimaryManifestationPnfExhaustiveOverlapReceipt,
+    OfficialPrimaryManifestationPnfExhaustiveOverlapError,
+> {
     install_official_primary_manifestation_pnf_exhaustive_overlap_schema(config)?;
     let overlap = load_official_primary_manifestation_pnf_overlap(config, overlap_ref)?;
-    let pdf = load_candidate_pnf_batch(config, &overlap.pdf_batch_ref)?
-        .ok_or_else(|| OfficialPrimaryManifestationPnfExhaustiveOverlapError::MissingBatch(overlap.pdf_batch_ref.clone()))?;
-    let docx = load_candidate_pnf_batch(config, &overlap.docx_batch_ref)?
-        .ok_or_else(|| OfficialPrimaryManifestationPnfExhaustiveOverlapError::MissingBatch(overlap.docx_batch_ref.clone()))?;
+    let pdf = load_candidate_pnf_batch(config, &overlap.pdf_batch_ref)?.ok_or_else(|| {
+        OfficialPrimaryManifestationPnfExhaustiveOverlapError::MissingBatch(
+            overlap.pdf_batch_ref.clone(),
+        )
+    })?;
+    let docx = load_candidate_pnf_batch(config, &overlap.docx_batch_ref)?.ok_or_else(|| {
+        OfficialPrimaryManifestationPnfExhaustiveOverlapError::MissingBatch(
+            overlap.docx_batch_ref.clone(),
+        )
+    })?;
 
     if pdf.batch_ref != overlap.pdf_batch_ref || docx.batch_ref != overlap.docx_batch_ref {
         return Err(OfficialPrimaryManifestationPnfExhaustiveOverlapError::CoordinateMismatch);
@@ -265,6 +312,9 @@ pub fn compare_and_persist_official_primary_manifestation_pnf_exhaustive_overlap
     }
 
     let coverage = measure_semantic_pnf_coverage(&pdf.factors, &docx.factors);
+    if !semantic_pnf_coverage_is_consistent(&coverage) {
+        return Err(OfficialPrimaryManifestationPnfExhaustiveOverlapError::ExistingRowConflict);
+    }
     let exhaustive_overlap_ref = stable_ref(overlap_ref, &coverage);
     let expected = OfficialPrimaryManifestationPnfExhaustiveOverlapReceipt {
         exhaustive_overlap_ref: exhaustive_overlap_ref.clone(),
@@ -325,10 +375,14 @@ pub fn compare_and_persist_official_primary_manifestation_pnf_exhaustive_overlap
 pub fn load_official_primary_manifestation_pnf_exhaustive_overlap(
     config: &DatabaseConfig,
     exhaustive_overlap_ref: &str,
-) -> Result<OfficialPrimaryManifestationPnfExhaustiveOverlapReceipt, OfficialPrimaryManifestationPnfExhaustiveOverlapError> {
+) -> Result<
+    OfficialPrimaryManifestationPnfExhaustiveOverlapReceipt,
+    OfficialPrimaryManifestationPnfExhaustiveOverlapError,
+> {
     let mut client = Client::connect(config.database_url(), NoTls)?;
-    let row = client.query_opt(
-        r#"SELECT overlap_ref,comparator_revision_ref,projection_ref,pdf_batch_ref,docx_batch_ref,
+    let row = client
+        .query_opt(
+            r#"SELECT overlap_ref,comparator_revision_ref,projection_ref,pdf_batch_ref,docx_batch_ref,
                   pdf_parser_factor_count,docx_parser_factor_count,pdf_semantic_factor_count,
                   docx_semantic_factor_count,matched_semantic_factor_count,
                   unmatched_pdf_semantic_count,unmatched_docx_semantic_count,
@@ -339,9 +393,15 @@ pub fn load_official_primary_manifestation_pnf_exhaustive_overlap(
                   independent_source_count_increment
            FROM source_provenance.official_primary_manifestation_pnf_exhaustive_overlap
            WHERE exhaustive_overlap_ref=$1"#,
-        &[&exhaustive_overlap_ref],
-    )?.ok_or_else(|| OfficialPrimaryManifestationPnfExhaustiveOverlapError::NotFound(exhaustive_overlap_ref.into()))?;
+            &[&exhaustive_overlap_ref],
+        )?
+        .ok_or_else(|| {
+            OfficialPrimaryManifestationPnfExhaustiveOverlapError::NotFound(
+                exhaustive_overlap_ref.into(),
+            )
+        })?;
 
+    let comparator_revision_ref: String = row.get(1);
     let coverage = SemanticPnfCoverage {
         projection_ref: row.get(2),
         pdf_parser_factor_count: count_usize(row.get(5))?,
@@ -363,23 +423,8 @@ pub fn load_official_primary_manifestation_pnf_exhaustive_overlap(
         claim_truth_promoted: row.get(21),
         independent_source_count_increment: row.get(22),
     };
-    if coverage.projection_ref != EXHAUSTIVE_PNF_PROJECTION_REF
-        || coverage.closes_source_transformation_residual != coverage.semantic_factor_multiset_exact
-        || coverage.requires_human_pnf_review == coverage.semantic_factor_multiset_exact
-        || coverage.creates_legal_controversy
-        || coverage.creates_semantic_authority
-        || coverage.creates_legal_authority
-        || coverage.applicability_promoted
-        || coverage.claim_truth_promoted
-        || coverage.independent_source_count_increment != 0
-        || coverage.matched_semantic_factor_count + coverage.unmatched_pdf_semantic_count
-            != coverage.pdf_semantic_factor_count
-        || coverage.matched_semantic_factor_count + coverage.unmatched_docx_semantic_count
-            != coverage.docx_semantic_factor_count
-        || coverage.pdf_semantic_factor_count + coverage.ignored_pdf_nonsemantic_count
-            != coverage.pdf_parser_factor_count
-        || coverage.docx_semantic_factor_count + coverage.ignored_docx_nonsemantic_count
-            != coverage.docx_parser_factor_count
+    if comparator_revision_ref != EXHAUSTIVE_PNF_COMPARATOR_REVISION_REF
+        || !semantic_pnf_coverage_is_consistent(&coverage)
     {
         return Err(OfficialPrimaryManifestationPnfExhaustiveOverlapError::ExistingRowConflict);
     }
@@ -387,7 +432,7 @@ pub fn load_official_primary_manifestation_pnf_exhaustive_overlap(
     Ok(OfficialPrimaryManifestationPnfExhaustiveOverlapReceipt {
         exhaustive_overlap_ref: exhaustive_overlap_ref.into(),
         overlap_ref: row.get(0),
-        comparator_revision_ref: row.get(1),
+        comparator_revision_ref,
         pdf_batch_ref: row.get(3),
         docx_batch_ref: row.get(4),
         coverage,
