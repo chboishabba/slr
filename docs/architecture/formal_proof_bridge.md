@@ -108,9 +108,9 @@ Every demand is candidate-only and non-promoting. Every payment and reopen plan 
 
 ## Verification boundary
 
-The source includes unit/contract tests plus strict-replay regressions. Exact-head Cargo/PostgreSQL execution remains a separate verification payment whenever the execution environment cannot run those commands.
+The source includes unit/contract tests plus strict-replay regressions. This connector environment does not expose Cargo/PostgreSQL execution, so no exact-head GREEN claim is made from this session.
 
-Focused commands:
+Focused execution payment:
 
 ```bash
 cargo test -p sensiblaw-formal-proof-bridge
