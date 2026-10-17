@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import hashlib
+import importlib.metadata
 import json
 import multiprocessing
 import re
@@ -43,6 +44,17 @@ def sha256_hex(data: bytes) -> str:
 def batches(items, size: int):
     for start in range(0, len(items), size):
         yield items[start : start + size]
+
+
+def runtime_tool_versions() -> dict:
+    """Return exact installed renderer/OCR provenance for the extraction receipt."""
+    return {
+        "package_versions": {
+            "pypdfium2": importlib.metadata.version("pypdfium2"),
+            "tesserocr": importlib.metadata.version("tesserocr"),
+        },
+        "tesseract_version": tesserocr.tesseract_version(),
+    }
 
 
 async def extract_pdf(pdf_bytes: bytes, workers: int | None = None) -> str:
@@ -87,6 +99,7 @@ def main() -> int:
     text = asyncio.run(extract_pdf(pdf_bytes, args.workers))
     text_bytes = text.encode("utf-8")
     args.text_out.write_bytes(text_bytes)
+    runtime_versions = runtime_tool_versions()
 
     receipt = {
         "schema": "sensiblaw-official-primary-extraction/v1",
@@ -106,6 +119,7 @@ def main() -> int:
             "paragraph_number_cleanup_regex": PARAGRAPH_NUMBER_PATTERN,
             "ocr_engine": "tesserocr.image_to_text",
             "renderer": "pypdfium2",
+            **runtime_versions,
         },
         "output_sha256_hex": sha256_hex(text_bytes),
         "output_size_bytes": len(text_bytes),
