@@ -27,6 +27,7 @@ fn projection(
         matter_ref,
         controversy_ref,
         persona,
+        representation_ref,
         adequacy(representation_ref, "consumer:affected-person"),
         format!("projection:{representation_ref}"),
     )
@@ -111,13 +112,13 @@ fn informativeness_binding_rejects_cross_matter_comparison() {
 
 #[test]
 fn projection_requires_adequacy_representation_identity() {
-    let mut mismatched = adequacy("repr:actual", "consumer:affected-person");
-    mismatched.representation_ref = "repr:other".into();
+    let mismatched = adequacy("repr:other", "consumer:affected-person");
 
     let err = MatterRepresentationProjection::new(
         "matter:real",
         "controversy:real",
         MatterPersona::AffectedPerson,
+        "repr:actual",
         mismatched,
         "projection:repr:actual",
     )
