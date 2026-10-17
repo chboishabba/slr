@@ -141,6 +141,10 @@ pub use reviewed_representation_factorisation_store::*;
 mod matter_consumer_projection_store;
 pub use matter_consumer_projection_store::*;
 
+#[path = "smith_reviewed_statement_admission.rs"]
+mod smith_reviewed_statement_admission;
+pub use smith_reviewed_statement_admission::*;
+
 pub use crate::investigation_acquisition::{
     AxisRelation, ParetoAxisRelation, ParetoDominanceWitness,
     RouteFrontierDisposition, RouteDispositionReceipt, PotentialReopeningCone,
