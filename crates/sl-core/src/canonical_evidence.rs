@@ -387,7 +387,7 @@ mod substrate_tests {
 }
 
 // Consumer-relative representation parity is part of the canonical evidence
-// substrate rather than a source-family lane.  It consumes explicit admission
+// substrate rather than a source-family lane. It consumes explicit admission
 // and factorisation receipts and does not promote claim truth.
 include!("consumer_parity.rs");
 
