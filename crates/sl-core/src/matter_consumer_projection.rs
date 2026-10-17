@@ -7,6 +7,10 @@
 // receipt only when its evidence ancestry has a real durable owner. Until that
 // producer exists, this module must not turn environment strings or UI wording
 // into a purported live parity receipt.
+//
+// `MatterPersona` is presentation/consumer metadata, not an authority class.
+// Switching persona cannot create a new Matter, change evidentiary status, or
+// confer adjudicative authority.
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MatterPersona {
