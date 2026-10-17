@@ -51,22 +51,6 @@ fn stable_ref(prefix: &str, parts: &[&str]) -> String {
     format!("{prefix}:sha256:{:x}", hasher.finalize())
 }
 
-fn parse_action(value: &str) -> Result<ReviewAction, String> {
-    match value {
-        "accept" => Ok(ReviewAction::Accept),
-        "qualify" => Ok(ReviewAction::Qualify),
-        other => Err(format!("unsupported action {other:?}; expected accept or qualify")),
-    }
-}
-
-fn target_status(action: ReviewAction) -> ReviewStatus {
-    match action {
-        ReviewAction::Accept => ReviewStatus::Accepted,
-        ReviewAction::Qualify => ReviewStatus::Qualified,
-        _ => unreachable!("operator accepts only accept or qualify"),
-    }
-}
-
 fn review_semantic_ref(
     config: &sensiblaw_pg_source_store::DatabaseConfig,
     semantic_ref: &str,
@@ -74,8 +58,6 @@ fn review_semantic_ref(
     controversy_ref: &str,
     provenance_refs: Vec<String>,
     reason: &str,
-    action: ReviewAction,
-    qualification_ref: Option<String>,
 ) -> Result<String, String> {
     let review_item_ref = stable_ref(
         "review-item:consumer-factorisation",
@@ -92,7 +74,6 @@ fn review_semantic_ref(
         available_actions: vec![
             ReviewAction::Accept,
             ReviewAction::OpenSource,
-            ReviewAction::Qualify,
             ReviewAction::RequestEvidence,
         ],
         affected_consumer_refs: canonical_refs(vec![CONSUMER_REF.into(), matter_ref.to_owned()]),
@@ -114,33 +95,22 @@ fn review_semantic_ref(
                     "existing review item for {semantic_ref} conflicts with canonical coordinates"
                 ));
             }
-            if !matches!(status, ReviewStatus::Pending | ReviewStatus::Accepted | ReviewStatus::Qualified) {
+            if !matches!(status, ReviewStatus::Pending | ReviewStatus::Accepted) {
                 return Err(format!("existing review item for {semantic_ref} is not replayable"));
             }
         }
     }
 
-    let action_tag = match action {
-        ReviewAction::Accept => "accept",
-        ReviewAction::Qualify => "qualify",
-        _ => unreachable!(),
-    };
-    let qualification_part = qualification_ref.as_deref().unwrap_or("");
     let command_ref = stable_ref(
         "review-command:consumer-factorisation",
-        &[
-            &review_item_ref,
-            REVIEWER_REF,
-            action_tag,
-            qualification_part,
-        ],
+        &[&review_item_ref, REVIEWER_REF, "accept"],
     );
     let command = ReviewCommand {
         command_ref: command_ref.clone(),
         review_item_ref,
-        action,
+        action: ReviewAction::Accept,
         reviewer_ref: REVIEWER_REF.into(),
-        qualification_ref,
+        qualification_ref: None,
         evidence_request_ref: None,
     };
     let (receipt, item) =
@@ -148,8 +118,8 @@ fn review_semantic_ref(
     if receipt.command_ref != command_ref
         || receipt.semantic_ref != semantic_ref
         || receipt.reviewer_ref != REVIEWER_REF
-        || receipt.action != action
-        || item.current_status != target_status(action)
+        || receipt.action != ReviewAction::Accept
+        || item.current_status != ReviewStatus::Accepted
         || !receipt.candidate_only
         || receipt.creates_semantic_authority
         || receipt.applicability_promoted
@@ -162,11 +132,11 @@ fn review_semantic_ref(
 
 fn main() -> Result<(), String> {
     let args = std::env::args().collect::<Vec<_>>();
-    if args.len() < 8 || args.len() > 9 {
+    if args.len() != 8 {
         return Err(
             "usage: review_smith_hca37_consumer_factorisations \
 <matter_ref> <controversy_ref> <accessible_representation_ref> <full_representation_ref> \
-<accessible_admission_ref> <full_admission_ref> <accept|qualify> [qualification_ref]"
+<accessible_admission_ref> <full_admission_ref> accept"
                 .into(),
         );
     }
@@ -177,17 +147,9 @@ fn main() -> Result<(), String> {
     let full_representation_ref = required_arg(&args, 4, "full_representation_ref")?;
     let accessible_admission_ref = required_arg(&args, 5, "accessible_admission_ref")?;
     let full_admission_ref = required_arg(&args, 6, "full_admission_ref")?;
-    let action = parse_action(&required_arg(&args, 7, "action")?)?;
-    let qualification_ref = match action {
-        ReviewAction::Accept => {
-            if args.get(8).is_some() {
-                return Err("accept does not take qualification_ref".into());
-            }
-            None
-        }
-        ReviewAction::Qualify => Some(required_arg(&args, 8, "qualification_ref")?),
-        _ => unreachable!(),
-    };
+    if required_arg(&args, 7, "review flag")? != "accept" {
+        return Err("Smith factorisation producer currently permits only explicit accept".into());
+    }
 
     let config = load_database_config(None).map_err(|error| error.to_string())?;
     let persisted_matter = load_legal_controversy_matter(&config, &controversy_ref)
@@ -235,8 +197,6 @@ fn main() -> Result<(), String> {
             accessible_admission_ref.clone(),
         ],
         "review whether the accessible Smith representation preserves every required affected-person distinction",
-        action,
-        qualification_ref.clone(),
     )?;
     let full_review_ref = review_semantic_ref(
         &config,
@@ -250,8 +210,6 @@ fn main() -> Result<(), String> {
             full_admission_ref.clone(),
         ],
         "review whether the full Smith legal representation preserves every required affected-person distinction",
-        action,
-        qualification_ref.clone(),
     )?;
 
     let accessible_factor = ReviewedRepresentationFactorisation {
@@ -321,8 +279,6 @@ fn main() -> Result<(), String> {
             full_factor_ref.clone(),
         ],
         "review whether the accessible Smith representation retains at least every distinction retained by the full representation for the affected-person query",
-        action,
-        qualification_ref,
     )?;
 
     let comparison = ReviewedInformativenessFactorisation {
