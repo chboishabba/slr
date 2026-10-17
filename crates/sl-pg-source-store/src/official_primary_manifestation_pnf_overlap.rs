@@ -25,7 +25,7 @@ use crate::{
     CandidatePnfRole, CandidatePnfStoreError, ComparisonFinding, DatabaseConfig,
     LicensedAlignment, ManifestationComparisonDisposition, ObservationContext,
     OfficialPrimaryManifestationComparisonError, RelationalComparisonError,
-    RelationalConsumer, RelationalSourceFamily,
+    Polarity, RelationalConsumer, RelationalSourceFamily,
 };
 
 pub const OFFICIAL_PRIMARY_MANIFESTATION_PNF_OVERLAP_SCHEMA_SQL: &str = r#"
@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS source_provenance.official_primary_manifestation_pnf_
   docx_batch_ref TEXT NOT NULL REFERENCES pnf.statement_candidate_batch(batch_ref),
   pdf_predicate_candidate_ref TEXT NOT NULL,
   docx_predicate_candidate_ref TEXT NOT NULL,
+  comparator_revision_ref TEXT NOT NULL DEFAULT 'official-primary-manifestation-predicate-pnf-overlap:v1',
   relational_comparison_ref TEXT NOT NULL,
   finding_ref TEXT NOT NULL,
   residual_obligation_refs TEXT[] NOT NULL,
@@ -58,12 +59,41 @@ CREATE TABLE IF NOT EXISTS source_provenance.official_primary_manifestation_pnf_
   UNIQUE(manifestation_comparison_ref,pdf_batch_ref,docx_batch_ref,
          pdf_predicate_candidate_ref,docx_predicate_candidate_ref)
 );
+
+ALTER TABLE source_provenance.official_primary_manifestation_pnf_overlap
+  ADD COLUMN IF NOT EXISTS comparator_revision_ref TEXT NOT NULL
+    DEFAULT 'official-primary-manifestation-predicate-pnf-overlap:v1';
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'official_primary_manifestatio_manifestation_comparison_ref__key'
+      AND conrelid = 'source_provenance.official_primary_manifestation_pnf_overlap'::regclass
+  ) THEN
+    ALTER TABLE source_provenance.official_primary_manifestation_pnf_overlap
+      DROP CONSTRAINT official_primary_manifestatio_manifestation_comparison_ref__key;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'official_primary_manifestation_pnf_overlap_coordinate_revision_key'
+      AND conrelid = 'source_provenance.official_primary_manifestation_pnf_overlap'::regclass
+  ) THEN
+    ALTER TABLE source_provenance.official_primary_manifestation_pnf_overlap
+      ADD CONSTRAINT official_primary_manifestation_pnf_overlap_coordinate_revision_key
+      UNIQUE(manifestation_comparison_ref,pdf_batch_ref,docx_batch_ref,
+             pdf_predicate_candidate_ref,docx_predicate_candidate_ref,
+             comparator_revision_ref);
+  END IF;
+END $$;
 "#;
 
 const TRANSFORMATION_CONSUMER_REF: &str =
-    "consumer:official-primary-manifestation-predicate-pnf-overlap:v1";
+    "consumer:official-primary-manifestation-predicate-pnf-overlap:v2";
 const TRANSFORMATION_LICENCE_REF: &str =
-    "licence:same-official-judgment-transformation-pnf:v1";
+    "licence:same-official-judgment-transformation-pnf:v2";
+const TRANSFORMATION_COMPARATOR_REVISION_REF: &str =
+    "official-primary-manifestation-predicate-pnf-overlap:v2";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ManifestationPnfOverlapDisposition {
@@ -143,6 +173,7 @@ pub struct OfficialPrimaryManifestationPnfOverlapReceipt {
     pub docx_batch_ref: String,
     pub pdf_predicate_candidate_ref: String,
     pub docx_predicate_candidate_ref: String,
+    pub comparator_revision_ref: String,
     pub relational_comparison_ref: String,
     pub finding: ComparisonFinding,
     pub residual_obligation_refs: Vec<String>,
@@ -208,7 +239,7 @@ fn role_occurrences(factors: &[CandidatePnfFactor]) -> BTreeMap<(&'static str, u
     let mut counts = BTreeMap::<&'static str, u32>::new();
     let mut out = BTreeMap::new();
     for factor in factors {
-        if factor.role == CandidatePnfRole::Predicate {
+        if matches!(factor.role, CandidatePnfRole::Predicate | CandidatePnfRole::Other) {
             continue;
         }
         let role = role_name(factor.role);
@@ -314,6 +345,46 @@ fn transformation_consumer(
         filler_alignments,
         type_alignments: vec![],
     })
+}
+
+/// Build the comparator fibre for one selected transformation predicate.
+///
+/// Parser `Other` tokens are lexical/parser debris, not Predicate-PNF role
+/// fillers. `Supports` here records only that this exact source span produced
+/// the selected candidate; it is not a legal-evidence, authority, or truth
+/// promotion.
+fn transformation_observation(
+    source_revision_ref: &str,
+    observation_ref: &str,
+    producer_ref: &str,
+    selected_predicate_candidate_ref: &str,
+    batch: &CandidatePnfBatch,
+    provenance_refs: Vec<String>,
+) -> Result<crate::RelationalObservation, RelationalComparisonError> {
+    let selected_fibre = CandidatePnfBatch {
+        exact_span_ref: batch.exact_span_ref.clone(),
+        candidates: batch
+            .candidates
+            .iter()
+            .filter(|factor| factor.role != CandidatePnfRole::Other)
+            .cloned()
+            .collect(),
+        proposition_support_paid: batch.proposition_support_paid,
+        applicability_paid: batch.applicability_paid,
+        claim_truth_paid: batch.claim_truth_paid,
+    };
+    let mut observation = observation_from_candidate_pnf(
+        source_revision_ref,
+        RelationalSourceFamily::Legal,
+        observation_ref,
+        producer_ref,
+        selected_predicate_candidate_ref,
+        &selected_fibre,
+        ObservationContext::default(),
+        provenance_refs,
+    )?;
+    observation.polarity = Polarity::Supports;
+    Ok(observation)
 }
 
 fn statement_source_revision(
@@ -441,24 +512,20 @@ pub fn compare_and_persist_official_primary_manifestation_pnf_overlap(
         pdf_predicate_candidate_ref,
         docx_predicate_candidate_ref,
     )?;
-    let pdf_observation = observation_from_candidate_pnf(
+    let pdf_observation = transformation_observation(
         &statement_source_revision(config, &pdf_persisted.statement_ref)?,
-        RelationalSourceFamily::Legal,
         &format!("manifestation-pnf-observation:{pdf_batch_ref}"),
         &pdf_persisted.parser_receipt_ref,
         pdf_predicate_candidate_ref,
         &pdf,
-        ObservationContext::default(),
         vec![manifestation_comparison_ref.into(), manifestation.pdf_extraction_ref.clone()],
     )?;
-    let docx_observation = observation_from_candidate_pnf(
+    let docx_observation = transformation_observation(
         &statement_source_revision(config, &docx_persisted.statement_ref)?,
-        RelationalSourceFamily::Legal,
         &format!("manifestation-pnf-observation:{docx_batch_ref}"),
         &docx_persisted.parser_receipt_ref,
         docx_predicate_candidate_ref,
         &docx,
-        ObservationContext::default(),
         vec![manifestation_comparison_ref.into(), manifestation.docx_extraction_ref.clone()],
     )?;
     let comparison = compare_relational_observations(&pdf_observation, &docx_observation, &consumer)?;
@@ -489,6 +556,7 @@ pub fn compare_and_persist_official_primary_manifestation_pnf_overlap(
         docx_batch_ref: docx_batch_ref.into(),
         pdf_predicate_candidate_ref: pdf_predicate_candidate_ref.into(),
         docx_predicate_candidate_ref: docx_predicate_candidate_ref.into(),
+        comparator_revision_ref: TRANSFORMATION_COMPARATOR_REVISION_REF.into(),
         relational_comparison_ref: comparison.comparison_ref,
         finding: comparison.finding,
         residual_obligation_refs,
@@ -501,12 +569,12 @@ pub fn compare_and_persist_official_primary_manifestation_pnf_overlap(
         r#"INSERT INTO source_provenance.official_primary_manifestation_pnf_overlap
            (overlap_ref,manifestation_comparison_ref,pdf_batch_ref,docx_batch_ref,
             pdf_predicate_candidate_ref,docx_predicate_candidate_ref,
-            relational_comparison_ref,finding_ref,residual_obligation_refs,
+            comparator_revision_ref,relational_comparison_ref,finding_ref,residual_obligation_refs,
             alignment_witness_refs,disposition_ref,requires_human_pnf_review,
             closes_source_transformation_residual,creates_legal_controversy,
             creates_semantic_authority,creates_legal_authority,applicability_promoted,
             claim_truth_promoted,independent_source_count_increment)
-           VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,
+           VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,
                   FALSE,FALSE,FALSE,FALSE,FALSE,0)
            ON CONFLICT(overlap_ref) DO NOTHING"#,
         &[
@@ -516,6 +584,7 @@ pub fn compare_and_persist_official_primary_manifestation_pnf_overlap(
             &expected.docx_batch_ref,
             &expected.pdf_predicate_candidate_ref,
             &expected.docx_predicate_candidate_ref,
+            &expected.comparator_revision_ref,
             &expected.relational_comparison_ref,
             &finding_db(&expected.finding),
             &expected.residual_obligation_refs,
@@ -540,7 +609,7 @@ pub fn load_official_primary_manifestation_pnf_overlap(
     let row = client.query_opt(
         r#"SELECT manifestation_comparison_ref,pdf_batch_ref,docx_batch_ref,
                   pdf_predicate_candidate_ref,docx_predicate_candidate_ref,
-                  relational_comparison_ref,finding_ref,residual_obligation_refs,
+                  comparator_revision_ref,relational_comparison_ref,finding_ref,residual_obligation_refs,
                   alignment_witness_refs,disposition_ref,requires_human_pnf_review,
                   closes_source_transformation_residual,creates_legal_controversy,
                   creates_semantic_authority,creates_legal_authority,applicability_promoted,
@@ -549,17 +618,17 @@ pub fn load_official_primary_manifestation_pnf_overlap(
            WHERE overlap_ref=$1"#,
         &[&overlap_ref],
     )?.ok_or_else(|| OfficialPrimaryManifestationPnfOverlapError::NotFound(overlap_ref.into()))?;
-    let finding = finding_from_db(&row.get::<_, String>(6))?;
+    let finding = finding_from_db(&row.get::<_, String>(7))?;
     let classification = ManifestationPnfOverlapClassification {
-        disposition: ManifestationPnfOverlapDisposition::from_db(&row.get::<_, String>(9))?,
-        requires_human_pnf_review: row.get(10),
-        closes_source_transformation_residual: row.get(11),
-        creates_legal_controversy: row.get(12),
-        creates_semantic_authority: row.get(13),
-        creates_legal_authority: row.get(14),
-        applicability_promoted: row.get(15),
-        claim_truth_promoted: row.get(16),
-        independent_source_count_increment: row.get(17),
+        disposition: ManifestationPnfOverlapDisposition::from_db(&row.get::<_, String>(10))?,
+        requires_human_pnf_review: row.get(11),
+        closes_source_transformation_residual: row.get(12),
+        creates_legal_controversy: row.get(13),
+        creates_semantic_authority: row.get(14),
+        creates_legal_authority: row.get(15),
+        applicability_promoted: row.get(16),
+        claim_truth_promoted: row.get(17),
+        independent_source_count_increment: row.get(18),
     };
     if classification != classify_manifestation_pnf_overlap(finding.clone()) {
         return Err(OfficialPrimaryManifestationPnfOverlapError::ExistingRowConflict);
@@ -571,10 +640,83 @@ pub fn load_official_primary_manifestation_pnf_overlap(
         docx_batch_ref: row.get(2),
         pdf_predicate_candidate_ref: row.get(3),
         docx_predicate_candidate_ref: row.get(4),
-        relational_comparison_ref: row.get(5),
+        comparator_revision_ref: row.get(5),
+        relational_comparison_ref: row.get(6),
         finding,
-        residual_obligation_refs: row.get(7),
-        alignment_witness_refs: row.get(8),
+        residual_obligation_refs: row.get(8),
+        alignment_witness_refs: row.get(9),
         classification,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{compare_relational_observations, ComparisonFinding};
+
+    fn factor(reference: &str, role: CandidatePnfRole, lemma: &str, dependency: &str) -> CandidatePnfFactor {
+        CandidatePnfFactor {
+            candidate_ref: reference.into(),
+            role,
+            source_start_char: 0,
+            source_end_char: 1,
+            surface: lemma.into(),
+            lemma: lemma.into(),
+            dependency_ref: dependency.into(),
+            candidate_only: true,
+        }
+    }
+
+    #[test]
+    fn transformation_consumer_ignores_non_pnf_token_debris() {
+        let pdf = CandidatePnfBatch {
+            exact_span_ref: "span:pdf".into(),
+            candidates: vec![
+                factor("pdf:include", CandidatePnfRole::Predicate, "include", "ROOT"),
+                factor("pdf:space", CandidatePnfRole::Other, " ", "dep"),
+            ],
+            proposition_support_paid: false,
+            applicability_paid: false,
+            claim_truth_paid: false,
+        };
+        let docx = CandidatePnfBatch {
+            exact_span_ref: "span:docx".into(),
+            candidates: vec![
+                factor("docx:include", CandidatePnfRole::Predicate, "include", "ROOT"),
+                factor("docx:space", CandidatePnfRole::Other, " ", "dep"),
+            ],
+            proposition_support_paid: false,
+            applicability_paid: false,
+            claim_truth_paid: false,
+        };
+
+        let consumer = transformation_consumer(&pdf, &docx, "pdf:include", "docx:include").unwrap();
+
+        assert_eq!(consumer.predicate_alignments.len(), 1);
+        assert!(consumer.filler_alignments.is_empty());
+    }
+
+    #[test]
+    fn same_selected_predicate_is_an_observed_transformation_not_unknown_evidence() {
+        let pdf = CandidatePnfBatch {
+            exact_span_ref: "span:pdf".into(),
+            candidates: vec![factor("pdf:include", CandidatePnfRole::Predicate, "include", "ROOT")],
+            proposition_support_paid: false,
+            applicability_paid: false,
+            claim_truth_paid: false,
+        };
+        let docx = CandidatePnfBatch {
+            exact_span_ref: "span:docx".into(),
+            candidates: vec![factor("docx:include", CandidatePnfRole::Predicate, "include", "ROOT")],
+            proposition_support_paid: false,
+            applicability_paid: false,
+            claim_truth_paid: false,
+        };
+        let consumer = transformation_consumer(&pdf, &docx, "pdf:include", "docx:include").unwrap();
+        let left = transformation_observation("source:pdf", "observation:pdf", "parser:pdf", "pdf:include", &pdf, vec!["receipt:pdf".into()]).unwrap();
+        let right = transformation_observation("source:docx", "observation:docx", "parser:docx", "docx:include", &docx, vec!["receipt:docx".into()]).unwrap();
+
+        assert_eq!(compare_relational_observations(&left, &right, &consumer).unwrap().finding, ComparisonFinding::LicensedCompatible);
+        assert_eq!(consumer.consumer_ref, "consumer:official-primary-manifestation-predicate-pnf-overlap:v2");
+    }
 }
