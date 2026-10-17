@@ -129,3 +129,39 @@ fn projection_requires_adequacy_representation_identity() {
         MatterConsumerProjectionError::RepresentationProjectionMismatch
     );
 }
+
+#[test]
+fn informativeness_binding_requires_exact_adequacy_ancestry() {
+    let left = projection(
+        "matter:real",
+        "controversy:real",
+        MatterPersona::AffectedPerson,
+        "repr:simple",
+    );
+    let right = projection(
+        "matter:real",
+        "controversy:real",
+        MatterPersona::SolicitorCounsel,
+        "repr:full",
+    );
+    let mut informativeness = ConsumerInformativenessReceipt::new(
+        left.adequacy.clone(),
+        right.adequacy.clone(),
+        ["distinction:a"],
+        ["distinction:a"],
+        "review:factorisation:same-matter",
+    )
+    .unwrap();
+    informativeness.left.admissibility_receipt_ref = "admission:mutated".into();
+
+    assert_eq!(
+        SameMatterInformativenessReceipt::new(
+            left,
+            right,
+            informativeness,
+            "receipt:mutated-ancestry",
+        )
+        .unwrap_err(),
+        MatterConsumerProjectionError::InformativenessProjectionMismatch
+    );
+}
