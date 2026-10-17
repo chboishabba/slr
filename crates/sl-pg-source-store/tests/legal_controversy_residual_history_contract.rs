@@ -1,6 +1,7 @@
 use sensiblaw_pg_source_store::{
-    derive_current_residual_refs, DisagreementKind, LegalControversyResidual,
-    LegalControversyResidualHistoryError, ResidualSupersessionReceipt,
+    derive_current_residual_refs, residual_lane_ref, DisagreementKind,
+    LegalControversyResidual, LegalControversyResidualHistoryError,
+    ResidualSupersessionReceipt,
 };
 
 fn residual(reference: &str, question: &str) -> LegalControversyResidual {
@@ -22,12 +23,15 @@ fn residual(reference: &str, question: &str) -> LegalControversyResidual {
     }
 }
 
-fn supersession(successor: &str, predecessors: &[&str]) -> ResidualSupersessionReceipt {
+fn supersession(
+    successor: &LegalControversyResidual,
+    predecessors: &[&str],
+) -> ResidualSupersessionReceipt {
     ResidualSupersessionReceipt {
         supersession_ref: "residual-supersession:test".into(),
         controversy_ref: "controversy:mabo".into(),
-        lane_ref: "residual-lane:test".into(),
-        successor_residual_ref: successor.into(),
+        lane_ref: residual_lane_ref(successor),
+        successor_residual_ref: successor.residual_ref.clone(),
         predecessor_residual_refs: predecessors.iter().map(|value| (*value).into()).collect(),
         review_command_ref: "review-command:mabo-residual-refinement".into(),
         candidate_only: true,
@@ -60,13 +64,11 @@ fn two_same_lane_residuals_without_reviewed_supersession_fail_closed() {
 
 #[test]
 fn reviewed_supersession_preserves_history_and_selects_only_the_successor() {
-    let values = [
-        residual("residual:a", "older narrative"),
-        residual("residual:b", "reviewed refinement"),
-    ];
+    let old = residual("residual:a", "older narrative");
+    let new = residual("residual:b", "reviewed refinement");
     let refs = derive_current_residual_refs(
-        &values,
-        &[supersession("residual:b", &["residual:a"])],
+        &[old, new.clone()],
+        &[supersession(&new, &["residual:a"])],
     )
     .expect("reviewed refinement makes the current head unique");
     assert_eq!(refs, vec!["residual:b"]);
@@ -74,14 +76,12 @@ fn reviewed_supersession_preserves_history_and_selects_only_the_successor() {
 
 #[test]
 fn one_reviewed_successor_can_reconcile_multiple_legacy_heads_without_rewriting_them() {
-    let values = [
-        residual("residual:a", "historical A"),
-        residual("residual:b", "historical B"),
-        residual("residual:c", "reviewed reconciled narrative"),
-    ];
+    let first = residual("residual:a", "historical A");
+    let second = residual("residual:b", "historical B");
+    let current = residual("residual:c", "reviewed reconciled narrative");
     let refs = derive_current_residual_refs(
-        &values,
-        &[supersession("residual:c", &["residual:a", "residual:b"])],
+        &[first, second, current.clone()],
+        &[supersession(&current, &["residual:a", "residual:b"])],
     )
     .expect("all legacy heads are retained as history beneath the reviewed successor");
     assert_eq!(refs, vec!["residual:c"]);
@@ -89,11 +89,12 @@ fn one_reviewed_successor_can_reconcile_multiple_legacy_heads_without_rewriting_
 
 #[test]
 fn a_supersession_receipt_cannot_cross_residual_lanes() {
+    let old = residual("residual:a", "characterisation");
     let mut other_lane = residual("residual:other", "different kind");
     other_lane.kind = DisagreementKind::Evidence;
     let error = derive_current_residual_refs(
-        &[residual("residual:a", "characterisation"), other_lane],
-        &[supersession("residual:other", &["residual:a"])],
+        &[old, other_lane.clone()],
+        &[supersession(&other_lane, &["residual:a"])],
     )
     .unwrap_err();
     assert_eq!(error, LegalControversyResidualHistoryError::ResidualLaneMismatch);
