@@ -54,6 +54,14 @@ pub use provider_candidate_pnf::*;
 mod official_primary_extraction;
 pub use official_primary_extraction::*;
 
+#[path = "official_primary_docx_extraction.rs"]
+mod official_primary_docx_extraction;
+pub use official_primary_docx_extraction::*;
+
+#[path = "official_primary_manifestation_comparison.rs"]
+mod official_primary_manifestation_comparison;
+pub use official_primary_manifestation_comparison::*;
+
 #[path = "real_matter_review_gate.rs"]
 mod real_matter_review_gate;
 pub use real_matter_review_gate::*;
