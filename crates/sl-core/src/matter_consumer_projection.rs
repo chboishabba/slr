@@ -109,12 +109,8 @@ impl SameMatterInformativenessReceipt {
         if left.controversy_ref != right.controversy_ref {
             return Err(MatterConsumerProjectionError::ControversyMismatch);
         }
-        if informativeness.left.representation_ref != left.representation_ref
-            || informativeness.right.representation_ref != right.representation_ref
-            || informativeness.left.consumer_ref != left.adequacy.consumer_ref
-            || informativeness.right.consumer_ref != right.adequacy.consumer_ref
-            || informativeness.left.query_family_ref != left.adequacy.query_family_ref
-            || informativeness.right.query_family_ref != right.adequacy.query_family_ref
+        if informativeness.left != left.adequacy
+            || informativeness.right != right.adequacy
             || !informativeness.left_at_least_as_informative()
         {
             return Err(MatterConsumerProjectionError::InformativenessProjectionMismatch);
