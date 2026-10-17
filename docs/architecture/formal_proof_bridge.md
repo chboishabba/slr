@@ -22,6 +22,8 @@ source/span
 -> ordinary SLR recurrence/payment
 ```
 
+Upstream typing remains separate. DASHI PR #1222 supplies the formal PNF/consumer-WrongType -> explicitly witnessed Lee residual adapter; SLR PR #66 supplies same-Matter consumer-informativeness receipts. Neither authorizes this formal route by itself: only an existing **open proof obligation** and reviewed PNF revision enter this bridge.
+
 ## Storage boundary
 
 `formal_bridge.*` stores only demand/route/evidence/payment joins. It does not copy PNF graphs, proposition payloads, controversy state, or proof-obligation bodies. `FormalProofDemand` must reopen an existing open `legal_controversy.proof_obligation` and an existing `algebra.factor_revision` before it can be persisted.
