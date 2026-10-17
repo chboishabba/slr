@@ -4,7 +4,9 @@
 // factorisation evidence: callers must supply the already-reviewed
 // ConsumerAdequacyReceipt / ConsumerInformativenessReceipt owned by the
 // canonical evidence substrate. A later PG/UI acceptance may reopen such a
-// receipt only when its evidence ancestry has a real durable owner.
+// receipt only when its evidence ancestry has a real durable owner. Until that
+// producer exists, this module must not turn environment strings or UI wording
+// into a purported live parity receipt.
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MatterPersona {
