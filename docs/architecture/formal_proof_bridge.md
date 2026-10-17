@@ -39,6 +39,21 @@ Formal evidence pays only the exact formal premise named by its demand when all 
 
 A changed formal statement requires rerouting or an explicit equivalence/transport receipt upstream. Symbol-name reuse, DA51 reuse, or artifact reuse is insufficient.
 
+## Immutable replay
+
+All four durable bridge layers are replay-strict:
+
+```text
+FormalProofDemand
+FormalProofRouteReceiptInput
+FormalEvidenceReceiptInput
+FormalEvidencePayment
+```
+
+The PostgreSQL path may still use idempotent `ON CONFLICT DO NOTHING`, but it must immediately reopen the row inside the same transaction and compare the **complete immutable Rust value**. Reusing a stable ref with changed consumer, residual, proposition, statement language, prover, DA51 coordinate, source-revision set, requested result kind, dependent set, route coordinates, artifact/checker/certification coordinates, evidence dependencies, or selective-reopening cone fails with `ExistingRowConflict` before commit.
+
+This is deliberately stronger than matching only the obligation and statement digest. A lookalike receipt cannot inherit a previous demand, independently certified evidence record, or payment.
+
 ## Selective reopening
 
 `sensiblaw-formal-proof-reopen` owns no dependency graph. After exact formal payment, it projects the evidence ref to the existing:
@@ -60,7 +75,7 @@ missing dependency -> zero work
 unrelated dependency -> stays closed
 ```
 
-The older `reopen_refs` field on the payment remains an explicit producer-side hint/audit coordinate; it is not allowed to bypass the canonical reverse-dependency graph.
+The older `reopen_refs` field on the payment remains an explicit producer-side hint/audit coordinate; it is not allowed to bypass the canonical reverse-dependency graph. Its persisted value is nevertheless immutable and replay-checked, so a reused evidence/payment ref cannot silently widen the recorded reopening cone.
 
 ## Authority firewalls
 
@@ -88,3 +103,7 @@ Every demand is candidate-only and non-promoting. Every payment and reopen plan 
 - Aristotle: adaptive reasoning/formalisation backend, never certification authority.
 - ITIR/ERDFA/Kant: optional evidence artifact/shard packaging.
 - IPFS/HF/file: sink/materialisation refs only.
+
+## Verification boundary
+
+The source includes unit/contract tests plus strict-replay regressions. Exact-head Cargo/PostgreSQL execution remains a separate verification payment whenever the execution environment cannot run those commands.
