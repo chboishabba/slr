@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS source_provenance.official_primary_extraction (
 
 const OALC_CREATOR_REPO: &str =
     "https://github.com/isaacus-dev/open-australian-legal-corpus-creator";
+const OALC_PDF_EXTRACTOR_PATH: &str = "src/oalc_creator/ocr.py";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OfficialPrimaryExtractionReceipt {
@@ -151,6 +152,7 @@ pub fn validate_official_primary_extraction_receipt(
         return Err(OfficialPrimaryExtractionError::WrongSourceProvider);
     }
     if receipt.extractor_repo != OALC_CREATOR_REPO
+        || receipt.extractor_path != OALC_PDF_EXTRACTOR_PATH
         || receipt.extractor_license != "MIT"
         || receipt.extractor_function != "pdf2txt"
     {
@@ -368,7 +370,7 @@ mod tests {
             source_size_bytes: 123,
             extractor_repo: OALC_CREATOR_REPO.into(),
             extractor_revision: "dbdb9e3752394a87a9c966c9a9199f9685db9af2".into(),
-            extractor_path: "src/oalc_creator/ocr.py".into(),
+            extractor_path: OALC_PDF_EXTRACTOR_PATH.into(),
             extractor_function: "pdf2txt".into(),
             extractor_license: "MIT".into(),
             parameters: serde_json::json!({"pdf_scale": 2}),
