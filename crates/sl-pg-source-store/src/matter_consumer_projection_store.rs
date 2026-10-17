@@ -14,7 +14,10 @@ use sensiblaw_core::canonical_evidence::{
     MatterRepresentationProjection, SameMatterInformativenessReceipt,
 };
 
-use crate::{install_legal_controversy_schema, DatabaseConfig, LegalControversyStoreError};
+use crate::{
+    install_legal_controversy_schema, load_legal_controversy_matter, DatabaseConfig,
+    LegalControversyStoreError,
+};
 
 pub const MATTER_CONSUMER_PROJECTION_SCHEMA_SQL: &str = r#"
 CREATE SCHEMA IF NOT EXISTS consumer_projection;
@@ -69,6 +72,8 @@ pub enum MatterConsumerProjectionStoreError {
     LegalControversy(#[from] LegalControversyStoreError),
     #[error("invalid matter consumer projection receipt")]
     InvalidProjection,
+    #[error("projection matter_ref does not match persisted controversy Matter")]
+    MatterBindingMismatch,
     #[error("persisted matter consumer projection row conflicts with immutable coordinates")]
     ExistingRowConflict,
     #[error("matter consumer projection row not found: {0}")]
@@ -106,10 +111,6 @@ fn vec_from_set(values: &BTreeSet<String>) -> Vec<String> {
     values.iter().cloned().collect()
 }
 
-fn set_from_vec(values: Vec<String>) -> BTreeSet<String> {
-    values.into_iter().collect()
-}
-
 fn rank_to_db(value: Option<u64>) -> Result<Option<i64>, MatterConsumerProjectionStoreError> {
     value
         .map(|rank| i64::try_from(rank).map_err(|_| MatterConsumerProjectionStoreError::RankOverflow))
@@ -120,6 +121,18 @@ fn rank_from_db(value: Option<i64>) -> Result<Option<u64>, MatterConsumerProject
     value
         .map(|rank| u64::try_from(rank).map_err(|_| MatterConsumerProjectionStoreError::RankOverflow))
         .transpose()
+}
+
+fn require_persisted_matter_binding(
+    config: &DatabaseConfig,
+    matter_ref: &str,
+    controversy_ref: &str,
+) -> Result<(), MatterConsumerProjectionStoreError> {
+    let persisted = load_legal_controversy_matter(config, controversy_ref)?;
+    if persisted.matter_ref != matter_ref {
+        return Err(MatterConsumerProjectionStoreError::MatterBindingMismatch);
+    }
+    Ok(())
 }
 
 pub fn install_matter_consumer_projection_schema(
@@ -139,6 +152,7 @@ pub fn persist_matter_representation_projection(
         .validate()
         .map_err(|_| MatterConsumerProjectionStoreError::InvalidProjection)?;
     install_matter_consumer_projection_schema(config)?;
+    require_persisted_matter_binding(config, &value.matter_ref, &value.controversy_ref)?;
 
     let factorisation_refs = vec_from_set(&value.adequacy.factorisation_receipt_refs);
     let rank = rank_to_db(value.adequacy.description_length_rank)?;
@@ -192,6 +206,9 @@ pub fn load_matter_representation_projection(
         )?
         .ok_or_else(|| MatterConsumerProjectionStoreError::NotFound(projection_receipt_ref.to_owned()))?;
 
+    let matter_ref: String = row.get(0);
+    let controversy_ref: String = row.get(1);
+    require_persisted_matter_binding(config, &matter_ref, &controversy_ref)?;
     let persona_ref: String = row.get(2);
     let factorisation_refs: Vec<String> = row.get(7);
     let rank: Option<i64> = row.get(10);
@@ -208,8 +225,8 @@ pub fn load_matter_representation_projection(
     .map_err(|_| MatterConsumerProjectionStoreError::InvalidProjection)?;
 
     let projection = MatterRepresentationProjection::new(
-        row.get::<_, String>(0),
-        row.get::<_, String>(1),
+        matter_ref,
+        controversy_ref,
         persona_from_db(&persona_ref)?,
         adequacy.representation_ref.clone(),
         adequacy,
@@ -293,6 +310,7 @@ pub fn load_same_matter_informativeness(
 
     let matter_ref: String = row.get(0);
     let controversy_ref: String = row.get(1);
+    require_persisted_matter_binding(config, &matter_ref, &controversy_ref)?;
     let left_ref: String = row.get(2);
     let right_ref: String = row.get(3);
     let left = load_matter_representation_projection(config, &left_ref)?;
