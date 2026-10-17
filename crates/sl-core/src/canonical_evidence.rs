@@ -390,3 +390,7 @@ mod substrate_tests {
 // substrate rather than a source-family lane.  It consumes explicit admission
 // and factorisation receipts and does not promote claim truth.
 include!("consumer_parity.rs");
+
+// Bind those generic consumer-relative receipts to projections of one persisted
+// Matter/controversy without creating a second Matter or adjudicative state.
+include!("matter_consumer_projection.rs");
