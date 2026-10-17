@@ -1,4 +1,5 @@
 use sensiblaw_formal_proof_bridge::{
+    demand_replay_matches, evidence_replay_matches, payment_replay_matches, route_replay_matches,
     validate_formal_evidence_payment, FormalEvidenceReceiptInput, FormalProofBridgeError,
     FormalProofDemand, FormalProofRouteReceiptInput,
 };
@@ -104,4 +105,33 @@ fn formal_evidence_payment_reopens_only_declared_dependents() {
     assert!(!payment.creates_legal_authority);
     assert!(!payment.applicability_promoted);
     assert!(!payment.claim_truth_promoted);
+}
+
+#[test]
+fn stable_refs_require_complete_immutable_replay() {
+    let d = demand();
+    let mut changed_d = d.clone();
+    changed_d.consumer_ref = "consumer:other".into();
+    assert!(!demand_replay_matches(&d, &changed_d));
+
+    let route = FormalProofRouteReceiptInput {
+        route_ref: "route:smith:1".into(),
+        demand_ref: d.demand_ref.clone(),
+        obligation_ref: d.obligation_ref.clone(),
+        statement_digest: d.statement_digest.clone(),
+        establishes_proof: false,
+    };
+    let mut changed_route = route.clone();
+    changed_route.demand_ref = "formal-demand:other".into();
+    assert!(!route_replay_matches(&route, &changed_route));
+
+    let e = evidence();
+    let mut changed_e = e.clone();
+    changed_e.artifact_digest = "sha256:changed-artifact".into();
+    assert!(!evidence_replay_matches(&e, &changed_e));
+
+    let p = validate_formal_evidence_payment(&d, &e).unwrap();
+    let mut changed_p = p.clone();
+    changed_p.reopen_refs.push("residual:extra".into());
+    assert!(!payment_replay_matches(&p, &changed_p));
 }
