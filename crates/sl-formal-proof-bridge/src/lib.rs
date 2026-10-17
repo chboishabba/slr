@@ -212,6 +212,14 @@ fn require_non_empty(name: &'static str, value: &str) -> Result<(), FormalProofB
     if value.trim().is_empty() { Err(FormalProofBridgeError::EmptyCoordinate(name)) } else { Ok(()) }
 }
 
+fn require_non_empty_values(name: &'static str, values: &[String]) -> Result<(), FormalProofBridgeError> {
+    if values.iter().any(|value| value.trim().is_empty()) {
+        Err(FormalProofBridgeError::EmptyCoordinate(name))
+    } else {
+        Ok(())
+    }
+}
+
 impl FormalProofDemand {
     pub fn validate(&self) -> Result<(), FormalProofBridgeError> {
         for (name, value) in [
@@ -226,6 +234,8 @@ impl FormalProofDemand {
             ("requested_result_kind", self.requested_result_kind.as_str()),
         ] { require_non_empty(name, value)?; }
         if self.source_revision_refs.is_empty() { return Err(FormalProofBridgeError::EmptySourceRevisionSet); }
+        require_non_empty_values("source_revision_refs", &self.source_revision_refs)?;
+        require_non_empty_values("dependent_refs", &self.dependent_refs)?;
         if !self.candidate_only || self.creates_semantic_authority || self.creates_legal_authority || self.applicability_promoted || self.claim_truth_promoted {
             return Err(FormalProofBridgeError::AuthorityEscalation);
         }
@@ -249,6 +259,7 @@ impl FormalEvidenceReceiptInput {
             ("result_kind", self.result_kind.as_str()),
             ("certification_state", self.certification_state.as_str()),
         ] { require_non_empty(name, value)?; }
+        require_non_empty_values("dependencies", &self.dependencies)?;
         if self.creates_legal_authority || self.applicability_promoted || self.claim_truth_promoted {
             return Err(FormalProofBridgeError::AuthorityEscalation);
         }
