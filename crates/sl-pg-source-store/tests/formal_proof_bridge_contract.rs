@@ -61,6 +61,33 @@ fn formal_demand_requires_existing_exact_obligation_and_pnf_revision_coordinates
 }
 
 #[test]
+fn formal_demand_rejects_blank_source_or_dependency_coordinates() {
+    let mut d = demand();
+    d.source_revision_refs = vec!["".into()];
+    assert!(matches!(
+        d.validate(),
+        Err(FormalProofBridgeError::EmptyCoordinate("source_revision_refs"))
+    ));
+
+    let mut d = demand();
+    d.dependent_refs = vec![" ".into()];
+    assert!(matches!(
+        d.validate(),
+        Err(FormalProofBridgeError::EmptyCoordinate("dependent_refs"))
+    ));
+}
+
+#[test]
+fn formal_evidence_rejects_blank_dependency_coordinate() {
+    let mut e = evidence();
+    e.dependencies = vec!["".into()];
+    assert!(matches!(
+        e.validate(),
+        Err(FormalProofBridgeError::EmptyCoordinate("dependencies"))
+    ));
+}
+
+#[test]
 fn formal_evidence_wrong_obligation_fails_closed() {
     let d = demand();
     let mut e = evidence();
