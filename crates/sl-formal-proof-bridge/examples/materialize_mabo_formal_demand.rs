@@ -19,6 +19,10 @@ fn stable_ref(prefix: &str, parts: &[&str]) -> String {
     format!("{prefix}:sha256:{:x}", hasher.finalize())
 }
 
+fn sanitize(value: &str) -> String {
+    value.replace('\n', " ").replace('\r', " ").replace('\t', " ")
+}
+
 fn main() -> Result<(), String> {
     let args = std::env::args().collect::<Vec<_>>();
     if !(4..=5).contains(&args.len()) {
@@ -227,8 +231,8 @@ fn main() -> Result<(), String> {
     println!("target_prover\tagda");
     println!("requested_result_kind\tformal-proof");
     println!("da51_address\t{}", da51_address.as_deref().unwrap_or("-"));
-    println!("route_query\t{}", query.replace(['\n', '\r', '\t'], " "));
+    println!("route_query\t{}", sanitize(&query));
     println!("obligation_kind_ref\t{obligation_kind_ref}");
-    println!("required_by\t{}", required_by.replace(['\n', '\r', '\t'], " "));
+    println!("required_by\t{}", sanitize(&required_by));
     Ok(())
 }
