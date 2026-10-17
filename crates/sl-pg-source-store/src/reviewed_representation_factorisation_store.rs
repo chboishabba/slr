@@ -11,8 +11,10 @@ use postgres::{Client, NoTls};
 use thiserror::Error;
 
 use crate::{
-    install_legal_controversy_schema, load_legal_controversy_matter, DatabaseConfig,
-    LegalControversyStoreError,
+    install_legal_controversy_schema, install_representation_evidence_schema,
+    load_legal_controversy_matter, load_representation_evidence,
+    load_reviewed_representation_admission, DatabaseConfig, LegalControversyStoreError,
+    RepresentationEvidenceStoreError,
 };
 
 pub const REVIEWED_REPRESENTATION_FACTORISATION_SCHEMA_SQL: &str = r#"
@@ -113,12 +115,16 @@ pub enum ReviewedRepresentationFactorisationStoreError {
     Postgres(#[from] postgres::Error),
     #[error("legal controversy prerequisite failed: {0}")]
     LegalControversy(#[from] LegalControversyStoreError),
+    #[error("representation evidence prerequisite failed: {0}")]
+    RepresentationEvidence(#[from] RepresentationEvidenceStoreError),
     #[error("empty reviewed factorisation coordinate: {0}")]
     EmptyCoordinate(&'static str),
     #[error("reviewed factorisation must remain explicitly accepted/candidate-only and non-promoting")]
     InvalidReviewBoundary,
     #[error("reviewed factorisation matter_ref does not match persisted controversy Matter")]
     MatterBindingMismatch,
+    #[error("representation/admission evidence does not match factorisation coordinates")]
+    RepresentationAdmissionMismatch,
     #[error("reviewed informativeness factorisation has mismatched consumer/query coordinates")]
     ConsumerQueryMismatch,
     #[error("reviewed informativeness factorisation does not have left >= right distinction coverage")]
@@ -152,6 +158,34 @@ fn require_matter_binding(
     Ok(())
 }
 
+fn require_representation_admission(
+    config: &DatabaseConfig,
+    value: &ReviewedRepresentationFactorisation,
+) -> Result<(), ReviewedRepresentationFactorisationStoreError> {
+    let representation = load_representation_evidence(config, &value.representation_ref)?;
+    let admission =
+        load_reviewed_representation_admission(config, &value.admissibility_receipt_ref)?;
+    if representation.matter_ref != value.matter_ref
+        || representation.controversy_ref != value.controversy_ref
+        || representation.consumer_ref != value.consumer_ref
+        || representation.query_family_ref != value.query_family_ref
+        || admission.representation_ref != value.representation_ref
+        || admission.consumer_ref != value.consumer_ref
+        || admission.query_family_ref != value.query_family_ref
+        || !admission.accepted
+        || !admission.candidate_only
+        || admission.creates_semantic_authority
+        || admission.creates_legal_authority
+        || admission.applicability_promoted
+        || admission.claim_truth_promoted
+    {
+        return Err(
+            ReviewedRepresentationFactorisationStoreError::RepresentationAdmissionMismatch,
+        );
+    }
+    Ok(())
+}
+
 fn vec_from_set(values: &BTreeSet<String>) -> Vec<String> {
     values.iter().cloned().collect()
 }
@@ -176,11 +210,16 @@ impl ReviewedRepresentationFactorisation {
             require_nonempty(name, value)?;
         }
         if self.preserved_distinction_refs.is_empty()
-            || self.preserved_distinction_refs.iter().any(|value| value.trim().is_empty())
+            || self
+                .preserved_distinction_refs
+                .iter()
+                .any(|value| value.trim().is_empty())
         {
-            return Err(ReviewedRepresentationFactorisationStoreError::EmptyCoordinate(
-                "preserved_distinction_refs",
-            ));
+            return Err(
+                ReviewedRepresentationFactorisationStoreError::EmptyCoordinate(
+                    "preserved_distinction_refs",
+                ),
+            );
         }
         if !self.accepted
             || !self.candidate_only
@@ -190,7 +229,9 @@ impl ReviewedRepresentationFactorisation {
             || self.enters_final_judgment
             || self.promotes_claim_truth
         {
-            return Err(ReviewedRepresentationFactorisationStoreError::InvalidReviewBoundary);
+            return Err(
+                ReviewedRepresentationFactorisationStoreError::InvalidReviewBoundary,
+            );
         }
         Ok(())
     }
@@ -227,9 +268,11 @@ impl ReviewedInformativenessFactorisation {
                 .chain(self.left_preserved_distinction_refs.iter())
                 .any(|value| value.trim().is_empty())
         {
-            return Err(ReviewedRepresentationFactorisationStoreError::EmptyCoordinate(
-                "preserved_distinction_refs",
-            ));
+            return Err(
+                ReviewedRepresentationFactorisationStoreError::EmptyCoordinate(
+                    "preserved_distinction_refs",
+                ),
+            );
         }
         if !self
             .right_preserved_distinction_refs
@@ -246,7 +289,9 @@ impl ReviewedInformativenessFactorisation {
             || self.enters_final_judgment
             || self.promotes_claim_truth
         {
-            return Err(ReviewedRepresentationFactorisationStoreError::InvalidReviewBoundary);
+            return Err(
+                ReviewedRepresentationFactorisationStoreError::InvalidReviewBoundary,
+            );
         }
         Ok(())
     }
@@ -256,6 +301,7 @@ pub fn install_reviewed_representation_factorisation_schema(
     config: &DatabaseConfig,
 ) -> Result<(), ReviewedRepresentationFactorisationStoreError> {
     install_legal_controversy_schema(config)?;
+    install_representation_evidence_schema(config)?;
     let mut client = Client::connect(config.database_url(), NoTls)?;
     client.batch_execute(REVIEWED_REPRESENTATION_FACTORISATION_SCHEMA_SQL)?;
     Ok(())
@@ -268,6 +314,7 @@ pub fn persist_reviewed_representation_factorisation(
     value.validate()?;
     install_reviewed_representation_factorisation_schema(config)?;
     require_matter_binding(config, &value.matter_ref, &value.controversy_ref)?;
+    require_representation_admission(config, value)?;
     let distinctions = vec_from_set(&value.preserved_distinction_refs);
     let mut client = Client::connect(config.database_url(), NoTls)?;
     client.execute(
@@ -291,7 +338,8 @@ pub fn persist_reviewed_representation_factorisation(
             &value.review_decision_ref,
         ],
     )?;
-    let reopened = load_reviewed_representation_factorisation(config, &value.factorisation_receipt_ref)?;
+    let reopened =
+        load_reviewed_representation_factorisation(config, &value.factorisation_receipt_ref)?;
     if reopened != *value {
         return Err(ReviewedRepresentationFactorisationStoreError::ExistingRowConflict);
     }
@@ -340,6 +388,7 @@ pub fn load_reviewed_representation_factorisation(
     };
     value.validate()?;
     require_matter_binding(config, &value.matter_ref, &value.controversy_ref)?;
+    require_representation_admission(config, &value)?;
     Ok(value)
 }
 
@@ -350,8 +399,14 @@ pub fn persist_reviewed_informativeness_factorisation(
     value.validate()?;
     install_reviewed_representation_factorisation_schema(config)?;
     require_matter_binding(config, &value.matter_ref, &value.controversy_ref)?;
-    let left = load_reviewed_representation_factorisation(config, &value.left_factorisation_receipt_ref)?;
-    let right = load_reviewed_representation_factorisation(config, &value.right_factorisation_receipt_ref)?;
+    let left = load_reviewed_representation_factorisation(
+        config,
+        &value.left_factorisation_receipt_ref,
+    )?;
+    let right = load_reviewed_representation_factorisation(
+        config,
+        &value.right_factorisation_receipt_ref,
+    )?;
     if left.matter_ref != value.matter_ref
         || right.matter_ref != value.matter_ref
         || left.controversy_ref != value.controversy_ref
@@ -361,7 +416,9 @@ pub fn persist_reviewed_informativeness_factorisation(
         || left.query_family_ref != value.query_family_ref
         || right.query_family_ref != value.query_family_ref
     {
-        return Err(ReviewedRepresentationFactorisationStoreError::ConsumerQueryMismatch);
+        return Err(
+            ReviewedRepresentationFactorisationStoreError::ConsumerQueryMismatch,
+        );
     }
     if left.preserved_distinction_refs != value.left_preserved_distinction_refs
         || right.preserved_distinction_refs != value.right_preserved_distinction_refs
@@ -452,8 +509,14 @@ pub fn load_reviewed_informativeness_factorisation(
     };
     value.validate()?;
     require_matter_binding(config, &value.matter_ref, &value.controversy_ref)?;
-    let left = load_reviewed_representation_factorisation(config, &value.left_factorisation_receipt_ref)?;
-    let right = load_reviewed_representation_factorisation(config, &value.right_factorisation_receipt_ref)?;
+    let left = load_reviewed_representation_factorisation(
+        config,
+        &value.left_factorisation_receipt_ref,
+    )?;
+    let right = load_reviewed_representation_factorisation(
+        config,
+        &value.right_factorisation_receipt_ref,
+    )?;
     if left.consumer_ref != value.consumer_ref
         || right.consumer_ref != value.consumer_ref
         || left.query_family_ref != value.query_family_ref
