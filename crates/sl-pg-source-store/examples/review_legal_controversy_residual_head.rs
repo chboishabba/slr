@@ -124,9 +124,9 @@ fn main() -> Result<(), String> {
         current_status: ReviewStatus::Pending,
         available_actions: vec![
             ReviewAction::Accept,
+            ReviewAction::OpenSource,
             ReviewAction::Qualify,
             ReviewAction::RequestEvidence,
-            ReviewAction::OpenSource,
         ],
         affected_consumer_refs: vec![matter.matter_ref.clone()],
         candidate_only: true,
