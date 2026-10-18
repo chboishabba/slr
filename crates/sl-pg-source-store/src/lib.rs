@@ -68,7 +68,8 @@ pub use chat_source_store::{
     canonical_chat_statement_span_ref, compile_and_persist_chat_selections,
     prepare_chat_selection_parser_run, compile_and_persist_chat_from_parser_run,
     ChatArchiveExportRow, ChatSourceStoreError, PersistedChatMessageSource,
-    CHAT_ARCHIVE_EXPORT_SCHEMA,
+    CHAT_ARCHIVE_EXPORT_SCHEMA, ChatArchiveReference, ChatReferenceRegistration,
+    register_chat_archive_reference, verify_reopened_chat_reference_bytes,
 };
 pub use cache_first::{
     resolve_cache_first, AcquiredSourceBundle, CacheFirstAcquirer, CacheFirstError,
