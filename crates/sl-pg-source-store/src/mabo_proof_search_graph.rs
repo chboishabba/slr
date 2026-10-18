@@ -3,7 +3,7 @@
 //! objects, never a proof search, admission, finding or residual discharge.
 
 use std::collections::{BTreeMap, BTreeSet};
-use postgres::{Client, NoTls};
+use postgres::{types::Json, Client, NoTls};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
@@ -357,6 +357,29 @@ pub fn persist_mabo_proof_search_graph(
         return Err(MaboProofGraphError::ChangedReplay);
     }
     let mut client = Client::connect(config.database_url(), NoTls)?;
+    let source_revision_refs = graph
+        .nodes
+        .iter()
+        .filter_map(|node| node.source_ref.as_deref())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>();
+    let document_rows = client.query(
+        "SELECT DISTINCT document_ref
+         FROM source_provenance.legal_source_manifestation
+         WHERE source_revision_ref = ANY($1)
+           AND candidate_only
+           AND NOT creates_semantic_authority
+           AND NOT creates_legal_authority
+           AND NOT applicability_promoted
+           AND NOT claim_truth_promoted
+         ORDER BY document_ref",
+        &[&source_revision_refs],
+    )?;
+    if document_rows.len() != 1 {
+        return Err(MaboProofGraphError::MissingAncestry);
+    }
+    let document_ref: String = document_rows[0].get(0);
     for table in ["pnf_follow_projection", "pnf_follow_node",
                   "pnf_follow_edge", "pnf_follow_edge_provenance"] {
         if client.query_one("SELECT to_regclass($1)::text", &[&table])?
@@ -392,7 +415,7 @@ pub fn persist_mabo_proof_search_graph(
           promotion_allowed,execution_allowed,payload,projection_sha256)
          VALUES($1,$2,'legal_follow','derived_only_challengeable',FALSE,FALSE,$3::jsonb,$4)
          ON CONFLICT(projection_ref) DO NOTHING",
-        &[&projection_ref, &graph.matter_ref, &payload_text, &projection_sha],
+        &[&projection_ref, &document_ref, &Json(&payload), &projection_sha],
     )?;
     for n in &graph.nodes {
         tx.execute(

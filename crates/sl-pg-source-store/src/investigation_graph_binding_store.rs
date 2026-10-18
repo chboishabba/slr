@@ -13,8 +13,7 @@ pub const INV_GRAPH_BINDING_SQL: &str = r#"
 CREATE SCHEMA IF NOT EXISTS semantic;
 CREATE TABLE IF NOT EXISTS semantic.investigation_graph_binding (
     binding_ref TEXT PRIMARY KEY,
-    obligation_ref TEXT NOT NULL
-      REFERENCES semantic.investigation_acquisition_obligation(obligation_ref),
+    obligation_ref TEXT NOT NULL,
     projection_ref TEXT NOT NULL,
     matter_ref TEXT NOT NULL,
     packet_sha256 TEXT NOT NULL,
@@ -45,7 +44,8 @@ ALTER TABLE semantic.investigation_graph_binding
  DROP CONSTRAINT IF EXISTS investigation_graph_binding_obligation_ref_fkey;
 DO $$
 BEGIN
- IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='investigation_graph_binding_acquisition_owner_fk') THEN
+ IF to_regclass('semantic.investigation_acquisition_obligation') IS NOT NULL
+    AND NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='investigation_graph_binding_acquisition_owner_fk') THEN
   ALTER TABLE semantic.investigation_graph_binding ADD CONSTRAINT investigation_graph_binding_acquisition_owner_fk
     FOREIGN KEY (acquisition_obligation_ref) REFERENCES semantic.investigation_acquisition_obligation(obligation_ref);
  END IF;
