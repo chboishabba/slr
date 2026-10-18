@@ -50,6 +50,26 @@ pub use provider_exact_slice::*;
 mod provider_candidate_pnf;
 pub use provider_candidate_pnf::*;
 
+#[path = "official_primary_extraction.rs"]
+mod official_primary_extraction;
+pub use official_primary_extraction::*;
+
+#[path = "official_primary_docx_extraction.rs"]
+mod official_primary_docx_extraction;
+pub use official_primary_docx_extraction::*;
+
+#[path = "official_primary_manifestation_comparison.rs"]
+mod official_primary_manifestation_comparison;
+pub use official_primary_manifestation_comparison::*;
+
+#[path = "official_primary_manifestation_pnf_overlap.rs"]
+mod official_primary_manifestation_pnf_overlap;
+pub use official_primary_manifestation_pnf_overlap::*;
+
+#[path = "official_primary_manifestation_pnf_exhaustive_overlap.rs"]
+mod official_primary_manifestation_pnf_exhaustive_overlap;
+pub use official_primary_manifestation_pnf_exhaustive_overlap::*;
+
 #[path = "real_matter_review_gate.rs"]
 mod real_matter_review_gate;
 pub use real_matter_review_gate::*;
@@ -90,6 +110,10 @@ pub use real_matter_controversy::*;
 mod real_matter_controversy_strict;
 pub use real_matter_controversy_strict::*;
 
+#[path = "real_matter_replay_acceptance.rs"]
+mod real_matter_replay_acceptance;
+pub use real_matter_replay_acceptance::*;
+
 #[path = "external_legal_system.rs"]
 mod external_legal_system;
 pub use external_legal_system::*;
@@ -120,6 +144,7 @@ pub use acceptance_control_store::*;
 #[path = "acceptance_reopen_store.rs"]
 mod acceptance_reopen_store;
 pub use acceptance_reopen_store::*;
+
 #[path = "persisted_relational_observation.rs"]
 mod persisted_relational_observation;
 pub use persisted_relational_observation::*;
@@ -127,6 +152,7 @@ pub use persisted_relational_observation::*;
 #[path = "reviewed_legal_follow_projection.rs"]
 mod reviewed_legal_follow_projection;
 pub use reviewed_legal_follow_projection::*;
+
 pub use crate::investigation_acquisition::{
     AxisRelation, ParetoAxisRelation, ParetoDominanceWitness,
     RouteFrontierDisposition, RouteDispositionReceipt, PotentialReopeningCone,
