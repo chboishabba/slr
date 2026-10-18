@@ -427,6 +427,61 @@ pub fn persist_mabo_proof_search_graph(
         || count_edges != graph.edges.len() as i64 {
         return Err(MaboProofGraphError::ChangedReplay);
     }
+    // A conflict-ignored INSERT is not a replay receipt. Verify every
+    // persisted node, edge and provenance tuple, not only row counts.
+    for n in &graph.nodes {
+        let row = client.query_opt(
+            "SELECT node_kind,label,document_ref,factor_revision_ref,
+                    domain_ir_ref,source_record_ref FROM pnf_follow_node
+             WHERE projection_ref=$1 AND node_ref=$2",
+            &[&projection_ref, &n.semantic_ref],
+        )?.ok_or(MaboProofGraphError::ChangedReplay)?;
+        if row.get::<_, String>(0) != n.kind
+            || row.get::<_, String>(1) != n.label
+            || row.get::<_, Option<String>>(2).as_deref() != Some(graph.matter_ref.as_str())
+            || row.get::<_, Option<String>>(3) != n.factor_revision_ref
+            || row.get::<_, Option<String>>(4).is_some()
+            || row.get::<_, Option<String>>(5) != n.source_ref {
+            return Err(MaboProofGraphError::ChangedReplay);
+        }
+    }
+    let mut expected_provenance_count = 0_i64;
+    for e in &graph.edges {
+        let edge_ref = stable_ref("mabo-proof-search-edge",
+            &[&projection_ref,&e.from_ref,&e.to_ref,e.relation,
+              &e.provenance_ref,&e.evidence_ref]);
+        let row = client.query_opt(
+            "SELECT from_node_ref,to_node_ref,relation_kind,admissibility_state
+             FROM pnf_follow_edge WHERE projection_ref=$1 AND edge_ref=$2",
+            &[&projection_ref,&edge_ref],
+        )?.ok_or(MaboProofGraphError::ChangedReplay)?;
+        if row.get::<_,String>(0)!=e.from_ref
+            || row.get::<_,String>(1)!=e.to_ref
+            || row.get::<_,String>(2)!=e.relation
+            || row.get::<_,String>(3)!="challengeable" {
+            return Err(MaboProofGraphError::ChangedReplay);
+        }
+        let provenance = client.query(
+            "SELECT provenance_ref,evidence_ref FROM pnf_follow_edge_provenance
+             WHERE edge_ref=$1", &[&edge_ref],
+        )?;
+        if provenance.len()!=1
+            || provenance[0].get::<_,String>(0)!=e.provenance_ref
+            || provenance[0].get::<_,String>(1)!=e.evidence_ref {
+            return Err(MaboProofGraphError::ChangedReplay);
+        }
+        expected_provenance_count += 1;
+    }
+    let actual_provenance_count: i64 = client.query_one(
+        "SELECT COUNT(*)::bigint FROM pnf_follow_edge_provenance p
+         JOIN pnf_follow_edge e ON e.edge_ref=p.edge_ref
+         WHERE e.projection_ref=$1",
+        &[&projection_ref],
+    )?.get(0);
+    if actual_provenance_count!=expected_provenance_count {
+        return Err(MaboProofGraphError::ChangedReplay);
+    }
+
     let binding_ref = stable_ref("mabo-proof-search-graph-binding",
         &[CONTRACT,&graph.obligation_ref,&projection_ref,&graph.matter_ref]);
     let mut evidence_refs = graph.edges.iter().flat_map(|e|
