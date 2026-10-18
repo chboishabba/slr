@@ -18,6 +18,10 @@ pub use investigation_graph_binding::*;
 mod investigation_graph_binding_store;
 pub use investigation_graph_binding_store::*;
 
+#[path = "mabo_proof_search_graph.rs"]
+mod mabo_proof_search_graph;
+pub use mabo_proof_search_graph::*;
+
 #[path = "reviewed_evidence.rs"]
 mod reviewed_evidence;
 pub use reviewed_evidence::*;
