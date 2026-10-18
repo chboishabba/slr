@@ -10,15 +10,15 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 use crate::{
-    load_legal_controversy_matter, load_legal_controversy_residual,
+    load_current_legal_controversy_matter, load_legal_controversy_residual,
     load_legal_proof_obligation, load_reviewed_evidence_coordinate,
     persist_legal_controversy_matter, persist_legal_controversy_residual,
     persist_legal_proof_obligation, persist_legal_proposition_fibre,
     persist_reverse_legal_proof_search, persist_typed_response_edge, DatabaseConfig,
     DisagreementKind, EpistemicStatus, LegalControversyMatter, LegalControversyResidual,
-    LegalControversyStoreError, LegalProofObligation, LegalPropositionFibre, LegalRole,
-    ObligationKind, PartyRole, ProceduralGoal, ResponseMode, ReverseLegalProofSearch,
-    ReviewedEvidenceStoreError, TypedResponseEdge,
+    LegalControversyResidualHistoryError, LegalControversyStoreError, LegalProofObligation,
+    LegalPropositionFibre, LegalRole, ObligationKind, PartyRole, ProceduralGoal, ResponseMode,
+    ReverseLegalProofSearch, ReviewedEvidenceStoreError, TypedResponseEdge,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -67,6 +67,8 @@ pub enum RealMatterControversyError {
     ReviewedEvidence(#[from] ReviewedEvidenceStoreError),
     #[error(transparent)]
     Controversy(#[from] LegalControversyStoreError),
+    #[error(transparent)]
+    ResidualHistory(#[from] LegalControversyResidualHistoryError),
     #[error("postgres error: {0}")]
     Postgres(#[from] postgres::Error),
     #[error("reviewed evidence does not match the declared normative order")]
@@ -77,6 +79,8 @@ pub enum RealMatterControversyError {
     MissingClaim,
     #[error("controversy has no open residual with a discriminator/query target")]
     NoOpenResidual,
+    #[error("current residual lanes disagree on the reverse-search discriminator/query target")]
+    AmbiguousResidualSearchTarget,
 }
 
 pub fn materialize_real_matter_controversy(
@@ -231,6 +235,10 @@ pub fn materialize_real_matter_controversy(
         claim_truth_promoted: false,
     })?;
 
+    // If this creates a second unsuperseded residual in the same typed lane,
+    // current-state projection fails closed here.  The immutable new residual
+    // remains available for explicit human review/supersession; no insertion
+    // order or "latest string" is allowed to choose the current meaning.
     let reverse = reverse_search_real_matter_controversy(config, &controversy_ref, draft.procedural_goal)?;
     Ok(RealMatterControversyReceipt {
         matter_ref: draft.matter_ref.clone(), controversy_ref, applicant_fibre_ref,
@@ -249,27 +257,42 @@ pub fn reverse_search_real_matter_controversy(
     controversy_ref: &str,
     goal: ProceduralGoal,
 ) -> Result<ReverseLegalProofSearch, RealMatterControversyError> {
-    let matter = load_legal_controversy_matter(config, controversy_ref)?;
+    let matter = load_current_legal_controversy_matter(config, controversy_ref)?;
     let mut open_obligation_refs = Vec::new();
     for obligation_ref in matter.obligation_refs {
         let obligation = load_legal_proof_obligation(config, &obligation_ref)?;
-        if obligation.is_open { open_obligation_refs.push(obligation_ref); }
+        if obligation.is_open {
+            open_obligation_refs.push(obligation_ref);
+        }
     }
+    open_obligation_refs.sort();
+    open_obligation_refs.dedup();
+
     let mut candidate_residual_refs = Vec::new();
-    let mut requested_discriminator = None;
-    let mut target_evidence_query = None;
+    let mut target_pair: Option<(String, String)> = None;
     for residual_ref in matter.residual_refs {
         let residual = load_legal_controversy_residual(config, &residual_ref)?;
-        if requested_discriminator.is_none() {
-            requested_discriminator = residual.requested_discriminator.clone();
-            target_evidence_query = residual.target_evidence_query.clone();
+        let requested_discriminator = residual
+            .requested_discriminator
+            .clone()
+            .filter(|value| !value.trim().is_empty())
+            .ok_or(RealMatterControversyError::NoOpenResidual)?;
+        let target_evidence_query = residual
+            .target_evidence_query
+            .clone()
+            .filter(|value| !value.trim().is_empty())
+            .ok_or(RealMatterControversyError::NoOpenResidual)?;
+        let pair = (requested_discriminator, target_evidence_query);
+        if target_pair.as_ref().is_some_and(|current| current != &pair) {
+            return Err(RealMatterControversyError::AmbiguousResidualSearchTarget);
         }
+        target_pair = Some(pair);
         candidate_residual_refs.push(residual_ref);
     }
-    let Some(requested_discriminator) = requested_discriminator else {
-        return Err(RealMatterControversyError::NoOpenResidual);
-    };
-    let Some(target_evidence_query) = target_evidence_query else {
+    candidate_residual_refs.sort();
+    candidate_residual_refs.dedup();
+
+    let Some((requested_discriminator, target_evidence_query)) = target_pair else {
         return Err(RealMatterControversyError::NoOpenResidual);
     };
     let reverse_ref = stable_ref("legal-reverse-search", &[

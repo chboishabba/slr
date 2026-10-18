@@ -2,6 +2,8 @@
 //! Parser output is observation evidence; it is never semantic authority.
 
 pub mod canonical_evidence;
+#[path = "matter_consumer_projection_public.rs"]
+pub mod matter_consumer_projection;
 pub mod chronology_contestation;
 pub mod chat_source;
 pub mod event_discovery;
