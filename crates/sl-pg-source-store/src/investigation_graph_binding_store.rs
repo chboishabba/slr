@@ -28,7 +28,101 @@ CREATE TABLE IF NOT EXISTS semantic.investigation_graph_binding (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS investigation_graph_binding_obligation_projection_idx
   ON semantic.investigation_graph_binding(obligation_ref, projection_ref);
+ALTER TABLE semantic.investigation_graph_binding
+  ADD COLUMN IF NOT EXISTS legal_obligation_ref TEXT;
+ALTER TABLE semantic.investigation_graph_binding
+  ADD COLUMN IF NOT EXISTS acquisition_obligation_ref TEXT;
+UPDATE semantic.investigation_graph_binding
+   SET acquisition_obligation_ref=obligation_ref
+ WHERE legal_obligation_ref IS NULL AND acquisition_obligation_ref IS NULL;
 "#;
+
+/// Install a two-owner foreign-key shape without relabelling a legal proof
+/// obligation as a relational acquisition obligation. Legacy acquisition rows
+/// retain their real acquisition FK through acquisition_obligation_ref.
+pub const LEGAL_PROOF_GRAPH_BINDING_MIGRATION_SQL: &str = r#"
+ALTER TABLE semantic.investigation_graph_binding
+ DROP CONSTRAINT IF EXISTS investigation_graph_binding_obligation_ref_fkey;
+DO $
+BEGIN
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='investigation_graph_binding_acquisition_owner_fk') THEN
+  ALTER TABLE semantic.investigation_graph_binding ADD CONSTRAINT investigation_graph_binding_acquisition_owner_fk
+    FOREIGN KEY (acquisition_obligation_ref) REFERENCES semantic.investigation_acquisition_obligation(obligation_ref);
+ END IF;
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='investigation_graph_binding_legal_owner_fk') THEN
+  ALTER TABLE semantic.investigation_graph_binding ADD CONSTRAINT investigation_graph_binding_legal_owner_fk
+    FOREIGN KEY (legal_obligation_ref) REFERENCES legal_controversy.proof_obligation(obligation_ref);
+ END IF;
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='investigation_graph_binding_exact_owner_ck') THEN
+  ALTER TABLE semantic.investigation_graph_binding ADD CONSTRAINT investigation_graph_binding_exact_owner_ck CHECK (
+   (acquisition_obligation_ref=obligation_ref AND legal_obligation_ref IS NULL)
+   OR (legal_obligation_ref=obligation_ref AND acquisition_obligation_ref IS NULL));
+ END IF;
+END $;
+"#;
+
+pub fn persist_legal_proof_investigation_graph_binding(
+    config: &DatabaseConfig,
+    binding: &InvestigationGraphBinding,
+) -> Result<InvestigationGraphBinding, InvestigationGraphBindingStoreError> {
+    validate_binding_shape(binding)?;
+    crate::install_legal_controversy_schema(config)
+        .map_err(|_| InvestigationGraphBindingStoreError::WrongOwner)?;
+    let mut client = Client::connect(config.database_url(), NoTls)?;
+    client.batch_execute(INV_GRAPH_BINDING_SQL)?;
+    client.batch_execute(LEGAL_PROOF_GRAPH_BINDING_MIGRATION_SQL)?;
+    let owner = client.query_opt(
+        "SELECT m.matter_ref FROM legal_controversy.proof_obligation o
+         JOIN legal_controversy.matter m ON m.controversy_ref=o.controversy_ref
+         WHERE o.obligation_ref=$1 AND o.is_open AND o.candidate_only
+           AND NOT o.creates_semantic_authority AND NOT o.creates_legal_authority
+           AND NOT o.applicability_promoted AND NOT o.claim_truth_promoted
+           AND m.candidate_only AND NOT m.creates_semantic_authority
+           AND NOT m.creates_legal_authority AND NOT m.applicability_promoted
+           AND NOT m.claim_truth_promoted",
+        &[&binding.obligation_ref],
+    )?.ok_or(InvestigationGraphBindingStoreError::WrongOwner)?;
+    if owner.get::<_, String>(0) != binding.matter_ref ||
+       !persisted_projection_is_derived_challengeable(&mut client, &binding.projection_ref)? {
+        return Err(InvestigationGraphBindingStoreError::WrongOwner);
+    }
+    let body = serde_json::to_string(binding)?;
+    let hash = digest(&body);
+    client.execute(
+        "INSERT INTO semantic.investigation_graph_binding
+          (binding_ref,obligation_ref,projection_ref,matter_ref,packet_sha256,packet_json,
+           derived_only,challengeable,creates_graph_edges,creates_semantic_authority,
+           creates_access_authority,creates_acquisition_state,legal_obligation_ref)
+         VALUES($1,$2,$3,$4,$5,$6,TRUE,TRUE,FALSE,FALSE,FALSE,FALSE,$2)
+         ON CONFLICT(binding_ref) DO NOTHING",
+        &[&binding.binding_ref,&binding.obligation_ref,&binding.projection_ref,
+          &binding.matter_ref,&hash,&body],
+    )?;
+    let reopened = load_investigation_graph_binding(config, &binding.binding_ref)?
+        .ok_or(InvestigationGraphBindingStoreError::ChangedReplay)?;
+    if reopened != *binding {
+        return Err(InvestigationGraphBindingStoreError::ChangedReplay);
+    }
+    Ok(reopened)
+}
+
+fn validate_binding_shape(binding: &InvestigationGraphBinding)
+    -> Result<(), InvestigationGraphBindingStoreError>
+{
+    if binding.schema != INV_GRAPH_BINDING_SCHEMA
+        || binding.binding_ref.trim().is_empty()
+        || binding.obligation_ref.trim().is_empty()
+        || binding.projection_ref.trim().is_empty()
+        || binding.matter_ref.trim().is_empty()
+        || binding.binding_evidence_refs.is_empty()
+        || binding.binding_evidence_refs.iter().any(|r| r.trim().is_empty())
+        || !binding.derived_only || !binding.challengeable
+        || binding.creates_graph_edges || binding.creates_semantic_authority
+        || binding.creates_access_authority || binding.creates_acquisition_state {
+        return Err(InvestigationGraphBindingStoreError::WrongOwner);
+    }
+    Ok(())
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BoundInvestigationGraphProjection {
@@ -104,8 +198,8 @@ pub fn persist_investigation_graph_binding(
          (binding_ref, obligation_ref, projection_ref, matter_ref,
           packet_sha256, packet_json, derived_only, challengeable,
           creates_graph_edges, creates_semantic_authority,
-          creates_access_authority, creates_acquisition_state)
-         VALUES($1,$2,$3,$4,$5,$6,TRUE,TRUE,FALSE,FALSE,FALSE,FALSE)
+          creates_access_authority, creates_acquisition_state, acquisition_obligation_ref)
+         VALUES($1,$2,$3,$4,$5,$6,TRUE,TRUE,FALSE,FALSE,FALSE,FALSE,$2)
          ON CONFLICT(binding_ref) DO NOTHING",
         &[
             &binding.binding_ref,
@@ -153,8 +247,36 @@ pub fn load_investigation_graph_binding(
         return Err(InvestigationGraphBindingStoreError::ChangedReplay);
     }
     let binding: InvestigationGraphBinding = serde_json::from_str(&body)?;
-    load_acquisition_queue(config, &binding.obligation_ref)?
-        .ok_or(InvestigationGraphBindingStoreError::WrongOwner)?;
+    validate_binding_shape(&binding)?;
+    let owner_row = client.query_one(
+        "SELECT legal_obligation_ref, acquisition_obligation_ref, matter_ref, projection_ref
+         FROM semantic.investigation_graph_binding WHERE binding_ref=$1",
+        &[&binding_ref],
+    )?;
+    let legal_ref: Option<String> = owner_row.get(0);
+    let acquisition_ref: Option<String> = owner_row.get(1);
+    if owner_row.get::<_,String>(2)!=binding.matter_ref
+      || owner_row.get::<_,String>(3)!=binding.projection_ref { return Err(InvestigationGraphBindingStoreError::WrongOwner); }
+    match (legal_ref, acquisition_ref) {
+        (Some(legal), None) if legal == binding.obligation_ref => {
+            let owner = client.query_opt(
+                "SELECT m.matter_ref FROM legal_controversy.proof_obligation o
+                 JOIN legal_controversy.matter m ON m.controversy_ref=o.controversy_ref
+                 WHERE o.obligation_ref=$1 AND o.is_open AND o.candidate_only
+                   AND NOT o.creates_semantic_authority AND NOT o.creates_legal_authority
+                   AND NOT o.applicability_promoted AND NOT o.claim_truth_promoted",
+                &[&legal],
+            )?.ok_or(InvestigationGraphBindingStoreError::WrongOwner)?;
+            if owner.get::<_,String>(0)!=binding.matter_ref {
+                return Err(InvestigationGraphBindingStoreError::WrongOwner);
+            }
+        }
+        (None, Some(acquisition)) if acquisition == binding.obligation_ref => {
+            load_acquisition_queue(config, &acquisition)?
+                .ok_or(InvestigationGraphBindingStoreError::WrongOwner)?;
+        }
+        _ => return Err(InvestigationGraphBindingStoreError::WrongOwner),
+    }
     if !persisted_projection_is_derived_challengeable(&mut client, &binding.projection_ref)? {
         return Err(InvestigationGraphBindingStoreError::WrongOwner);
     }
