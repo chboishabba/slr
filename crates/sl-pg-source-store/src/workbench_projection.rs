@@ -157,6 +157,22 @@ pub use reviewed_legal_follow_projection::*;
 mod legal_controversy_residual_history;
 pub use legal_controversy_residual_history::*;
 
+#[path = "representation_evidence_store.rs"]
+mod representation_evidence_store;
+pub use representation_evidence_store::*;
+
+#[path = "reviewed_representation_factorisation_store.rs"]
+mod reviewed_representation_factorisation_store;
+pub use reviewed_representation_factorisation_store::*;
+
+#[path = "matter_consumer_projection_store.rs"]
+mod matter_consumer_projection_store;
+pub use matter_consumer_projection_store::*;
+
+#[path = "smith_reviewed_statement_admission.rs"]
+mod smith_reviewed_statement_admission;
+pub use smith_reviewed_statement_admission::*;
+
 pub use crate::investigation_acquisition::{
     AxisRelation, ParetoAxisRelation, ParetoDominanceWitness,
     RouteFrontierDisposition, RouteDispositionReceipt, PotentialReopeningCone,
