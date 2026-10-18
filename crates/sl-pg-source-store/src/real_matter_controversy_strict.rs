@@ -8,10 +8,10 @@
 use thiserror::Error;
 
 use crate::{
-    load_legal_controversy_matter, load_legal_controversy_residual,
+    load_current_legal_controversy_matter, load_legal_controversy_residual,
     load_legal_proof_obligation, load_reverse_legal_proof_search,
-    load_typed_response_edge, DatabaseConfig, LegalControversyStoreError,
-    ObligationKind,
+    load_typed_response_edge, DatabaseConfig, LegalControversyResidualHistoryError,
+    LegalControversyStoreError, ObligationKind,
 };
 use super::real_matter_controversy as raw;
 
@@ -21,6 +21,8 @@ pub enum RealMatterControversyMaterializationError {
     Construction(#[from] raw::RealMatterControversyError),
     #[error(transparent)]
     Store(#[from] LegalControversyStoreError),
+    #[error(transparent)]
+    ResidualHistory(#[from] LegalControversyResidualHistoryError),
     #[error("persisted controversy meaning differs from the requested reviewed/typed coordinates")]
     PersistedMeaningMismatch,
 }
@@ -31,7 +33,9 @@ pub fn materialize_real_matter_controversy_strict(
 ) -> Result<raw::RealMatterControversyReceipt, RealMatterControversyMaterializationError> {
     let receipt = raw::materialize_real_matter_controversy(config, draft)?;
 
-    let matter = load_legal_controversy_matter(config, &receipt.controversy_ref)?;
+    // Strict replay compares against the reviewed current projection, not the
+    // historical union of every residual ever persisted under this controversy.
+    let matter = load_current_legal_controversy_matter(config, &receipt.controversy_ref)?;
     if matter.matter_ref != draft.matter_ref
         || !matter.proposition_fibre_refs.contains(&receipt.applicant_fibre_ref)
         || !matter.proposition_fibre_refs.contains(&receipt.respondent_fibre_ref)
