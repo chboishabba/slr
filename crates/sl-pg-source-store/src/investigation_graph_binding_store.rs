@@ -43,7 +43,7 @@ UPDATE semantic.investigation_graph_binding
 pub const LEGAL_PROOF_GRAPH_BINDING_MIGRATION_SQL: &str = r#"
 ALTER TABLE semantic.investigation_graph_binding
  DROP CONSTRAINT IF EXISTS investigation_graph_binding_obligation_ref_fkey;
-DO $
+DO $$
 BEGIN
  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='investigation_graph_binding_acquisition_owner_fk') THEN
   ALTER TABLE semantic.investigation_graph_binding ADD CONSTRAINT investigation_graph_binding_acquisition_owner_fk
@@ -58,7 +58,7 @@ BEGIN
    (acquisition_obligation_ref=obligation_ref AND legal_obligation_ref IS NULL)
    OR (legal_obligation_ref=obligation_ref AND acquisition_obligation_ref IS NULL));
  END IF;
-END $;
+END $$;
 "#;
 
 pub fn persist_legal_proof_investigation_graph_binding(
