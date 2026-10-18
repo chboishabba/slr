@@ -382,10 +382,10 @@ pub fn persist_mabo_proof_search_graph(
             "INSERT INTO pnf_follow_node
              (projection_ref,node_ref,node_kind,label,document_ref,
               factor_revision_ref,domain_ir_ref,source_record_ref)
-             VALUES($1,$2,$3,$4,$5,$6,NULL,$7)
+             VALUES($1,$2,$3,$4,NULL,$5,NULL,$6)
              ON CONFLICT(projection_ref,node_ref) DO NOTHING",
             &[&projection_ref,&n.semantic_ref,&n.kind,&n.label,
-              &graph.matter_ref,&n.factor_revision_ref,&n.source_ref],
+              &n.factor_revision_ref,&n.source_ref],
         )?;
     }
     for e in &graph.edges {
@@ -438,7 +438,7 @@ pub fn persist_mabo_proof_search_graph(
         )?.ok_or(MaboProofGraphError::ChangedReplay)?;
         if row.get::<_, String>(0) != n.kind
             || row.get::<_, String>(1) != n.label
-            || row.get::<_, Option<String>>(2).as_deref() != Some(graph.matter_ref.as_str())
+            || row.get::<_, Option<String>>(2).is_some()
             || row.get::<_, Option<String>>(3) != n.factor_revision_ref
             || row.get::<_, Option<String>>(4).is_some()
             || row.get::<_, Option<String>>(5) != n.source_ref {
