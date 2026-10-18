@@ -6,7 +6,7 @@
 //! eligibility only: it does not assign an evidence role, normative order,
 //! applicability, legal authority, or claim truth.
 
-use postgres::{Client, NoTls};
+use postgres::{types::Json, Client, NoTls};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
@@ -156,10 +156,14 @@ pub fn persist_provider_legal_source_registration(
         &draft.semantic_scope,
         "compile",
     ]);
-    let temporal_json = serde_json::to_string(&sorted_unique(&draft.temporal_refs))
-        .expect("serializing string refs cannot fail");
-    let provider_json = serde_json::to_string(&sorted_unique(&draft.provider_profile_refs))
-        .expect("serializing string refs cannot fail");
+    let temporal_refs = sorted_unique(&draft.temporal_refs);
+    let provider_profile_refs = sorted_unique(&draft.provider_profile_refs);
+    let temporal_json =
+        serde_json::to_string(&temporal_refs).expect("serializing string refs cannot fail");
+    let provider_json =
+        serde_json::to_string(&provider_profile_refs).expect("serializing string refs cannot fail");
+    let temporal_parameter = Json(temporal_refs);
+    let provider_parameter = Json(provider_profile_refs);
     let revision_digest = digest_parts(&[
         "slr-legal-source-revision:v1",
         &source_revision_ref,
@@ -210,8 +214,8 @@ pub fn persist_provider_legal_source_registration(
             &materialization.identity.jurisdiction_ref,
             &draft.source_role,
             &draft.authority_level,
-            &temporal_json,
-            &provider_json,
+            &temporal_parameter,
+            &provider_parameter,
             &draft.media_type,
             &materialization.canonical_sha256_hex,
             &&revision_digest[..],
@@ -268,7 +272,9 @@ pub fn load_provider_legal_source_registration(
                WHERE l.source_revision_ref=$1"#,
             &[&source_revision_ref],
         )?
-        .ok_or_else(|| ProviderLegalSourceRegistrationError::NotFound(source_revision_ref.to_owned()))?;
+        .ok_or_else(|| {
+            ProviderLegalSourceRegistrationError::NotFound(source_revision_ref.to_owned())
+        })?;
 
     let compile_eligible: bool = row.get(9);
     let identity_promoted: bool = row.get(10);
@@ -328,7 +334,10 @@ fn validate_draft(
     for (name, value) in [
         ("materialization_ref", draft.materialization_ref.as_str()),
         ("corpus_ref", draft.corpus_ref.as_str()),
-        ("admission_profile_ref", draft.admission_profile_ref.as_str()),
+        (
+            "admission_profile_ref",
+            draft.admission_profile_ref.as_str(),
+        ),
         ("source_role", draft.source_role.as_str()),
         ("authority_level", draft.authority_level.as_str()),
         ("semantic_scope", draft.semantic_scope.as_str()),
@@ -337,7 +346,10 @@ fn validate_draft(
         required(name, value)?;
     }
     if draft.provider_profile_refs.is_empty()
-        || draft.provider_profile_refs.iter().any(|value| value.trim().is_empty())
+        || draft
+            .provider_profile_refs
+            .iter()
+            .any(|value| value.trim().is_empty())
     {
         return Err(ProviderLegalSourceRegistrationError::MissingProviderProfile);
     }
@@ -370,10 +382,7 @@ fn sorted_unique(values: &[String]) -> Vec<String> {
     result
 }
 
-fn required(
-    name: &'static str,
-    value: &str,
-) -> Result<(), ProviderLegalSourceRegistrationError> {
+fn required(name: &'static str, value: &str) -> Result<(), ProviderLegalSourceRegistrationError> {
     if value.trim().is_empty() {
         Err(ProviderLegalSourceRegistrationError::EmptyCoordinate(name))
     } else {
