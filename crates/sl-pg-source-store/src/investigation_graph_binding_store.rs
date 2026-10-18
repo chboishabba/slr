@@ -289,13 +289,16 @@ pub fn load_investigation_graph_binding_for_obligation(
 ) -> Result<Option<InvestigationGraphBinding>, InvestigationGraphBindingStoreError> {
     let mut client = Client::connect(config.database_url(), NoTls)?;
     client.batch_execute(INV_GRAPH_BINDING_SQL)?;
-    let Some(row) = client.query_opt(
+    let rows = client.query(
         "SELECT binding_ref FROM semantic.investigation_graph_binding
-         WHERE obligation_ref=$1 ORDER BY binding_ref LIMIT 1",
+         WHERE obligation_ref=$1 ORDER BY binding_ref LIMIT 2",
         &[&obligation_ref],
-    )? else {
-        return Ok(None);
-    };
+    )?;
+    if rows.len() > 1 {
+        // Never pick an arbitrary stale graph after a review/revision change.
+        return Err(InvestigationGraphBindingStoreError::ChangedReplay);
+    }
+    let Some(row) = rows.first() else { return Ok(None); };
     let binding_ref: String = row.get(0);
     load_investigation_graph_binding(config, &binding_ref)
 }
