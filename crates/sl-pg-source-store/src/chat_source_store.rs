@@ -90,6 +90,8 @@ pub enum ChatSourceStoreError {
     BaseCorpusMissing,
     #[error("existing archived message conflicts with requested coordinates")]
     ExistingMessageConflict,
+    #[error("reference-only chat message requires verified canonical archive reopen: {0}")]
+    ReferenceOnlyNotMaterialised(String),
     #[error("unknown archived message: {0}")]
     UnknownMessage(String),
     #[error("statement selection does not belong to archived message")]
@@ -116,6 +118,120 @@ pub enum ChatSourceStoreError {
     ParserRevisionMismatch,
     #[error("parser worker has not attempted all selected chat spans")]
     IncompleteChatParserRun,
+}
+
+
+/// Reference-only canonical archive coordinates. No ChatGPT body is accepted.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+pub struct ChatArchiveReference {
+    pub conversation_ref: String,
+    pub source_thread_ref: String,
+    pub message_ref: String,
+    pub node_ref: String,
+    pub parent_node_ref: Option<String>,
+    pub branch_membership_ref: String,
+    pub message_time_ref: String,
+    pub role_ref: String,
+    pub thread_title: String,
+    pub content_kind_ref: String,
+    pub attachment_refs: Vec<String>,
+    pub archive_locator: String,
+    pub body_sha256: String,
+    pub provenance_ref: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ChatReferenceRegistration {
+    Inserted,
+    Replayed,
+    ChangedDigestConflict { prior_sha256: String, proposed_sha256: String },
+}
+
+fn valid_reference(r: &ChatArchiveReference) -> bool {
+    let fields = [&r.conversation_ref, &r.source_thread_ref, &r.message_ref,
+        &r.node_ref, &r.message_time_ref, &r.role_ref, &r.archive_locator,
+        &r.provenance_ref];
+    fields.iter().all(|s| !s.trim().is_empty() && s.len() <= 2048)
+        && r.body_sha256.len() == 64
+        && r.body_sha256.bytes().all(|b| b.is_ascii_hexdigit())
+        && r.archive_locator.starts_with("sqlite:")
+        && matches!(r.branch_membership_ref.as_str(), "active" | "inactive")
+        && r.attachment_refs.len() <= 128
+}
+
+/// Register immutable source coordinates without inserting any canonical body bytes.
+/// Changed digest is a separate receipt; original source identity is untouched.
+pub fn register_chat_archive_reference(
+    config: &DatabaseConfig,
+    r: &ChatArchiveReference,
+) -> Result<ChatReferenceRegistration, ChatSourceStoreError> {
+    if !valid_reference(r) {
+        return Err(ChatSourceStoreError::InvalidSource);
+    }
+    install_chat_source_schema(config)?;
+    let mut client = Client::connect(config.database_url(), NoTls)?;
+    let mut tx = client.transaction()?;
+    let prior = tx.query_opt(
+        "SELECT body_sha256, archive_locator, source_thread_ref
+         FROM corpus.chat_archive_message WHERE message_ref=$1 FOR UPDATE",
+        &[&r.message_ref],
+    )?;
+    if let Some(row) = prior {
+        let old: Option<String> = row.get(0);
+        let locator: Option<String> = row.get(1);
+        let thread: Option<String> = row.get(2);
+        if old.as_deref() == Some(&r.body_sha256)
+            && locator.as_deref() == Some(&r.archive_locator)
+            && thread.as_deref() == Some(&r.source_thread_ref) {
+            return Ok(ChatReferenceRegistration::Replayed);
+        }
+        let prior_sha256 = old.unwrap_or_default();
+        let receipt_ref = format!("chat-reference-conflict:sha256:{}",
+            hex(&sha256(format!("{}\n{}\n{}", r.message_ref,
+                prior_sha256, r.body_sha256).as_bytes())));
+        tx.execute(
+            "INSERT INTO corpus.chat_archive_reference_conflict
+             (receipt_ref,message_ref,prior_sha256,proposed_sha256,proposed_locator)
+             VALUES ($1,$2,$3,$4,$5) ON CONFLICT (receipt_ref) DO NOTHING",
+            &[&receipt_ref,&r.message_ref,&prior_sha256,&r.body_sha256,&r.archive_locator],
+        )?;
+        tx.commit()?;
+        return Ok(ChatReferenceRegistration::ChangedDigestConflict {
+            prior_sha256, proposed_sha256: r.body_sha256.clone()
+        });
+    }
+    // This insert uses the existing chat source table, never a parallel message table.
+    tx.execute(
+        "INSERT INTO corpus.chat_archive_message
+         (message_ref,conversation_ref,node_ref,parent_node_ref,branch_membership_ref,
+          message_time_ref,role_ref,thread_title,content_kind_ref,
+          document_ref,source_revision_ref,full_message_span_ref,
+          identity_verified,candidate_only,creates_semantic_authority,
+          applicability_promoted,claim_truth_promoted,
+          source_thread_ref,archive_locator,body_sha256,attachment_refs_json,provenance_ref)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NULL,$10,NULL,
+                 TRUE,TRUE,FALSE,FALSE,FALSE,$11,$12,$13,$14,$15)",
+        &[&r.message_ref,&r.conversation_ref,&r.node_ref,&r.parent_node_ref,
+          &r.branch_membership_ref,&r.message_time_ref,&r.role_ref,&r.thread_title,
+          &r.content_kind_ref,
+          &format!("chat-reference:sha256:{}",r.body_sha256),
+          &r.source_thread_ref,&r.archive_locator,&r.body_sha256,
+          &serde_json::to_string(&r.attachment_refs).map_err(|_| ChatSourceStoreError::InvalidSource)?,
+          &r.provenance_ref],
+    )?;
+    tx.commit()?;
+    Ok(ChatReferenceRegistration::Inserted)
+}
+
+/// Verify reopened canonical SQLite bytes before any bounded parser handoff.
+/// The caller owns the SQLite exact-ID lookup and must not persist the returned bytes in PG.
+pub fn verify_reopened_chat_reference_bytes(
+    reference: &ChatArchiveReference, reopened: &[u8]
+) -> Result<(), ChatSourceStoreError> {
+    if !valid_reference(reference) || hex(&sha256(reopened)) != reference.body_sha256.to_ascii_lowercase() {
+        return Err(ChatSourceStoreError::ExistingMessageConflict);
+    }
+    Ok(())
 }
 
 pub fn load_chat_archive_export_jsonl(
@@ -196,6 +312,32 @@ pub fn install_chat_source_schema(
           ON corpus.chat_archive_message (conversation_ref, message_time_ref);
         "#,
     )?;
+    // Existing body-backed records remain valid; new reference-only rows have
+    // nullable document/span foreign keys and no canonical_content payload.
+    client.batch_execute(r#"
+        ALTER TABLE corpus.chat_archive_message
+          ALTER COLUMN document_ref DROP NOT NULL;
+        ALTER TABLE corpus.chat_archive_message
+          ALTER COLUMN full_message_span_ref DROP NOT NULL;
+        ALTER TABLE corpus.chat_archive_message
+          ADD COLUMN IF NOT EXISTS source_thread_ref TEXT;
+        ALTER TABLE corpus.chat_archive_message
+          ADD COLUMN IF NOT EXISTS archive_locator TEXT;
+        ALTER TABLE corpus.chat_archive_message
+          ADD COLUMN IF NOT EXISTS body_sha256 TEXT;
+        ALTER TABLE corpus.chat_archive_message
+          ADD COLUMN IF NOT EXISTS attachment_refs_json TEXT;
+        CREATE TABLE IF NOT EXISTS corpus.chat_archive_reference_conflict (
+          receipt_ref TEXT PRIMARY KEY,
+          message_ref TEXT NOT NULL,
+          prior_sha256 TEXT NOT NULL,
+          proposed_sha256 TEXT NOT NULL,
+          proposed_locator TEXT NOT NULL,
+          candidate_only BOOLEAN NOT NULL DEFAULT TRUE CHECK (candidate_only),
+          creates_semantic_authority BOOLEAN NOT NULL DEFAULT FALSE
+            CHECK (NOT creates_semantic_authority)
+        );
+    "#)?;
     Ok(())
 }
 
@@ -638,6 +780,14 @@ pub fn load_chat_message_source(
     message_ref: &str,
 ) -> Result<Option<PersistedChatMessageSource>, ChatSourceStoreError> {
     let mut client = Client::connect(config.database_url(), NoTls)?;
+    if let Some(row) = client.query_opt(
+        "SELECT document_ref FROM corpus.chat_archive_message WHERE message_ref=$1",
+        &[&message_ref],
+    )? {
+        if row.get::<_, Option<String>>(0).is_none() {
+            return Err(ChatSourceStoreError::ReferenceOnlyNotMaterialised(message_ref.to_owned()));
+        }
+    }
     client
         .query_opt(
             r#"
@@ -915,5 +1065,49 @@ mod tests {
             claim_truth_promoted: false,
         };
         selection.validate().unwrap();
+    }
+}
+
+#[cfg(test)]
+mod reference_only_tests {
+    use super::*;
+
+    fn reference() -> ChatArchiveReference {
+        ChatArchiveReference {
+            conversation_ref:"conversation".into(),
+            source_thread_ref:"source-thread".into(),
+            message_ref:"message".into(),
+            node_ref:"node".into(),
+            parent_node_ref:Some("parent".into()),
+            branch_membership_ref:"active".into(),
+            message_time_ref:"2026-10-18T00:00:00Z".into(),
+            role_ref:"user".into(),
+            thread_title:"title".into(),
+            content_kind_ref:"message".into(),
+            attachment_refs:vec!["attachment:1".into()],
+            archive_locator:"sqlite:canonical#node".into(),
+            body_sha256:hex(&sha256(b"canonical body")),
+            provenance_ref:"receipt:1".into(),
+        }
+    }
+
+    #[test]
+    fn reference_contains_no_body_and_checks_digest() {
+        let reference=reference();
+        assert!(valid_reference(&reference));
+        verify_reopened_chat_reference_bytes(&reference,b"canonical body").unwrap();
+        assert!(verify_reopened_chat_reference_bytes(&reference,b"changed body").is_err());
+        let serialized=serde_json::to_string(&reference).unwrap();
+        assert!(!serialized.contains("canonical body"));
+    }
+
+    #[test]
+    fn rejects_noncanonical_locator_or_digest() {
+        let mut reference=reference();
+        reference.archive_locator="http://untrusted".into();
+        assert!(!valid_reference(&reference));
+        reference.archive_locator="sqlite:canonical#node".into();
+        reference.body_sha256="bad".into();
+        assert!(!valid_reference(&reference));
     }
 }
