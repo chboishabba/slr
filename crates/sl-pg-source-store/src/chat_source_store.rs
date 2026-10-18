@@ -90,6 +90,8 @@ pub enum ChatSourceStoreError {
     BaseCorpusMissing,
     #[error("existing archived message conflicts with requested coordinates")]
     ExistingMessageConflict,
+    #[error("reference-only chat message requires verified canonical archive reopen: {0}")]
+    ReferenceOnlyNotMaterialised(String),
     #[error("unknown archived message: {0}")]
     UnknownMessage(String),
     #[error("statement selection does not belong to archived message")]
@@ -778,6 +780,14 @@ pub fn load_chat_message_source(
     message_ref: &str,
 ) -> Result<Option<PersistedChatMessageSource>, ChatSourceStoreError> {
     let mut client = Client::connect(config.database_url(), NoTls)?;
+    if let Some(row) = client.query_opt(
+        "SELECT document_ref FROM corpus.chat_archive_message WHERE message_ref=$1",
+        &[&message_ref],
+    )? {
+        if row.get::<_, Option<String>>(0).is_none() {
+            return Err(ChatSourceStoreError::ReferenceOnlyNotMaterialised(message_ref.to_owned()));
+        }
+    }
     client
         .query_opt(
             r#"
@@ -1055,5 +1065,49 @@ mod tests {
             claim_truth_promoted: false,
         };
         selection.validate().unwrap();
+    }
+}
+
+#[cfg(test)]
+mod reference_only_tests {
+    use super::*;
+
+    fn reference() -> ChatArchiveReference {
+        ChatArchiveReference {
+            conversation_ref:"conversation".into(),
+            source_thread_ref:"source-thread".into(),
+            message_ref:"message".into(),
+            node_ref:"node".into(),
+            parent_node_ref:Some("parent".into()),
+            branch_membership_ref:"active".into(),
+            message_time_ref:"2026-10-18T00:00:00Z".into(),
+            role_ref:"user".into(),
+            thread_title:"title".into(),
+            content_kind_ref:"message".into(),
+            attachment_refs:vec!["attachment:1".into()],
+            archive_locator:"sqlite:canonical#node".into(),
+            body_sha256:hex(&sha256(b"canonical body")),
+            provenance_ref:"receipt:1".into(),
+        }
+    }
+
+    #[test]
+    fn reference_contains_no_body_and_checks_digest() {
+        let reference=reference();
+        assert!(valid_reference(&reference));
+        verify_reopened_chat_reference_bytes(&reference,b"canonical body").unwrap();
+        assert!(verify_reopened_chat_reference_bytes(&reference,b"changed body").is_err());
+        let serialized=serde_json::to_string(&reference).unwrap();
+        assert!(!serialized.contains("canonical body"));
+    }
+
+    #[test]
+    fn rejects_noncanonical_locator_or_digest() {
+        let mut reference=reference();
+        reference.archive_locator="http://untrusted".into();
+        assert!(!valid_reference(&reference));
+        reference.archive_locator="sqlite:canonical#node".into();
+        reference.body_sha256="bad".into();
+        assert!(!valid_reference(&reference));
     }
 }
