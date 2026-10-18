@@ -334,3 +334,44 @@ pub fn load_bound_investigation_graph_projection(
     }
     Ok(Some(BoundInvestigationGraphProjection { binding, projection }))
 }
+
+
+#[cfg(test)]
+mod legal_graph_binding_contract_tests {
+    use super::*;
+
+    #[test]
+    fn legacy_acquisition_binding_stays_referentially_owned() {
+        assert!(INV_GRAPH_BINDING_SQL.contains("acquisition_obligation_ref=obligation_ref"));
+        assert!(LEGAL_PROOF_GRAPH_BINDING_MIGRATION_SQL.contains(
+            "FOREIGN KEY (acquisition_obligation_ref) REFERENCES semantic.investigation_acquisition_obligation"
+        ));
+        assert!(LEGAL_PROOF_GRAPH_BINDING_MIGRATION_SQL.contains(
+            "FOREIGN KEY (legal_obligation_ref) REFERENCES legal_controversy.proof_obligation"
+        ));
+        assert!(LEGAL_PROOF_GRAPH_BINDING_MIGRATION_SQL.contains(
+            "(legal_obligation_ref=obligation_ref AND acquisition_obligation_ref IS NULL)"
+        ));
+        assert!(LEGAL_PROOF_GRAPH_BINDING_MIGRATION_SQL.contains("DO $$"));
+        assert!(LEGAL_PROOF_GRAPH_BINDING_MIGRATION_SQL.contains("END $$;"));
+    }
+
+    #[test]
+    fn legal_graph_binding_refuses_authority_promotion() {
+        let mut b = super::super::investigation_graph_binding::
+            build_investigation_graph_binding(
+                "legal-graph-binding:one", "legal-obligation:one",
+                "legal-follow:one", "matter:mabo",
+                vec!["review:one".into()],
+            ).expect("typed binding");
+        assert!(validate_binding_shape(&b).is_ok());
+        b.creates_graph_edges = true;
+        assert!(validate_binding_shape(&b).is_err());
+        b.creates_graph_edges = false;
+        b.creates_semantic_authority = true;
+        assert!(validate_binding_shape(&b).is_err());
+        b.creates_semantic_authority = false;
+        b.creates_acquisition_state = true;
+        assert!(validate_binding_shape(&b).is_err());
+    }
+}
