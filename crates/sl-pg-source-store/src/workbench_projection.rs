@@ -153,6 +153,10 @@ pub use persisted_relational_observation::*;
 mod reviewed_legal_follow_projection;
 pub use reviewed_legal_follow_projection::*;
 
+#[path = "legal_controversy_residual_history.rs"]
+mod legal_controversy_residual_history;
+pub use legal_controversy_residual_history::*;
+
 pub use crate::investigation_acquisition::{
     AxisRelation, ParetoAxisRelation, ParetoDominanceWitness,
     RouteFrontierDisposition, RouteDispositionReceipt, PotentialReopeningCone,
