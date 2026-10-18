@@ -183,6 +183,8 @@ pub fn derive_mabo_proof_search_graph(
 
     let mut nodes = BTreeMap::new();
     let mut edges = Vec::new();
+    let mut reviewed_pnf_refs = BTreeSet::<String>::new();
+    let mut reviewed_source_refs = BTreeSet::<String>::new();
     insert_node(&mut nodes, node(&matter.controversy_ref, "legal_controversy",
         "Reviewed controversy", None, None))?;
     insert_node(&mut nodes, node(&residual.residual_ref, "unresolved_legal_residual",
@@ -211,6 +213,8 @@ pub fn derive_mabo_proof_search_graph(
             || fibre.source_reference != reviewed.exact_span_ref {
             return Err(MaboProofGraphError::MissingAncestry);
         }
+        reviewed_pnf_refs.insert(reviewed.pnf_revision_ref.clone());
+        reviewed_source_refs.insert(reviewed.source_revision_ref.clone());
         insert_node(&mut nodes, node(&reviewed.source_revision_ref,
             "source_revision", "Primary source revision",
             Some(&reviewed.source_revision_ref), None))?;
@@ -269,7 +273,7 @@ pub fn derive_mabo_proof_search_graph(
         &[])?.get::<_, Option<String>>(0).is_some() {
         for row in client.query(
             "SELECT d.demand_ref, d.statement_digest, d.pnf_revision_ref,
-                    p.evidence_ref
+                    d.source_revision_refs, p.evidence_ref
              FROM formal_bridge.demand d
              LEFT JOIN formal_bridge.payment p
                ON p.demand_ref=d.demand_ref AND p.obligation_ref=d.obligation_ref
@@ -286,7 +290,20 @@ pub fn derive_mabo_proof_search_graph(
             let demand_ref: String = row.get(0);
             let statement_digest: String = row.get(1);
             let pnf_ref: String = row.get(2);
-            let payment_ref: Option<String> = row.get(3);
+            let demand_sources: Vec<String> = row.get(3);
+            let payment_ref: Option<String> = row.get(4);
+            if !reviewed_pnf_refs.contains(&pnf_ref)
+                || !demand_sources.iter().any(|r| reviewed_source_refs.contains(r)) {
+                return Err(MaboProofGraphError::MissingAncestry);
+            }
+            let factor_row = client.query_opt(
+                "SELECT encode(factor_sha256,'hex') FROM algebra.factor_revision
+                 WHERE factor_revision_ref=$1", &[&pnf_ref],
+            )?.ok_or(MaboProofGraphError::MissingAncestry)?;
+            let factor_hex: String = factor_row.get(0);
+            if format!("sha256:{factor_hex}") != statement_digest {
+                return Err(MaboProofGraphError::MissingAncestry);
+            }
             insert_node(&mut nodes, node(&demand_ref, "formal_proof_demand",
                 "Formal premise demand", None, Some(&pnf_ref)))?;
             edges.push(edge(&obligation_ref, &demand_ref, "formal_demand_for_obligation",
