@@ -145,7 +145,7 @@ pub fn assess_document_pair_manifestation_coverage(
             }
         }
         for id in ids {
-            if !used.contains(&id) {
+            if !used.contains(id.as_str()) {
                 residuals.push(format!("{side}:unaccounted_span:{id}"));
             }
         }
