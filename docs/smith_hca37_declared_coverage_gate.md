@@ -80,3 +80,65 @@ Agda/Lean kernel receipt** for full Smith document-partition coverage.
 Some historical SensibLaw context files referenced by the controller were
 not available at their requested GitHub paths; no claim of reviewing their
 exact line ranges is made.
+
+
+## DB-native document-pair producer (implementation tranche)
+
+`official_primary_manifestation_document_pnf_overlap.rs` now adds
+`compare_and_persist_document_pnf_pair` and `load_document_pnf_pair`.
+The producer reopens the official manifestation comparison, canonical source
+revisions and text, lossless long-document compilation receipts, exact candidate
+persistence stage and **all** statement candidate batches for each document.
+It reuses the existing v3 `measure_semantic_pnf_coverage` semantics on the
+concatenated per-document factor inventory; sentence spans are ancestry only.
+
+A new PostgreSQL `source_provenance.official_primary_document_pnf_overlap`
+table binds the extraction refs/digests, source revisions, parser run refs,
+candidate batch inventories and ancestry digests, comparator/projection,
+semantic counts, parser residual counts, review coordinates and non-promotion
+flags. Insert is idempotent and the read path recomputes the expected receipt
+from reopened source/compilation/candidate evidence before comparing columns.
+A different immutable coordinate under the same document-pair unique key
+cannot silently replace the previous row.
+
+**Conservative closure rule:** any parser residual or any `Other` factor
+prevents full transformation closure. Review refs are retained but are not
+interpreted as authorising omission. The live producer currently passes no
+review refs. This deliberately leaves potential layout debris unresolved
+rather than falsely declaring it nonsemantic.
+
+**Unpaid/known limitations:** no live Smith full-document compilation receipt
+was supplied in this turn; the operator requires those persisted source
+revisions and exact candidate stage rows. The producer does not generate
+parser jobs or run the parser itself. A complete document-level multiset
+match is exact under v3 projection, not proof of proposition correspondence,
+consumer informativeness, source truth or legal equivalence. A formal Agda
+empirical coverage kernel receipt is also absent.
+
+### Local commands — intended, not executed here
+
+```sh
+cargo test -p sensiblaw-pg-source-store --test official_primary_manifestation_document_pnf_overlap
+cargo test -p sensiblaw-pg-source-store --test official_primary_manifestation_pnf_exhaustive_overlap
+cargo test -p sensiblaw-pg-source-store --test official_primary_manifestation_pnf_overlap
+cargo test -p sensiblaw-pg-source-store --lib db_native_long_document
+cargo test -p sensiblaw-pg-source-store --lib generic_source_compiler
+cargo fmt --all -- --check
+cargo clippy -p sensiblaw-pg-source-store --all-targets -- -D warnings
+```
+
+### Ignored live Smith PG gate
+
+```sh
+DATABASE_URL=... \
+ITIR_SMITH_HCA37_MANIFESTATION_COMPARISON_REF=... \
+ITIR_SMITH_HCA37_PDF_SOURCE_REVISION_REF=... \
+ITIR_SMITH_HCA37_DOCX_SOURCE_REVISION_REF=... \
+cargo test -p sensiblaw-pg-source-store --test official_primary_manifestation_document_pnf_overlap -- --ignored
+```
+
+Requires the real official extraction comparison, source revisions whose
+acquisition receipts match each extraction, full lossless compilation and
+single exact parser-stage candidate inventories. The selected statutory
+span's v3 receipt is preserved separately. No tests, PG replay or kernel
+verification were executed by this GitHub-only authoring turn.
