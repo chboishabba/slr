@@ -147,11 +147,11 @@ impl<'a> FlatParser<'a> {
     fn value(&mut self) -> io::Result<FlatValue> {
         match self.bytes.get(self.pos) {
             Some(b'"') => Ok(FlatValue::Text(self.string()?)),
-            Some(b't') if self.bytes.get(self.pos..self.pos + 4) == Some(b"true") => {
+            Some(b't') if self.bytes[self.pos..].starts_with(b"true") => {
                 self.pos += 4;
                 Ok(FlatValue::Bool(true))
             }
-            Some(b'f') if self.bytes.get(self.pos..self.pos + 5) == Some(b"false") => {
+            Some(b'f') if self.bytes[self.pos..].starts_with(b"false") => {
                 self.pos += 5;
                 Ok(FlatValue::Bool(false))
             }
