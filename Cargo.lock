@@ -1388,6 +1388,9 @@ name = "sensiblaw-world-compiler"
 version = "0.1.0"
 dependencies = [
  "sensiblaw-core",
+ "serde",
+ "serde_json",
+ "tempfile",
  "sensiblaw-world-store",
  "sha2 0.10.9",
  "thiserror 1.0.69",
