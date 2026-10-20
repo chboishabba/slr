@@ -67,7 +67,35 @@ fn other_requires_independent_review_and_does_not_auto_close() {
     let b=side("docx",vec![factor(CandidatePnfRole::Actor,"smith")]);
     let result=assess_document_pnf_pair("comparison",a,b,vec!["review:pending".into()]).unwrap();
     assert!(result.coverage.semantic_factor_multiset_exact);
+    assert!(result.semantic_pnf_overlap_closed);
     assert!(!result.transformation_closed);
+}
+#[test]
+fn differing_other_counts_preserve_v3_semantic_overlap_and_replay() {
+    let mut pdf=side("pdf",vec![factor(CandidatePnfRole::Actor,"smith")]);
+    pdf.factors.push(factor(CandidatePnfRole::Other,"punctuation"));
+    pdf.factors.push(factor(CandidatePnfRole::Other,"determiner"));
+    let docx=side("docx",vec![factor(CandidatePnfRole::Actor,"smith")]);
+    let receipt=assess_document_pnf_pair("comparison",pdf.clone(),docx.clone(),vec![]).unwrap();
+    assert!(receipt.coverage.semantic_factor_multiset_exact);
+    assert!(receipt.semantic_pnf_overlap_closed);
+    assert!(!receipt.transformation_closed); // materiality remains unclassified
+    assert_eq!(receipt.coverage.ignored_pdf_nonsemantic_count,2);
+    assert_eq!(receipt.coverage.ignored_docx_nonsemantic_count,0);
+    assert_eq!(receipt,assess_document_pnf_pair("comparison",pdf,docx,vec![]).unwrap());
+}
+#[test]
+fn unverified_review_coordinate_does_not_authorize_materiality() {
+    let mut pdf=side("pdf",vec![factor(CandidatePnfRole::Actor,"smith")]);
+    pdf.factors.push(factor(CandidatePnfRole::Other,"layout"));
+    let docx=side("docx",vec![factor(CandidatePnfRole::Actor,"smith")]);
+    let pending=assess_document_pnf_pair("comparison",pdf.clone(),docx.clone(),vec![]).unwrap();
+    let unverified=assess_document_pnf_pair("comparison",pdf,docx,vec!["review:unverified".into()]).unwrap();
+    assert!(pending.semantic_pnf_overlap_closed);
+    assert!(unverified.semantic_pnf_overlap_closed);
+    assert!(!pending.transformation_closed);
+    assert!(!unverified.transformation_closed);
+    assert_ne!(pending.receipt_ref,unverified.receipt_ref);
 }
 #[test]
 fn same_revision_is_rejected() {
