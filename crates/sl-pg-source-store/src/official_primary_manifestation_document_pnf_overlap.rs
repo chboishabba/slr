@@ -9,7 +9,6 @@ use crate::{
     load_long_document_ingest_receipt, load_official_primary_manifestation_comparison,
     measure_semantic_pnf_coverage, semantic_pnf_coverage_is_consistent,
     SemanticPnfCoverage, CANDIDATE_PNF_COMPILER_REF,
-    EXHAUSTIVE_PNF_COMPARATOR_REVISION_REF,
 };
 
 pub const DOCUMENT_PNF_COMPARATOR_REF: &str =
@@ -201,7 +200,7 @@ pub fn assess_document_pnf_pair(
         && coverage.ignored_pdf_nonsemantic_count==0
         && coverage.ignored_docx_nonsemantic_count==0;
     let mut identity=vec![DOCUMENT_PNF_COMPARATOR_REF.into(),
-        EXHAUSTIVE_PNF_COMPARATOR_REVISION_REF.into(),
+        crate::official_primary_manifestation_pnf_exhaustive_overlap::EXHAUSTIVE_PNF_COMPARATOR_REVISION_REF.into(),
         coverage.projection_ref.clone(),comparison_ref.into()];
     for side in [&pdf,&docx] {
         identity.extend([side.source_revision_ref.clone(),side.extraction_ref.clone(),
