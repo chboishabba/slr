@@ -1,6 +1,6 @@
 //! Strict bounded archived-chat JSONL -> native SLRO -> SLRW.
 //! No spaCy, no inferred dependencies, no semantic promotion.
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, BufWriter, Seek, SeekFrom, Write};
 use std::path::Path;
@@ -11,14 +11,12 @@ use sensiblaw_core::chat_source::{
 use sensiblaw_world_compiler::{
     compile_observation_stream, encode_observation, DependencyShape, ObservationRecord,
 };
-use serde::Deserialize;
 use sha2::{Digest, Sha256};
 
 const MAX_MESSAGE_BYTES: usize = 4 * 1024 * 1024;
 const MAX_MESSAGES: usize = 10000;
 
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[derive(Debug)]
 struct ArchivedLine {
     schema: String,
     conversation_ref: String,
@@ -44,13 +42,217 @@ struct ArchivedLine {
     semantic_promotion: bool,
 }
 
+
+#[derive(Debug)]
+enum FlatValue {
+    Text(String),
+    Bool(bool),
+}
+
+struct FlatParser<'a> {
+    bytes: &'a [u8],
+    pos: usize,
+}
+
+impl<'a> FlatParser<'a> {
+    fn new(input: &'a str) -> Self {
+        Self { bytes: input.as_bytes(), pos: 0 }
+    }
+    fn error(&self, detail: &str) -> io::Error {
+        io::Error::new(io::ErrorKind::InvalidData, format!("JSON at byte {}: {detail}", self.pos))
+    }
+    fn ws(&mut self) {
+        while self.pos < self.bytes.len() && self.bytes[self.pos].is_ascii_whitespace() {
+            self.pos += 1;
+        }
+    }
+    fn take(&mut self, byte: u8) -> bool {
+        if self.bytes.get(self.pos) == Some(&byte) {
+            self.pos += 1;
+            true
+        } else {
+            false
+        }
+    }
+    fn expect(&mut self, byte: u8) -> io::Result<()> {
+        if self.take(byte) { Ok(()) } else { Err(self.error("unexpected JSON token")) }
+    }
+    fn hex_quad(&mut self) -> io::Result<u16> {
+        let mut code = 0u16;
+        for _ in 0..4 {
+            let byte = *self.bytes.get(self.pos).ok_or_else(|| self.error("truncated Unicode escape"))?;
+            let digit = (byte as char).to_digit(16)
+                .ok_or_else(|| self.error("invalid Unicode escape"))?;
+            self.pos += 1;
+            code = (code << 4) | digit as u16;
+        }
+        Ok(code)
+    }
+    fn string(&mut self) -> io::Result<String> {
+        self.expect(b'"')?;
+        let mut result = String::new();
+        let mut chunk_start = self.pos;
+        while let Some(&byte) = self.bytes.get(self.pos) {
+            if byte == b'"' || byte == b'\\' {
+                let chunk = std::str::from_utf8(&self.bytes[chunk_start..self.pos])
+                    .map_err(|_| self.error("invalid UTF-8"))?;
+                if chunk.chars().any(|ch| ch <= '\u{001f}') {
+                    return Err(self.error("unescaped control character"));
+                }
+                result.push_str(chunk);
+                self.pos += 1;
+                if byte == b'"' { return Ok(result); }
+                let escaped = *self.bytes.get(self.pos)
+                    .ok_or_else(|| self.error("unterminated escape"))?;
+                self.pos += 1;
+                match escaped {
+                    b'"' => result.push('"'),
+                    b'\\' => result.push('\\'),
+                    b'/' => result.push('/'),
+                    b'b' => result.push('\u{0008}'),
+                    b'f' => result.push('\u{000c}'),
+                    b'n' => result.push('\n'),
+                    b'r' => result.push('\r'),
+                    b't' => result.push('\t'),
+                    b'u' => {
+                        let first = self.hex_quad()?;
+                        let scalar = if (0xd800..=0xdbff).contains(&first) {
+                            self.expect(b'\\')?;
+                            self.expect(b'u')?;
+                            let second = self.hex_quad()?;
+                            if !(0xdc00..=0xdfff).contains(&second) {
+                                return Err(self.error("invalid low surrogate"));
+                            }
+                            0x10000 + ((u32::from(first) - 0xd800) << 10)
+                                + (u32::from(second) - 0xdc00)
+                        } else if (0xdc00..=0xdfff).contains(&first) {
+                            return Err(self.error("unpaired low surrogate"));
+                        } else {
+                            u32::from(first)
+                        };
+                        result.push(char::from_u32(scalar)
+                            .ok_or_else(|| self.error("invalid Unicode scalar"))?);
+                    }
+                    _ => return Err(self.error("invalid string escape")),
+                }
+                chunk_start = self.pos;
+            } else if byte < 0x20 {
+                return Err(self.error("unescaped control character"));
+            } else {
+                self.pos += 1;
+            }
+        }
+        Err(self.error("unterminated JSON string"))
+    }
+    fn value(&mut self) -> io::Result<FlatValue> {
+        match self.bytes.get(self.pos) {
+            Some(b'"') => Ok(FlatValue::Text(self.string()?)),
+            Some(b't') if self.bytes.get(self.pos..self.pos + 4) == Some(b"true") => {
+                self.pos += 4;
+                Ok(FlatValue::Bool(true))
+            }
+            Some(b'f') if self.bytes.get(self.pos..self.pos + 5) == Some(b"false") => {
+                self.pos += 5;
+                Ok(FlatValue::Bool(false))
+            }
+            _ => Err(self.error("expected string or boolean")),
+        }
+    }
+    fn object(mut self) -> io::Result<HashMap<String, FlatValue>> {
+        self.ws();
+        self.expect(b'{')?;
+        let mut fields = HashMap::new();
+        self.ws();
+        if !self.take(b'}') {
+            loop {
+                self.ws();
+                let key = self.string()?;
+                if !ARCHIVED_FIELDS.contains(&key.as_str()) {
+                    return Err(self.error("unknown archived-message field"));
+                }
+                self.ws();
+                self.expect(b':')?;
+                self.ws();
+                let value = self.value()?;
+                if fields.insert(key, value).is_some() {
+                    return Err(self.error("duplicate archived-message field"));
+                }
+                self.ws();
+                if self.take(b'}') { break; }
+                self.expect(b',')?;
+                self.ws();
+                if self.bytes.get(self.pos) == Some(&b'}') {
+                    return Err(self.error("trailing comma"));
+                }
+            }
+        }
+        self.ws();
+        if self.pos != self.bytes.len() {
+            return Err(self.error("trailing bytes after JSON object"));
+        }
+        Ok(fields)
+    }
+}
+
+const ARCHIVED_FIELDS: [&str; 22] = [
+    "schema", "conversation_ref", "message_ref", "node_ref",
+    "parent_node_ref", "branch_membership", "message_time_ref", "role_ref",
+    "thread_title", "content", "tool_kind", "citation_token",
+    "filename", "asset_pointer", "source_scope", "body_storage_ref",
+    "mime_type", "archive_source_id", "provenance_json",
+    "identity_verified", "candidate_only", "semantic_promotion",
+];
+
+impl ArchivedLine {
+    fn from_json(line: &str) -> io::Result<Self> {
+        let mut fields = FlatParser::new(line).object()?;
+        fn text(fields: &mut HashMap<String, FlatValue>, key: &str) -> io::Result<String> {
+            match fields.remove(key) {
+                Some(FlatValue::Text(value)) => Ok(value),
+                _ => Err(io::Error::new(io::ErrorKind::InvalidData,
+                    format!("missing or non-string field: {key}"))),
+            }
+        }
+        fn boolean(fields: &mut HashMap<String, FlatValue>, key: &str) -> io::Result<bool> {
+            match fields.remove(key) {
+                Some(FlatValue::Bool(value)) => Ok(value),
+                _ => Err(io::Error::new(io::ErrorKind::InvalidData,
+                    format!("missing or non-boolean field: {key}"))),
+            }
+        }
+        Ok(Self {
+            schema: text(&mut fields, "schema")?,
+            conversation_ref: text(&mut fields, "conversation_ref")?,
+            message_ref: text(&mut fields, "message_ref")?,
+            node_ref: text(&mut fields, "node_ref")?,
+            parent_node_ref: text(&mut fields, "parent_node_ref")?,
+            branch_membership: text(&mut fields, "branch_membership")?,
+            message_time_ref: text(&mut fields, "message_time_ref")?,
+            role_ref: text(&mut fields, "role_ref")?,
+            thread_title: text(&mut fields, "thread_title")?,
+            content: text(&mut fields, "content")?,
+            tool_kind: text(&mut fields, "tool_kind")?,
+            citation_token: text(&mut fields, "citation_token")?,
+            filename: text(&mut fields, "filename")?,
+            asset_pointer: text(&mut fields, "asset_pointer")?,
+            source_scope: text(&mut fields, "source_scope")?,
+            body_storage_ref: text(&mut fields, "body_storage_ref")?,
+            mime_type: text(&mut fields, "mime_type")?,
+            archive_source_id: text(&mut fields, "archive_source_id")?,
+            provenance_json: text(&mut fields, "provenance_json")?,
+            identity_verified: boolean(&mut fields, "identity_verified")?,
+            candidate_only: boolean(&mut fields, "candidate_only")?,
+            semantic_promotion: boolean(&mut fields, "semantic_promotion")?,
+        })
+    }
+}
+
 fn optional(value: String) -> Option<String> {
     if value.is_empty() { None } else { Some(value) }
 }
 
 fn parse_line(line: &str) -> io::Result<(ArchivedChatMessage, bool)> {
-    let raw: ArchivedLine = serde_json::from_str(line)
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+    let raw = ArchivedLine::from_json(line)?;
     if raw.schema != "sensiblaw.chat-archive-message.v0_1"
         || !raw.candidate_only || raw.semantic_promotion {
         return Err(io::Error::new(io::ErrorKind::InvalidData,
@@ -228,17 +430,26 @@ mod tests {
     use super::*;
 
     fn fixture(content: &str) -> String {
-        serde_json::json!({
-            "schema":"sensiblaw.chat-archive-message.v0_1",
-            "conversation_ref":"c1","message_ref":"m1","node_ref":"n1",
-            "parent_node_ref":"","branch_membership":"active",
-            "message_time_ref":"2026-10-20T00:00:00Z","role_ref":"user",
-            "thread_title":"case","content":content,"tool_kind":"",
-            "citation_token":"","filename":"","asset_pointer":"",
-            "source_scope":"","body_storage_ref":"","mime_type":"",
-            "archive_source_id":"","provenance_json":"",
-            "identity_verified":true,"candidate_only":true,"semantic_promotion":false
-        }).to_string()
+        // Fixed valid JSONL fixture. Content substitution only for these ASCII test cases.
+        const BASE: &str = r#"{"schema":"sensiblaw.chat-archive-message.v0_1","conversation_ref":"c1","message_ref":"m1","node_ref":"n1","parent_node_ref":"","branch_membership":"active","message_time_ref":"2026-10-20T00:00:00Z","role_ref":"user","thread_title":"case","content":"CONTENT","tool_kind":"","citation_token":"","filename":"","asset_pointer":"","source_scope":"","body_storage_ref":"","mime_type":"","archive_source_id":"","provenance_json":"","identity_verified":true,"candidate_only":true,"semantic_promotion":false}"#;
+        BASE.replace("CONTENT", content)
+    }
+
+    #[test]
+    fn strict_unknown_fields_and_escaped_newline() {
+        let unknown = fixture("test").replace(
+            r#""role_ref":"user""#, r#""role_ref":"user","unexpected":""#,
+        );
+        assert!(parse_line(&unknown).is_err());
+        let (message, _) = parse_line(&fixture(r#"first\nsecond \"quote\""#)).unwrap();
+        assert_eq!(message.content, "first\nsecond \"quote\"");
+        let (emoji, _) = parse_line(&fixture(r#"\uD83D\uDE00"#)).unwrap();
+        assert_eq!(emoji.content, "😀");
+        assert!(parse_line(&(fixture("test") + " trailing")).is_err());
+        assert!(parse_line(&fixture(r#"\uD83D"#)).is_err());
+        assert!(parse_line(&fixture("test").replace(
+            r#""identity_verified":true"#, r#""identity_verified":"true""#
+        )).is_err());
     }
 
     #[test]
