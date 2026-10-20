@@ -85,3 +85,76 @@ fn duplicate_comparison_fails_closed() {
     let result = run(&domain("pdf"), &domain("docx"), &[comparison(0),comparison(0),comparison(1)]);
     assert!(!result.complete_declared_domain);
 }
+
+
+fn group(pdf: &[&str], docx: &[&str], name: &str) -> sensiblaw_pg_source_store::AlignmentGroup {
+    use sensiblaw_pg_source_store::AlignmentGroup;
+    AlignmentGroup {
+        group_ref:name.into(),
+        pdf_span_refs:pdf.iter().map(|s| (*s).into()).collect(),
+        docx_span_refs:docx.iter().map(|s| (*s).into()).collect(),
+        pdf_candidate_batch_refs:vec!["pdf-candidate".into()],
+        docx_candidate_batch_refs:vec!["docx-candidate".into()],
+        comparator_revision_ref:"v3".into(),
+        comparison_receipt_refs:vec!["v3-receipt".into()],
+        semantic_multiset_exact:true,
+        other_mismatch:false,
+        other_debris_review_ref:None,
+    }
+}
+#[test]
+fn document_pair_one_to_many_alignment_is_complete() {
+    use sensiblaw_pg_source_store::assess_document_pair_manifestation_coverage as assess;
+    let pdf = domain("pdf");
+    let docx = domain("docx");
+    let mut d = docx.clone();
+    d.spans = vec![
+        sensiblaw_pg_source_store::SourceInterval { span_ref:"docx-a".into(),start:0,end:2 },
+        sensiblaw_pg_source_store::SourceInterval { span_ref:"docx-b".into(),start:2,end:5 },
+        sensiblaw_pg_source_store::SourceInterval { span_ref:"docx-c".into(),start:5,end:10 },
+    ];
+    let groups = vec![
+        group(&["pdf-0"],&["docx-a","docx-b"],"g0"),
+        group(&["pdf-1"],&["docx-c"],"g1"),
+    ];
+    let result = assess(&pdf,&d,&groups,&[],&[]);
+    assert!(result.complete_declared_domain, "{:?}",result.residuals);
+    assert!(result.transformation_residual_closed);
+    assert_eq!(result,assess(&pdf,&d,&groups,&[],&[]));
+    let mut reversed = groups.clone();
+    reversed.reverse();
+    assert_eq!(result.receipt_ref,assess(&pdf,&d,&reversed,&[],&[]).receipt_ref);
+}
+#[test]
+fn duplicate_group_membership_fails_closed() {
+    use sensiblaw_pg_source_store::assess_document_pair_manifestation_coverage as assess;
+    let groups = vec![group(&["pdf-0"],&["docx-0"],"g0"),
+                      group(&["pdf-0","pdf-1"],&["docx-1"],"g1")];
+    let result = assess(&domain("pdf"),&domain("docx"),&groups,&[],&[]);
+    assert!(!result.complete_declared_domain);
+    assert!(result.residuals.iter().any(|s|s.contains("duplicate_membership")));
+}
+#[test]
+fn reviewed_exclusion_accounts_for_unmatched_source_interval() {
+    use sensiblaw_pg_source_store::{
+        assess_document_pair_manifestation_coverage as assess, ReviewedExclusion
+    };
+    let exclusion = ReviewedExclusion {
+        span_ref:"pdf-1".into(),review_ref:"human-review".into(),policy_ref:"layout-policy".into()
+    };
+    let result = assess(&domain("pdf"),&domain("docx"),
+        &[group(&["pdf-0"],&["docx-0","docx-1"],"g0")],&[exclusion],&[]);
+    assert!(result.complete_declared_domain, "{:?}",result.residuals);
+    assert!(!result.creates_legal_controversy);
+    assert!(!result.creates_semantic_authority);
+    assert_eq!(result.independent_source_count_increment,0);
+}
+#[test]
+fn unmatched_semantic_group_forces_residual() {
+    use sensiblaw_pg_source_store::assess_document_pair_manifestation_coverage as assess;
+    let mut g = group(&["pdf-0","pdf-1"],&["docx-0","docx-1"],"all");
+    g.semantic_multiset_exact = false;
+    let result = assess(&domain("pdf"),&domain("docx"),&[g],&[],&[]);
+    assert!(!result.transformation_residual_closed);
+    assert!(result.residuals.iter().any(|s|s.contains("unmatched_semantic_group")));
+}
