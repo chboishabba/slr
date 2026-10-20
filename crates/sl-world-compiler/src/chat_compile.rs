@@ -1,5 +1,6 @@
 //! Strict bounded archived-chat JSONL -> native SLRO -> SLRW.
 //! No spaCy, no inferred dependencies, no semantic promotion.
+use std::collections::HashSet;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, BufWriter, Seek, SeekFrom, Write};
 use std::path::Path;
@@ -110,7 +111,15 @@ fn emit_message<W: Write>(writer: &mut W, msg: &ArchivedChatMessage) -> io::Resu
     let document_ref = format!("chat:{}:message:{}:node:{}",
                                msg.conversation_ref, msg.message_ref, msg.node_ref);
     let digest: [u8; 32] = Sha256::digest(msg.content.as_bytes()).into();
-    let revision_ref = format!("chat-revision:sha256:{}", hex_digest(&digest));
+    let branch = match msg.branch_membership {
+        ChatBranchMembership::Active => "active",
+        ChatBranchMembership::Inactive => "inactive",
+    };
+    let lineage = format!("{}:{}:{}:{}", msg.node_ref,
+        msg.parent_node_ref.as_deref().unwrap_or(""), branch, msg.message_time_ref);
+    let lineage_digest: [u8; 32] = Sha256::digest(lineage.as_bytes()).into();
+    let revision_ref = format!("chat-revision:sha256:{}:lineage:{}",
+                               hex_digest(&digest), hex_digest(&lineage_digest));
     encode_observation(writer, &ObservationRecord::Manifestation {
         document_ref: document_ref.clone(),
         qid: "Q_CHAT".into(),
@@ -168,6 +177,7 @@ pub fn compile_chat(
     // Anonymous tempfile: no persistent SLRO or duplicate transcript corpus.
     let mut observation_stream = tempfile::tempfile()?;
     let mut messages = 0usize;
+    let mut seen = HashSet::new();
     let mut unresolved = 0u64;
     for line in reader.lines() {
         let line = line?;
@@ -180,6 +190,12 @@ pub fn compile_chat(
                                       "tranche limit exceeded: input must be bounded"));
         }
         let (message, _) = parse_line(&line)?;
+        let identity = (message.conversation_ref.clone(), message.message_ref.clone(),
+                        message.node_ref.clone());
+        if !seen.insert(identity) {
+            return Err(io::Error::new(io::ErrorKind::InvalidData,
+                                      "duplicate exact archived message identity"));
+        }
         unresolved += emit_message(&mut observation_stream, &message)?;
         messages += 1;
     }
