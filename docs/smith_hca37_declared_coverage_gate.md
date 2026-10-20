@@ -1,35 +1,59 @@
-# Smith HCA 37 — declared-domain coverage gate (candidate only)
+# Smith HCA 37 — document-pair declared-domain coverage (candidate only)
 
-## O/R/C/S/L/P/G/F
+## Roadmap and O/R/C/S/L/P/G/F
 
-- **O** SensibLaw owns official manifestation and PNF evidence; ITIR owns acceptance.
-- **R** Source-bound whole-judgment or explicitly declared complete-aligned-span coverage.
-- **C** `official_primary_manifestation_coverage_domain` adds a pure assessor over existing v3 comparator references.
-- **S** PR #67 pays one selected aligned statutory span, not the whole judgment.
-- **L** Official extraction -> partition -> aligned exact spans -> v3 candidate PNF -> aggregate -> review.
-- **P** Bind the assessor to persisted extraction lengths/digests and v3 overlap rows, persist and reopen the aggregate receipt.
-- **G** No new independent authority, truth, applicability, legal controversy or automatic review.
-- **F** Missing spans, incomplete partitions, unverified Other exclusions, semantic mismatch, source/receipt binding and live persistence.
+- **O** SLR owns official extraction, exact slices, candidate-PNF, review and transformation receipts. ITIR owns suite acceptance.
+- **R** Auditable comparator-scoped PDF↔DOCX **document-pair** coverage for the same official judgment.
+- **C** `official_primary_manifestation_coverage_domain.rs` assesses independently complete source partitions and many-to-many alignment groups. Existing v3 selected-span comparison remains an immutable witness.
+- **S** Runner verified one selected statutory span, 22/22 semantic factors; whole judgment remains unmeasured.
+- **L** Two official extractions -> two complete partitions -> many-to-many groups -> candidate-PNF/v3 witnesses -> document-pair aggregate -> review.
+- **P** Bind declared coordinates to persisted official extraction and per-group comparison rows, then persist/reopen immutable aggregate.
+- **G** Candidate/provenance diagnostics only; never legal controversy, authority, applicability, truth, independent corroboration or consumer-informativeness payment.
+- **F** Official extraction binding, complete live Smith partitions, verified grouped PNF comparison, reviewed Other/exclusion records, PG aggregate/reopen and Agda empirical coverage proof.
 
-## Important limitation
+## Exact semantics
 
-The new assessor is a deterministic **declared-domain** computation, not a durable
-PostgreSQL receipt and not a live-verified whole-judgment result. It checks
-coverage of a *caller-declared* partition, including holes, overlaps and
-duplicate alignments. It hashes the declared extraction coordinates and
-per-span v3 references, but does **not** load and verify those references
-against persisted source-provenance rows. The caller must not promote
-`complete_declared_domain` to `whole_judgment_complete` until a trusted
-producer verifies the source domain against official extraction length/digest,
-reopens every v3 candidate batch, and persists/replays the aggregate receipt.
+`assess_document_pair_manifestation_coverage` emits a **single document-pair**
+digest over both declared extraction identities, SHA-256 values, parser
+revisions, document lengths, interval partitions, grouped span membership,
+candidate batch refs, comparator revision, comparison receipt refs and review
+coordinates. Each side's intervals must independently partition its declared
+document length without gaps or overlaps. Each interval must appear in
+**exactly one** comparison group or reviewed exclusion. Groups may include
+one or many spans from each side, so offset and segmentation differences do
+not force one-to-one matching.
 
-An `Other` mismatch requires a nonempty debris-review reference. Such a
-reference is only an assertion at this pure seam; downstream must verify
-the referenced review policy and decision. Excluded spans likewise require
-explicit review/policy references; exclusion never proves their semantic
-equivalence.
+A group marked `semantic_multiset_exact` is a caller-supplied v3-scoped
+comparison outcome, **not** an executed grouped semantic compiler. Group
+candidate ancestry and v3 receipt references are required but are not yet
+independently reopened. The legacy singleton function remains for historical
+callers and never establishes whole-document scope by itself.
 
-## Acceptance commands
+A nonsemantic `Other` mismatch requires an explicit debris-review reference;
+non-debris or unreviewed differences remain residuals. Reviewed exclusions
+must carry policy and review references, but those references are **not yet
+verified** against the review store. A pure successful receipt only says
+`complete_declared_domain`, not `whole_judgment_complete`.
+
+## Remaining producer/persistence acceptance
+
+A future PostgreSQL-bound operator must:
+
+1. Reopen both persisted official extraction refs and verify actual bytes,
+   digest, extraction identity, length, document/manifestation relationship
+   and parser revision; never trust caller assertions.
+2. Produce a complete independent partition of **each full extraction** and
+   verify every exact slice's byte/span ancestry.
+3. Reopen every candidate batch and v3 comparison, and aggregate PNF factors
+   across each many-to-many group using the **existing** semantic comparator.
+   Do not infer grouped equality from a list of singleton equality booleans.
+4. Reopen human review decisions for nonsemantic debris and exclusions; leave
+   unreviewed material as typed residual.
+5. Persist a versioned document-pair receipt with immutable coordinates,
+   revalidate on reopen, and reject identity conflicts or stale extraction
+   digests. A successful live Smith receipt is still outstanding.
+
+## Intended local commands (not executed in this GitHub authoring turn)
 
 ```sh
 cargo test -p sensiblaw-pg-source-store --test official_primary_manifestation_coverage_domain
@@ -39,15 +63,20 @@ cargo test -p sensiblaw-pg-source-store --test smith_hca37_real_matter_live -- -
 cargo fmt --all -- --check
 ```
 
-The ignored live gate requires configured PostgreSQL and reviewed Smith
-coordinates; it is **not** a whole-manifestation coverage test. No commands
-were executed in this GitHub-only authoring turn.
+The ignored real-matter test requires PostgreSQL and reviewed Smith coordinates;
+it is not a whole-document acceptance gate.
 
-## Formalisation residual
+## Multi-view and formalisation boundaries
 
-The Agda Smith interpretation and legal-follow regression modules encode
-information-loss and authority boundaries, not the empirical coverage of
-PDF/DOCX partitions. No Agda/Lean kernel receipt is claimed. A future
-formalisation can specify partition coverage and one-to-one accounting
-independently of the Rust assessor, with the live source/receipt binding as
-the explicit empirical premise.
+ITIR's world-model convergence roadmap says projections retain source/version,
+role-predicate shape, omissions/additions, authority class and rebuildability;
+comparisons emit diagnostic residuals. Simple Wikipedia supplies
+simplification pressure and Abstract Wikipedia constructor-level pressure.
+Neither makes PDF/DOCX agreement independent corroboration or establishes
+consumer-informativeness parity. DASHI Smith interpretation/legal-follow
+regressions bound coarse information loss and non-promotion; there is **no
+Agda/Lean kernel receipt** for full Smith document-partition coverage.
+
+Some historical SensibLaw context files referenced by the controller were
+not available at their requested GitHub paths; no claim of reviewing their
+exact line ranges is made.
