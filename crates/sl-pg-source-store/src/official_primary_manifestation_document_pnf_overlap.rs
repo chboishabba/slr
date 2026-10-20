@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS source_provenance.official_primary_document_pnf_overl
  docx_parser_residual_count BIGINT NOT NULL,
  review_refs TEXT[] NOT NULL,
  semantic_exact BOOLEAN NOT NULL,
+ semantic_pnf_overlap_closed BOOLEAN NOT NULL,
  transformation_closed BOOLEAN NOT NULL,
  candidate_only BOOLEAN NOT NULL CHECK(candidate_only),
  creates_legal_controversy BOOLEAN NOT NULL CHECK(NOT creates_legal_controversy),
@@ -55,6 +56,8 @@ CREATE TABLE IF NOT EXISTS source_provenance.official_primary_document_pnf_overl
  independent_source_count_increment INTEGER NOT NULL CHECK(independent_source_count_increment=0),
  UNIQUE(manifestation_comparison_ref,pdf_source_revision_ref,docx_source_revision_ref,comparator_ref)
 );
+ALTER TABLE source_provenance.official_primary_document_pnf_overlap
+  ADD COLUMN IF NOT EXISTS semantic_pnf_overlap_closed BOOLEAN NOT NULL DEFAULT FALSE;
 "#;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -76,6 +79,7 @@ pub struct DocumentPnfReceipt {
     pub docx: DocumentPnfSide,
     pub coverage: SemanticPnfCoverage,
     pub review_refs: Vec<String>,
+    pub semantic_pnf_overlap_closed: bool,
     pub transformation_closed: bool,
     pub candidate_only: bool,
     pub creates_legal_controversy: bool,
@@ -195,8 +199,13 @@ pub fn assess_document_pnf_pair(
     }
     // Review coordinates are retained as residual evidence, not trusted as
     // a materiality/closure decision until independently reopened.
-    let transformation_closed=coverage.semantic_factor_multiset_exact
-        && pdf.parser_residual_count==0 && docx.parser_residual_count==0
+    // The established v3 semantic projection excludes Other. Keep semantic
+    // exactness separate from review-dependent whole-transformation closure.
+    let semantic_pnf_overlap_closed=coverage.semantic_factor_multiset_exact
+        && pdf.parser_residual_count==0 && docx.parser_residual_count==0;
+    // No trusted persisted Other-materiality review loader is wired yet.
+    // An arbitrary caller-supplied review ref must not authorize closure.
+    let transformation_closed=semantic_pnf_overlap_closed
         && coverage.ignored_pdf_nonsemantic_count==0
         && coverage.ignored_docx_nonsemantic_count==0;
     let mut identity=vec![DOCUMENT_PNF_COMPARATOR_REF.into(),
@@ -218,9 +227,10 @@ pub fn assess_document_pnf_pair(
     let mut review_refs=review_refs;
     review_refs.sort();
     identity.extend(review_refs.clone());
+    identity.extend([semantic_pnf_overlap_closed.to_string(),transformation_closed.to_string()]);
     let receipt_ref=format!("official-primary-document-pnf:sha256:{}",hash_values(&identity));
     Ok(DocumentPnfReceipt {receipt_ref,manifestation_comparison_ref:comparison_ref.into(),
-        pdf,docx,coverage,review_refs,transformation_closed,candidate_only:true,
+        pdf,docx,coverage,review_refs,semantic_pnf_overlap_closed,transformation_closed,candidate_only:true,
         creates_legal_controversy:false,creates_semantic_authority:false,
         creates_legal_authority:false,applicability_promoted:false,
         claim_truth_promoted:false,consumer_informativeness_paid:false,
@@ -252,12 +262,12 @@ pub fn compare_and_persist_document_pnf_pair(
          pdf_inventory_sha256,docx_inventory_sha256,comparator_ref,projection_ref,
          pdf_semantic_count,docx_semantic_count,matched_count,unmatched_pdf_count,unmatched_docx_count,
          pdf_other_count,docx_other_count,pdf_parser_residual_count,docx_parser_residual_count,
-         review_refs,semantic_exact,transformation_closed,candidate_only,
+         review_refs,semantic_exact,semantic_pnf_overlap_closed,transformation_closed,candidate_only,
          creates_legal_controversy,creates_semantic_authority,creates_legal_authority,
          applicability_promoted,claim_truth_promoted,consumer_informativeness_paid,
          independent_source_count_increment)
          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,
-                $21,$22,$23,$24,$25,$26,$27,$28,TRUE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,0)
+                $21,$22,$23,$24,$25,$26,$27,$28,$29,TRUE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,0)
          ON CONFLICT(receipt_ref) DO NOTHING",
         &[&expected.receipt_ref,&expected.manifestation_comparison_ref,
           &expected.pdf.source_revision_ref,&expected.docx.source_revision_ref,
@@ -272,7 +282,7 @@ pub fn compare_and_persist_document_pnf_pair(
           &n(k.unmatched_docx_semantic_count)?,&n(k.ignored_pdf_nonsemantic_count)?,
           &n(k.ignored_docx_nonsemantic_count)?,&n(expected.pdf.parser_residual_count)?,
           &n(expected.docx.parser_residual_count)?,&expected.review_refs,
-          &k.semantic_factor_multiset_exact,&expected.transformation_closed])?;
+          &k.semantic_factor_multiset_exact,&expected.semantic_pnf_overlap_closed,&expected.transformation_closed])?;
     let reopened=load_document_pnf_pair(config,&expected.receipt_ref)?;
     if reopened != expected {return Err(DocumentPnfError::Conflict);}
     Ok(reopened)
@@ -290,7 +300,7 @@ pub fn load_document_pnf_pair(
                 pdf_inventory_sha256,docx_inventory_sha256,comparator_ref,projection_ref,
                 pdf_semantic_count,docx_semantic_count,matched_count,unmatched_pdf_count,unmatched_docx_count,
                 pdf_other_count,docx_other_count,pdf_parser_residual_count,docx_parser_residual_count,
-                review_refs,semantic_exact,transformation_closed,candidate_only,
+                review_refs,semantic_exact,semantic_pnf_overlap_closed,transformation_closed,candidate_only,
                 creates_legal_controversy,creates_semantic_authority,creates_legal_authority,
                 applicability_promoted,claim_truth_promoted,consumer_informativeness_paid,
                 independent_source_count_increment
@@ -327,10 +337,11 @@ pub fn load_document_pnf_pair(
         || row.get::<_,i64>(22)!=expected.pdf.parser_residual_count as i64
         || row.get::<_,i64>(23)!=expected.docx.parser_residual_count as i64
         || row.get::<_,bool>(25)!=expected.coverage.semantic_factor_multiset_exact
-        || row.get::<_,bool>(26)!=expected.transformation_closed
-        || !row.get::<_,bool>(27)
-        || (28..=33).any(|i|row.get::<_,bool>(i))
-        || row.get::<_,i32>(34)!=0 {
+        || row.get::<_,bool>(26)!=expected.semantic_pnf_overlap_closed
+        || row.get::<_,bool>(27)!=expected.transformation_closed
+        || !row.get::<_,bool>(28)
+        || (29..=34).any(|i|row.get::<_,bool>(i))
+        || row.get::<_,i32>(35)!=0 {
         return Err(DocumentPnfError::Conflict);
     }
     Ok(expected)
