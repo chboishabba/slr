@@ -101,7 +101,16 @@ from reopened source/compilation/candidate evidence before comparing columns.
 A different immutable coordinate under the same document-pair unique key
 cannot silently replace the previous row.
 
-**Conservative closure rule:** any parser residual or any `Other` factor
+**Corrected v3 semantics:** `semantic_pnf_overlap_closed` follows the existing
+non-`Other` semantic multiset comparator, provided parser coverage is complete.
+Unequal `Other` counts remain countable provenance residuals and do **not**
+make semantic PNF overlap unequal. `transformation_closed` is a distinct,
+stricter review-dependent conclusion: unresolved `Other` materiality still
+blocks it. A caller-supplied review reference does not pay that obligation;
+only an independently reopened established nonsemantic-debris disposition
+could eventually permit closure. Parser residuals remain conservative.
+
+**Conservative closure rule:** any parser residual or any unclassified `Other` factor
 prevents full transformation closure. Review refs are retained but are not
 interpreted as authorising omission. The live producer currently passes no
 review refs. This deliberately leaves potential layout debris unresolved
