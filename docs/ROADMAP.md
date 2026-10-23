@@ -269,3 +269,19 @@ scope permission != review/payment
 review/payment != legal applicability
 reachable legal route != predicted judicial outcome
 ```
+
+
+# 2026-10-23 cross-suite research-cockpit interface addendum
+
+**Owner boundary:** `itir-dioxus` owns operator visual projections and wgpu interaction; ITIR MCP/AO owns governed fleet dispatch, receipt lookup and reconciliation; StatiBaker owns temporal observer memory; SLR owns producer-side canonical evidence, scoped semantic admission and **experimental candidate-only** proof-search scheduler/loop. Neither Dioxus nor the fleet may turn model output, PNF lexical hints or a good-looking graph into admitted truth.
+
+**New operator user story:** trace from mission/obligation -> competing producer attempts -> source/revision/span observations -> proof-search frontier deltas -> review/admission -> exact compiler/kernel receipt -> next residual. Preserve alternative unsuccessful attempts, source-local identity and explicit abstentions. Operator may choose a candidate strategy or request a review through governed AO commands, not a direct semantic write.
+
+**Roadmap acceptance**
+- P0: produce a bounded, stable typed read projection keyed by canonical producer references and exact revisions; preserve residual kind, provenance, status, scope, cost-vector dimensions and prior-hop receipt links; explicit unavailable fields are better than inferred claims.
+- P0: demonstrate restart/replay consistency and deep-link to observation/span/receipt for a real persisted mission; no second canonical store or JSON-as-semantic-ABI (JSON is permitted for export/debug).
+- P1: connect proof-search schedule/return receipts to Dioxus `VisualisationIr` through a framework-neutral typed projection. Provide independent axes for verification status, information/proof gap reduction, time and cost; no scalar score as authority.
+- P1: distinguish source acquisition, reviewed correspondence, admission, publication, model-generated proof, local test and exact-head Agda/Lean kernel certification.
+- P2: experimental Cogentic-style prover/critic population and Self-Harness/MESH-inspired optimisation may only select **candidate** strategies; verify on held-out tasks with explicit resource budgets, negative-result retention and a human/typed admission gate.
+
+**References:** `itir-dioxus/docs/M10_UNIFIED_WORKBENCH.md`; `ITIR-suite/itir-mcp/README.md`; `ITIR-suite/docs/planning/governed_revival_handoff_v1.md`; `StatiBaker/docs/user_stories.md`; Cogentic https://arxiv.org/abs/2609.40324, Self-Harness https://arxiv.org/abs/2606.09498, MESH https://arxiv.org/abs/2610.05300. External studies motivate research hypotheses, not production performance claims. **Status:** planning only; original Sprint 1 certification and all existing acceptance gates unchanged.
