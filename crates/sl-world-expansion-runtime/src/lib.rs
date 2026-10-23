@@ -762,3 +762,8 @@ impl WorldExpansionCycleSink for PgDiscoveryLineageSink {
 pub mod adaptive_campaign;
 pub mod adaptive_context_review;
 pub mod reviewed_campaign;
+pub mod digital_esd_world;
+
+pub mod digital_esd_coordinates;
+
+pub mod digital_esd_genealogy;
