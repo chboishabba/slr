@@ -55,6 +55,13 @@ def read_jsonl(path: Path | None) -> list[dict[str, Any]]:
     return rows
 
 
+def write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as fh:
+        for row in rows:
+            fh.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
+
+
 class DigitalESDFulltextIndexer:
     def __init__(
         self,
@@ -190,8 +197,23 @@ class DigitalESDFulltextIndexer:
             for row in index_rows:
                 writer.writerow(row)
 
+        worklist_rows = [
+            {
+                "source_identity_reference": ref,
+                "decision": row.get("decision", ""),
+                "decision_reference": row.get("decision_reference", ""),
+                "metadata_revision_reference": row.get("metadata_revision_reference", ""),
+                "candidate_only": True,
+                "creates_source_truth": False,
+                "creates_source_audit_admission": False,
+            }
+            for ref, row in sorted(eligible.items())
+        ]
+        worklist_path = self.output_dir / "fulltext-worklist.jsonl"
+        write_jsonl(worklist_path, worklist_rows)
+
         result = {
-            "schema": "sensiblaw.digital-esd-fulltext-index.v0_2",
+            "schema": "sensiblaw.digital-esd-fulltext-index.v0_3",
             "completed_at": now_iso(),
             "input_screening_records": len(ledger),
             "eligible_for_fulltext": len(eligible),
@@ -200,6 +222,8 @@ class DigitalESDFulltextIndexer:
             "failed": failed,
             "pending": pending,
             "index_reference": str(index_path),
+            "worklist_reference": str(worklist_path),
+            "worklist_count": len(worklist_rows),
             "fulltext_retrieval_creates_source_truth": False,
             "fulltext_retrieval_creates_source_audit_admission": False,
         }
@@ -214,7 +238,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Digital-ESD fail-closed full-text gate")
     parser.add_argument("--ledger", type=Path, required=True)
     parser.add_argument("--retrieved-manifest", type=Path)
-    parser.add_argument("--output-dir", type=Path, default=Path("artifacts/digital_esd/fulltext"))
+    parser.add_argument("--output-dir", type=Path, default=Path("artifacts/digital-esd/fulltext"))
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
 
