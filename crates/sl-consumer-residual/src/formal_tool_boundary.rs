@@ -57,24 +57,36 @@ mod tests {
     use super::*;
     fn receipt(kind: FormalToolKind) -> FormalToolReceipt {
         FormalToolReceipt {
-            kind, subject_commit:"commit".into(), source_digest:"source".into(),
-            artifact_digest:"artifact".into(), checker_digest:"checker".into(),
-            dependency_digest:"deps".into(), evidence_digest:"evidence".into(),
-            candidate_only:true, establishes_proof:false,
+            kind,
+            subject_commit: "commit".into(),
+            source_digest: "source".into(),
+            artifact_digest: "artifact".into(),
+            checker_digest: "checker".into(),
+            dependency_digest: "deps".into(),
+            evidence_digest: "evidence".into(),
+            candidate_only: true,
+            establishes_proof: false,
         }
     }
     fn expected() -> CertifiedHandoff<'static> {
         CertifiedHandoff {
-            subject_commit:"commit", source_digest:"source",
-            artifact_digest:"artifact", checker_digest:"checker",
-            dependency_digest:"deps", authenticated_local_referee:true,
-            independent_kernel_success:true,
+            subject_commit: "commit",
+            source_digest: "source",
+            artifact_digest: "artifact",
+            checker_digest: "checker",
+            dependency_digest: "deps",
+            authenticated_local_referee: true,
+            independent_kernel_success: true,
         }
     }
     #[test]
     fn all_exploration_surfaces_fail_closed() {
-        for kind in [FormalToolKind::Preflight, FormalToolKind::Similarity,
-            FormalToolKind::ObligationRoute, FormalToolKind::InteractiveGoal] {
+        for kind in [
+            FormalToolKind::Preflight,
+            FormalToolKind::Similarity,
+            FormalToolKind::ObligationRoute,
+            FormalToolKind::InteractiveGoal,
+        ] {
             let mut r = receipt(kind);
             r.candidate_only = false;
             r.establishes_proof = true; // even forged flags do not promote
