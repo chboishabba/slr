@@ -1,3 +1,4 @@
+pub mod referee_protocol;
 pub mod protected_fleet;
 use std::collections::HashMap;
 use std::io::{ErrorKind, Read, Write};
