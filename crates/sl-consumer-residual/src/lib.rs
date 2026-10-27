@@ -1,3 +1,4 @@
+pub mod formal_tool_boundary;
 use std::io::{ErrorKind, Read, Write};
 
 use sensiblaw_world_store::{decode_record, encode_record, WireRecord, WorldRecordKind};
