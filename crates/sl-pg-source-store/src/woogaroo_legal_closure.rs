@@ -342,6 +342,12 @@ pub struct WoogarooSynthesisPacket {
     pub applicant_issue: &'static str,
     pub respondent_countercase: &'static str,
     pub decisive_original: &'static str,
+    /// Existing 80-obligation canonical max-cut acquisition packet.
+    pub original_acquisition_packet_key: &'static str,
+    /// Exactly four still-unpaid G01..G28 closure IDs for this ground.
+    pub open_ground_obligation_ids: Vec<&'static str>,
+    /// Its packet-to-ground consumer is potential-only, never a DB reopen.
+    pub creates_actual_reopening: bool,
     pub kind: WoogarooSynthesisKind,
     /// Applicant/respondent disagreement. This is NOT Boolean negation.
     pub applicant_respondent_edge: WoogarooDialecticEdge,
@@ -389,6 +395,24 @@ pub fn woogaroo_synthesise_dialectic_trialectic(
 ) -> Option<WoogarooSynthesisPacket> {
     let ground = WOOGAROO_GROUNDS.iter().find(|g| g.key == ground_key)?;
     let comparison = woogaroo_hypothetical_adversarial_test(ground_key, world)?;
+    let obligations = WOOGAROO_CLOSURE_OBLIGATIONS.iter()
+        .filter(|o| o.ground_key == Some(ground.key))
+        .collect::<Vec<_>>();
+    if obligations.len() != 4 || obligations.iter().any(|o| o.discharged) {
+        return None;
+    }
+    let acquisition_key = obligations.first()?.primary_packet;
+    if !obligations.iter().all(|o| o.primary_packet == acquisition_key) {
+        return None;
+    }
+    let packet = WOOGAROO_ACQUISITION_PACKETS.iter()
+        .find(|p| p.key == acquisition_key)?;
+    let cone = woogaroo_potential_reopening_cone(packet.key).ok()?;
+    if cone.creates_actual_reopening || cone.creates_semantic_authority
+        || !obligations.iter().all(|o| cone.direct_refs.contains(
+            &format!("obligation:woogaroo:{}", o.id))) {
+        return None;
+    }
     let kind = if comparison.contradictory_assumptions_retained {
         WoogarooSynthesisKind::ReconcileOpposingSourceAssertions
     } else if comparison.applicant_conditional {
@@ -418,6 +442,9 @@ pub fn woogaroo_synthesise_dialectic_trialectic(
         applicant_issue: ground.statutory_hook,
         respondent_countercase: woogaroo_countercase_hint(ground.key)?,
         decisive_original: ground.next_original,
+        original_acquisition_packet_key: packet.key,
+        open_ground_obligation_ids: obligations.iter().map(|o| o.id).collect(),
+        creates_actual_reopening: false,
         kind,
         applicant_respondent_edge: edge,
         respondent_independent_edge: WoogarooDialecticEdge::Unresolved,
