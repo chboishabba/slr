@@ -233,3 +233,26 @@ standing, clock and interim-preservation review. Candidate logic cannot
 file a proceeding, pay a source, make an ecological measurement or secure
 habitat protection by proof-term construction. Preserve the historical
 SensibLaw prototype as prototype; SLR is production.
+
+## 28 October: original-source max-cut now takes priority over cube output
+
+`woogaroo_original_source_maxcut()` is a Pareto-ordered
+readout of the existing **12 canonical original acquisition
+packets** against all **80 unpaid closure obligations**.
+The `woogaroo_trialectic_synthesis` JSON example exports this
+source worklist before the candidate trialectic/fibre packets.
+The implementation never changes reviewed source status or
+calls a database or filing action. It distinguishes the original
+2019/8575 approval public listing from binding signed Part 9
+conditions, original s95B comment transmission and the s95C report;
+those originals remain unpaid, alongside standing/furnishing and
+same-stage Council works.
+
+The #1414 inspiration is a *finite presentation legend*:
+`woogaroo_chart_invariant_case_packet` checks all seven grounds
+and the same G01–G28 packets independently of any S3 labels.
+Only identity/endpoint reflection genuinely preserve strict
+three-stage cube **adjacency**. The other permutations cannot
+be welded into legal claim changes, genuine mediation of Z,
+Monster/Spin identity or habitat outcomes. [DASHI
+source-first mathematical/legal crosscut](https://github.com/chboishabba/dashi_agda/blob/research/woogaroo-approval-benefit-gas-20261027/Docs/Woogaroo1414S3ChartTransportAndOriginalSourceMaxCut20261028.md).
