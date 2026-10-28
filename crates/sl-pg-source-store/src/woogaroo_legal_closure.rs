@@ -248,3 +248,54 @@ pub fn woogaroo_potential_reopening_cone(
     }
     potential_reopening_cone(&format!("packet:woogaroo:{packet_key}"), &edges)
 }
+
+
+// Seven-ground applicant/respondent LOGIC ONLY. This mirrors the DASHI
+// counterfactual truth-table, not a legal sufficiency rule or source payment.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct WoogarooHypotheticalWorld {
+    pub legally_applicable: bool,
+    pub defect_established: bool,
+    pub materiality_established: bool,
+    pub government_compliance_established: bool,
+    pub evidence_reviewed: bool,
+    pub ecological_harm_assumed: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct WoogarooHypotheticalBranches {
+    pub ground_key: &'static str,
+    pub applicant_conditional: bool,
+    pub respondent_conditional: bool,
+    /// Always false: this function cannot materialize evidence or decide law.
+    pub proves_actual_legal_merits: bool,
+    pub creates_legal_evidence_review: bool,
+    pub creates_court_filing: bool,
+}
+
+/// No synthetic or other-referral ground identifiers are accepted.
+/// Positive branches mean only that *stipulated inputs* satisfy this
+/// finite test; neither branch entails a Woogaroo fact or court judgment.
+pub fn woogaroo_hypothetical_adversarial_test(
+    ground_key: &str,
+    world: WoogarooHypotheticalWorld,
+) -> Option<WoogarooHypotheticalBranches> {
+    let canonical = WOOGAROO_GROUNDS.iter()
+        .find(|ground| ground.key == ground_key)?.key;
+    let applicant = !world.government_compliance_established
+        && world.evidence_reviewed
+        && world.legally_applicable
+        && world.defect_established
+        && world.materiality_established;
+    let respondent = world.government_compliance_established
+        && world.evidence_reviewed
+        && world.legally_applicable;
+    Some(WoogarooHypotheticalBranches {
+        ground_key: canonical,
+        applicant_conditional: applicant,
+        respondent_conditional: respondent,
+        proves_actual_legal_merits: false,
+        creates_legal_evidence_review: false,
+        creates_court_filing: false,
+    })
+}
