@@ -5,10 +5,12 @@ use sensiblaw_pg_source_store::{
     project_matter_reverse_proof_search, validate_matter_controversy_draft,
     validate_woogaroo_candidate_matter, validate_woogaroo_case_cut,
     woogaroo_candidate_matter, woogaroo_locator_matches_springview,
+    woogaroo_priority_frontier,
     MatterEpistemicStatus, MatterPartyRole, MatterProceduralGoal,
     MatterResponseMode, WoogarooCaseCutError, WoogarooGroundPriority,
     WOOGAROO_ACTION_REF, WOOGAROO_CASE_CONTRACT, WOOGAROO_GROUNDS,
-    WOOGAROO_MATTER_REF, WOOGAROO_SOURCE_LOCATORS, SCENIC_ACTION_REF,
+    WOOGAROO_MATTER_REF, WOOGAROO_SOURCE_LOCATORS, WOOGAROO_PRECONDITIONS,
+    SCENIC_ACTION_REF,
 };
 
 #[test]
@@ -100,6 +102,36 @@ fn case_frontier_prioritises_real_decision_evidence_over_network_speculation() {
     ]);
     assert_eq!(WOOGAROO_GROUNDS[6].key, "improper-influence");
     assert_eq!(WOOGAROO_GROUNDS[6].priority, WoogarooGroundPriority::SourceOnlySpeculation);
+}
+
+#[test]
+fn procedural_standing_clock_works_and_signed_conditions_remain_unpaid() {
+    assert_eq!(WOOGAROO_PRECONDITIONS.len(), 4);
+    assert!(WOOGAROO_PRECONDITIONS.iter().all(|precondition|
+        !precondition.document_paid && !precondition.competent_decision_paid
+        && !precondition.key.is_empty()
+        && !precondition.required_original.is_empty()
+    ));
+    assert!(WOOGAROO_PRECONDITIONS.iter().any(|p|
+        p.key == "applicant-specific-adjr-clock"));
+    assert!(WOOGAROO_PRECONDITIONS.iter().any(|p|
+        p.key == "actual-stage-works-and-urgency"));
+    assert!(WOOGAROO_PRECONDITIONS.iter().any(|p|
+        p.key == "signed-federal-decision-package"));
+}
+
+#[test]
+fn pareto_frontier_is_a_deterministic_evidence_queue_not_a_success_score() {
+    let frontier = woogaroo_priority_frontier();
+    assert_eq!(frontier.len(), 7);
+    let urgent: Vec<_> = frontier.iter()
+        .take_while(|g| g.priority == WoogarooGroundPriority::UrgentProcedural)
+        .map(|g| g.key).collect();
+    assert_eq!(urgent.len(), 4);
+    assert_eq!(frontier[0].key, "advice-consideration");
+    assert_eq!(frontier.last().expect("not empty").key, "improper-influence");
+    assert!(frontier.iter().all(|g| g.evidence_gate == 0));
+    assert_eq!(frontier, woogaroo_priority_frontier());
 }
 
 #[test]
