@@ -61,7 +61,9 @@ pub struct WoogarooSourceLocator {
 }
 
 impl WoogarooSourceLocator {
-    pub fn same_action_merits_candidate(self) -> bool {
+    /// This checks reference identity only, not source admission,
+    /// decision-maker consideration, admissibility, or the truth of merits.
+    pub fn matches_springview_action(self) -> bool {
         self.epbc_action == WOOGAROO_ACTION_REF
     }
 
@@ -295,9 +297,9 @@ pub fn validate_woogaroo_case_cut(
     Ok(())
 }
 
-pub fn woogaroo_same_action_merits_source(key: &str) -> Option<bool> {
+pub fn woogaroo_locator_matches_springview(key: &str) -> Option<bool> {
     WOOGAROO_SOURCE_LOCATORS.iter().find(|s| s.key == key)
-        .map(|source| source.same_action_merits_candidate())
+        .map(|source| source.matches_springview_action())
 }
 
 const APPROVAL: &str = "prop:woogaroo:public-approval-status";
