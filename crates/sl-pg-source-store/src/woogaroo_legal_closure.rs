@@ -668,7 +668,7 @@ impl WoogarooSignedEvidence {
 
     /// Merge only *after* the caller has supplied a same-proposition,
     /// same-ground, same-scope alignment: no global blind evidence pooling.
-    pub fn merge_same_claim(&self, other: &Self) -> Self {
+    fn merge_same_claim(&self, other: &Self) -> Self {
         let mut refs = self.original_reference_labels.clone();
         refs.extend(other.original_reference_labels.iter().cloned());
         refs.sort();
@@ -678,6 +678,38 @@ impl WoogarooSignedEvidence {
             negative_supported: self.negative_supported || other.negative_supported,
             original_reference_labels: refs,
         }
+    }
+}
+
+/// Evidence union is permitted only for the same ground, SAME predicate,
+/// same project/scope, and a declared alignment. Matching numeric signs
+/// alone never licenses a cross-ground or cross-project join.
+/// Alignment labels are candidate declarations, not actual source payments.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct WoogarooScopedSignedEvidence {
+    pub ground_key: String,
+    pub predicate_key: String,
+    pub project_and_scope_ref: String,
+    pub evidence: WoogarooSignedEvidence,
+}
+
+impl WoogarooScopedSignedEvidence {
+    pub fn merge_aligned(&self, other: &Self) -> Option<Self> {
+        if self.ground_key != other.ground_key
+            || self.predicate_key != other.predicate_key
+            || self.project_and_scope_ref != other.project_and_scope_ref
+            || self.project_and_scope_ref.trim().is_empty()
+            || !WOOGAROO_GROUNDS.iter().any(|g| g.key == self.ground_key)
+            || !WOOGAROO_SIGNED_PREDICATES.contains(&self.predicate_key.as_str())
+            || self.project_and_scope_ref !=
+                format!("epbc:2019/8575:{}",self.ground_key)
+        { return None; }
+        Some(Self {
+            ground_key: self.ground_key.clone(),
+            predicate_key: self.predicate_key.clone(),
+            project_and_scope_ref: self.project_and_scope_ref.clone(),
+            evidence: self.evidence.merge_same_claim(&other.evidence),
+        })
     }
 }
 
