@@ -837,3 +837,33 @@ fn all_unpaid_signed_outputs_keep_seven_distinct_fibres_and_obligation_roots() {
         assert!(!packet.actual_source_reviewed);
     }
 }
+
+
+#[test]
+fn one_converged_synthesis_per_ground_preserves_signed_and_dialectical_owners() {
+    use sensiblaw_pg_source_store::{
+        woogaroo_unpaid_converged_synthesis, WoogarooSignedSearchFocus,
+        WoogarooTrialecticFace,
+    };
+    let outputs = woogaroo_unpaid_converged_synthesis();
+    assert_eq!(outputs.len(),7);
+    for (output,g) in outputs.iter().zip(WOOGAROO_GROUNDS) {
+        assert_eq!(output.canonical_ground,g.key);
+        assert_eq!(output.candidate_dialectic.ground_key,g.key);
+        assert_eq!(output.signed_predicate_hyperfabric.ground_key,g.key);
+        assert_eq!(output.candidate_dialectic.original_acquisition_packet_key,
+            output.signed_predicate_hyperfabric.base_acquisition_packet);
+        assert_eq!(output.candidate_dialectic.open_ground_obligation_ids,
+            output.signed_predicate_hyperfabric.four_unpaid_obligation_ids);
+        assert_eq!(output.candidate_dialectic.open_ground_obligation_ids.len(),4);
+        assert_eq!(output.signed_predicate_hyperfabric.focus,
+            WoogarooSignedSearchFocus::AcquireOriginals);
+        assert_eq!(output.candidate_dialectic.triadic_face,
+            WoogarooTrialecticFace::Underdetermined);
+        assert!(output.matched_source_obligations);
+        assert!(output.p_adic_branch_is_only_a_prefix);
+        assert!(!output.may_force_irreducible_face);
+        assert!(!output.real_legal_conclusion);
+        assert!(!output.signed_predicate_hyperfabric.actual_source_reviewed);
+    }
+}
