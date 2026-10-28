@@ -830,6 +830,36 @@ pub fn woogaroo_signed_search_focus(
     }
 }
 
+/// Combine MULTIPLE same-ground/same-scope predicate branches, instead
+/// of letting a solitary defect sign determine a case-level synthesis.
+/// This is explicitly counterfactual: these checks never pay original
+/// evidence, standing, saved-law interpretation, or an independent face.
+pub fn woogaroo_signed_nested_focus(
+    fibre: &WoogarooSignedClaimFibre,
+    synthetic_review_assumed: bool,
+) -> Option<WoogarooSignedSearchFocus> {
+    if fibre.evidence.len() != WOOGAROO_SIGNED_PREDICATES.len() {
+        return None;
+    }
+    let e = &fibre.evidence;
+    if e.iter().any(|x| x.status() == WoogarooEvidenceStatus::Both) {
+        return Some(WoogarooSignedSearchFocus::ReconcileContradiction);
+    }
+    let pos = |i: usize| e[i].status() == WoogarooEvidenceStatus::PositiveOnly;
+    let neg = |i: usize| e[i].status() == WoogarooEvidenceStatus::NegativeOnly;
+    let common = synthetic_review_assumed && pos(0) && pos(6) && pos(7);
+    let result = if !common {
+        WoogarooSignedSearchFocus::AcquireOriginals
+    } else if pos(1) && pos(2) && !pos(3) {
+        WoogarooSignedSearchFocus::TestApplicantDefeaters
+    } else if neg(1) && pos(3) {
+        WoogarooSignedSearchFocus::TestRespondentCounterDefeaters
+    } else {
+        WoogarooSignedSearchFocus::AcquireOriginals
+    };
+    Some(result)
+}
+
 /// A finite 3-adic branch prefix, not the whole inverse limit: adding a
 /// finer sign preserves the earlier low-to-high digits. A coarse 0 still
 /// requires the four-valued fine-fibre residual to distinguish both/neither.
@@ -886,7 +916,7 @@ pub fn woogaroo_synthesise_signed_fibre(
     let base = woogaroo_synthesise_dialectic_trialectic(ground.key, unpaid)?;
     let signed_369 = fibre.signed_chart()?;
     let nested_predicate_tree = woogaroo_signed_decision_tree(&fibre)?;
-    let focus = woogaroo_signed_search_focus(&fibre.evidence[1], synthetic_review_assumed);
+    let focus = woogaroo_signed_nested_focus(&fibre, synthetic_review_assumed)?;
     let one_branch_padic_prefix = woogaroo_signed_padic_prefix(&[
         &fibre.evidence[0], &fibre.evidence[1], &fibre.evidence[2],
     ]);
