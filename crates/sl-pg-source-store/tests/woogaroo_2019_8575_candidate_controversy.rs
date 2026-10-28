@@ -640,3 +640,57 @@ fn all_64_boolean_worlds_embed_in_ternary_369_without_loss_of_legal_inputs() {
     // 64 unique Boolean inputs occupy only 64 of the ambient 19683 states.
     assert_eq!(codes.len(), 64);
 }
+
+
+#[test]
+fn all_single_axis_369_perturbations_respect_grounded_pair_semantics() {
+    use sensiblaw_pg_source_store::{
+        woogaroo_geometric_pair, WoogarooGeometricIntervention, WoogarooHypotheticalWorld,
+    };
+    let mut tested = 0usize;
+    for ground in WOOGAROO_GROUNDS {
+        let mut review_label_flips = 0usize;
+        let mut harm_false_flips = 0usize;
+        for mask in 0u8..32 {
+            let base = WoogarooHypotheticalWorld {
+                legally_applicable: mask & 1 != 0,
+                defect_established: mask & 2 != 0,
+                materiality_established: mask & 4 != 0,
+                government_compliance_established: mask & 8 != 0,
+                evidence_reviewed: false,
+                ecological_harm_assumed: mask & 16 != 0,
+            };
+            let changed_review = WoogarooHypotheticalWorld {
+                evidence_reviewed: true, ..base
+            };
+            let review = woogaroo_geometric_pair(
+                ground.key, base, changed_review, WoogarooGeometricIntervention::ReviewGate
+            ).unwrap();
+            assert!(review.changed_369_position);
+            assert!(!review.model_pair_accuracy_measured);
+            assert!(!review.actual_legal_merits_determined);
+            if review.changed_logical_label { review_label_flips += 1; }
+
+            let no_harm = WoogarooHypotheticalWorld {
+                ecological_harm_assumed: false, ..base
+            };
+            let with_harm = WoogarooHypotheticalWorld {
+                ecological_harm_assumed: true, ..no_harm
+            };
+            let harm = woogaroo_geometric_pair(
+                ground.key, no_harm, with_harm,
+                WoogarooGeometricIntervention::EcologicalHarm
+            ).unwrap();
+            assert!(harm.changed_369_position);
+            if harm.changed_logical_label { harm_false_flips += 1; }
+            assert_eq!(harm.canonical.independent_review_cube,
+                harm.perturbed.independent_review_cube);
+            tested += 2;
+        }
+        // Review alone flips only under six sufficient antecedent
+        // configurations per ground, not all 32 source-free scenarios.
+        assert_eq!(review_label_flips, 6);
+        assert_eq!(harm_false_flips, 0);
+    }
+    assert_eq!(tested, 7 * 32 * 2);
+}
