@@ -947,6 +947,9 @@ pub fn woogaroo_unpaid_signed_fibre_synthesis() -> Vec<WoogarooSignedSynthesisOu
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct WoogarooConvergedSynthesisPacket {
     pub canonical_ground: &'static str,
+    /// The actual dialectic-position X/Y and emergent interaction Z carrier;
+    /// distinct from the nine signed evidence predicate slots.
+    pub xy_interaction_27: WoogarooXYInteractionCarrier,
     pub candidate_dialectic: WoogarooSynthesisPacket,
     pub signed_predicate_hyperfabric: WoogarooSignedSynthesisOutput,
     pub matched_source_obligations: bool,
@@ -982,6 +985,7 @@ pub fn woogaroo_unpaid_converged_synthesis() -> Vec<WoogarooConvergedSynthesisPa
         { return None; }
         Some(WoogarooConvergedSynthesisPacket {
             canonical_ground: g.key,
+            xy_interaction_27: woogaroo_unpaid_xy_interaction_carrier(g.key)?,
             candidate_dialectic,
             signed_predicate_hyperfabric,
             matched_source_obligations:true,
@@ -990,4 +994,168 @@ pub fn woogaroo_unpaid_converged_synthesis() -> Vec<WoogarooConvergedSynthesisPa
             real_legal_conclusion:false,
         })
     }).collect()
+}
+
+
+// ---------------------------------------------------------------------------
+// ORIGINAL 27-CUBE SEMANTICS (not the nine signed-proposition chart):
+//   X = thesis/antithesis/synthesis position of dialectic A
+//   Y = thesis/antithesis/synthesis position of dialectic B
+//   Z = thesis/antithesis/synthesis position of THEIR INTERACTION
+//
+// The XY plane has 9 ordered encounters. Each XY column permits three Z
+// positions: 27 total cells. A chosen Z is NOT determined by the two
+// dialectic positions unless a separate interaction rule/receipt is supplied.
+// Reuse DASHI.Reasoning.TernaryComparisonSynthesisExact, and
+// DialecticXYInteractionZTransportExact. Belnap claim-support evidence,
+// original references, Pareto obligation IDs and source review stay in
+// separate ground-indexed fine fibres, NOT on these axes.
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WoogarooDialecticPosition {
+    Thesis,
+    Antithesis,
+    Synthesis,
+}
+
+impl WoogarooDialecticPosition {
+    pub fn index(self) -> usize {
+        match self {
+            Self::Thesis => 0,
+            Self::Antithesis => 1,
+            Self::Synthesis => 2,
+        }
+    }
+
+    /// Numerical embedding only. Negative index != evidence for ¬P.
+    pub fn embedded_trit(self) -> i8 {
+        self.index() as i8 - 1
+    }
+
+    pub const ALL: [Self; 3] = [Self::Thesis, Self::Antithesis, Self::Synthesis];
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct WoogarooXYDialecticInteractionCell {
+    pub ground_key: &'static str,
+    pub x_dialectic_ref: String,
+    pub y_dialectic_ref: String,
+    pub z_interaction_ref: String,
+    pub x_position: WoogarooDialecticPosition,
+    pub y_position: WoogarooDialecticPosition,
+    pub z_position: WoogarooDialecticPosition,
+    /// Stable ordinal 0..26 on the ordered X/Y/Z basis.
+    pub cell_index: usize,
+    /// Stable ordinal 0..8 on the XY comparison plane.
+    pub xy_plane_index: usize,
+    /// -1/0/+1 code for ROLE positions only: not signed claim support.
+    pub role_position_trits: [i8; 3],
+    pub actual_z_mediation_witness_paid: bool,
+    pub actual_source_review_paid: bool,
+    pub actual_legal_merits_established: bool,
+}
+
+/// Full eligible XY/Z position with explicitly selected *hypothetical* Z.
+/// No real mediation/evidence is inferred from a numerical position.
+pub fn woogaroo_xy_interaction_cell(
+    ground_key: &str,
+    x: WoogarooDialecticPosition,
+    y: WoogarooDialecticPosition,
+    z: WoogarooDialecticPosition,
+) -> Option<WoogarooXYDialecticInteractionCell> {
+    let ground = WOOGAROO_GROUNDS.iter().find(|g| g.key == ground_key)?;
+    Some(WoogarooXYDialecticInteractionCell {
+        ground_key: ground.key,
+        x_dialectic_ref:
+            format!("epbc:2019/8575:{}:decision-dialectic", ground.key),
+        y_dialectic_ref:
+            format!("epbc:2019/8575:{}:source-response-dialectic", ground.key),
+        z_interaction_ref:
+            format!("epbc:2019/8575:{}:interaction", ground.key),
+        x_position: x, y_position: y, z_position: z,
+        xy_plane_index: x.index() * 3 + y.index(),
+        cell_index: x.index() * 9 + y.index() * 3 + z.index(),
+        role_position_trits: [x.embedded_trit(), y.embedded_trit(), z.embedded_trit()],
+        actual_z_mediation_witness_paid: false,
+        actual_source_review_paid: false,
+        actual_legal_merits_established: false,
+    })
+}
+
+/// The 9 XY columns each have 3 *possible* Z outcomes. Until a rule
+/// is supplied, ALL three remain open; this is not a voted/derived Z.
+pub fn woogaroo_xy_interaction_column(
+    ground_key: &str,
+    x: WoogarooDialecticPosition,
+    y: WoogarooDialecticPosition,
+) -> Option<[WoogarooXYDialecticInteractionCell; 3]> {
+    Some([
+        woogaroo_xy_interaction_cell(ground_key,x,y,WoogarooDialecticPosition::Thesis)?,
+        woogaroo_xy_interaction_cell(ground_key,x,y,WoogarooDialecticPosition::Antithesis)?,
+        woogaroo_xy_interaction_cell(ground_key,x,y,WoogarooDialecticPosition::Synthesis)?,
+    ])
+}
+
+/// An explicit Z selection makes one *hypothetical* transport output.
+/// None = no chosen Z, NOT "Z=antithesis" or "Z=unknown evidence".
+pub fn woogaroo_xy_transport_selected_z(
+    ground_key: &str,
+    x: WoogarooDialecticPosition,
+    y: WoogarooDialecticPosition,
+    selected_z: Option<WoogarooDialecticPosition>,
+) -> Option<WoogarooXYDialecticInteractionCell> {
+    woogaroo_xy_interaction_cell(ground_key, x, y, selected_z?)
+}
+
+/// A possible (not compulsory) within-XY interaction progression.
+pub fn woogaroo_xy_next_z_step(
+    cell: &WoogarooXYDialecticInteractionCell,
+) -> Option<WoogarooXYDialecticInteractionCell> {
+    let next_z = match cell.z_position {
+        WoogarooDialecticPosition::Thesis => WoogarooDialecticPosition::Antithesis,
+        WoogarooDialecticPosition::Antithesis => WoogarooDialecticPosition::Synthesis,
+        WoogarooDialecticPosition::Synthesis => return None,
+    };
+    woogaroo_xy_interaction_cell(cell.ground_key,cell.x_position,cell.y_position,next_z)
+}
+
+/// Stage-free structural base of one seven-ground case. The current legal
+/// record does NOT establish either dialectic's stage or any Z outcome.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct WoogarooXYInteractionCarrier {
+    pub ground_key: &'static str,
+    pub x_dialectic_ref: String,
+    pub y_dialectic_ref: String,
+    pub z_interaction_ref: String,
+    pub xy_encounter_count: usize,
+    pub xyz_possible_cells: usize,
+    pub actual_x_position_selected: Option<WoogarooDialecticPosition>,
+    pub actual_y_position_selected: Option<WoogarooDialecticPosition>,
+    pub actual_z_position_selected: Option<WoogarooDialecticPosition>,
+    pub selected_interaction_is_a_legal_conclusion: bool,
+}
+
+pub fn woogaroo_unpaid_xy_interaction_carrier(
+    ground_key: &str,
+) -> Option<WoogarooXYInteractionCarrier> {
+    let sample = woogaroo_xy_interaction_cell(
+        ground_key,
+        WoogarooDialecticPosition::Thesis,
+        WoogarooDialecticPosition::Thesis,
+        WoogarooDialecticPosition::Thesis,
+    )?;
+    Some(WoogarooXYInteractionCarrier {
+        ground_key:sample.ground_key,
+        x_dialectic_ref:sample.x_dialectic_ref,
+        y_dialectic_ref:sample.y_dialectic_ref,
+        z_interaction_ref:sample.z_interaction_ref,
+        xy_encounter_count:9,
+        xyz_possible_cells:27,
+        actual_x_position_selected:None,
+        actual_y_position_selected:None,
+        actual_z_position_selected:None,
+        selected_interaction_is_a_legal_conclusion:false,
+    })
 }
