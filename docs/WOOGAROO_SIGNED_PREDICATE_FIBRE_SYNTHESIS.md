@@ -203,3 +203,19 @@ not likelihoods, Court outcomes or real evidence. The high
 contradiction count comes from considering all possible synthetic
 four-valued nine-predicate assignments, NOT from claims that the
 actual 2019/8575 record contains such contradictions.
+
+## Critical 27-cube axis correction — separate attached evidence fibres
+
+The **original 27-cube transport** is documented in
+[`WOOGAROO_XY_DIALECTIC_Z_INTERACTION_27_TRANSPORT.md`](WOOGAROO_XY_DIALECTIC_Z_INTERACTION_27_TRANSPORT.md):
+X=position in dialectic A (thesis, antithesis, synthesis),
+Y=position in dialectic B (thesis, antithesis, synthesis), and
+Z=their interaction's own thesis/antithesis/synthesis position.
+There are 9 ordered XY encounters with 3 possible Z states each.
+Neither signed `−P/0/+P` nor the nine source-evidence predicates
+defines X/Y/Z. These fine support/provenance data are **attached to
+one cube cell as fibres**, retaining BOTH versus NEITHER. This document
+still describes a valid *separate* 9-predicate `T^9` sign chart and
+p-adic projection, not the original user-defined *one* `T^3`
+dialectic-interaction cube. The corrected SLR converged source packets
+include `xy_interaction_27`, defaulting actual X/Y/Z to **None**.
