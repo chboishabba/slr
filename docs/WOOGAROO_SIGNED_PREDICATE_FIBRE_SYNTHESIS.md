@@ -151,3 +151,24 @@ SensibLaw/SLR/DASHI author credits retained. In particular the
 Ibrahim Monster 3B and prior PR proof ownership stays separate;
 no shared code/prime, 369 label or signature implies same-object
 Monster representation. No protected ESD files are edited.
+
+## One converged source-gated synthesis output
+
+The final native `woogaroo_unpaid_converged_synthesis()` joins the
+previous dialectic/trialectic candidate packet to the signed predicate
+fibre tree/p-adic packet **only when their canonical seven-ground ID,
+existing acquisition packet and four Gxx obligation IDs match**.
+It returns `WoogarooConvergedSynthesisPacket` with the two original
+components intact, `matched_source_obligations=true`, and explicit
+false flags for legal conclusion and forced triadic face. This is
+a receiving adapter, not a new geometry/synthesis owner.
+
+The source-written SLR suite now has 26 test functions, including a
+seven-ground converged-output check. The JSON example emits its
+`converged_dialectic_signed_padic_hyperfabric_outputs` array
+alongside the separate components. The independent Python finite
+enumeration checked **262,144** fine states → **19,683** coarse states,
+including **512 all-zero preimages** and 242,461 fine/coarse collisions;
+it did not establish any document review or official case result.
+The signed viewer and source-attributed docs remain distinct from the
+older six-Boolean test fixture.
