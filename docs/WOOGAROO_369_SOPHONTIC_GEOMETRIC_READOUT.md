@@ -188,3 +188,18 @@ fixed **3×3×3** geometry is not replaced with a mere list of
 27 labels. The signed evidence can nest in predicate trees, scope-
 guarded hyperfabric stalks and finite triadic 3-adic prefixes.
 See [signed synthesis contract](WOOGAROO_SIGNED_PREDICATE_FIBRE_SYNTHESIS.md).
+
+## Correction of what the original 27-cube actually means
+
+The six-Boolean 3×27 cube bundle and nine signed claim observations
+in this report are **auxiliary reasoning/evidence models**, NOT the
+original dialectic interaction cube. The latter is one **27-position
+3D cube**, where X=the selected thesis/antithesis/synthesis role of
+dialectic A, Y=the same role in dialectic B, and Z=the separately
+mediated role of their interaction. The XY grid has nine encounters;
+each allows three Z cells. The exact owner is existing
+`TernaryComparisonSynthesisExact`, newly recharted by
+`DialecticXYInteractionZTransportExact`. Its signed proposition
+fibre is attached, not promoted into an axis. See
+[`WOOGAROO_XY_DIALECTIC_Z_INTERACTION_27_TRANSPORT.md`](WOOGAROO_XY_DIALECTIC_Z_INTERACTION_27_TRANSPORT.md)
+and [the corrected viewer](woogaroo-369-geometric-lab.html).
