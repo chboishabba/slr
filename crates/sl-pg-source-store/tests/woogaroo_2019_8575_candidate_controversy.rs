@@ -439,6 +439,23 @@ fn dialectic_trialectic_output_preserves_three_lenses_and_unpaid_face() {
         assert_eq!(packet.applicant_issue, ground.statutory_hook);
         assert_eq!(packet.decisive_original, ground.next_original);
         assert!(!packet.respondent_countercase.is_empty());
+        assert_eq!(packet.open_ground_obligation_ids.len(), 4);
+        assert!(!packet.creates_actual_reopening);
+        let ground_rows: Vec<_> = WOOGAROO_CLOSURE_OBLIGATIONS.iter()
+            .filter(|o| o.ground_key == Some(ground.key)).collect();
+        assert_eq!(ground_rows.len(), 4);
+        assert!(ground_rows.iter().all(|o| {
+            packet.open_ground_obligation_ids.contains(&o.id)
+                && packet.original_acquisition_packet_key == o.primary_packet
+                && !o.discharged
+        }));
+        let cone = sensiblaw_pg_source_store::woogaroo_potential_reopening_cone(
+            packet.original_acquisition_packet_key).unwrap();
+        assert!(!cone.creates_actual_reopening);
+        assert!(!cone.creates_semantic_authority);
+        assert!(packet.open_ground_obligation_ids.iter().all(|id|
+            cone.direct_refs.contains(&format!("obligation:woogaroo:{id}"))
+        ));
         assert_eq!(packet.kind, WoogarooSynthesisKind::SeekOriginals);
         assert_eq!(packet.applicant_respondent_edge, WoogarooDialecticEdge::Unresolved);
         assert_eq!(packet.respondent_independent_edge, WoogarooDialecticEdge::Unresolved);
@@ -506,6 +523,8 @@ fn trialectic_routes_all_448_worlds_without_filling_missing_face() {
             };
             assert_eq!(packet.kind, expected);
             assert_eq!(packet.triadic_face, WoogarooTrialecticFace::Underdetermined);
+            assert_eq!(packet.open_ground_obligation_ids.len(), 4);
+            assert!(!packet.creates_actual_reopening);
             assert_eq!(packet.respondent_independent_edge, WoogarooDialecticEdge::Unresolved);
             assert_eq!(packet.independent_applicant_edge, WoogarooDialecticEdge::Unresolved);
             assert!(packet.candidate_only);
