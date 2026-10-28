@@ -611,3 +611,272 @@ pub fn woogaroo_unpaid_trialectic_synthesis() -> Vec<WoogarooSynthesisPacket> {
         }
     }).collect()
 }
+
+
+// -------------------------------------------------------------------------
+// SIGNED PROPOSITION FIBRES: −P is explicit evidence for the negative
+// version of SAME proposition; +P is evidence for P; 0 is coarse abstention.
+// "Both" and "neither" share coarse 0 but retain separate fine receipts.
+// Canonical owners are DASHI ClaimIndexedEvidencePolarityExact,
+// SignedPredicateFibreTreeExact, TypedHyperfabricCore, and
+// TriadicPAdicCylinderExact. No signed evidence is invented from a
+// false Boolean in the older hypothetical-gate reference model.
+// -------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WoogarooEvidenceStatus {
+    Neither,
+    PositiveOnly,
+    NegativeOnly,
+    Both,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct WoogarooSignedEvidence {
+    pub positive_supported: bool,
+    pub negative_supported: bool,
+    /// Locator strings are NOT payment receipts or proof of document review.
+    pub original_reference_labels: Vec<String>,
+}
+
+impl WoogarooSignedEvidence {
+    pub fn unknown() -> Self {
+        Self {
+            positive_supported: false,
+            negative_supported: false,
+            original_reference_labels: vec![],
+        }
+    }
+
+    pub fn status(&self) -> WoogarooEvidenceStatus {
+        match (self.positive_supported, self.negative_supported) {
+            (false, false) => WoogarooEvidenceStatus::Neither,
+            (true, false) => WoogarooEvidenceStatus::PositiveOnly,
+            (false, true) => WoogarooEvidenceStatus::NegativeOnly,
+            (true, true) => WoogarooEvidenceStatus::Both,
+        }
+    }
+
+    pub fn coarse_signed_trit(&self) -> i8 {
+        match self.status() {
+            WoogarooEvidenceStatus::PositiveOnly => 1,
+            WoogarooEvidenceStatus::NegativeOnly => -1,
+            WoogarooEvidenceStatus::Neither | WoogarooEvidenceStatus::Both => 0,
+        }
+    }
+
+    /// Merge only *after* the caller has supplied a same-proposition,
+    /// same-ground, same-scope alignment: no global blind evidence pooling.
+    pub fn merge_same_claim(&self, other: &Self) -> Self {
+        let mut refs = self.original_reference_labels.clone();
+        refs.extend(other.original_reference_labels.iter().cloned());
+        refs.sort();
+        refs.dedup();
+        Self {
+            positive_supported: self.positive_supported || other.positive_supported,
+            negative_supported: self.negative_supported || other.negative_supported,
+            original_reference_labels: refs,
+        }
+    }
+}
+
+pub const WOOGAROO_SIGNED_PREDICATES: [&str; 9] = [
+    "applicable-law", "alleged-defect", "materiality",
+    "claimed-compliance", "habitat-concern", "causal-connection",
+    "reviewed-original", "same-project-stage", "independent-mediation",
+];
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct WoogarooSignedClaimFibre {
+    pub ground_key: &'static str,
+    pub proposition_scope: String,
+    /// All nine are separate propositions with explicit polarity pairs.
+    pub evidence: Vec<WoogarooSignedEvidence>,
+    pub candidate_only: bool,
+    pub source_reviewed_and_paid: bool,
+}
+
+impl WoogarooSignedClaimFibre {
+    pub fn unpaid(ground_key: &'static str) -> Self {
+        Self {
+            ground_key,
+            proposition_scope: format!("epbc:2019/8575:{ground_key}"),
+            evidence: vec![WoogarooSignedEvidence::unknown(); 9],
+            candidate_only: true,
+            source_reviewed_and_paid: false,
+        }
+    }
+
+    pub fn signed_chart(&self) -> Option<WoogarooSigned369Chart> {
+        if self.evidence.len() != 9 { return None; }
+        let values: Vec<_> = self.evidence.iter().map(|e| e.coarse_signed_trit()).collect();
+        let conflicts = self.evidence.iter().enumerate()
+            .filter(|(_,e)| e.status() == WoogarooEvidenceStatus::Both)
+            .map(|(i,_)| WOOGAROO_SIGNED_PREDICATES[i].to_string()).collect();
+        Some(WoogarooSigned369Chart {
+            applicant_cube: [values[0],values[1],values[2]],
+            respondent_cube: [values[3],values[4],values[5]],
+            independent_cube: [values[6],values[7],values[8]],
+            conflict_predicate_keys: conflicts,
+            image_is_only_a_coarse_observation: true,
+            actual_source_payment: false,
+            actual_mediation_face_glued: false,
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct WoogarooSigned369Chart {
+    /// These are true {-1,0,+1} signed-proposition coordinates, NOT
+    /// the legacy 0/1 hypothetical input-gate fixture.
+    pub applicant_cube: [i8; 3],
+    pub respondent_cube: [i8; 3],
+    pub independent_cube: [i8; 3],
+    /// The 0-valued "both" residual is retained here instead of erased.
+    pub conflict_predicate_keys: Vec<String>,
+    pub image_is_only_a_coarse_observation: bool,
+    pub actual_source_payment: bool,
+    pub actual_mediation_face_glued: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct WoogarooSignedDecisionTree {
+    pub predicate: &'static str,
+    pub evidence: WoogarooSignedEvidence,
+    pub children: Vec<WoogarooSignedDecisionTree>,
+}
+
+fn signed_tree_slot(fibre: &WoogarooSignedClaimFibre, i: usize) -> WoogarooSignedDecisionTree {
+    WoogarooSignedDecisionTree {
+        predicate: WOOGAROO_SIGNED_PREDICATES[i],
+        evidence: fibre.evidence[i].clone(),
+        children: vec![],
+    }
+}
+
+/// Three hierarchy branches contain nested predicates. The raw nine
+/// fine-fibre assessments are preserved at EVERY leaf, not collapsed
+/// into a signed cube or a global average.
+pub fn woogaroo_signed_decision_tree(
+    fibre: &WoogarooSignedClaimFibre,
+) -> Option<Vec<WoogarooSignedDecisionTree>> {
+    if fibre.evidence.len() != 9 { return None; }
+    Some([0usize,3,6].iter().map(|offset| {
+        let mut parent = signed_tree_slot(fibre, *offset);
+        parent.children = vec![
+            signed_tree_slot(fibre, offset + 1),
+            signed_tree_slot(fibre, offset + 2),
+        ];
+        parent
+    }).collect())
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+pub enum WoogarooSignedSearchFocus {
+    AcquireOriginals,
+    TestApplicantDefeaters,
+    TestRespondentCounterDefeaters,
+    ReconcileContradiction,
+}
+
+/// Candidate search role for the SAME signed alleged-defect proposition.
+/// "review_assumed" is a deliberately synthetic test flag. It must never
+/// be accepted as a real-source receipt; all output authority flags remain false.
+pub fn woogaroo_signed_search_focus(
+    defect: &WoogarooSignedEvidence,
+    review_assumed: bool,
+) -> WoogarooSignedSearchFocus {
+    match defect.status() {
+        WoogarooEvidenceStatus::Both => WoogarooSignedSearchFocus::ReconcileContradiction,
+        WoogarooEvidenceStatus::Neither => WoogarooSignedSearchFocus::AcquireOriginals,
+        WoogarooEvidenceStatus::PositiveOnly if review_assumed =>
+            WoogarooSignedSearchFocus::TestApplicantDefeaters,
+        WoogarooEvidenceStatus::NegativeOnly if review_assumed =>
+            WoogarooSignedSearchFocus::TestRespondentCounterDefeaters,
+        _ => WoogarooSignedSearchFocus::AcquireOriginals,
+    }
+}
+
+/// A finite 3-adic branch prefix, not the whole inverse limit: adding a
+/// finer sign preserves the earlier low-to-high digits. A coarse 0 still
+/// requires the four-valued fine-fibre residual to distinguish both/neither.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct WoogarooSignedPadicPrefix {
+    pub low_to_high_digits: Vec<i8>,
+    pub three_adic_prefix_only: bool,
+    pub full_inverse_limit_established: bool,
+}
+
+pub fn woogaroo_signed_padic_prefix(
+    selected_branch: &[&WoogarooSignedEvidence],
+) -> WoogarooSignedPadicPrefix {
+    WoogarooSignedPadicPrefix {
+        low_to_high_digits: selected_branch.iter()
+            .map(|e| e.coarse_signed_trit()).collect(),
+        three_adic_prefix_only: true,
+        full_inverse_limit_established: false,
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct WoogarooSignedSynthesisOutput {
+    pub ground_key: &'static str,
+    pub signed_fibre: WoogarooSignedClaimFibre,
+    pub signed_369: WoogarooSigned369Chart,
+    pub nested_predicate_tree: Vec<WoogarooSignedDecisionTree>,
+    pub one_branch_padic_prefix: WoogarooSignedPadicPrefix,
+    pub focus: WoogarooSignedSearchFocus,
+    pub base_acquisition_packet: &'static str,
+    pub four_unpaid_obligation_ids: Vec<&'static str>,
+    pub triadic_face_underdetermined: bool,
+    pub hypothetical_only: bool,
+    pub actual_source_reviewed: bool,
+    pub actual_legal_merits_decided: bool,
+}
+
+/// Reuses the canonical seven-ground + four-obligation + potential snowball
+/// packet, and fails closed on noncanonical ground or malformed fibre.
+pub fn woogaroo_synthesise_signed_fibre(
+    fibre: WoogarooSignedClaimFibre,
+    synthetic_review_assumed: bool,
+) -> Option<WoogarooSignedSynthesisOutput> {
+    let ground = WOOGAROO_GROUNDS.iter().find(|g| g.key == fibre.ground_key)?;
+    if !fibre.candidate_only || fibre.source_reviewed_and_paid
+        || fibre.proposition_scope != format!("epbc:2019/8575:{}",ground.key)
+        || fibre.evidence.len() != WOOGAROO_SIGNED_PREDICATES.len()
+    { return None; }
+    let unpaid = WoogarooHypotheticalWorld {
+        legally_applicable: false, defect_established: false,
+        materiality_established: false, government_compliance_established: false,
+        evidence_reviewed: false, ecological_harm_assumed: false,
+    };
+    let base = woogaroo_synthesise_dialectic_trialectic(ground.key, unpaid)?;
+    let signed_369 = fibre.signed_chart()?;
+    let nested_predicate_tree = woogaroo_signed_decision_tree(&fibre)?;
+    let focus = woogaroo_signed_search_focus(&fibre.evidence[1], synthetic_review_assumed);
+    let one_branch_padic_prefix = woogaroo_signed_padic_prefix(&[
+        &fibre.evidence[0], &fibre.evidence[1], &fibre.evidence[2],
+    ]);
+    Some(WoogarooSignedSynthesisOutput {
+        ground_key: ground.key,
+        signed_fibre: fibre,
+        signed_369,
+        nested_predicate_tree,
+        one_branch_padic_prefix,
+        focus,
+        base_acquisition_packet: base.original_acquisition_packet_key,
+        four_unpaid_obligation_ids: base.open_ground_obligation_ids,
+        triadic_face_underdetermined: true,
+        hypothetical_only: true,
+        actual_source_reviewed: false,
+        actual_legal_merits_decided: false,
+    })
+}
+
+pub fn woogaroo_unpaid_signed_fibre_synthesis() -> Vec<WoogarooSignedSynthesisOutput> {
+    WOOGAROO_GROUNDS.iter().filter_map(|g| {
+        woogaroo_synthesise_signed_fibre(
+            WoogarooSignedClaimFibre::unpaid(g.key), false)
+    }).collect()
+}
