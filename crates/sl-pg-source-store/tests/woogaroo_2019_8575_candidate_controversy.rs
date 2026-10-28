@@ -540,3 +540,103 @@ fn trialectic_routes_all_448_worlds_without_filling_missing_face() {
     }
     assert_eq!(n, 448);
 }
+
+
+#[test]
+fn geometric_sophontic_reference_pairs_are_load_bearing_or_nuisance_by_construction() {
+    use sensiblaw_pg_source_store::{
+        woogaroo_geometric_pair, WoogarooGeometricIntervention,
+        WoogarooHypotheticalWorld, WoogarooSynthesisKind,
+    };
+    for ground in WOOGAROO_GROUNDS {
+        let before = WoogarooHypotheticalWorld {
+            legally_applicable: true,
+            defect_established: true,
+            materiality_established: true,
+            government_compliance_established: false,
+            evidence_reviewed: false,
+            ecological_harm_assumed: true,
+        };
+        let after = WoogarooHypotheticalWorld { evidence_reviewed: true, ..before };
+        let flip = woogaroo_geometric_pair(
+            ground.key, before, after, WoogarooGeometricIntervention::ReviewGate
+        ).expect("single selected review gate perturbation");
+        assert!(flip.changed_369_position);
+        assert!(flip.changed_logical_label);
+        assert_eq!(flip.initial_synthesis, WoogarooSynthesisKind::SeekOriginals);
+        assert_eq!(flip.perturbed_synthesis,
+            WoogarooSynthesisKind::ApplicantCandidateForDefeaterSearch);
+        assert!(!flip.model_pair_accuracy_measured);
+        assert!(!flip.actual_legal_merits_determined);
+        assert_eq!(flip.canonical.full_cube_cardinality, 27);
+        assert_eq!(flip.canonical.full_fabric_cardinality, 19683);
+        assert!(!flip.canonical.same_object_monster_action_established);
+        assert!(!flip.canonical.learned_geometric_action_established);
+
+        // A factual ecology change must not flip the specific statutory
+        // review-gate classifier: a geometry move != a legal outcome.
+        let with_harm = WoogarooHypotheticalWorld {
+            legally_applicable: true,
+            defect_established: false,
+            materiality_established: false,
+            government_compliance_established: true,
+            evidence_reviewed: true,
+            ecological_harm_assumed: true,
+        };
+        let without_harm = WoogarooHypotheticalWorld {
+            ecological_harm_assumed: false, ..with_harm
+        };
+        let nuisance = woogaroo_geometric_pair(
+            ground.key, with_harm, without_harm,
+            WoogarooGeometricIntervention::EcologicalHarm,
+        ).unwrap();
+        assert!(nuisance.changed_369_position);
+        assert!(!nuisance.changed_logical_label);
+        assert_eq!(nuisance.initial_synthesis,
+            WoogarooSynthesisKind::RespondentCandidateForCounterDefeaterSearch);
+        assert_eq!(nuisance.perturbed_synthesis, nuisance.initial_synthesis);
+        assert_eq!(nuisance.canonical.applicant_cube, nuisance.perturbed.applicant_cube);
+        assert_ne!(nuisance.canonical.respondent_cube, nuisance.perturbed.respondent_cube);
+        assert_eq!(nuisance.canonical.independent_review_cube,
+            nuisance.perturbed.independent_review_cube);
+
+        // Any two-axis perturbation is not a valid one-fact pair.
+        assert!(woogaroo_geometric_pair(
+            ground.key, before, with_harm, WoogarooGeometricIntervention::ReviewGate
+        ).is_none());
+    }
+}
+
+#[test]
+fn all_64_boolean_worlds_embed_in_ternary_369_without_loss_of_legal_inputs() {
+    use std::collections::BTreeSet;
+    use sensiblaw_pg_source_store::{woogaroo_369_chart, WoogarooHypotheticalWorld};
+    let mut codes = BTreeSet::new();
+    for mask in 0..64u8 {
+        let world = WoogarooHypotheticalWorld {
+            legally_applicable: mask & 1 != 0,
+            defect_established: mask & 2 != 0,
+            materiality_established: mask & 4 != 0,
+            government_compliance_established: mask & 8 != 0,
+            evidence_reviewed: mask & 16 != 0,
+            ecological_harm_assumed: mask & 32 != 0,
+        };
+        let chart = woogaroo_369_chart(world);
+        let coordinates = [
+            chart.applicant_cube[0], chart.applicant_cube[1], chart.applicant_cube[2],
+            chart.respondent_cube[0], chart.respondent_cube[1], chart.respondent_cube[2],
+            chart.independent_review_cube[0], chart.independent_review_cube[1],
+            chart.independent_review_cube[2],
+        ];
+        assert!(coordinates.iter().all(|v| *v == 0 || *v == 1));
+        assert_eq!(chart.full_cube_cardinality, 27);
+        assert_eq!(chart.full_fabric_cardinality, 27 * 27 * 27);
+        assert!(!chart.actual_evidence_payment_established);
+        assert!(!chart.same_object_monster_action_established);
+        codes.insert(coordinates);
+    }
+    // The first three applicant coordinates, respondent compliance/harm,
+    // and independent review coordinate retain all original six bits.
+    // 64 unique Boolean inputs occupy only 64 of the ambient 19683 states.
+    assert_eq!(codes.len(), 64);
+}
