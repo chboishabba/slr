@@ -267,6 +267,8 @@ pub struct WoogarooHypotheticalBranches {
     pub ground_key: &'static str,
     pub applicant_conditional: bool,
     pub respondent_conditional: bool,
+    /// Independent source assertions can conflict. No adjudicative promotion.
+    pub contradictory_assumptions_retained: bool,
     /// Always false: this function cannot materialize evidence or decide law.
     pub proves_actual_legal_merits: bool,
     pub creates_legal_evidence_review: bool,
@@ -287,13 +289,17 @@ pub fn woogaroo_hypothetical_adversarial_test(
         && world.legally_applicable
         && world.defect_established
         && world.materiality_established;
-    let respondent = world.government_compliance_established
+    let contradiction = world.defect_established
+        && world.government_compliance_established;
+    let respondent = !world.defect_established
+        && world.government_compliance_established
         && world.evidence_reviewed
         && world.legally_applicable;
     Some(WoogarooHypotheticalBranches {
         ground_key: canonical,
         applicant_conditional: applicant,
         respondent_conditional: respondent,
+        contradictory_assumptions_retained: contradiction,
         proves_actual_legal_merits: false,
         creates_legal_evidence_review: false,
         creates_court_filing: false,
