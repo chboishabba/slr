@@ -562,6 +562,7 @@ fn geometric_sophontic_reference_pairs_are_load_bearing_or_nuisance_by_construct
             ground.key, before, after, WoogarooGeometricIntervention::ReviewGate
         ).expect("single selected review gate perturbation");
         assert!(flip.changed_369_position);
+        assert_eq!(flip.ternary_grid_steps, 2);
         assert!(flip.changed_logical_label);
         assert_eq!(flip.initial_synthesis, WoogarooSynthesisKind::SeekOriginals);
         assert_eq!(flip.perturbed_synthesis,
@@ -591,6 +592,7 @@ fn geometric_sophontic_reference_pairs_are_load_bearing_or_nuisance_by_construct
             WoogarooGeometricIntervention::EcologicalHarm,
         ).unwrap();
         assert!(nuisance.changed_369_position);
+        assert_eq!(nuisance.ternary_grid_steps, 1);
         assert!(!nuisance.changed_logical_label);
         assert_eq!(nuisance.initial_synthesis,
             WoogarooSynthesisKind::RespondentCandidateForCounterDefeaterSearch);
@@ -667,6 +669,8 @@ fn all_single_axis_369_perturbations_respect_grounded_pair_semantics() {
                 ground.key, base, changed_review, WoogarooGeometricIntervention::ReviewGate
             ).unwrap();
             assert!(review.changed_369_position);
+            assert_eq!(review.ternary_grid_steps,
+                if review.changed_logical_label { 2 } else { 1 });
             assert!(!review.model_pair_accuracy_measured);
             assert!(!review.actual_legal_merits_determined);
             if review.changed_logical_label { review_label_flips += 1; }
@@ -682,6 +686,7 @@ fn all_single_axis_369_perturbations_respect_grounded_pair_semantics() {
                 WoogarooGeometricIntervention::EcologicalHarm
             ).unwrap();
             assert!(harm.changed_369_position);
+            assert_eq!(harm.ternary_grid_steps, 1);
             if harm.changed_logical_label { harm_false_flips += 1; }
             assert_eq!(harm.canonical.independent_review_cube,
                 harm.perturbed.independent_review_cube);
