@@ -54,8 +54,23 @@ The independent triadic face remains <strong>underdetermined</strong> regardless
   <div><span class="small muted">Actual source reviews / court findings</span><div class="metric">None produced</div></div></div>
   <p id="explain" class="bar muted"></p>
 </section>
+<div class="card" style="margin-top:14px">
+<h2>Signed proposition dialectic — authoritative <code>−P / 0 / +P</code> encoding</h2>
+<p class="small muted">These are nine separate propositions. Negative means the explicitly opposing version of the SAME proposition, not absent evidence. Both supported and neither supported share coarse 0 but retain distinct fine-fibre states. All edits are synthetic, not reviewed source records.</p>
+<div id="signed-controls" class="control"></div>
+<div class="meta" style="margin-top:12px">
+<div><span class="small muted">Signed candidate search</span><div class="metric" id="signed-focus">Acquire originals</div></div>
+<div><span class="small muted">Contradictory predicate fibres</span><div class="metric" id="signed-both">None</div></div>
+<div><span class="small muted">3-adic selected-branch prefix</span><div class="metric" id="signed-path">[0,0,0]</div></div>
+<div><span class="small muted">Independent trialectic face</span><div class="metric">Underdetermined</div></div>
+</div>
+<h2 style="margin-top:16px">Three signed 27-cubes</h2>
+<div class="layout" id="signed-cube-layout"></div>
+<details><summary>Nested fine-fibre decision tree</summary><pre id="signed-tree" class="small muted"></pre></details>
+</div>
+<p class="small muted">Below: the earlier separate Boolean-gate counterfactual chart. Its 0/1 flags are not signed proposition evidence. Its algebraic moves are retained only as a reference check.</p>
 <div class="layout" id="cube-layout"></div>
-<footer class="small muted"><p><strong>Meaning of coordinates:</strong> zero = unstipulated in this hypothetical fixture, +1 = stipulated.
+<footer class="small muted"><p><strong>Auxiliary Boolean-gate chart meaning only:</strong> zero = unstipulated in this hypothetical fixture, +1 = stipulated. The signed proposition chart ABOVE uses −1 for the negative version of a proposition and retains both/neither in its nested fine fibre.
 No -1 value occurs in these six-Boolean fixtures although the original 27-state cube permits -1, 0 and +1.
 A=(applicability, defect, materiality), B=(compliance, habitat concern, contradiction),
 C=(review gate, derived applicant conditional, derived respondent conditional).
@@ -91,7 +106,50 @@ const axes=[
 ["ecological_harm_assumed","Habitat harm (stipulated)"]
 ];
 const zero=()=>Object.fromEntries(axes.map(([k])=>[k,false]));
-let baseline=zero(), perturb=zero(), mode="current"; 
+let baseline=zero(), perturb=zero(), mode="current";
+const signedSlots=[
+ "Applicable law", "Alleged defect (P / ¬P)", "Materiality",
+ "Claimed compliance", "Habitat concern", "Causal connection",
+ "Reviewed original", "Same-project stage", "Independent mediation"
+];
+let signedEvidence=Array(9).fill("neither");
+function signedTrit(state){return state==="positive"?1:state==="negative"?-1:0}
+function signedCubeRows(){const all=signedEvidence.map(signedTrit);return [all.slice(0,3),all.slice(3,6),all.slice(6,9)]}
+function signedFibreFocus(){
+ const defect=signedEvidence[1];
+ if(defect==="both")return "Reconcile contradictory source assertions";
+ if(defect==="neither"||!baseline.evidence_reviewed)return "Acquire originals / refine branch";
+ return defect==="positive" ? "Applicant hypothesis → defeater search"
+                            : "Respondent hypothesis → counter-defeater search";
+}
+function updateSigned(){
+ const controls=byId("signed-controls"); controls.replaceChildren();
+ signedSlots.forEach((slot,i)=>{
+  const l=document.createElement("label");l.textContent=slot;
+  const select=document.createElement("select");
+  for(const [val,text] of [["neither","0 · unknown"],["positive","+1 · P"],["negative","−1 · ¬P"],["both","0 · both (retained)"]]){
+   const opt=document.createElement("option");opt.value=val;opt.textContent=text;select.append(opt);
+  }
+  select.value=signedEvidence[i];
+  select.addEventListener("change",()=>{signedEvidence[i]=select.value;updateSigned()});
+  l.append(select);controls.append(l)
+ });
+ const rows=signedCubeRows();
+ const holder=byId("signed-cube-layout");holder.replaceChildren(...[
+  cubeView("A • signed applicant predicates",rows[0],rows[0]),
+  cubeView("B • signed respondent/context predicates",rows[1],rows[1]),
+  cubeView("C • signed independent predicates",rows[2],rows[2])
+ ]);
+ const both=signedEvidence.map((v,i)=>v==="both"?signedSlots[i]:null).filter(Boolean);
+ byId("signed-focus").textContent=signedFibreFocus();
+ byId("signed-both").textContent=both.join(", ")||"None";
+ byId("signed-path").textContent=JSON.stringify(rows[0])+" (finite low→high prefix)";
+ const tree=[0,3,6].map(i=>({
+  predicate:signedSlots[i],support:signedEvidence[i],
+  children:[1,2].map(j=>({predicate:signedSlots[i+j],support:signedEvidence[i+j]}))
+ }));
+ byId("signed-tree").textContent=JSON.stringify(tree,null,2);
+} 
 const byId=id=>document.getElementById(id);
 function classification(w){
  if(w.defect_established&&w.government_compliance_established)return "Reconcile opposing assertions";
@@ -144,6 +202,7 @@ function update(){
   "Only the synthetic review gate changed. The derived result can change if all other antecedents hold; a changed code position is not a real reviewed source.":
  mode==="harm"?"Only the habitat-harm assumption changed. This specific legal review-gate classifier remains stable; ecological importance must be tested separately.":
  "No paired input change selected. This is a current source-unpaid planning state, not a measured or legally adjudicated outcome.";
+ updateSigned();
  const holder=byId("cube-layout");holder.replaceChildren(...[
   cubeView("A • applicant premises",p[0],b[0]),
   cubeView("B • respondent / context",p[1],b[1]),
@@ -153,8 +212,8 @@ function update(){
 const g=byId("ground");grounds.forEach(([id,label])=>{const option=document.createElement("option");option.value=id;option.textContent=label;g.append(option)});
 byId("review").addEventListener("click",()=>{perturb={...baseline,evidence_reviewed:!baseline.evidence_reviewed};mode="review";update()});
 byId("harm").addEventListener("click",()=>{perturb={...baseline,ecological_harm_assumed:!baseline.ecological_harm_assumed};mode="harm";update()});
-byId("reset").addEventListener("click",()=>{baseline=zero();perturb=zero();mode="current";update()});
-byId("ground").addEventListener("change",update);
+byId("reset").addEventListener("click",()=>{baseline=zero();perturb=zero();signedEvidence=Array(9).fill("neither");mode="current";update()});
+byId("ground").addEventListener("change",()=>{signedEvidence=Array(9).fill("neither");baseline=zero();perturb=zero();mode="current";update()});
 update();
 </script>
 </body>
