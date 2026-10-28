@@ -133,3 +133,29 @@ similarity proves same-object representation or a physical/legal
 mechanism. No protected ESD surface was changed, and no actual
 reviewed approval file, court order or habitat preservation is
 produced by this finite construction.
+
+## 28 October: #1414 finite S3 PRESENTATION versus actual grid transport
+
+`WoogarooPresentationS3` has all six invertible permutations
+of thesis/antithesis/synthesis, recharting exactly one canonical
+XYZ role and retaining its original ground, four Gxx unpaid
+obligations, and original acquisition packet. It is **not**
+the movement of a real dialectic, and does not rewrite signed
+claim polarity or ministerial evidence. See
+[`woogaroo_legal_closure.rs`](../crates/sl-pg-source-store/src/woogaroo_legal_closure.rs),
+`woogaroo_chart_invariant_case_packet`, and the matching DASHI
+Agda chart-source invariance receiver.
+
+There is a crucial finer graph cut: the strict cube adjacency
+uses the path thesis–antithesis–synthesis, NOT a cyclic graph.
+Only the S3 identity and endpoint reflection preserve this
+grid; C3 rotating the names is a valid *label legend*, not an
+adjacency-preserving geometric move. The SLR tests source-write
+7×27×6=1,134 presentation invariance cases plus all six maps
+over all 27²=729 ordered pairs each. The independent executed
+reference found 108 discrepancies for each of the four invalid
+grid transports, and zero for the two genuine C2 symmetries.
+No typechecker/Cargo claim. A further local cube seam still
+requires orientation, full palette/site map, all nine colours,
+canonical five-field Pants.InterfaceMatch, scope and any cyclic
+cocycle/independent face witness.
