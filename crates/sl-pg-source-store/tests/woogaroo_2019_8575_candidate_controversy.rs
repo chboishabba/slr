@@ -319,3 +319,77 @@ fn source_snowball_is_a_potential_reopening_cone_only() {
     ));
     assert!(woogaroo_potential_reopening_cone("unknown-or-synthetic-source").is_err());
 }
+
+
+#[test]
+fn all_seven_grounds_have_exhaustive_hypothetical_for_against_tests() {
+    use sensiblaw_pg_source_store::{
+        woogaroo_hypothetical_adversarial_test, WoogarooHypotheticalWorld,
+    };
+    let mut ground_worlds = 0usize;
+    for ground in WOOGAROO_GROUNDS {
+        // Six independent Boolean premises: exactly 64 worlds per ground.
+        for mask in 0u8..64u8 {
+            let w = WoogarooHypotheticalWorld {
+                legally_applicable: mask & 1 != 0,
+                defect_established: mask & 2 != 0,
+                materiality_established: mask & 4 != 0,
+                government_compliance_established: mask & 8 != 0,
+                evidence_reviewed: mask & 16 != 0,
+                ecological_harm_assumed: mask & 32 != 0,
+            };
+            let result = woogaroo_hypothetical_adversarial_test(ground.key, w)
+                .expect("all canonical ground IDs are accepted");
+            ground_worlds += 1;
+            assert_eq!(result.ground_key, ground.key);
+            assert_eq!(result.applicant_conditional,
+                !w.government_compliance_established && w.evidence_reviewed
+                && w.legally_applicable && w.defect_established
+                && w.materiality_established);
+            assert_eq!(result.respondent_conditional,
+                w.government_compliance_established && w.evidence_reviewed
+                && w.legally_applicable);
+            assert!(!(result.applicant_conditional && result.respondent_conditional));
+            assert!(!result.proves_actual_legal_merits);
+            assert!(!result.creates_legal_evidence_review);
+            assert!(!result.creates_court_filing);
+            if !w.evidence_reviewed {
+                assert!(!result.applicant_conditional);
+                assert!(!result.respondent_conditional);
+            }
+        }
+    }
+    assert_eq!(ground_worlds, 7 * 64);
+    assert!(woogaroo_hypothetical_adversarial_test(
+        "fictional-springview-court-ground",
+        WoogarooHypotheticalWorld {
+            legally_applicable: true,
+            defect_established: true,
+            materiality_established: true,
+            government_compliance_established: false,
+            evidence_reviewed: true,
+            ecological_harm_assumed: true,
+        },
+    ).is_none());
+}
+
+#[test]
+fn ecological_harm_does_not_entail_unlawfulness_and_compliance_does_not_deny_harm() {
+    use sensiblaw_pg_source_store::{
+        woogaroo_hypothetical_adversarial_test, WoogarooHypotheticalWorld,
+    };
+    let w = WoogarooHypotheticalWorld {
+        legally_applicable: true,
+        defect_established: false,
+        materiality_established: false,
+        government_compliance_established: true,
+        evidence_reviewed: true,
+        ecological_harm_assumed: true,
+    };
+    let result = woogaroo_hypothetical_adversarial_test("advice-consideration", w)
+        .expect("existing 2022 advice ground");
+    assert!(w.ecological_harm_assumed);
+    assert!(!result.applicant_conditional);
+    assert!(result.respondent_conditional);
+    assert!(!result.proves_actual_legal_merits);
+}
