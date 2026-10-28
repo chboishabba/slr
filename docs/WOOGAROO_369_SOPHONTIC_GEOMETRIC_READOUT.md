@@ -160,3 +160,12 @@ The independent 64-world reference has 64 unique input encodings, 32
 review-gate pairs (6 classifier changes), 32 harm-only pairs (zero
 classifier changes). Across seven grounds that yields 448 specified
 single-field pair regressions. Rust/Agda were not executed here.
+
+**Exact decoder addition (DASHI):** the current formal adapter now
+defines `fromPositiveStatus`, `worldFrom369`,
+`sixInputBitsRoundTrip` and `worldTo369Injective`.
+These prove at the source/proof-term level that the six Boolean
+hypothetical premises are not lost by the T^9 embedding, even though
+the ambient ternary carrier contains many out-of-image states.
+Independent reference enumeration cross-checks all 64 input worlds.
+No Agda kernel typecheck was run in this session.
