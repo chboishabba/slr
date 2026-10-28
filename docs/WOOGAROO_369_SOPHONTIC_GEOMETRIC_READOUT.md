@@ -169,3 +169,22 @@ hypothetical premises are not lost by the T^9 embedding, even though
 the ambient ternary carrier contains many out-of-image states.
 Independent reference enumeration cross-checks all 64 input worlds.
 No Agda kernel typecheck was run in this session.
+
+## Correction: the operational 0/1 chart is NOT signed proposition evidence
+
+The earlier six-Boolean `Woogaroo369GeometricChart` is retained
+only as an **auxiliary counterfactual decision-gate view**.
+Zero there means a false/unstipulated Boolean TEST INPUT. It must
+not substitute for `−P` or be treated as an epistemic absence
+certificate. The primary signed proposition receiver is now
+`WoogarooSignedClaimFibre` and `WoogarooSigned369Chart`,
+whose nine 27-cube coordinates use the full `−1,0,+1` spectrum
+and retain Belnap both/neither in separate fine fibre records.
+
+The independent fully enumerated nine-slot evidence space contains
+262,144 fine vectors, 19,683 distinct coarse T^9 codes, and 512
+different fine-fibre preimages at the all-zero code. The original
+fixed **3×3×3** geometry is not replaced with a mere list of
+27 labels. The signed evidence can nest in predicate trees, scope-
+guarded hyperfabric stalks and finite triadic 3-adic prefixes.
+See [signed synthesis contract](WOOGAROO_SIGNED_PREDICATE_FIBRE_SYNTHESIS.md).
