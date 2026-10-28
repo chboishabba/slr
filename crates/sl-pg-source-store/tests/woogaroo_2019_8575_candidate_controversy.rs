@@ -762,9 +762,20 @@ fn signed_fibre_drives_paired_candidate_synthesis_without_truth_promotion() {
         assert!(!unresolved.actual_legal_merits_decided);
 
         // −P is the negative version of EXACT SAME alleged-defect predicate.
+        // These are separately stipulated P-claims on the same legal
+        // ground. Without all common gates the negative sign alone
+        // cannot activate a respondent synthesis.
         f.evidence[1] = WoogarooSignedEvidence {
             positive_supported:false,negative_supported:true,original_reference_labels:vec![],
         };
+        let unbridged = woogaroo_synthesise_signed_fibre(f.clone(), true).unwrap();
+        assert_eq!(unbridged.focus, WoogarooSignedSearchFocus::AcquireOriginals);
+        for slot in [0usize, 3, 6, 7] {
+            f.evidence[slot] = WoogarooSignedEvidence {
+                positive_supported:true,negative_supported:false,
+                original_reference_labels:vec![],
+            };
+        }
         let negative = woogaroo_synthesise_signed_fibre(f.clone(), true).unwrap();
         assert_eq!(negative.signed_369.applicant_cube[1], -1);
         assert_eq!(negative.focus, WoogarooSignedSearchFocus::TestRespondentCounterDefeaters);
@@ -783,6 +794,15 @@ fn signed_fibre_drives_paired_candidate_synthesis_without_truth_promotion() {
 
         f.evidence[1].positive_supported = true;
         f.evidence[1].negative_supported = false;
+        f.evidence[2] = WoogarooSignedEvidence {
+            positive_supported:true,negative_supported:false,original_reference_labels:vec![],
+        };
+        // A positive compliance assertion blocks automatic applicant
+        // synthesis; it does NOT certify legal compliance.
+        let competing = woogaroo_synthesise_signed_fibre(f.clone(), true).unwrap();
+        assert_eq!(competing.focus, WoogarooSignedSearchFocus::AcquireOriginals);
+        f.evidence[3].positive_supported = false;
+        f.evidence[3].negative_supported = true;
         let positive = woogaroo_synthesise_signed_fibre(f.clone(), true).unwrap();
         assert_eq!(positive.signed_369.applicant_cube[1], 1);
         assert_eq!(positive.focus, WoogarooSignedSearchFocus::TestApplicantDefeaters);
