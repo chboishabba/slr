@@ -156,3 +156,35 @@ while asserting `creates_actual_reopening=false` and
 
 This is a source-written, potential-only dependency graph. It is not
 an executed Rust test or a verified persisted downstream Matter.
+
+
+## Seven-ground adversarial logic (28 October)
+
+DASHI PR #1276 now imports `SensibLawWoogarooAdversarialLogicalTests20261028Exact.agda`,
+a thin reuse of the original DASHI PNF sequent calculus, finite
+Boolean truth-table owner, contradiction-preserving pipeline, existing
+Woogaroo seven-ground case owner, historical for/against matrix,
+applicable-law matrix, Pareto and Ibrahim genealogy.
+
+Here SLR #59 provides a **hypothetical** production-side reader
+`woogaroo_hypothetical_adversarial_test(ground_key, world)`, not
+evidence admission or a Court merits engine. It only accepts the seven
+original `WOOGAROO_GROUNDS` keys. Its input has six independent
+Boolean dimensions: legal applicability, evidence of defect,
+materiality, evidence of compliance, review status and ecological
+harm. The output distinguishes applicant/defence *conditional*
+branches, retains explicit contradictory defect/compliance claims and
+keeps all legal-evidence-review, filing and actual-merits authority
+flags false. A contradiction selects **neither** branch; it does not
+privilege one side or explode into a legal finding.
+
+Two new Rust regressions specify exhaustive 7 x 64 hypothetical worlds,
+unknown-ground refusal, contradiction non-explosion, unreviewed
+non-promotion and the counterexample where harm coexists with
+compliance. DASHI also owns a separate finite Python reference
+regression. Its logical scenarios stipulate `evidence_reviewed=true`
+for counterfactual testing; they do **not** create actual reviewed
+evidence records. The real native SLR Matter still has two unresolved
+residuals; five other legal grounds are defined but uninstantiated.
+This is not full case merits resolution. No Agda kernel or Cargo/PG
+execution is claimed.
