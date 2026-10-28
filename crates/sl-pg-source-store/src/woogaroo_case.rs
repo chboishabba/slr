@@ -221,6 +221,56 @@ pub const WOOGAROO_GROUNDS: [WoogarooGround; 7] = [
         SourceOnlySpeculation),
 ];
 
+/// Separate procedural prerequisites. A signed instrument or legal standing
+/// is not a legal-error ground, and no recorded source pays these obligations.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct WoogarooProceduralPrecondition {
+    pub key: &'static str,
+    pub required_original: &'static str,
+    pub document_paid: bool,
+    pub competent_decision_paid: bool,
+}
+
+pub const WOOGAROO_PRECONDITIONS: [WoogarooProceduralPrecondition; 4] = [
+    WoogarooProceduralPrecondition {
+        key: "named-applicant-and-organisation-authority",
+        required_original: "SWFG current and 15 October 2026 historic governing rules, authorised officers, real activity series, authorised applicant or another independently eligible person",
+        document_paid: false, competent_decision_paid: false,
+    },
+    WoogarooProceduralPrecondition {
+        key: "applicant-specific-adjr-clock",
+        required_original: "Actual written decision/reasons furnishing, named applicant's filing triggers, extension or independent jurisdiction analysis by counsel",
+        document_paid: false, competent_decision_paid: false,
+    },
+    WoogarooProceduralPrecondition {
+        key: "actual-stage-works-and-urgency",
+        required_original: "Dated/geolocated project-stage works and imminent clearing, signed same-stage condition compliance and proportionate protective-order evidence",
+        document_paid: false, competent_decision_paid: false,
+    },
+    WoogarooProceduralPrecondition {
+        key: "signed-federal-decision-package",
+        required_original: "Original signed 15 October federal approval, conditions, approving officer, expiry, Secretary section95C and complete transmitted section95B",
+        document_paid: false, competent_decision_paid: false,
+    },
+];
+
+/// Deterministic max-cut/Pareto queue. This is a documented acquisition
+/// priority, NOT a probability of legal success or a numerical impact score.
+pub fn woogaroo_priority_frontier() -> Vec<WoogarooGround> {
+    let priority_order = [
+        WoogarooGroundPriority::UrgentProcedural,
+        WoogarooGroundPriority::PrimaryMerits,
+        WoogarooGroundPriority::SecondaryMerits,
+        WoogarooGroundPriority::SourceOnlySpeculation,
+    ];
+    let mut frontier = Vec::with_capacity(WOOGAROO_GROUNDS.len());
+    for priority in priority_order {
+        frontier.extend(WOOGAROO_GROUNDS.iter().copied()
+            .filter(|ground| ground.priority == priority));
+    }
+    frontier
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WoogarooCaseCutError {
     EmptySourceCoordinate,
@@ -240,6 +290,12 @@ pub fn validate_woogaroo_case_cut(
 ) -> Result<(), WoogarooCaseCutError> {
     if sources.len() != WOOGAROO_SOURCE_LOCATORS.len() ||
         grounds.len() != WOOGAROO_GROUNDS.len() {
+        return Err(WoogarooCaseCutError::ExpectedCaseElementsMissing);
+    }
+    if WOOGAROO_PRECONDITIONS.iter().any(|p| {
+        p.key.is_empty() || p.required_original.is_empty()
+            || p.document_paid || p.competent_decision_paid
+    }) {
         return Err(WoogarooCaseCutError::ExpectedCaseElementsMissing);
     }
     let mut source_keys = BTreeSet::new();
