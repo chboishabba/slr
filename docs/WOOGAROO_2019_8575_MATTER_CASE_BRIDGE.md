@@ -140,3 +140,19 @@ decision file, actually reviewed evidence payment, regulatory referral,
 photographic works proof or injunction was created by this code change.
 The next decisive work is external original-record acquisition and competent
 counsel assessment, in parallel with executed local verification.
+
+
+### Canonical snowball, not a new graph engine
+
+`woogaroo_potential_reopening_cone(packet_key)` now reuses SLR's existing
+`investigation_acquisition::potential_reopening_cone` and converts each
+candidate acquisition packet into direct outstanding closure IDs. The
+G01-G28 subset continues to its already-owned legal-ground key and then
+one candidate review node. No other-project merits, inferred receipt,
+actual reopening or access/semantic authority is created. The native
+regression checks exact direct coverage and transitive advice review,
+while asserting `creates_actual_reopening=false` and
+`creates_semantic_authority=false`. Unknown packet IDs fail closed.
+
+This is a source-written, potential-only dependency graph. It is not
+an executed Rust test or a verified persisted downstream Matter.
