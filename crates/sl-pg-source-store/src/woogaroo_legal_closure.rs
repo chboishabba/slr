@@ -1159,3 +1159,123 @@ pub fn woogaroo_unpaid_xy_interaction_carrier(
         selected_interaction_is_a_legal_conclusion:false,
     })
 }
+
+
+// -----------------------------------------------------------------------------
+// #1414 REUSE-ONLY INTERPRETATION: a finite S3 chart of the 27 ROLE labels.
+//
+// The polynomial/monodromy donor is a separate, unmerged proof owner.
+// In this *case* the action is only a presentation-chart re-encoding,
+// NOT a permutation of the legal ground, decision-maker, source actor,
+// original document status, signed ±P claim polarity, or paid review.
+// The same canonical XYZ encounter stays fixed while its display labels
+// are recharted together with the inverse legend. An S3/C3 rotation is
+// not itself a real dialectical/physical/legal movement along Z.
+// -----------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WoogarooPresentationS3 {
+    Identity,
+    Rotate,
+    RotateTwice,
+    SwapThesisAntithesis,
+    SwapThesisSynthesis,
+    SwapAntithesisSynthesis,
+}
+
+impl WoogarooPresentationS3 {
+    pub const ALL: [Self; 6] = [
+        Self::Identity, Self::Rotate, Self::RotateTwice,
+        Self::SwapThesisAntithesis, Self::SwapThesisSynthesis,
+        Self::SwapAntithesisSynthesis,
+    ];
+
+    pub fn apply(self, position: WoogarooDialecticPosition) -> WoogarooDialecticPosition {
+        use WoogarooDialecticPosition::{Thesis, Antithesis, Synthesis};
+        match self {
+            Self::Identity => position,
+            Self::Rotate => match position { Thesis=>Antithesis, Antithesis=>Synthesis, Synthesis=>Thesis },
+            Self::RotateTwice => match position { Thesis=>Synthesis, Antithesis=>Thesis, Synthesis=>Antithesis },
+            Self::SwapThesisAntithesis => match position { Thesis=>Antithesis, Antithesis=>Thesis, Synthesis=>Synthesis },
+            Self::SwapThesisSynthesis => match position { Thesis=>Synthesis, Antithesis=>Antithesis, Synthesis=>Thesis },
+            Self::SwapAntithesisSynthesis => match position { Thesis=>Thesis, Antithesis=>Synthesis, Synthesis=>Antithesis },
+        }
+    }
+
+    pub fn inverse(self) -> Self {
+        match self {
+            Self::Rotate => Self::RotateTwice,
+            Self::RotateTwice => Self::Rotate,
+            other => other,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct WoogarooChartInvariantCasePacket {
+    pub ground_key: &'static str,
+    /// Canonical owner is the original XY dialectic role × emergent Z.
+    pub canonical_xyz: [WoogarooDialecticPosition; 3],
+    /// These display tags have an explicit inverse chart; not a new stage.
+    pub display_xyz: [WoogarooDialecticPosition; 3],
+    pub presentation_chart: WoogarooPresentationS3,
+    pub original_acquisition_packet: &'static str,
+    pub four_unpaid_ground_obligation_ids: Vec<&'static str>,
+    /// Nothing in a numerical chart or symmetry action pays source bytes.
+    pub originals_reviewed: bool,
+    pub standing_or_filing_clock_paid: bool,
+    pub actual_interaction_stage_selected: bool,
+    pub mediation_face_paid: bool,
+    pub real_legal_merits_decided: bool,
+}
+
+impl WoogarooChartInvariantCasePacket {
+    pub fn recover_canonical_xyz(&self) -> [WoogarooDialecticPosition; 3] {
+        self.display_xyz.map(|p| self.presentation_chart.inverse().apply(p))
+    }
+}
+
+/// Require the SAME ground and acquired-document packet as the canonical
+/// 7-ground candidate owner; a chart is never grounds for source discharge.
+/// The XYZ argument is a hypothetical CELL, not the selected real-world state.
+pub fn woogaroo_chart_invariant_case_packet(
+    ground_key: &str,
+    canonical_xyz: [WoogarooDialecticPosition; 3],
+    chart: WoogarooPresentationS3,
+) -> Option<WoogarooChartInvariantCasePacket> {
+    let converged = woogaroo_unpaid_converged_synthesis()
+        .into_iter().find(|p| p.canonical_ground == ground_key)?;
+    if converged.xy_interaction_27.actual_x_position_selected.is_some()
+        || converged.xy_interaction_27.actual_y_position_selected.is_some()
+        || converged.xy_interaction_27.actual_z_position_selected.is_some()
+        || !converged.matched_source_obligations
+        || converged.candidate_dialectic.open_ground_obligation_ids
+            != converged.signed_predicate_hyperfabric.four_unpaid_obligation_ids
+    { return None; }
+    Some(WoogarooChartInvariantCasePacket {
+        ground_key: converged.canonical_ground,
+        canonical_xyz,
+        display_xyz: canonical_xyz.map(|p| chart.apply(p)),
+        presentation_chart: chart,
+        original_acquisition_packet:
+            converged.signed_predicate_hyperfabric.base_acquisition_packet,
+        four_unpaid_ground_obligation_ids:
+            converged.signed_predicate_hyperfabric.four_unpaid_obligation_ids,
+        originals_reviewed: false,
+        standing_or_filing_clock_paid: false,
+        actual_interaction_stage_selected: false,
+        mediation_face_paid: false,
+        real_legal_merits_decided: false,
+    })
+}
+
+/// Return one priority-ordered *unpaid* P0/P1 worklist from existing 80
+/// closure obligations. It is not conditioned on any S3 presentation chart.
+/// No fabricated "evidence paid" status or default legal filing clock.
+pub fn woogaroo_original_source_maxcut() -> Vec<WoogarooCutFrontier> {
+    let mut list = woogaroo_closure_frontier();
+    list.retain(|packet| !packet.unpaid_obligations.is_empty());
+    list.sort_by_key(|packet| packet.ordinal_priority);
+    list
+}
