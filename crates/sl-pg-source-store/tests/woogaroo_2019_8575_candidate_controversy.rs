@@ -703,7 +703,9 @@ fn all_single_axis_369_perturbations_respect_grounded_pair_semantics() {
 
 #[test]
 fn signed_proposition_negative_is_minus_and_both_is_not_neither() {
-    use sensiblaw_pg_source_store::{WoogarooEvidenceStatus,WoogarooSignedEvidence};
+    use sensiblaw_pg_source_store::{
+        WoogarooEvidenceStatus, WoogarooSignedEvidence, WoogarooScopedSignedEvidence
+    };
     let blank = WoogarooSignedEvidence::unknown();
     let positive = WoogarooSignedEvidence {
         positive_supported:true, negative_supported:false, original_reference_labels:vec![],
@@ -711,7 +713,24 @@ fn signed_proposition_negative_is_minus_and_both_is_not_neither() {
     let negative = WoogarooSignedEvidence {
         positive_supported:false, negative_supported:true, original_reference_labels:vec![],
     };
-    let both = positive.merge_same_claim(&negative);
+    let make = |evidence: WoogarooSignedEvidence| WoogarooScopedSignedEvidence {
+        ground_key: "advice-consideration".into(),
+        predicate_key: "alleged-defect".into(),
+        project_and_scope_ref: "epbc:2019/8575:advice-consideration".into(),
+        evidence,
+    };
+    let left = make(positive.clone());
+    let right = make(negative.clone());
+    let both = left.merge_aligned(&right).unwrap().evidence;
+    let mut different = make(negative.clone());
+    different.predicate_key = "materiality".into();
+    assert!(left.merge_aligned(&different).is_none());
+    different.predicate_key = "alleged-defect".into();
+    different.project_and_scope_ref = "epbc:2020/8651:advice-consideration".into();
+    assert!(left.merge_aligned(&different).is_none());
+    different.project_and_scope_ref = "epbc:2019/8575:advice-consideration".into();
+    different.ground_key = "recovery-plan".into();
+    assert!(left.merge_aligned(&different).is_none());
     assert_eq!(positive.coarse_signed_trit(), 1);
     assert_eq!(negative.coarse_signed_trit(), -1);
     assert_eq!(blank.coarse_signed_trit(), 0);
