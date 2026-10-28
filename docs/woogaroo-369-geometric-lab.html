@@ -131,6 +131,7 @@ const axes=[
 ];
 const zero=()=>Object.fromEntries(axes.map(([k])=>[k,false]));
 let baseline=zero(), perturb=zero(), mode="current";
+const byId=id=>document.getElementById(id);
 
 // These are THREE DIALECTIC POSITIONS per axis, NOT proposition truth values.
 const dialecticPositions=["thesis","antithesis","synthesis"];
@@ -231,7 +232,6 @@ function updateSigned(){
  }));
  byId("signed-tree").textContent=JSON.stringify(tree,null,2);
 } 
-const byId=id=>document.getElementById(id);
 function classification(w){
  if(w.defect_established&&w.government_compliance_established)return "Reconcile opposing assertions";
  if(!w.government_compliance_established&&w.evidence_reviewed&&w.legally_applicable&&w.defect_established&&w.materiality_established)return "Applicant candidate → seek defeater";
