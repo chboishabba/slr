@@ -411,6 +411,9 @@ pub struct WoogarooGeometricPair {
     pub initial_synthesis: WoogarooSynthesisKind,
     pub perturbed_synthesis: WoogarooSynthesisKind,
     pub changed_369_position: bool,
+    /// Manhattan grid steps on the existing finite ternary lattice.
+    /// This is NOT metres, p-value, or source evidence.
+    pub ternary_grid_steps: usize,
     pub changed_logical_label: bool,
     pub model_pair_accuracy_measured: bool,
     pub actual_legal_merits_determined: bool,
@@ -440,10 +443,18 @@ pub fn woogaroo_geometric_pair(
     let after_packet = woogaroo_synthesise_dialectic_trialectic(ground_key, after)?;
     let canonical = woogaroo_369_chart(before);
     let perturbed = woogaroo_369_chart(after);
+    let ternary_grid_steps = [
+        (canonical.applicant_cube, perturbed.applicant_cube),
+        (canonical.respondent_cube, perturbed.respondent_cube),
+        (canonical.independent_review_cube, perturbed.independent_review_cube),
+    ].iter().flat_map(|(left, right)| left.iter().zip(right.iter()))
+        .map(|(x, y)| ((*x as i32) - (*y as i32)).abs() as usize)
+        .sum();
     Some(WoogarooGeometricPair {
         ground_key: before_packet.ground_key,
         intervention,
         changed_369_position: canonical != perturbed,
+        ternary_grid_steps,
         changed_logical_label: before_packet.kind != after_packet.kind,
         initial_synthesis: before_packet.kind,
         perturbed_synthesis: after_packet.kind,
