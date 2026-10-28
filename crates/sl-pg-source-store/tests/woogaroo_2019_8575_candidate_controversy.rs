@@ -347,8 +347,14 @@ fn all_seven_grounds_have_exhaustive_hypothetical_for_against_tests() {
                 && w.legally_applicable && w.defect_established
                 && w.materiality_established);
             assert_eq!(result.respondent_conditional,
-                w.government_compliance_established && w.evidence_reviewed
-                && w.legally_applicable);
+                !w.defect_established && w.government_compliance_established
+                && w.evidence_reviewed && w.legally_applicable);
+            assert_eq!(result.contradictory_assumptions_retained,
+                w.defect_established && w.government_compliance_established);
+            if result.contradictory_assumptions_retained {
+                assert!(!result.applicant_conditional);
+                assert!(!result.respondent_conditional);
+            }
             assert!(!(result.applicant_conditional && result.respondent_conditional));
             assert!(!result.proves_actual_legal_merits);
             assert!(!result.creates_legal_evidence_review);
@@ -371,6 +377,30 @@ fn all_seven_grounds_have_exhaustive_hypothetical_for_against_tests() {
             ecological_harm_assumed: true,
         },
     ).is_none());
+}
+
+#[test]
+fn conflicting_defect_and_compliance_claims_are_retained_not_exploded() {
+    use sensiblaw_pg_source_store::{
+        woogaroo_hypothetical_adversarial_test, WoogarooHypotheticalWorld,
+    };
+    for ground in WOOGAROO_GROUNDS {
+        let result = woogaroo_hypothetical_adversarial_test(
+            ground.key,
+            WoogarooHypotheticalWorld {
+                legally_applicable: true,
+                defect_established: true,
+                materiality_established: true,
+                government_compliance_established: true,
+                evidence_reviewed: true,
+                ecological_harm_assumed: true,
+            },
+        ).unwrap();
+        assert!(result.contradictory_assumptions_retained);
+        assert!(!result.applicant_conditional);
+        assert!(!result.respondent_conditional);
+        assert!(!result.proves_actual_legal_merits);
+    }
 }
 
 #[test]
