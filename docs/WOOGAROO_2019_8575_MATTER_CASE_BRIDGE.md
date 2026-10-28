@@ -45,3 +45,98 @@ To persist this Matter, SLR first requires actual source-revision and canonical-
 ## Attribution and case safety
 
 Commonwealth Parliament wrote the Act; DCCEEW issued portal decisions and species documents; AGS authored its legal briefing; Stockland authored its own FAQ; QCC, QUT and Save Woogaroo Forest Group authored their respective submissions; the original 2013/2015/2024 cases retain their judicial/party authorship; SLR PR #59 owns the existing Rust Matter types; DASHI PR #1276 owns this case's source-gated issue analysis. The new SLR specimen is additive integration source code, **not execution or kernel verification**. There is no owned/paid court filing, original signed 15 October conditions, source-reviewed exact span, confirmed environmental breach or newly proved payoff.
+
+
+## 28 October closure-ledger max cut (source-written, UNPAID)
+
+The canonical native case has a second **case-specific** projection:
+[`woogaroo_legal_closure.rs`](../crates/sl-pg-source-store/src/woogaroo_legal_closure.rs).
+It consumes the existing `WOOGAROO_GROUNDS` keys; it is **not** a new generic
+evidence authority, duplicate Matter, source admission engine, or source store.
+The canonical five-proposition/two-residual Matter remains unchanged until
+real documents justify adding more reviewed disputes.
+
+The closure ledger enumerates **80 still-unpaid targets**, divided into:
+I01-I08 identity (8); E01-E08 source provenance (8); P01-P08 standing/time/
+procedure (8); D01-D08 decision file (8); G01-G28 seven grounds x four
+discriminators (28); F01-F08 ecological function (8); V01-V07 actual production/
+formal verification (7); O01-O05 litigation, enforcement and conservation
+outcomes (5). These are *research, expert, engineering and real-world
+obligations*, not 80 established mathematical theorems or Court findings.
+
+A deterministic `woogaroo_closure_frontier()` links each target to the
+**most decisive next original or action**, preserving 12 unscored acquisition
+packets: counsel; signed approval/conditions; delegate brief/s95C; original
+comments/s95B; stage works/Council acceptance; recovery plan; local ecological
+expert evidence; source materialisation; executed runtime verification;
+actual legal/regulatory disposition; durable habitat monitoring; decision-specific
+conflicts (last). The numbers of targets unlocked are **dependency coverage
+counts**, not probabilities of winning, financial weights, or certification.
+
+`validate_woogaroo_closure_contract()` checks exact unique canonical
+identities, packet coverage, ordered priorities, every ground key against
+the original native seven-ground source, four discriminators per ground,
+and **zero accepted discharges**. A future actual reviewed source must use
+the *existing SLR* source-store and Matter review flow, not flip these
+source-written template booleans.
+
+### Priority originals and factual/legal guards
+
+1. Applicant-specific qualified standing, historical association objects,
+   litigation authority, reasons/notification chronology, real review limit,
+   and urgent protective relief: **a public 15 October notice alone does not
+   start a universal clock**. Federal Court procedural guidance:
+   https://www.fedcourt.gov.au/law-and-practice/national-practice-areas/aclhr/more
+2. Signed EPBC 2019/8575 Part 9 approval, final numbered conditions, plans,
+   expiry and actual delegate authorisation. Current public project page
+   https://epbcpublicportal.environment.gov.au/all-notices/project-decision/?id=b0e6d9ac-0ebb-f111-aaad-7c1e522b52b7
+   displays approved status but does not furnish those original files in the
+   accessible document pane. **Do not infer nonexistence from a portal failure.**
+3. Original s95C report and actual decision brief that identifies the correct
+   2022 endangered-koala approved advice, relevant significant impact finding,
+   and material considered. The Act as compiled **24 August 2026** has s139(1)
+   recovery-plan consistency and s139(2) advice consideration requirements.
+   The precise saved/amended law must be checked against the 2025 Reform Act,
+   commencement instruments and August 2026 transitional rules for the specific
+   referral: https://www.legislation.gov.au/C2004A00485/2026-08-24/ and
+   https://www.legislation.gov.au/F2026L01106/asmade .
+4. Actual proponent recipient records, final PD and original sent comments
+   under s95B. A count of 1,786 submitted comments does not pay copies
+   delivered, when, or statutory compliance.
+5. Approved site geometry, exact Council 9281/2024/OW Condition 6(a),
+   actual Council satisfaction, and dated/geolocated clearing/works.
+   Confirm whether the same stage is involved; no published start date
+   is not no risk. Separate Queensland condition breach from federal
+   approval invalidity.
+6. Expert before/after *functional* koala network evidence, original surveys,
+   mature canopy, shade/thermal refuges, roads, offsets and years to offset
+   equivalence. Compare Springview's attributable effects against the
+   surrounding context; do not attribute every other development to this
+   referred action.
+7. Only if genuine decision-specific originals emerge: independently
+   review actual conflicts, communications and legal elements. Policy
+   alignment, company ownership or historic gas links are not proof
+   of influence or wrongdoing.
+
+### Verification and external action boundary
+
+New negative-contract tests reside in
+[`woogaroo_2019_8575_candidate_controversy.rs`](../crates/sl-pg-source-store/tests/woogaroo_2019_8575_candidate_controversy.rs).
+They assert 80 unique unpaid targets, seven x four grounds, the complete
+unscored packet frontier, and rejection of invented discharges and altered
+ground/source identities. The code was committed via GitHub and read back;
+**Cargo, PostgreSQL, rustfmt, Agda, Python and CI have not been run here**.
+
+Newest method-only sibling references: DASHI #1411 lazy revision-bound
+evidence spans, #1413 single-transaction proof-gap persistence, SLR #75
+candidate retention and #54 actual persisted reopening. These are distinct
+unmerged owners and **not** imported or represented as executed dependencies.
+Preserve historical SensibLaw prototype authorship, independent prior
+repo/PR mathematical proofs, and existing Ibrahim Monster 3B ownership.
+No ESD or digital_esd surface is changed.
+
+**Operational wall**: no court filing, legal representation, requested original
+decision file, actually reviewed evidence payment, regulatory referral,
+photographic works proof or injunction was created by this code change.
+The next decisive work is external original-record acquisition and competent
+counsel assessment, in parallel with executed local verification.
