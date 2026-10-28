@@ -113,7 +113,9 @@ fn specimen() -> MatterControversyDraft {
                 response_ref: "response:woogaroo:development-corridor-answer".into(),
                 target_proposition_ref: LOCAL_BASELINE.into(),
                 response_proposition_ref: DEVELOPER.into(),
-                mode: MatterResponseMode::AdmitConductAddContext,
+                // An independent developer statement is an evidentiary challenge,
+                // NOT a respondent admission of conduct or common ground.
+                mode: MatterResponseMode::ChallengeEvidenceReliability,
             },
         ],
         residuals: vec![
@@ -180,6 +182,7 @@ fn woogaroo_is_a_source_written_unpaid_matter_not_an_approval_merits_finding() {
         .obligations
         .iter()
         .all(|o| o.discharge_ref.is_none()));
+    assert!(draft.responses.iter().all(|r| r.mode == MatterResponseMode::ChallengeEvidenceReliability));
     assert!(draft
         .propositions
         .iter()
