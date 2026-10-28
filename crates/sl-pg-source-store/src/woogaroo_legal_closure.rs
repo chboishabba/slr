@@ -316,7 +316,7 @@ pub fn woogaroo_hypothetical_adversarial_test(
 // Match DASHI/Law/SensibLawWoogarooDialecticTrialecticSynthesis20261028Exact.
 // -------------------------------------------------------------------------
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub enum WoogarooSynthesisKind {
     SeekOriginals,
     ApplicantCandidateForDefeaterSearch,
@@ -324,19 +324,19 @@ pub enum WoogarooSynthesisKind {
     ReconcileOpposingSourceAssertions,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub enum WoogarooDialecticEdge {
     ProvisionalApplicant,
     Unresolved,
     ProvisionalRespondent,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub enum WoogarooTrialecticFace {
     Underdetermined,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct WoogarooSynthesisPacket {
     pub ground_key: &'static str,
     pub applicant_issue: &'static str,
