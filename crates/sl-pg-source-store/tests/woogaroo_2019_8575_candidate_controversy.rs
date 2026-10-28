@@ -699,3 +699,122 @@ fn all_single_axis_369_perturbations_respect_grounded_pair_semantics() {
     }
     assert_eq!(tested, 7 * 32 * 2);
 }
+
+
+#[test]
+fn signed_proposition_negative_is_minus_and_both_is_not_neither() {
+    use sensiblaw_pg_source_store::{WoogarooEvidenceStatus,WoogarooSignedEvidence};
+    let blank = WoogarooSignedEvidence::unknown();
+    let positive = WoogarooSignedEvidence {
+        positive_supported:true, negative_supported:false, original_reference_labels:vec![],
+    };
+    let negative = WoogarooSignedEvidence {
+        positive_supported:false, negative_supported:true, original_reference_labels:vec![],
+    };
+    let both = positive.merge_same_claim(&negative);
+    assert_eq!(positive.coarse_signed_trit(), 1);
+    assert_eq!(negative.coarse_signed_trit(), -1);
+    assert_eq!(blank.coarse_signed_trit(), 0);
+    assert_eq!(both.coarse_signed_trit(), 0);
+    assert_eq!(blank.status(), WoogarooEvidenceStatus::Neither);
+    assert_eq!(both.status(), WoogarooEvidenceStatus::Both);
+    assert_ne!(blank.status(), both.status());
+    assert_ne!(negative.status(), blank.status());
+}
+
+#[test]
+fn signed_fibre_drives_paired_candidate_synthesis_without_truth_promotion() {
+    use sensiblaw_pg_source_store::{
+        woogaroo_synthesise_signed_fibre, woogaroo_signed_padic_prefix,
+        WoogarooSignedClaimFibre, WoogarooSignedEvidence, WoogarooSignedSearchFocus,
+    };
+    for ground in WOOGAROO_GROUNDS {
+        let mut f = WoogarooSignedClaimFibre::unpaid(ground.key);
+        let unresolved = woogaroo_synthesise_signed_fibre(f.clone(), false).unwrap();
+        assert_eq!(unresolved.signed_369.applicant_cube, [0,0,0]);
+        assert!(unresolved.signed_369.conflict_predicate_keys.is_empty());
+        assert_eq!(unresolved.focus, WoogarooSignedSearchFocus::AcquireOriginals);
+        assert_eq!(unresolved.nested_predicate_tree.len(), 3);
+        assert_eq!(unresolved.nested_predicate_tree.iter()
+            .map(|x| x.children.len()).collect::<Vec<_>>(), vec![2,2,2]);
+        assert_eq!(unresolved.four_unpaid_obligation_ids.len(), 4);
+        assert!(unresolved.triadic_face_underdetermined);
+        assert!(!unresolved.actual_source_reviewed);
+        assert!(!unresolved.actual_legal_merits_decided);
+
+        // −P is the negative version of EXACT SAME alleged-defect predicate.
+        f.evidence[1] = WoogarooSignedEvidence {
+            positive_supported:false,negative_supported:true,original_reference_labels:vec![],
+        };
+        let negative = woogaroo_synthesise_signed_fibre(f.clone(), true).unwrap();
+        assert_eq!(negative.signed_369.applicant_cube[1], -1);
+        assert_eq!(negative.focus, WoogarooSignedSearchFocus::TestRespondentCounterDefeaters);
+        assert_eq!(negative.one_branch_padic_prefix.low_to_high_digits, vec![0,-1,0]);
+        assert!(!negative.one_branch_padic_prefix.full_inverse_limit_established);
+
+        let prefix = woogaroo_signed_padic_prefix(&[
+            &f.evidence[0],&f.evidence[1],&f.evidence[2]
+        ]);
+        let mut extended = f.evidence.clone();
+        extended.push(f.evidence[1].clone());
+        let finer = woogaroo_signed_padic_prefix(&[
+            &extended[0],&extended[1],&extended[2],&extended[9]
+        ]);
+        assert_eq!(prefix.low_to_high_digits, finer.low_to_high_digits[..3]);
+
+        f.evidence[1].positive_supported = true;
+        f.evidence[1].negative_supported = false;
+        let positive = woogaroo_synthesise_signed_fibre(f.clone(), true).unwrap();
+        assert_eq!(positive.signed_369.applicant_cube[1], 1);
+        assert_eq!(positive.focus, WoogarooSignedSearchFocus::TestApplicantDefeaters);
+        assert_eq!(positive.signed_fibre.evidence[1].coarse_signed_trit(),1);
+
+        f.evidence[1].negative_supported = true;
+        let both = woogaroo_synthesise_signed_fibre(f.clone(), true).unwrap();
+        assert_eq!(both.signed_369.applicant_cube[1], 0);
+        assert_eq!(both.signed_369.conflict_predicate_keys,vec!["alleged-defect"]);
+        assert_eq!(both.focus, WoogarooSignedSearchFocus::ReconcileContradiction);
+        assert_eq!(both.nested_predicate_tree[0].children[0].evidence.status(),
+            sensiblaw_pg_source_store::WoogarooEvidenceStatus::Both);
+        // The projection is NOT lossless for both/neither. Fine fibre is.
+        assert_eq!(unresolved.signed_369.applicant_cube, [0,0,0]);
+        assert_ne!(both.signed_fibre.evidence[1].status(),
+            unresolved.signed_fibre.evidence[1].status());
+        assert!(!both.actual_source_reviewed);
+        assert!(!both.actual_legal_merits_decided);
+        assert_eq!(both.base_acquisition_packet, negative.base_acquisition_packet);
+
+        f.proposition_scope = "different-project".into();
+        assert!(woogaroo_synthesise_signed_fibre(f.clone(), false).is_none());
+        f.proposition_scope=format!("epbc:2019/8575:{}",ground.key);
+        f.evidence.pop();
+        assert!(woogaroo_synthesise_signed_fibre(f, false).is_none());
+    }
+}
+
+#[test]
+fn all_unpaid_signed_outputs_keep_seven_distinct_fibres_and_obligation_roots() {
+    use sensiblaw_pg_source_store::{
+        woogaroo_unpaid_signed_fibre_synthesis, WoogarooSignedSearchFocus,
+        WOOGAROO_SIGNED_PREDICATES,
+    };
+    let packets = woogaroo_unpaid_signed_fibre_synthesis();
+    assert_eq!(packets.len(),7);
+    assert_eq!(WOOGAROO_SIGNED_PREDICATES.len(),9);
+    for (packet,ground) in packets.iter().zip(WOOGAROO_GROUNDS) {
+        assert_eq!(packet.ground_key,ground.key);
+        assert_eq!(packet.signed_fibre.ground_key,ground.key);
+        assert_eq!(packet.focus,WoogarooSignedSearchFocus::AcquireOriginals);
+        assert_eq!(packet.signed_fibre.evidence.len(),9);
+        assert!(packet.signed_fibre.evidence.iter().all(|e|
+            !e.positive_supported && !e.negative_supported &&
+            e.original_reference_labels.is_empty()));
+        assert!(packet.signed_369.conflict_predicate_keys.is_empty());
+        assert!(packet.signed_369.image_is_only_a_coarse_observation);
+        assert!(!packet.signed_369.actual_source_payment);
+        assert!(!packet.signed_369.actual_mediation_face_glued);
+        assert_eq!(packet.four_unpaid_obligation_ids.len(),4);
+        assert!(!packet.actual_legal_merits_decided);
+        assert!(!packet.actual_source_reviewed);
+    }
+}
