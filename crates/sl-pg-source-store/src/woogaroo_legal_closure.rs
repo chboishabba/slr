@@ -1210,6 +1210,13 @@ impl WoogarooPresentationS3 {
             other => other,
         }
     }
+
+    /// Strict graph-geometry symmetry is only C2: identity or endpoint
+    /// reflection. #1414 S3 is valid for PRESENTATION/palette charts,
+    /// but C3 makes 0->+1 become +1->-1, an invalid unit-grid jump.
+    pub fn preserves_strict_grid_adjacency(self) -> bool {
+        matches!(self, Self::Identity | Self::SwapThesisSynthesis)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
