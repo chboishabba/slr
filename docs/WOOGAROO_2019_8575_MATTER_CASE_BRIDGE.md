@@ -211,3 +211,25 @@ Boolean model worlds generated 294 original-acquisition, 14 conditional
 applicant, 28 conditional respondent, 112 contradiction-resolution
 states. These are **not** real merits results. No actual-reviewed
 evidence, Court filing, stage compliance or relief is created.
+
+## Complete mathematical lemma ledger versus the original legal completion gates (28 October)
+
+The [119-entry DASHI dialectic-27/pants/hyperfabric/case matrix](https://github.com/chboishabba/dashi_agda/blob/research/woogaroo-approval-benefit-gas-20261027/Docs/Dialectic27PantsHyperformalCompleteLemmaLedger20261028.md)
+is the total scoped proof ledger. The new finite
+`Dialectic27PantsNativeGridAdjacencyExact` has source-written native
+one-slot pants-path 27-grid adjacency, bidirectional GraphHom maps and
+inverse roundtrips; independently executed Python checked 729 vertex
+pairs and 108 directed/54 undirected grid edges. It does not establish
+physical pants geometry, all-face global sheaf gluing, the trialectic
+mediation face or legal authority.
+
+The **real Woogaroo case**, EPBC 2019/8575, remains post-approval,
+pre-enforcement. Its priority is not mathematical numerology:
+authenticated federal signed approval and conditions; actual s95B/s95C
+records and operative 2022 koala advice/recovery plan; original Council
+Condition 6(a) and same-stage works; expert test of functional
+habitat/corridor loss; an authorised applicant; and urgent counsel
+standing, clock and interim-preservation review. Candidate logic cannot
+file a proceeding, pay a source, make an ecological measurement or secure
+habitat protection by proof-term construction. Preserve the historical
+SensibLaw prototype as prototype; SLR is production.
