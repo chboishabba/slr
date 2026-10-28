@@ -94,6 +94,10 @@ pub use matter_controversy_projection::*;
 mod woogaroo_case;
 pub use woogaroo_case::*;
 
+#[path = "woogaroo_legal_closure.rs"]
+mod woogaroo_legal_closure;
+pub use woogaroo_legal_closure::*;
+
 #[path = "acceptance_control_store.rs"]
 mod acceptance_control_store;
 pub use acceptance_control_store::*;
