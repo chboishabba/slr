@@ -188,3 +188,26 @@ evidence records. The real native SLR Matter still has two unresolved
 residuals; five other legal grounds are defined but uninstantiated.
 This is not full case merits resolution. No Agda kernel or Cargo/PG
 execution is claimed.
+
+
+## Dialectic/trialectic synthesis result (28 October)
+
+See the full seven-ground output manifest and primary-source attribution at
+[`WOOGAROO_2019_8575_TRIALECTIC_SYNTHESIS_OUTPUTS.md`](WOOGAROO_2019_8575_TRIALECTIC_SYNTHESIS_OUTPUTS.md).
+The production `woogaroo_synthesise_dialectic_trialectic` consumes **only**
+existing `WOOGAROO_GROUNDS` and the earlier `WoogarooHypotheticalWorld`
+logic; it returns a typed seven-ground applicant issue, hypothetical
+respondent countercase, original record needed, search goal, provisional
+A↔B opposition and two neutral independent-appraisal edges, plus the
+deliberately **underdetermined irreducible face**. The native unreviewed
+manifest is available via
+`cargo run -p sensiblaw-pg-source-store --example woogaroo_trialectic_synthesis`
+(source-written; Cargo execution unverified). No generic dialectic or
+trialectic engine is cloned in SLR: DASHI remains formal owner.
+
+Two additional tests specify exact seven unpaid packets and exhaustive
+448-world routing. A separate independent reference check of the 448
+Boolean model worlds generated 294 original-acquisition, 14 conditional
+applicant, 28 conditional respondent, 112 contradiction-resolution
+states. These are **not** real merits results. No actual-reviewed
+evidence, Court filing, stage compliance or relief is created.
