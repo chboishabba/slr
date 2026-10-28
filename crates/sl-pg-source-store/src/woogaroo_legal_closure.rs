@@ -912,3 +912,52 @@ pub fn woogaroo_unpaid_signed_fibre_synthesis() -> Vec<WoogarooSignedSynthesisOu
             WoogarooSignedClaimFibre::unpaid(g.key), false)
     }).collect()
 }
+
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct WoogarooConvergedSynthesisPacket {
+    pub canonical_ground: &'static str,
+    pub candidate_dialectic: WoogarooSynthesisPacket,
+    pub signed_predicate_hyperfabric: WoogarooSignedSynthesisOutput,
+    pub matched_source_obligations: bool,
+    pub p_adic_branch_is_only_a_prefix: bool,
+    pub may_force_irreducible_face: bool,
+    pub real_legal_conclusion: bool,
+}
+
+/// One joined canonical seven-ground readout. No claim-level Boolean is
+/// silently reinterpreted as −P; signed fine fibre is independent, and
+/// synthesis only joins via exact ground, packet and four obligation IDs.
+/// A false or missing witness fails CLOSED by omitting that packet.
+pub fn woogaroo_unpaid_converged_synthesis() -> Vec<WoogarooConvergedSynthesisPacket> {
+    let unsigned_world = WoogarooHypotheticalWorld {
+        legally_applicable:false, defect_established:false, materiality_established:false,
+        government_compliance_established:false, evidence_reviewed:false,
+        ecological_harm_assumed:false,
+    };
+    WOOGAROO_GROUNDS.iter().filter_map(|g| {
+        let candidate_dialectic =
+            woogaroo_synthesise_dialectic_trialectic(g.key, unsigned_world)?;
+        let signed_predicate_hyperfabric =
+            woogaroo_synthesise_signed_fibre(
+                WoogarooSignedClaimFibre::unpaid(g.key), false)?;
+        if candidate_dialectic.ground_key != signed_predicate_hyperfabric.ground_key
+            || candidate_dialectic.original_acquisition_packet_key !=
+                signed_predicate_hyperfabric.base_acquisition_packet
+            || candidate_dialectic.open_ground_obligation_ids !=
+                signed_predicate_hyperfabric.four_unpaid_obligation_ids
+            || !candidate_dialectic.candidate_only
+            || !signed_predicate_hyperfabric.hypothetical_only
+            || !signed_predicate_hyperfabric.triadic_face_underdetermined
+        { return None; }
+        Some(WoogarooConvergedSynthesisPacket {
+            canonical_ground: g.key,
+            candidate_dialectic,
+            signed_predicate_hyperfabric,
+            matched_source_obligations:true,
+            p_adic_branch_is_only_a_prefix:true,
+            may_force_irreducible_face:false,
+            real_legal_conclusion:false,
+        })
+    }).collect()
+}
