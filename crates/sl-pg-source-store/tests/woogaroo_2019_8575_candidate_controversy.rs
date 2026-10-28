@@ -887,3 +887,93 @@ fn one_converged_synthesis_per_ground_preserves_signed_and_dialectical_owners() 
         assert!(!output.signed_predicate_hyperfabric.actual_source_reviewed);
     }
 }
+
+
+#[test]
+fn dialectic_xy_has_nine_encounters_each_with_three_independent_z_positions() {
+    use std::collections::BTreeSet;
+    use sensiblaw_pg_source_store::{
+        woogaroo_xy_interaction_cell, woogaroo_xy_interaction_column,
+        woogaroo_xy_transport_selected_z, woogaroo_xy_next_z_step,
+        woogaroo_unpaid_xy_interaction_carrier, WoogarooDialecticPosition as P,
+    };
+    let mut total = 0;
+    for g in WOOGAROO_GROUNDS {
+        let carrier = woogaroo_unpaid_xy_interaction_carrier(g.key).unwrap();
+        assert_eq!(carrier.xy_encounter_count, 9);
+        assert_eq!(carrier.xyz_possible_cells, 27);
+        assert_eq!(carrier.actual_x_position_selected, None);
+        assert_eq!(carrier.actual_y_position_selected, None);
+        assert_eq!(carrier.actual_z_position_selected, None);
+        assert!(!carrier.selected_interaction_is_a_legal_conclusion);
+        let mut all_cells=BTreeSet::new();
+        let mut all_xy=BTreeSet::new();
+        for x in P::ALL {
+            for y in P::ALL {
+                all_xy.insert(x.index()*3+y.index());
+                let column = woogaroo_xy_interaction_column(g.key,x,y).unwrap();
+                assert_eq!(column.len(),3);
+                assert!(woogaroo_xy_transport_selected_z(g.key,x,y,None).is_none());
+                assert!(woogaroo_xy_next_z_step(&column[2]).is_none());
+                assert_eq!(woogaroo_xy_next_z_step(&column[0]),Some(column[1].clone()));
+                assert_eq!(woogaroo_xy_next_z_step(&column[1]),Some(column[2].clone()));
+                for z in P::ALL {
+                    let cell=woogaroo_xy_interaction_cell(g.key,x,y,z).unwrap();
+                    assert_eq!(cell.xy_plane_index,x.index()*3+y.index());
+                    assert_eq!(cell.cell_index,x.index()*9+y.index()*3+z.index());
+                    assert_eq!(cell.role_position_trits,[
+                        x.embedded_trit(),y.embedded_trit(),z.embedded_trit()
+                    ]);
+                    assert_eq!(cell, column[z.index()]);
+                    assert_eq!(Some(cell.clone()),
+                        woogaroo_xy_transport_selected_z(g.key,x,y,Some(z)));
+                    assert!(!cell.actual_z_mediation_witness_paid);
+                    assert!(!cell.actual_source_review_paid);
+                    assert!(!cell.actual_legal_merits_established);
+                    all_cells.insert(cell.cell_index);
+                    total+=1;
+                }
+                assert_eq!(column[0].x_position,column[2].x_position);
+                assert_eq!(column[0].y_position,column[2].y_position);
+                assert_ne!(column[0].z_position,column[2].z_position);
+            }
+        }
+        assert_eq!(all_xy.len(),9);
+        assert_eq!(all_cells.len(),27);
+        assert_eq!(all_cells.into_iter().collect::<Vec<_>>(),
+            (0usize..27usize).collect::<Vec<_>>());
+    }
+    assert_eq!(total,7*27);
+    assert!(woogaroo_xy_interaction_column("wrong-referral",P::Thesis,P::Thesis)
+        .is_none());
+}
+
+#[test]
+fn converged_ground_preserves_xy_z_as_roles_and_polar_evidence_as_fibre() {
+    use sensiblaw_pg_source_store::{
+        woogaroo_unpaid_converged_synthesis, woogaroo_xy_interaction_cell,
+        WoogarooDialecticPosition as P,
+    };
+    for packet in woogaroo_unpaid_converged_synthesis() {
+        assert_eq!(packet.xy_interaction_27.ground_key,packet.canonical_ground);
+        assert_eq!(packet.xy_interaction_27.xy_encounter_count,9);
+        assert_eq!(packet.xy_interaction_27.xyz_possible_cells,27);
+        assert_eq!(packet.xy_interaction_27.actual_z_position_selected,None);
+        // Position code -1 is "thesis" HERE, NOT support for ¬P.
+        let cell=woogaroo_xy_interaction_cell(
+            packet.canonical_ground,P::Thesis,P::Antithesis,P::Synthesis).unwrap();
+        assert_eq!(cell.role_position_trits,[-1,0,1]);
+        assert_eq!(cell.xy_plane_index,1);
+        assert_eq!(cell.cell_index,5);
+        // All actual signed evidence remains unknown/unpaid independent of
+        // the chosen hypothetical X/Y/Z stage positions.
+        assert_eq!(packet.signed_predicate_hyperfabric.signed_369.applicant_cube,
+            [0,0,0]);
+        assert_eq!(packet.signed_predicate_hyperfabric.signed_369.respondent_cube,
+            [0,0,0]);
+        assert_eq!(packet.signed_predicate_hyperfabric.signed_369.independent_cube,
+            [0,0,0]);
+        assert!(packet.signed_predicate_hyperfabric.triadic_face_underdetermined);
+        assert!(!packet.real_legal_conclusion);
+    }
+}
