@@ -172,3 +172,34 @@ including **512 all-zero preimages** and 242,461 fine/coarse collisions;
 it did not establish any document review or official case result.
 The signed viewer and source-attributed docs remain distinct from the
 older six-Boolean test fixture.
+
+### Multi-predicate gate correction
+
+The final converged synthesis no longer allows a single positive or
+negative alleged-defect sign to route an entire ground. The case-level
+`woogaroo_signed_nested_focus` requires **all** stipulated
+`applicable-law=+P`, `reviewed-original=+P`,
+`same-project-stage=+P`, and the synthetic review switch. For
+the applicant path it additionally requires
+`alleged-defect=+P`, `materiality=+P` and
+`claimed-compliance != +P`. For the respondent path it
+requires `alleged-defect=−P` and
+`claimed-compliance=+P`. Any BOTH state on any of the nine
+predicates is retained as `ReconcileContradiction`.
+A single signed leaf still supplies its local search direction, but
+does NOT override missing case-level conjuncts or prove a case.
+
+The matching Agda owner has `sharedSourceGates`,
+`applicantPredicateConjunction`,
+`respondentPredicateConjunction`, `hasAnyConflict`,
+`signedFibreFocus`, and fully stipulated applicant/respondent
+and unpaid example lemmas. The HTML signed viewer now uses the same
+conjunction. The exhaustive nine-predicate reference check
+classifies the **262,144** fine configurations, when synthetic
+review is on: **54** applicant candidates, **81** respondent
+candidates, **19,548** original-acquisition candidates and
+**242,461** conflicted configurations. Those are model counts,
+not likelihoods, Court outcomes or real evidence. The high
+contradiction count comes from considering all possible synthetic
+four-valued nine-predicate assignments, NOT from claims that the
+actual 2019/8575 record contains such contradictions.
