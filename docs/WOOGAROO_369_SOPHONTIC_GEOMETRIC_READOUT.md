@@ -146,3 +146,17 @@ The original statutory authors, judges, QUT/QCC/SWFG/Stockland authors,
 Sophontic's published protocol, all existing DASHI proof owners,
 SensibLaw prototype and Ibrahim/Monster 3B PR proofs remain separately
 attributed. Protected ESD surfaces were not edited.
+
+## Checked finite steps and browser exploration (28 October)
+The original DASHI `HypervoxelAdjacent`/ `zeroToPos` grid now supplies
+two explicit review-gate steps and one harm-only step in
+`SensibLawWoogarooSophontic369GeometricPerturbationExact.agda`.
+SLR exposes the same `ternary_grid_steps` in a paired reference packet.
+The self-contained [interactive geometry explorer](woogaroo-369-geometric-lab.html)
+shows three complete 27-point cubes with switchable legal hypotheses,
+review/harm one-field perturbations, packet/G01–G28 identifiers and
+the always-unresolved attached face. It runs locally without network calls.
+The independent 64-world reference has 64 unique input encodings, 32
+review-gate pairs (6 classifier changes), 32 harm-only pairs (zero
+classifier changes). Across seven grounds that yields 448 specified
+single-field pair regressions. Rust/Agda were not executed here.
