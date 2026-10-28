@@ -1081,3 +1081,42 @@ fn p0_woogaroo_source_worklist_is_chart_independent_and_full_coverage() {
     assert!(frontier.iter().all(|p| !p.unpaid_obligations.is_empty()));
     assert_eq!(frontier.iter().map(|p|p.unpaid_obligations.len()).sum::<usize>(),80);
 }
+
+
+#[test]
+fn monodromy_s3_is_not_27_grid_geometry_except_identity_and_endpoint_swap() {
+    use sensiblaw_pg_source_store::{
+        WoogarooPresentationS3 as S3, WoogarooDialecticPosition as P,
+    };
+    let vertices: Vec<[P;3]> = P::ALL.into_iter().flat_map(|x|
+        P::ALL.into_iter().flat_map(move |y|
+            P::ALL.into_iter().map(move |z| [x,y,z])
+        )
+    ).collect();
+    assert_eq!(vertices.len(),27);
+    let adjacent = |a:[P;3],b:[P;3]| -> bool {
+        let steps:usize=a.into_iter().zip(b)
+            .map(|(x,y)| x.index().abs_diff(y.index())).sum();
+        steps==1
+    };
+    for chart in S3::ALL {
+        let preserves_all=vertices.iter().copied().all(|left| {
+            vertices.iter().copied().all(|right| {
+                let mapped_left=left.map(|v|chart.apply(v));
+                let mapped_right=right.map(|v|chart.apply(v));
+                adjacent(left,right)==adjacent(mapped_left,mapped_right)
+            })
+        });
+        assert_eq!(preserves_all,chart.preserves_strict_grid_adjacency());
+        // The only true geometric reorientation is the C2 reflection.
+        assert_eq!(chart.preserves_strict_grid_adjacency(),
+            matches!(chart,S3::Identity | S3::SwapThesisSynthesis));
+    }
+    // A canonical X/Y→Z move across one layer becomes a two-hop jump
+    // under the C3 root-label presentation rotation.
+    let before=[P::Thesis,P::Thesis,P::Antithesis];
+    let after=[P::Thesis,P::Thesis,P::Synthesis];
+    assert!(adjacent(before,after));
+    assert!(!adjacent(before.map(|x|S3::Rotate.apply(x)),
+        after.map(|x|S3::Rotate.apply(x))));
+}
