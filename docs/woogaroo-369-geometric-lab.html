@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Woogaroo 369 / 27-cube — source-unpaid geometric reasoning lab</title>
+<style>
+:root {font-family:ui-sans-serif,system-ui,sans-serif; color:#ecf2fa; background:#0c1423; font-size:15px}
+*{box-sizing:border-box} body{margin:0 auto;max-width:1220px;padding:24px}
+h1{font-size:clamp(1.6rem,3vw,2.4rem);margin:10px 0} h2{font-size:1.05rem;margin:.2rem 0 .7rem}
+p{line-height:1.56;max-width:85ch}.muted{color:#a6b7c9}.small{font-size:.86rem}
+.row{display:flex;gap:16px;flex-wrap:wrap;align-items:center}
+.card{border:1px solid #34445e;border-radius:14px;background:#132035;padding:18px}
+.bar{border-left:4px solid #edbd65;padding-left:12px}
+select,button{border:1px solid #475a79;border-radius:8px;background:#1c2d44;color:#f0f6fc;padding:9px 12px}
+button:hover,button:focus{background:#2c476a;cursor:pointer}
+label{display:flex;align-items:center;gap:7px;padding:6px 10px;border:1px solid #31435a;border-radius:9px}
+input{accent-color:#8dc3ff}.control{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:9px}
+.layout{display:grid;grid-template-columns:repeat(auto-fit,minmax(305px,1fr));gap:12px;margin-top:14px}
+.pair{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;margin-top:14px}
+.cubes{display:grid;grid-template-columns:repeat(3,minmax(82px,1fr));gap:8px;align-items:start}
+.slice{min-width:0}.slice-title{font-size:.75rem;color:#a6b7c9;margin:0 0 3px;text-align:center}
+.cubeg{display:grid;grid-template-columns:repeat(3,1fr);gap:3px}
+.voxel{border-radius:5px;aspect-ratio:1;border:1px solid #34425d;background:#26334b;display:grid;place-items:center;position:relative}
+.voxel.selected{background:#208b9b;border-color:#a3f0f6;box-shadow:0 0 0 1px #9eeaf6;color:#fff}
+.voxel.selected.changed{background:#bc8658;border-color:#ffd49d}
+code{color:#bddcff} .metric{font-size:1.1rem;font-weight:700}.pill{display:inline-block;border-radius:14px;border:1px solid #5a6986;padding:3px 9px;color:#d5e6fa;margin-bottom:7px}
+a{color:#a4d4ff}.meta{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}
+footer{border-top:1px solid #384962;margin-top:20px;padding-top:12px}
+</style>
+</head>
+<body>
+<span class="pill">Finite geometric reference model · not legal advice</span>
+<h1>Woogaroo <span style="color:#8dc3ff">369 / 27-cube</span> reasoning lab</h1>
+<p>Seven source-unpaid legal hypotheses. Three ternary (T^3) cubes (A, B, C) form the canonical (T^9) carrier.
+The displayed six-Boolean case occupies 1 of at most 64 reachable points within 19,683 ambient states.
+The independent triadic face remains <strong>underdetermined</strong> regardless of a logical label flip.</p>
+<div class="card" style="margin-bottom:12px">
+  <div class="row"><label for="ground">Candidate legal ground</label><select id="ground"></select>
+  <button type="button" id="review">Perturb review gate</button>
+  <button type="button" id="harm">Perturb habitat assumption</button>
+  <button type="button" id="reset">Restore unresolved case</button></div>
+  <p class="muted small" id="originals"></p>
+  <div class="control" id="controls"></div>
+</div>
+<div class="pair">
+  <section class="card"><h2>A · Canonical hypothetical world</h2><div id="base-kind" class="metric"></div><p id="base-coords" class="small muted"></p></section>
+  <section class="card"><h2>B · One-fact perturbation</h2><div id="new-kind" class="metric"></div><p id="new-coords" class="small muted"></p></section>
+</div>
+<section class="card" style="margin-top:12px"><h2>Geometric / semantic discriminator</h2>
+  <div class="meta"><div><span class="small muted">Finite ternary grid displacement</span><div class="metric" id="gridsteps">—</div></div>
+  <div><span class="small muted">Candidate logical label changed</span><div class="metric" id="flip">—</div></div>
+  <div><span class="small muted">Irreducible trialectic face</span><div class="metric">Underdetermined</div></div>
+  <div><span class="small muted">Actual source reviews / court findings</span><div class="metric">None produced</div></div></div>
+  <p id="explain" class="bar muted"></p>
+</section>
+<div class="layout" id="cube-layout"></div>
+<footer class="small muted"><p><strong>Meaning of coordinates:</strong> zero = unstipulated in this hypothetical fixture, +1 = stipulated.
+No -1 value occurs in these six-Boolean fixtures although the original 27-state cube permits -1, 0 and +1.
+A=(applicability, defect, materiality), B=(compliance, habitat concern, contradiction),
+C=(review gate, derived applicant conditional, derived respondent conditional).
+Cube position and ultrametric distance are not real GIS/ecological coordinates or legal merits scores.
+The 3-dyad structured trialectic boundary is the separate (27^6=3^{18}) carrier; it does not follow from this single (27^3) chart.</p>
+<p>Protocol inspiration: <a href="https://sophontic.ai/evals/" rel="noopener">Sophontic's public paired perturbation evaluation</a>.
+Original finite proof owners: DASHI 369/27-cube, trialectic non-factorability; Sophontic-style unmerged
+<a href="https://github.com/chboishabba/dashi_agda/pull/1094">#1094</a>,
+<a href="https://github.com/chboishabba/dashi_agda/pull/1095">#1095</a> and
+<a href="https://github.com/chboishabba/dashi_agda/pull/1265">#1265</a>.
+Production source and unpaid originals: SLR
+<a href="https://github.com/chboishabba/slr/pull/59">#59</a>;
+DASHI case integration <a href="https://github.com/chboishabba/dashi_agda/pull/1276">#1276</a>.
+Original Commonwealth, QUT, QCC, SWFG, Stockland and earlier Ibrahim Monster 3B authorship remains separate.
+No actual Sophontic model was tested here.</p></footer>
+<script>
+"use strict";
+const grounds=[
+["advice-consideration","Conservation advice","G01–G04","brief","Obtain delegate brief and section 95C; check actual 2022 advice consideration"],
+["recovery-plan","Recovery plan","G05–G08","plan","Compare operative 2022 plan provisions to signed final approval conditions"],
+["incremental-habitat","Incremental habitat","G09–G12","ecology","Reconstruct action-specific marginal habitat connectivity and offsets"],
+["comment-transmission","Comment procedure","G13–G16","comments","Match original section 95B comments and section 95C recommendation"],
+["approval-scope","Approval scope","G17–G20","signed","Compare referred/signed scope and stage-specific conditions"],
+["local-prestart","Council prestart","G21–G24","works","Obtain Council 6(a) acceptance, date and same-stage works"],
+["improper-influence","Improper influence (unproved)","G25–G28","conflict","Require decision-specific original influence evidence before promotion"]
+];
+const axes=[
+["legally_applicable","Applicable law (stipulated)"],
+["defect_established","Defect (stipulated)"],
+["materiality_established","Materiality (stipulated)"],
+["government_compliance_established","Compliance (stipulated)"],
+["evidence_reviewed","Reviewed evidence (synthetic flag only)"],
+["ecological_harm_assumed","Habitat harm (stipulated)"]
+];
+const zero=()=>Object.fromEntries(axes.map(([k])=>[k,false]));
+let baseline=zero(), perturb=zero(), mode="current"; 
+const byId=id=>document.getElementById(id);
+function classification(w){
+ if(w.defect_established&&w.government_compliance_established)return "Reconcile opposing assertions";
+ if(!w.government_compliance_established&&w.evidence_reviewed&&w.legally_applicable&&w.defect_established&&w.materiality_established)return "Applicant candidate → seek defeater";
+ if(!w.defect_established&&w.government_compliance_established&&w.evidence_reviewed&&w.legally_applicable)return "Respondent candidate → seek counter-defeater";
+ return "Acquire originals / unresolved";
+}
+function cubes(w){
+ const applicant=!w.government_compliance_established&&w.evidence_reviewed&&w.legally_applicable&&w.defect_established&&w.materiality_established;
+ const respondent=!w.defect_established&&w.government_compliance_established&&w.evidence_reviewed&&w.legally_applicable;
+ return [
+ [w.legally_applicable,w.defect_established,w.materiality_established],
+ [w.government_compliance_established,w.ecological_harm_assumed,w.defect_established&&w.government_compliance_established],
+ [w.evidence_reviewed,applicant,respondent]
+ ].map(row=>row.map(Number));
+}
+function cubeView(name,point,previous){
+ const el=document.createElement("section");el.className="card";
+ const h=document.createElement("h2");h.textContent=name+" · ternary 27-cube";el.append(h);
+ const small=document.createElement("p");small.className="small muted";small.textContent="Current position: ("+point.join(", ")+")";el.append(small);
+ const container=document.createElement("div");container.className="cubes";
+ for(let z of [-1,0,1]){const plane=document.createElement("div");plane.className="slice";
+ const title=document.createElement("p");title.className="slice-title";title.textContent="z="+z;plane.append(title);
+ const g=document.createElement("div");g.className="cubeg";
+ for(let y of [1,0,-1])for(let x of [-1,0,1]){
+  const cell=document.createElement("div");cell.className="voxel";
+  const selected=point[0]===x&&point[1]===y&&point[2]===z;
+  if(selected){cell.classList.add("selected");if(previous.some((v,i)=>v!==point[i]))cell.classList.add("changed");cell.textContent="●"}
+  cell.title=`(${x},${y},${z})`;g.append(cell);
+ }
+ plane.append(g);container.append(plane)}
+ el.append(container);return el
+}
+function update(){
+ const groundsChoice=grounds.find(x=>x[0]===byId("ground").value)||grounds[0];
+ byId("originals").textContent=`${groundsChoice[2]} • source packet '${groundsChoice[3]}' • ${groundsChoice[4]}. All obligations remain unpaid.`;
+ const controls=byId("controls");controls.replaceChildren();
+ for(const [key,label] of axes){const l=document.createElement("label");
+ const check=document.createElement("input");check.type="checkbox";check.checked=baseline[key];
+ check.addEventListener("change",()=>{baseline[key]=check.checked;perturb={...baseline};mode="current";update()});
+ l.append(check,document.createTextNode(label));controls.append(l)}
+ const b=cubes(baseline),p=cubes(perturb),kind=classification(baseline),kind2=classification(perturb);
+ const displacement=b.reduce((sum,row,i)=>sum+row.reduce((v,x,j)=>v+Math.abs(x-p[i][j]),0),0);
+ const flip=kind!==kind2;
+ byId("base-kind").textContent=kind;byId("new-kind").textContent=kind2;
+ byId("base-coords").textContent=b.map(x=>"("+x.join(",")+")").join(" / ");
+ byId("new-coords").textContent=p.map(x=>"("+x.join(",")+")").join(" / ");
+ byId("gridsteps").textContent=String(displacement);byId("flip").textContent=flip?"Yes (candidate only)":"No";
+ byId("explain").textContent=mode==="review"?
+  "Only the synthetic review gate changed. The derived result can change if all other antecedents hold; a changed code position is not a real reviewed source.":
+ mode==="harm"?"Only the habitat-harm assumption changed. This specific legal review-gate classifier remains stable; ecological importance must be tested separately.":
+ "No paired input change selected. This is a current source-unpaid planning state, not a measured or legally adjudicated outcome.";
+ const holder=byId("cube-layout");holder.replaceChildren(...[
+  cubeView("A • applicant premises",p[0],b[0]),
+  cubeView("B • respondent / context",p[1],b[1]),
+  cubeView("C • independent review / derived outcomes",p[2],b[2])
+ ]);
+}
+const g=byId("ground");grounds.forEach(([id,label])=>{const option=document.createElement("option");option.value=id;option.textContent=label;g.append(option)});
+byId("review").addEventListener("click",()=>{perturb={...baseline,evidence_reviewed:!baseline.evidence_reviewed};mode="review";update()});
+byId("harm").addEventListener("click",()=>{perturb={...baseline,ecological_harm_assumed:!baseline.ecological_harm_assumed};mode="harm";update()});
+byId("reset").addEventListener("click",()=>{baseline=zero();perturb=zero();mode="current";update()});
+byId("ground").addEventListener("change",update);
+update();
+</script>
+</body>
+</html>
