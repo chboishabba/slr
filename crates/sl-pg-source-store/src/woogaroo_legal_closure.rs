@@ -6,7 +6,10 @@
 //! retain separate authorship. Johl Brown directed synthesis; ChatGPT assisted.
 
 use std::collections::BTreeSet;
-use crate::WOOGAROO_GROUNDS;
+use crate::{
+    potential_reopening_cone, InvestigationAcquisitionError, PotentialReopeningCone,
+    WOOGAROO_GROUNDS,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WoogarooClosureClass { Identity, Provenance, Procedure, DecisionFile, Ground, Ecology, Verification, Outcome }
@@ -216,4 +219,32 @@ pub fn validate_woogaroo_closure_contract(
         }
     }
     Ok(())
+}
+
+
+/// Source-specific snowball *candidate* cone through the canonical SLR
+/// investigation graph. Acquiring a record would make these targets worth
+/// reviewing; this projection DOES NOT acquire or review it, create a
+/// persisted reopening receipt, or promote any ecological/legal claim.
+pub fn woogaroo_potential_reopening_cone(
+    packet_key: &str,
+) -> Result<PotentialReopeningCone, InvestigationAcquisitionError> {
+    if !WOOGAROO_ACQUISITION_PACKETS.iter().any(|p| p.key == packet_key) {
+        return Err(InvestigationAcquisitionError::InvalidIdentity);
+    }
+    let mut edges = Vec::<(String, String)>::new();
+    for obligation in WOOGAROO_CLOSURE_OBLIGATIONS {
+        let target = format!("obligation:woogaroo:{}", obligation.id);
+        edges.push((format!("packet:woogaroo:{}", obligation.primary_packet), target.clone()));
+        if let Some(ground) = obligation.ground_key {
+            edges.push((target, format!("ground:woogaroo:{ground}")));
+        }
+    }
+    for ground in WOOGAROO_GROUNDS {
+        edges.push((
+            format!("ground:woogaroo:{}", ground.key),
+            "matter:woogaroo:candidate-seven-ground-review".to_owned(),
+        ));
+    }
+    potential_reopening_cone(&format!("packet:woogaroo:{packet_key}"), &edges)
 }
