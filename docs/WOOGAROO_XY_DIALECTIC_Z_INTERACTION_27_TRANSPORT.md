@@ -100,7 +100,7 @@ declare X as a decision-process dialectic and Y as a source/
 ecological-response dialectic. For each of seven grounds, a real
 source payment must still establish how those roles apply in time
 and which, if any, Z transition occurred. Signed propositions
-`P/¬P`, Belnap BOTH/NEITHER, the eight factual/legal predicates,
+`P/¬P`, Belnap BOTH/NEITHER, the nine factual/legal predicates,
 source IDs, actor, date, stage, admissibility, and the Gxx Pareto
 acquisition path remain attached to the chosen cell *as fibres*.
 A positive support state in one fibre does not itself put that
