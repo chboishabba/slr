@@ -305,3 +305,150 @@ pub fn woogaroo_hypothetical_adversarial_test(
         creates_court_filing: false,
     })
 }
+
+
+// -------------------------------------------------------------------------
+// Woogaroo dialectic / trialectic: synthesis of outputs, NOT of legal truth.
+// Reuses the existing Woogaroo seven-ground original owner, the explicit
+// hypothetical evaluator, and canonical SLR reverse-search procedural goal.
+// The independent third lens is evidence/law/ecology appraisal, NOT another
+// litigating party. The irreducible face stays unreviewed/underdetermined.
+// Match DASHI/Law/SensibLawWoogarooDialecticTrialecticSynthesis20261028Exact.
+// -------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WoogarooSynthesisKind {
+    SeekOriginals,
+    ApplicantCandidateForDefeaterSearch,
+    RespondentCandidateForCounterDefeaterSearch,
+    ReconcileOpposingSourceAssertions,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WoogarooDialecticEdge {
+    ProvisionalApplicant,
+    Unresolved,
+    ProvisionalRespondent,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WoogarooTrialecticFace {
+    Underdetermined,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WoogarooSynthesisPacket {
+    pub ground_key: &'static str,
+    pub applicant_issue: &'static str,
+    pub respondent_countercase: &'static str,
+    pub decisive_original: &'static str,
+    pub kind: WoogarooSynthesisKind,
+    /// Applicant/respondent disagreement. This is NOT Boolean negation.
+    pub applicant_respondent_edge: WoogarooDialecticEdge,
+    /// Independent evidence/legal/ecological appraisal is a third lens.
+    pub respondent_independent_edge: WoogarooDialecticEdge,
+    pub independent_applicant_edge: WoogarooDialecticEdge,
+    /// Existing trialectic theory forbids computing this from three edges.
+    pub triadic_face: WoogarooTrialecticFace,
+    pub next_procedural_goal: crate::MatterProceduralGoal,
+    pub candidate_only: bool,
+    pub creates_actual_review: bool,
+    pub creates_court_filing: bool,
+    pub proves_legal_error_or_compliance: bool,
+    pub orders_physical_protection: bool,
+}
+
+/// Source-attributed hypotheses, not respondent admissions. These hints
+/// paraphrase the already-owned DASHI seven-ground defence/falsifier matrix.
+fn woogaroo_countercase_hint(ground_key: &str) -> Option<&'static str> {
+    Some(match ground_key {
+        "advice-consideration" =>
+            "The actual delegate may have considered the correct 2022 advice under the saved statutory trigger.",
+        "recovery-plan" =>
+            "The operative 2022 recovery plan may be consistent with a conditioned action; objectives are not an automatic refusal.",
+        "incremental-habitat" =>
+            "The action-specific baseline, retained corridor and mitigation may withstand review; unrelated projects are not automatically its impacts.",
+        "comment-transmission" =>
+            "The Secretary may have received and transmitted all comments and the final PD although the portal does not show the records.",
+        "approval-scope" =>
+            "The signed decision and stage plans may match the referral with legally ascertainable enforceable conditions.",
+        "local-prestart" =>
+            "Council may have accepted conditions before same-stage works, or the relevant works may not yet have commenced.",
+        "improper-influence" =>
+            "The record may show lawful decision-making with no decision-specific improper influence; adjacency is not proof.",
+        _ => return None,
+    })
+}
+
+/// Candidate synthesis: for, against, and independent reviewer remain
+/// distinct. It neither changes the persisted SLR Matter nor accepts
+/// invented source/review/counsel authority from a caller-supplied world.
+pub fn woogaroo_synthesise_dialectic_trialectic(
+    ground_key: &str,
+    world: WoogarooHypotheticalWorld,
+) -> Option<WoogarooSynthesisPacket> {
+    let ground = WOOGAROO_GROUNDS.iter().find(|g| g.key == ground_key)?;
+    let comparison = woogaroo_hypothetical_adversarial_test(ground_key, world)?;
+    let kind = if comparison.contradictory_assumptions_retained {
+        WoogarooSynthesisKind::ReconcileOpposingSourceAssertions
+    } else if comparison.applicant_conditional {
+        WoogarooSynthesisKind::ApplicantCandidateForDefeaterSearch
+    } else if comparison.respondent_conditional {
+        WoogarooSynthesisKind::RespondentCandidateForCounterDefeaterSearch
+    } else {
+        WoogarooSynthesisKind::SeekOriginals
+    };
+    let edge = match kind {
+        WoogarooSynthesisKind::ApplicantCandidateForDefeaterSearch =>
+            WoogarooDialecticEdge::ProvisionalApplicant,
+        WoogarooSynthesisKind::RespondentCandidateForCounterDefeaterSearch =>
+            WoogarooDialecticEdge::ProvisionalRespondent,
+        _ => WoogarooDialecticEdge::Unresolved,
+    };
+    let goal = match kind {
+        WoogarooSynthesisKind::ApplicantCandidateForDefeaterSearch
+        | WoogarooSynthesisKind::RespondentCandidateForCounterDefeaterSearch =>
+            crate::MatterProceduralGoal::IsolateResidualControversy,
+        WoogarooSynthesisKind::SeekOriginals
+        | WoogarooSynthesisKind::ReconcileOpposingSourceAssertions =>
+            crate::MatterProceduralGoal::DecideEvidenceNeeded,
+    };
+    Some(WoogarooSynthesisPacket {
+        ground_key: ground.key,
+        applicant_issue: ground.statutory_hook,
+        respondent_countercase: woogaroo_countercase_hint(ground.key)?,
+        decisive_original: ground.next_original,
+        kind,
+        applicant_respondent_edge: edge,
+        respondent_independent_edge: WoogarooDialecticEdge::Unresolved,
+        independent_applicant_edge: WoogarooDialecticEdge::Unresolved,
+        triadic_face: WoogarooTrialecticFace::Underdetermined,
+        next_procedural_goal: goal,
+        candidate_only: true,
+        creates_actual_review: false,
+        creates_court_filing: false,
+        proves_legal_error_or_compliance: false,
+        orders_physical_protection: false,
+    })
+}
+
+/// Seven actual-current *source-state research packets*. All six false values
+/// denote NO REVIEWED PROOF HERE, not factual falsehood of the legal elements.
+/// This list cannot be used as a filed or legally decided controversy.
+pub fn woogaroo_unpaid_trialectic_synthesis() -> Vec<WoogarooSynthesisPacket> {
+    let unpaid = WoogarooHypotheticalWorld {
+        legally_applicable: false,
+        defect_established: false,
+        materiality_established: false,
+        government_compliance_established: false,
+        evidence_reviewed: false,
+        ecological_harm_assumed: false,
+    };
+    WOOGAROO_GROUNDS.iter().filter_map(|g| {
+        if g.evidence_gate == 0 {
+            woogaroo_synthesise_dialectic_trialectic(g.key, unpaid)
+        } else {
+            None
+        }
+    }).collect()
+}
