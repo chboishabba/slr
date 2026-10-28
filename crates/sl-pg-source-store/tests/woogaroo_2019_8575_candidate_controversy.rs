@@ -977,3 +977,107 @@ fn converged_ground_preserves_xy_z_as_roles_and_polar_evidence_as_fibre() {
         assert!(!packet.real_legal_conclusion);
     }
 }
+
+
+#[test]
+fn polynomial_1414_s3_presentation_cannot_change_woogaroo_unpaid_proof_cut() {
+    use std::collections::BTreeSet;
+    use sensiblaw_pg_source_store::{
+        woogaroo_chart_invariant_case_packet, WoogarooDialecticPosition as P,
+        WoogarooPresentationS3 as S3,
+    };
+    let mut visited = 0usize;
+    for ground in WOOGAROO_GROUNDS {
+        let mut original_packet: Option<(&'static str, Vec<&'static str>)> = None;
+        for x in P::ALL {
+            for y in P::ALL {
+                for z in P::ALL {
+                    let xyz = [x,y,z];
+                    let mut displays = BTreeSet::new();
+                    for chart in S3::ALL {
+                        let packet = woogaroo_chart_invariant_case_packet(
+                            ground.key, xyz, chart).expect("canonical ground");
+                        assert_eq!(packet.canonical_xyz, xyz);
+                        assert_eq!(packet.recover_canonical_xyz(), xyz);
+                        assert_eq!(packet.ground_key, ground.key);
+                        assert_eq!(packet.four_unpaid_ground_obligation_ids.len(), 4);
+                        assert!(!packet.originals_reviewed);
+                        assert!(!packet.standing_or_filing_clock_paid);
+                        assert!(!packet.actual_interaction_stage_selected);
+                        assert!(!packet.mediation_face_paid);
+                        assert!(!packet.real_legal_merits_decided);
+                        displays.insert(packet.display_xyz.map(P::index));
+                        if let Some((prior_key, prior_ids)) = &original_packet {
+                            assert_eq!(packet.original_acquisition_packet, *prior_key);
+                            assert_eq!(&packet.four_unpaid_ground_obligation_ids, prior_ids);
+                        } else {
+                            original_packet = Some((
+                                packet.original_acquisition_packet,
+                                packet.four_unpaid_ground_obligation_ids,
+                            ));
+                        }
+                        visited += 1;
+                    }
+                    assert!(!displays.is_empty());
+                    // The 3 diagonal encounters are invariant under diagonal
+                    // re-labelling: 6 charts need not yield 6 distinct displays.
+                    assert!(displays.len() <= 6);
+                }
+            }
+        }
+    }
+    assert_eq!(visited, 7 * 27 * 6);
+    assert!(woogaroo_chart_invariant_case_packet(
+        SCENIC_ACTION_REF,
+        [P::Thesis,P::Antithesis,P::Synthesis],
+        S3::Rotate).is_none());
+}
+
+#[test]
+fn polynomial_1414_c3_has_order_three_not_legal_stage_progression() {
+    use sensiblaw_pg_source_store::{
+        WoogarooDialecticPosition as P,
+        WoogarooPresentationS3 as S3,
+        woogaroo_chart_invariant_case_packet,
+    };
+    for p in P::ALL {
+        assert_eq!(S3::Rotate.apply(S3::Rotate.apply(S3::Rotate.apply(p))),p);
+        for chart in S3::ALL {
+            assert_eq!(chart.inverse().apply(chart.apply(p)),p);
+            assert_eq!(chart.apply(chart.inverse().apply(p)),p);
+        }
+    }
+    let before = woogaroo_chart_invariant_case_packet("advice-consideration",
+        [P::Thesis,P::Antithesis,P::Synthesis],S3::Identity).unwrap();
+    let after = woogaroo_chart_invariant_case_packet("advice-consideration",
+        [P::Thesis,P::Antithesis,P::Synthesis],S3::Rotate).unwrap();
+    assert_ne!(before.display_xyz,after.display_xyz);
+    assert_eq!(before.recover_canonical_xyz(),after.recover_canonical_xyz());
+    assert_eq!(before.four_unpaid_ground_obligation_ids,
+        after.four_unpaid_ground_obligation_ids);
+    assert!(!after.actual_interaction_stage_selected);
+    assert!(!after.originals_reviewed);
+}
+
+#[test]
+fn p0_woogaroo_source_worklist_is_chart_independent_and_full_coverage() {
+    use std::collections::BTreeSet;
+    use sensiblaw_pg_source_store::{
+        woogaroo_original_source_maxcut, WOOGAROO_CLOSURE_OBLIGATIONS,
+        WOOGAROO_ACQUISITION_PACKETS,
+    };
+    let frontier=woogaroo_original_source_maxcut();
+    let all=frontier.iter().flat_map(|p| p.unpaid_obligations.iter().copied())
+        .collect::<BTreeSet<_>>();
+    let expected=WOOGAROO_CLOSURE_OBLIGATIONS.iter().map(|p| p.id)
+        .collect::<BTreeSet<_>>();
+    assert_eq!(all,expected);
+    assert_eq!(all.len(),80);
+    assert_eq!(WOOGAROO_ACQUISITION_PACKETS.len(),12);
+    assert_eq!(frontier[0].packet_key,"counsel");
+    assert_eq!(frontier[1].packet_key,"signed");
+    assert_eq!(frontier[2].packet_key,"brief");
+    assert!(frontier.windows(2).all(|w| w[0].ordinal_priority<w[1].ordinal_priority));
+    assert!(frontier.iter().all(|p| !p.unpaid_obligations.is_empty()));
+    assert_eq!(frontier.iter().map(|p|p.unpaid_obligations.len()).sum::<usize>(),80);
+}
