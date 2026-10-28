@@ -336,12 +336,132 @@ pub enum WoogarooTrialecticFace {
     Underdetermined,
 }
 
+
+// --------------------------------------------------------------------------
+// Finite 369 / 27-cube semantic chart. Reuses the existing 7-ground world
+// model: no learned Sophontic representation, E8/3B action or GIS coordinates.
+// Original mathematical carrier and non-descent owner is DASHI Agda.
+// Donor paired evaluation protocol: Sophontic Inc. public 2026 eval kit;
+// DASHI PRs #1094/#1095/#1265, unmerged and NOT imported into SLR.
+// --------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+pub struct Woogaroo369GeometricChart {
+    /// Three T^3 rows; 0 means hypothetical flag absent, 1 means present.
+    /// This Boolean embedding touches a subset of each 27-point trit cube.
+    pub applicant_cube: [i8; 3],
+    pub respondent_cube: [i8; 3],
+    pub independent_review_cube: [i8; 3],
+    /// Ambient cardinalities, NOT measured data or a sample count.
+    pub full_cube_cardinality: usize,
+    pub full_fabric_cardinality: usize,
+    pub learned_geometric_action_established: bool,
+    pub same_object_monster_action_established: bool,
+    pub actual_evidence_payment_established: bool,
+}
+
+fn woogaroo_bool_to_trit(flag: bool) -> i8 {
+    if flag { 1 } else { 0 }
+}
+
+/// Three canonical 27-cell roles; the three derived coordinates in the
+/// independent-review row do not create three additional source facts.
+pub fn woogaroo_369_chart(world: WoogarooHypotheticalWorld) -> Woogaroo369GeometricChart {
+    let b = woogaroo_bool_to_trit;
+    let contradiction = world.defect_established && world.government_compliance_established;
+    let applicant = !world.government_compliance_established
+        && world.evidence_reviewed
+        && world.legally_applicable
+        && world.defect_established
+        && world.materiality_established;
+    let respondent = !world.defect_established
+        && world.government_compliance_established
+        && world.evidence_reviewed
+        && world.legally_applicable;
+    Woogaroo369GeometricChart {
+        applicant_cube: [b(world.legally_applicable), b(world.defect_established),
+            b(world.materiality_established)],
+        respondent_cube: [b(world.government_compliance_established),
+            b(world.ecological_harm_assumed), b(contradiction)],
+        independent_review_cube: [b(world.evidence_reviewed), b(applicant), b(respondent)],
+        full_cube_cardinality: 27,
+        full_fabric_cardinality: 19683,
+        learned_geometric_action_established: false,
+        same_object_monster_action_established: false,
+        actual_evidence_payment_established: false,
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+pub enum WoogarooGeometricIntervention {
+    /// Change only the hypothetical reviewed-evidence gate.
+    ReviewGate,
+    /// Change only the habitat-harm assumption, leaving the specific
+    /// procedural/merits logic untouched. This is a nuisance test FOR
+    /// THIS STIPULATED LOGICAL CLASSIFIER, not for ecological science.
+    EcologicalHarm,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct WoogarooGeometricPair {
+    pub ground_key: &'static str,
+    pub intervention: WoogarooGeometricIntervention,
+    pub canonical: Woogaroo369GeometricChart,
+    pub perturbed: Woogaroo369GeometricChart,
+    pub initial_synthesis: WoogarooSynthesisKind,
+    pub perturbed_synthesis: WoogarooSynthesisKind,
+    pub changed_369_position: bool,
+    pub changed_logical_label: bool,
+    pub model_pair_accuracy_measured: bool,
+    pub actual_legal_merits_determined: bool,
+}
+
+/// A reference-model paired assay, not a trained reasoner's flip-rate.
+/// Reject paired rows that change more than the selected load-bearing or
+/// nuisance input. A review-gate flip need not change the output if the
+/// other required legal premises are absent: this is explicitly recorded.
+pub fn woogaroo_geometric_pair(
+    ground_key: &str,
+    before: WoogarooHypotheticalWorld,
+    after: WoogarooHypotheticalWorld,
+    intervention: WoogarooGeometricIntervention,
+) -> Option<WoogarooGeometricPair> {
+    let mut expected = before;
+    match intervention {
+        WoogarooGeometricIntervention::ReviewGate => {
+            expected.evidence_reviewed = !expected.evidence_reviewed;
+        }
+        WoogarooGeometricIntervention::EcologicalHarm => {
+            expected.ecological_harm_assumed = !expected.ecological_harm_assumed;
+        }
+    }
+    if expected != after { return None; }
+    let before_packet = woogaroo_synthesise_dialectic_trialectic(ground_key, before)?;
+    let after_packet = woogaroo_synthesise_dialectic_trialectic(ground_key, after)?;
+    let canonical = woogaroo_369_chart(before);
+    let perturbed = woogaroo_369_chart(after);
+    Some(WoogarooGeometricPair {
+        ground_key: before_packet.ground_key,
+        intervention,
+        changed_369_position: canonical != perturbed,
+        changed_logical_label: before_packet.kind != after_packet.kind,
+        initial_synthesis: before_packet.kind,
+        perturbed_synthesis: after_packet.kind,
+        canonical,
+        perturbed,
+        model_pair_accuracy_measured: false,
+        actual_legal_merits_determined: false,
+    })
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct WoogarooSynthesisPacket {
     pub ground_key: &'static str,
     pub applicant_issue: &'static str,
     pub respondent_countercase: &'static str,
     pub decisive_original: &'static str,
+    /// Position in the pre-existing 3 × 27 finite triadic carrier.
+    pub geometric_369: Woogaroo369GeometricChart,
     /// Existing 80-obligation canonical max-cut acquisition packet.
     pub original_acquisition_packet_key: &'static str,
     /// Exactly four still-unpaid G01..G28 closure IDs for this ground.
@@ -442,6 +562,7 @@ pub fn woogaroo_synthesise_dialectic_trialectic(
         applicant_issue: ground.statutory_hook,
         respondent_countercase: woogaroo_countercase_hint(ground.key)?,
         decisive_original: ground.next_original,
+        geometric_369: woogaroo_369_chart(world),
         original_acquisition_packet_key: packet.key,
         open_ground_obligation_ids: obligations.iter().map(|o| o.id).collect(),
         creates_actual_reopening: false,
