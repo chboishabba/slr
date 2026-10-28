@@ -187,3 +187,110 @@ fn same_matter_and_review_existence_fail_closed() {
     draft.propositions[2].display_text.clear();
     assert!(validate_matter_controversy_draft(&draft).is_err());
 }
+
+use sensiblaw_pg_source_store::{
+    validate_woogaroo_closure_contract, woogaroo_closure_frontier,
+    WoogarooClosureClass, WoogarooClosureError, WOOGAROO_ACQUISITION_PACKETS,
+    WOOGAROO_CLOSURE_OBLIGATIONS,
+};
+
+#[test]
+fn woogaroo_full_closure_has_80_distinct_unpaid_targets() {
+    validate_woogaroo_closure_contract(
+        &WOOGAROO_CLOSURE_OBLIGATIONS, &WOOGAROO_ACQUISITION_PACKETS,
+    ).expect("closure ledger is source-written and explicitly unpaid");
+    assert_eq!(WOOGAROO_CLOSURE_OBLIGATIONS.len(), 80);
+    let counts = [
+        (WoogarooClosureClass::Identity, 8),
+        (WoogarooClosureClass::Provenance, 8),
+        (WoogarooClosureClass::Procedure, 8),
+        (WoogarooClosureClass::DecisionFile, 8),
+        (WoogarooClosureClass::Ground, 28),
+        (WoogarooClosureClass::Ecology, 8),
+        (WoogarooClosureClass::Verification, 7),
+        (WoogarooClosureClass::Outcome, 5),
+    ];
+    for (class, expected) in counts {
+        assert_eq!(
+            WOOGAROO_CLOSURE_OBLIGATIONS.iter().filter(|o| o.class == class).count(),
+            expected, "incorrect obligation count for {class:?}",
+        );
+    }
+    assert!(WOOGAROO_CLOSURE_OBLIGATIONS.iter().all(|o| !o.discharged));
+    assert_eq!(WOOGAROO_CLOSURE_OBLIGATIONS.first().unwrap().id, "I01");
+    assert_eq!(WOOGAROO_CLOSURE_OBLIGATIONS.last().unwrap().id, "O05");
+}
+
+#[test]
+fn closure_ground_crosswalk_is_exact_and_keeps_all_seven_claims_open() {
+    for ground in WOOGAROO_GROUNDS {
+        let rows: Vec<_> = WOOGAROO_CLOSURE_OBLIGATIONS.iter()
+            .filter(|o| o.ground_key == Some(ground.key)).collect();
+        assert_eq!(rows.len(), 4, "each existing ground has four discriminators");
+        assert!(rows.iter().all(|o| {
+            o.class == WoogarooClosureClass::Ground && !o.discharged
+        }));
+        assert_eq!(ground.evidence_gate, 0);
+        assert!(ground.positive_witness_ref.is_none());
+        assert!(ground.negative_witness_ref.is_none());
+        assert!(ground.court_filing_ref.is_none());
+    }
+    let mut rows = WOOGAROO_CLOSURE_OBLIGATIONS;
+    rows[32].ground_key = Some("not-an-existing-legal-ground");
+    assert_eq!(
+        validate_woogaroo_closure_contract(&rows, &WOOGAROO_ACQUISITION_PACKETS),
+        Err(WoogarooClosureError::UnknownGround),
+    );
+}
+
+#[test]
+fn synthetic_source_payment_and_mutated_obligation_are_never_accepted() {
+    let mut rows = WOOGAROO_CLOSURE_OBLIGATIONS;
+    rows[0].discharged = true;
+    assert_eq!(
+        validate_woogaroo_closure_contract(&rows, &WOOGAROO_ACQUISITION_PACKETS),
+        Err(WoogarooClosureError::ImproperDischarge),
+    );
+    let mut rows = WOOGAROO_CLOSURE_OBLIGATIONS;
+    rows[1].id = "I01";
+    assert_eq!(
+        validate_woogaroo_closure_contract(&rows, &WOOGAROO_ACQUISITION_PACKETS),
+        Err(WoogarooClosureError::DuplicateObligation),
+    );
+    let mut rows = WOOGAROO_CLOSURE_OBLIGATIONS;
+    rows[0].primary_packet = "synthetic-paid-original";
+    assert_eq!(
+        validate_woogaroo_closure_contract(&rows, &WOOGAROO_ACQUISITION_PACKETS),
+        Err(WoogarooClosureError::UncoveredObligation),
+    );
+    let mut rows = WOOGAROO_CLOSURE_OBLIGATIONS;
+    rows[0].title = "wrong-source";
+    assert_eq!(
+        validate_woogaroo_closure_contract(&rows, &WOOGAROO_ACQUISITION_PACKETS),
+        Err(WoogarooClosureError::WrongCanonicalObligation),
+    );
+}
+
+#[test]
+fn max_cut_packets_derive_all_open_queries_without_success_probabilities() {
+    let frontier = woogaroo_closure_frontier();
+    assert_eq!(frontier.len(), 12);
+    assert_eq!(frontier[0].packet_key, "counsel");
+    assert_eq!(frontier[1].packet_key, "signed");
+    assert_eq!(frontier[2].packet_key, "brief");
+    assert_eq!(frontier[3].packet_key, "comments");
+    assert_eq!(frontier[4].packet_key, "works");
+    assert_eq!(frontier.last().unwrap().packet_key, "conflict");
+    assert_eq!(frontier.iter().map(|p| p.unpaid_obligations.len()).sum::<usize>(), 80);
+    assert!(frontier.iter().all(|p| !p.unpaid_obligations.is_empty()));
+    assert!(frontier.iter().flat_map(|p| p.unpaid_obligations.iter()).all(|id|
+        WOOGAROO_CLOSURE_OBLIGATIONS.iter().any(|o| o.id == *id && !o.discharged)
+    ));
+    assert_eq!(frontier, woogaroo_closure_frontier());
+    let mut packets = WOOGAROO_ACQUISITION_PACKETS;
+    packets[1].ordinal_priority = 0;
+    assert_eq!(
+        validate_woogaroo_closure_contract(&WOOGAROO_CLOSURE_OBLIGATIONS, &packets),
+        Err(WoogarooClosureError::InvalidPriority),
+    );
+}
