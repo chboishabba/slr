@@ -90,6 +90,10 @@ pub use matter_reverse_proof::*;
 mod matter_controversy_projection;
 pub use matter_controversy_projection::*;
 
+#[path = "woogaroo_case.rs"]
+mod woogaroo_case;
+pub use woogaroo_case::*;
+
 #[path = "acceptance_control_store.rs"]
 mod acceptance_control_store;
 pub use acceptance_control_store::*;
