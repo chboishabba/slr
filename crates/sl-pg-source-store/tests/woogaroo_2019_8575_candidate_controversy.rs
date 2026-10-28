@@ -294,3 +294,28 @@ fn max_cut_packets_derive_all_open_queries_without_success_probabilities() {
         Err(WoogarooClosureError::InvalidPriority),
     );
 }
+
+
+#[test]
+fn source_snowball_is_a_potential_reopening_cone_only() {
+    use sensiblaw_pg_source_store::woogaroo_potential_reopening_cone;
+    for packet in woogaroo_closure_frontier() {
+        let cone = woogaroo_potential_reopening_cone(packet.packet_key)
+            .expect("all canonical acquisition packets have a cone");
+        assert_eq!(cone.seed_ref, format!("packet:woogaroo:{}", packet.packet_key));
+        assert_eq!(cone.direct_refs.len(), packet.unpaid_obligations.len());
+        assert!(packet.unpaid_obligations.iter().all(|id|
+            cone.direct_refs.contains(&format!("obligation:woogaroo:{id}"))
+        ));
+        assert!(!cone.creates_actual_reopening);
+        assert!(!cone.creates_semantic_authority);
+    }
+    let advice_cone = woogaroo_potential_reopening_cone("brief").unwrap();
+    assert!(advice_cone.transitive_refs.contains(
+        &"ground:woogaroo:advice-consideration".to_owned()
+    ));
+    assert!(advice_cone.transitive_refs.contains(
+        &"matter:woogaroo:candidate-seven-ground-review".to_owned()
+    ));
+    assert!(woogaroo_potential_reopening_cone("unknown-or-synthetic-source").is_err());
+}
