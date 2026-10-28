@@ -56,7 +56,7 @@ The independent triadic face remains <strong>underdetermined</strong> regardless
 </section>
 <div class="card" style="margin-top:14px">
 <h2>Signed proposition dialectic — authoritative <code>−P / 0 / +P</code> encoding</h2>
-<p class="small muted">These are nine separate propositions. Negative means the explicitly opposing version of the SAME proposition, not absent evidence. Both supported and neither supported share coarse 0 but retain distinct fine-fibre states. All edits are synthetic, not reviewed source records.</p>
+<p class="small muted">These are nine separate propositions. Negative means the explicitly opposing version of the SAME proposition, not absent evidence. Both supported and neither supported share coarse 0 but retain distinct fine-fibre states. All edits are synthetic, not reviewed source records. A case-level applicant/defence route additionally requires positive applicability, positive reviewed-original and same-stage predicates plus the relevant materiality or compliance branch. The separate synthetic review checkbox must also be on; none of this pays real evidence.</p>
 <div id="signed-controls" class="control"></div>
 <div class="meta" style="margin-top:12px">
 <div><span class="small muted">Signed candidate search</span><div class="metric" id="signed-focus">Acquire originals</div></div>
@@ -116,11 +116,17 @@ let signedEvidence=Array(9).fill("neither");
 function signedTrit(state){return state==="positive"?1:state==="negative"?-1:0}
 function signedCubeRows(){const all=signedEvidence.map(signedTrit);return [all.slice(0,3),all.slice(3,6),all.slice(6,9)]}
 function signedFibreFocus(){
- const defect=signedEvidence[1];
- if(defect==="both")return "Reconcile contradictory source assertions";
- if(defect==="neither"||!baseline.evidence_reviewed)return "Acquire originals / refine branch";
- return defect==="positive" ? "Applicant hypothesis → defeater search"
-                            : "Respondent hypothesis → counter-defeater search";
+ if(signedEvidence.some(v=>v==="both"))return "Reconcile contradictory source assertions";
+ const common=baseline.evidence_reviewed &&
+              signedEvidence[0]==="positive" &&
+              signedEvidence[6]==="positive" &&
+              signedEvidence[7]==="positive";
+ if(!common)return "Acquire originals / refine source+stage branch";
+ if(signedEvidence[1]==="positive"&&signedEvidence[2]==="positive"&&signedEvidence[3]!=="positive")
+  return "Applicant hypothesis → defeater search";
+ if(signedEvidence[1]==="negative"&&signedEvidence[3]==="positive")
+  return "Respondent hypothesis → counter-defeater search";
+ return "Acquire originals / refine remaining predicates";
 }
 function updateSigned(){
  const controls=byId("signed-controls"); controls.replaceChildren();
