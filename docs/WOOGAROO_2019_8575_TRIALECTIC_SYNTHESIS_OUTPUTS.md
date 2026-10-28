@@ -131,3 +131,34 @@ the attributed Python prototype; SLR owns this production consumer.
 Previous Ibrahim / Monster 3B source and PR ownership is retained.
 No ESD or digital_esd file was edited, and no Monster identity is
 claimed for this legal case.
+
+
+## Source-genealogy additions and exact snowball binding
+
+The SLR JSON packets now include each ground's **existing canonical
+acquisition packet key** and its four `G01..G28` unpaid obligation IDs.
+The producer validates that those four IDs belong to the one original
+case ground, share one canonical packet and occur directly within the
+**existing potential-only SLR snowball cone**. It rejects an inconsistent
+join rather than constructing a new routing engine. Each output also
+states `creates_actual_reopening=false`. This is an actionable
+dependency cut, not a case reopening, payment or Court finding.
+
+Formal philosophical roots, distinct from DASHI's independently authored
+finite constructions:
+
+- **Klaus F. Riegel, 1973**, "Dialectic Operations: The Final Period
+  of Cognitive Development," *Human Development* 16(5):346–370,
+  DOI 10.1159/000271287.
+  https://pubmed.ncbi.nlm.nih.gov/4591158/
+- **Charles S. Peirce**, historical primary writings on the conceptual
+  irreducibility of some triadic relations, *Collected Papers* 2.233–234.
+  These motivate a triadic distinction; they do not prove the DASHI
+  exact face non-descent theorem or this legal case.
+  https://sites.ualberta.ca/~michaelf/M665/sources/Pages%20from%20Charles%20Sanders%20Peirce%2C%20Charles%20Hartshorne%2C%20Paul%20Weiss%2C%20Arthur%20W.%20Burks%20Collected%20Papers%20of%20Charles%20Sanders%20Peirce%20%201994-2.pdf
+
+The independent proof ownership belongs to the pre-existing DASHI
+trialectic modules, not to Peirce, Riegel, a cited philosophy essay,
+or this case-specific SLR output adapter. Preservation of Ibrahim's
+separate prior Monster 3B mathematical work does not assert that the
+Woogaroo trialectic is the same object as any Monster representation.
