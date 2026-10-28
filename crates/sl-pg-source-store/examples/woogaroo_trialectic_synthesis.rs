@@ -6,7 +6,7 @@
 
 use sensiblaw_pg_source_store::{
     woogaroo_unpaid_trialectic_synthesis, woogaroo_unpaid_signed_fibre_synthesis,
-    woogaroo_unpaid_converged_synthesis,
+    woogaroo_unpaid_converged_synthesis, woogaroo_original_source_maxcut,
     WOOGAROO_ACTION_REF,
     WOOGAROO_MATTER_REF,
 };
@@ -15,6 +15,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let packets = woogaroo_unpaid_trialectic_synthesis();
     let signed_packets = woogaroo_unpaid_signed_fibre_synthesis();
     let converged_packets = woogaroo_unpaid_converged_synthesis();
+    let original_source_maxcut = woogaroo_original_source_maxcut();
     if packets.len() != 7 || !packets.iter().all(|p| p.candidate_only
         && !p.creates_actual_review
         && !p.creates_court_filing
@@ -23,7 +24,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     {
         return Err("Woogaroo candidate-only output boundary failed".into());
     }
-    if converged_packets.len() != 7 || signed_packets.len() != 7 || !signed_packets.iter().all(|p|
+    if original_source_maxcut.len() != 12 || converged_packets.len() != 7 || signed_packets.len() != 7 || !signed_packets.iter().all(|p|
         p.triadic_face_underdetermined && !p.actual_source_reviewed &&
         !p.actual_legal_merits_decided && p.four_unpaid_obligation_ids.len() == 4)
     {
@@ -41,6 +42,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "habitat_protection_ordered": false,
         "triadic_face_reviewed": false,
         "candidate_packets": packets,
+        "original_source_maxcut_pareto_12_packets": original_source_maxcut,
+        "three_colour_and_s3_role_chart_do_not_pay_original_evidence": true,
+        "s3_chart_not_always_grid_automorphism": true,
         "signed_predicate_fibre_packets": signed_packets,
         "converged_dialectic_signed_padic_hyperfabric_outputs": converged_packets,
         "signed_coordinate_interpretation": "-1=negative same proposition, 0=no exclusive polarity (neither OR both retained in fibre), +1=positive same proposition",
