@@ -4,7 +4,7 @@
 use sensiblaw_pg_source_store::{
     project_matter_reverse_proof_search, validate_matter_controversy_draft,
     validate_woogaroo_candidate_matter, validate_woogaroo_case_cut,
-    woogaroo_candidate_matter, woogaroo_same_action_merits_source,
+    woogaroo_candidate_matter, woogaroo_locator_matches_springview,
     MatterEpistemicStatus, MatterPartyRole, MatterProceduralGoal,
     MatterResponseMode, WoogarooCaseCutError, WoogarooGroundPriority,
     WOOGAROO_ACTION_REF, WOOGAROO_CASE_CONTRACT, WOOGAROO_GROUNDS,
@@ -36,11 +36,11 @@ fn source_cut_is_exactly_one_project_and_all_published_locators_unpaid() {
 }
 
 #[test]
-fn scenic_activity_is_not_springview_merits_and_an_unseen_source_stays_unknown() {
-    assert_eq!(woogaroo_same_action_merits_source("swfg-scenic-letter"), Some(false));
-    assert_eq!(woogaroo_same_action_merits_source("qut-springview-letter"), Some(true));
-    assert_eq!(woogaroo_same_action_merits_source("stockland-springview"), Some(true));
-    assert_eq!(woogaroo_same_action_merits_source("not-acquired"), None);
+fn scenic_activity_is_other_action_and_locator_identity_does_not_pay_merits() {
+    assert_eq!(woogaroo_locator_matches_springview("swfg-scenic-letter"), Some(false));
+    assert_eq!(woogaroo_locator_matches_springview("qut-springview-letter"), Some(true));
+    assert_eq!(woogaroo_locator_matches_springview("stockland-springview"), Some(true));
+    assert_eq!(woogaroo_locator_matches_springview("not-acquired"), None);
     let scenic = WOOGAROO_SOURCE_LOCATORS.iter()
         .find(|s| s.epbc_action == SCENIC_ACTION_REF).expect("distinct Scenic");
     assert_eq!(scenic.key, "swfg-scenic-letter");
@@ -68,7 +68,7 @@ fn promotion_into_a_paid_case_source_or_legal_ground_is_rejected() {
         Err(WoogarooCaseCutError::WrongAction),
     );
     let mut sources = WOOGAROO_SOURCE_LOCATORS;
-    sources[2].key = sources[1].key;
+    sources[2].key = "epbc-decision-status";
     assert_eq!(
         validate_woogaroo_case_cut(&sources, &WOOGAROO_GROUNDS),
         Err(WoogarooCaseCutError::DuplicateSource),
