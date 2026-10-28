@@ -423,3 +423,101 @@ fn ecological_harm_does_not_entail_unlawfulness_and_compliance_does_not_deny_har
     assert!(result.respondent_conditional);
     assert!(!result.proves_actual_legal_merits);
 }
+
+
+#[test]
+fn dialectic_trialectic_output_preserves_three_lenses_and_unpaid_face() {
+    use sensiblaw_pg_source_store::{
+        woogaroo_synthesise_dialectic_trialectic, woogaroo_unpaid_trialectic_synthesis,
+        WoogarooDialecticEdge, WoogarooHypotheticalWorld, WoogarooSynthesisKind,
+        WoogarooTrialecticFace,
+    };
+    let current = woogaroo_unpaid_trialectic_synthesis();
+    assert_eq!(current.len(), 7);
+    for (packet, ground) in current.iter().zip(WOOGAROO_GROUNDS) {
+        assert_eq!(packet.ground_key, ground.key);
+        assert_eq!(packet.applicant_issue, ground.statutory_hook);
+        assert_eq!(packet.decisive_original, ground.next_original);
+        assert!(!packet.respondent_countercase.is_empty());
+        assert_eq!(packet.kind, WoogarooSynthesisKind::SeekOriginals);
+        assert_eq!(packet.applicant_respondent_edge, WoogarooDialecticEdge::Unresolved);
+        assert_eq!(packet.respondent_independent_edge, WoogarooDialecticEdge::Unresolved);
+        assert_eq!(packet.independent_applicant_edge, WoogarooDialecticEdge::Unresolved);
+        assert_eq!(packet.triadic_face, WoogarooTrialecticFace::Underdetermined);
+        assert_eq!(packet.next_procedural_goal, MatterProceduralGoal::DecideEvidenceNeeded);
+        assert!(packet.candidate_only);
+        assert!(!packet.creates_actual_review);
+        assert!(!packet.creates_court_filing);
+        assert!(!packet.proves_legal_error_or_compliance);
+        assert!(!packet.orders_physical_protection);
+    }
+
+    let hypothetical = WoogarooHypotheticalWorld {
+        legally_applicable: true,
+        defect_established: true,
+        materiality_established: true,
+        government_compliance_established: false,
+        evidence_reviewed: true,
+        ecological_harm_assumed: true,
+    };
+    let candidate = woogaroo_synthesise_dialectic_trialectic(
+        "advice-consideration", hypothetical).expect("canonical ground");
+    assert_eq!(candidate.kind, WoogarooSynthesisKind::ApplicantCandidateForDefeaterSearch);
+    assert_eq!(candidate.applicant_respondent_edge, WoogarooDialecticEdge::ProvisionalApplicant);
+    assert_eq!(candidate.next_procedural_goal, MatterProceduralGoal::IsolateResidualControversy);
+    assert_eq!(candidate.triadic_face, WoogarooTrialecticFace::Underdetermined);
+    // Hypothetical 'evidence_reviewed=true' is NOT a real source-store receipt.
+    assert!(!candidate.creates_actual_review);
+    assert!(!candidate.proves_legal_error_or_compliance);
+}
+
+#[test]
+fn trialectic_routes_all_448_worlds_without_filling_missing_face() {
+    use sensiblaw_pg_source_store::{
+        woogaroo_synthesise_dialectic_trialectic,
+        WoogarooDialecticEdge, WoogarooHypotheticalWorld, WoogarooSynthesisKind,
+        WoogarooTrialecticFace,
+    };
+    let mut n = 0;
+    for ground in WOOGAROO_GROUNDS {
+        for mask in 0u8..64u8 {
+            let w = WoogarooHypotheticalWorld {
+                legally_applicable: mask & 1 != 0,
+                defect_established: mask & 2 != 0,
+                materiality_established: mask & 4 != 0,
+                government_compliance_established: mask & 8 != 0,
+                evidence_reviewed: mask & 16 != 0,
+                ecological_harm_assumed: mask & 32 != 0,
+            };
+            let packet = woogaroo_synthesise_dialectic_trialectic(ground.key, w).unwrap();
+            let contradictory = w.defect_established && w.government_compliance_established;
+            let applicant = !w.government_compliance_established && w.evidence_reviewed
+                && w.legally_applicable && w.defect_established && w.materiality_established;
+            let respondent = w.government_compliance_established && !w.defect_established
+                && w.evidence_reviewed && w.legally_applicable;
+            let expected = if contradictory {
+                WoogarooSynthesisKind::ReconcileOpposingSourceAssertions
+            } else if applicant {
+                WoogarooSynthesisKind::ApplicantCandidateForDefeaterSearch
+            } else if respondent {
+                WoogarooSynthesisKind::RespondentCandidateForCounterDefeaterSearch
+            } else {
+                WoogarooSynthesisKind::SeekOriginals
+            };
+            assert_eq!(packet.kind, expected);
+            assert_eq!(packet.triadic_face, WoogarooTrialecticFace::Underdetermined);
+            assert_eq!(packet.respondent_independent_edge, WoogarooDialecticEdge::Unresolved);
+            assert_eq!(packet.independent_applicant_edge, WoogarooDialecticEdge::Unresolved);
+            assert!(packet.candidate_only);
+            assert!(!packet.creates_actual_review);
+            assert!(!packet.proves_legal_error_or_compliance);
+            assert!(!packet.creates_court_filing);
+            assert!(!packet.orders_physical_protection);
+            if contradictory {
+                assert_eq!(packet.applicant_respondent_edge, WoogarooDialecticEdge::Unresolved);
+            }
+            n += 1;
+        }
+    }
+    assert_eq!(n, 448);
+}
