@@ -1,0 +1,35 @@
+# Woogaroo EPBC 2019/8575 — SLR native controversy bridge
+
+**Source-written pre-filing test, 28 October 2026.** This is not a persisted Matter, a materialised source revision, a reviewed-evidence payment, a legal opinion, court filing, ministerial admission or court finding.
+
+## Why this work belongs in the existing SLR Matter owner
+
+[SLR PR #59](https://github.com/chboishabba/slr/pull/59) owns the `MatterControversyDraft`, `MatterResponseDraft`, `MatterControversyResidualDraft`, `MatterObligationDraft` and `project_matter_reverse_proof_search` data contracts. This new [candidate test](../crates/sl-pg-source-store/tests/woogaroo_2019_8575_candidate_controversy.rs) uses that existing interface, rather than creating a duplicate controversy engine or inserting unverifiable data into PostgreSQL.
+
+The originating [DASHI law research case](https://github.com/chboishabba/dashi_agda/pull/1276) owns the seven candidate legal grounds, 2022 koala advice, original-source comparison, qualified-standing and signed-condition gaps. The separate [SensibLaw source-admission slice](https://github.com/chboishabba/SensibLaw) classifies a legal authority, an original campaign submission, official notice, developer claim and unrelated Scenic referral without promoting any of those into decision-maker findings. **Case ID:** `matter:au:epbc:2019-8575:postapproval`.
+
+## Five proposition fibres
+
+| Proposition | Author / status in this model | Original source locator | Truth and admissibility boundary |
+|---|---|---|---|
+| Approval status | Original Commonwealth portal; public decision fact `Supported` | [EPBC all-notices](https://epbcpublicportal.environment.gov.au/all-notices/) | Publication is not a signed conditions instrument, deemed furnishing or original section 95C |
+| Possible s139(2) omission | **Applicant's candidate issue, not actual filed pleading**; `Unresolved` | [EPBC 24 August 2026 C70](https://www.legislation.gov.au/C2004A00485/2026-08-24/) | Exact saved/transitional law, significant-impact trigger, original approved advice and evidence of consideration not proven |
+| Possible answer that advice was considered | **Modelled hypothetical defence only, not government allegation/admission**; `Unresolved` | [2022 koala recovery plan](https://www.dcceew.gov.au/sites/default/files/documents/recovery-plan-koala-2022.pdf) | Source locator cannot pay 95C, delegate brief, advice receipt or reasons |
+| Action-specific incremental habitat effect | **Candidate causal fact**; `Unresolved` | [AGS 2024 contextual baseline analysis](https://www.ags.gov.au/publications/legal-briefing/lb-20240219) | Surrounding developments contribute contextual baseline but are not automatically consequences of this action |
+| Retained corridor/developer account | **Stockland publisher claim**; `Alleged` | [Stockland Springview](https://www.stockland.com.au/residential/qld/springview) | Unverified ecological function, land title, contract, on-ground works or Commonwealth decision finding |
+
+Two contestation residuals require specific discriminators: (1) original **2022 conservation-advice consideration** versus possible evidence in the signed 15 October approval/section 95C report; and (2) **retained corridor geometry** versus habitat connectivity and mature-tree functioning. Both have typed outstanding evidence obligations and no discharge reference. Both are candidate-only. Even a `Supported` portal publication is not a `Proved` review ground.
+
+The tests explicitly fail a proposition that drifts into **Scenic 2020/8651**, a dangling evidence obligation, or an empty proposition explanation. Developer counterevidence is classified with `ChallengeEvidenceReliability`, not any `Admit*` variant, so no fictional respondent admission is generated.
+
+## Exact next execution boundary
+
+To persist this Matter, SLR first requires actual source-revision and canonical-text/payment coordinates, valid reviewed evidence and normative-order refs in the existing persisted evidence substrate. The current Rust fixture deliberately sets **all `reviewed_evidence_ref = None`**, references only unchanged public URLs as *locators*, and uses source-written label/date strings. It never calls `persist_matter_controversy`, `load_matter_controversy` or a PostgreSQL connection.
+
+**Before a client/solicitor/court read model is authoritative:** materialise each original source and exact span through the canonical SLR source/store path; obtain reviewer confirmation; bind correct published-versus-signed document identity; attach statutory s139, s95B/s95C, s487 standing and actual procedural deadline to their independent original authority; and only then run contested Matter projection. No source-admission receipt or citation alone closes a legal ground.
+
+**SLR related lanes:** [PR #54](https://github.com/chboishabba/slr/pull/54) owns selective reopening from actual persisted evidence; [PR #73](https://github.com/chboishabba/slr/pull/73) owns native bounded chat world materialisation; [PR #75](https://github.com/chboishabba/slr/pull/75) owns protected-fleet candidate reduction; [PR #42](https://github.com/chboishabba/slr/pull/42) owns temporal assertions and human contestation. These are **independently authored, unmerged or stacked lanes**. Nothing in this test claims they have merged or that a candidate fleet receipt is certified proof/payment.
+
+## Attribution and case safety
+
+Commonwealth Parliament wrote the Act; DCCEEW issued portal decisions and species documents; AGS authored its legal briefing; Stockland authored its own FAQ; QCC, QUT and Save Woogaroo Forest Group authored their respective submissions; the original 2013/2015/2024 cases retain their judicial/party authorship; SLR PR #59 owns the existing Rust Matter types; DASHI PR #1276 owns this case's source-gated issue analysis. The new SLR specimen is additive integration source code, **not execution or kernel verification**. There is no owned/paid court filing, original signed 15 October conditions, source-reviewed exact span, confirmed environmental breach or newly proved payoff.
