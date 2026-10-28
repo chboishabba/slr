@@ -162,3 +162,18 @@ trialectic modules, not to Peirce, Riegel, a cited philosophy essay,
 or this case-specific SLR output adapter. Preservation of Ibrahim's
 separate prior Monster 3B mathematical work does not assert that the
 Woogaroo trialectic is the same object as any Monster representation.
+
+## 369 geometry and Sophontic paired reasoning (28 October)
+See [the exact finite geometric readout](WOOGAROO_369_SOPHONTIC_GEOMETRIC_READOUT.md)
+and [standalone interactive 27-cube explorer](woogaroo-369-geometric-lab.html).
+Each candidate synthesis packet now contains three ternary 27-cube rows in
+`geometric_369` without changing its original G01–G28 acquisition join.
+The review-gate example propagates two grid steps (input and derived label);
+the harm-only example changes one cube coordinate without changing the
+narrow legal classification. These are not legal/physical distances.
+The higher six-cube T^18 trialectic boundary (387,420,489 configurations)
+is separate from the three-cube T^9 (19,683-point) chart. The triadic
+face remains irreducibly undetermined.
+Source owners: in-branch DASHI finite geometry; Sophontic public eval
+method; open unmerged DASHI #1094/#1095/#1265 as donors only.
+All original obligations and source author credits remain intact.
