@@ -195,3 +195,18 @@ do not match exactly. Its outputs carry the existing max-cut,
 potential snowball, source-vs-opposition, nested tree and finite
 3-adic branch prefix. The trialectic face remains unresolved and
 no real evidence is paid.
+
+## Correction: original two-dialectic XY → emergent Z geometry
+
+The original 27-state dialectic is **one cube**:
+X=thesis/antithesis/synthesis of dialectic A,
+Y=thesis/antithesis/synthesis of dialectic B,
+Z=their *interaction*'s thesis/antithesis/synthesis.
+It is **not** three unrelated proposition-category cubies.
+Previous seven-ground source/claim fibres remain valid but are
+attached to the encounter, not substituted for its coordinates.
+For each XY encounter there are three possible Z states until an
+interaction law/mediator selects one. The new production
+`xy_interaction_27` field in each seven-ground converged output
+explicitly leaves every actual X/Y/Z position unselected.
+See the [corrected coordinate/transport contract](WOOGAROO_XY_DIALECTIC_Z_INTERACTION_27_TRANSPORT.md).
