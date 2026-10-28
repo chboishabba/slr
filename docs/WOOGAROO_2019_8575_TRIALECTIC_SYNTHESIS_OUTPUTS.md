@@ -177,3 +177,21 @@ face remains irreducibly undetermined.
 Source owners: in-branch DASHI finite geometry; Sophontic public eval
 method; open unmerged DASHI #1094/#1095/#1265 as donors only.
 All original obligations and source author credits remain intact.
+
+## Signed polarity correction / nested synthesis (28 October)
+
+The older `geometric_369` consists of 0/1 *hypothetical Boolean gates*,
+not a complete signed dialectic. The new primary signed chart and
+nested decision tree preserve **−1 = opposing version ¬P of the SAME
+ground-scoped predicate**, **+1 = P**, and **0 = coarse neutral/unknown
+or coarse contradiction**, with both/neither separately retained
+by the fine evidence fibre. See
+[`WOOGAROO_SIGNED_PREDICATE_FIBRE_SYNTHESIS.md`](WOOGAROO_SIGNED_PREDICATE_FIBRE_SYNTHESIS.md)
+and [the signed HTML explorer](woogaroo-369-geometric-lab.html).
+
+The single `woogaroo_unpaid_converged_synthesis` producer now
+fails closed if dialectical and signed fibre packet/ground/Gxx joins
+do not match exactly. Its outputs carry the existing max-cut,
+potential snowball, source-vs-opposition, nested tree and finite
+3-adic branch prefix. The trialectic face remains unresolved and
+no real evidence is paid.
