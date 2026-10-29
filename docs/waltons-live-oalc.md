@@ -247,3 +247,30 @@ retained_receipts_validated
 The later-authority acquisition report records the same fresh-vs-reused split.
 A failed later source remains an acquisition residual and does not become
 negative legal evidence.
+
+
+## Formal max-cut owner
+
+The golden formal owner is `DASHI.Law.AustralianContractsReviewedHopCompilerExact` in `dashi_agda`.
+
+The live operator path must preserve these gates.
+
+The OALC source receipt needs reviewed authority identity before a canonical trace alias.
+
+Reviewed proposition support needs its reviewed evidence coordinate.
+
+A citation occurrence needs reviewed citation use before it becomes treatment.
+
+Contested, context-only, unsupported, and unresolved inputs remain residuals.
+
+Corroborating reviewed source units may support one semantic treatment hop. Their provenance remains distinct.
+
+Paid identity or treatment work cannot reappear as the same fresh work.
+
+An empty selectable frontier means the current frontier is closed. It does not prove consumer adequacy or current-law truth.
+
+Runtime coordinate coverage does not prove `FactorsThrough`. A theorem-backed adequacy receipt needs an actual formal witness.
+
+QID and other external identity work may help scheduling. They cannot create legal authority or applicability.
+
+The canonical TOE roots expose the same owner. The Lean mirror is a parity surface only. Agda remains golden.
