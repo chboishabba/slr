@@ -4,6 +4,9 @@
 //! treatment/support edges to an existing contracts trace, but may not invent
 //! authority identities, promote legal truth, or collapse contested/context
 //! review into positive doctrine.
+//!
+//! Golden formal owner:
+//! `DASHI/Law/AustralianContractsReviewedHopCompilerExact.agda` in dashi_agda.
 
 use serde::Serialize;
 use std::collections::BTreeMap;
