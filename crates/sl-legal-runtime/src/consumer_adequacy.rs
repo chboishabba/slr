@@ -5,6 +5,11 @@
 //! of factorisation.  It records which query-required coordinates are paid,
 //! emits typed research demands for missing coordinates, and can explicitly
 //! terminate unresolved when a missing coordinate is known closed.
+//!
+//! Golden formal owners:
+//! `DASHI/Law/ConsumerDirectedLegalFollowAdequacyExact.agda`,
+//! `DASHI/Law/ConsumerAdequacyRuntimeTheoremBridgeExact.agda`, and
+//! `DASHI/Law/ClosedIsNotAdequateExact.agda` in dashi_agda.
 
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
