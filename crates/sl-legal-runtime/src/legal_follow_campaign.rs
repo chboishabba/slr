@@ -8,6 +8,10 @@
 //!
 //! Source acquisition, human/LLM review, doctrine semantics and persistence
 //! remain adapters.  The kernel cannot manufacture authority or claim truth.
+//!
+//! Golden formal owners:
+//! `DASHI/Law/GenericReviewedDeltaCampaignKernelExact.agda` and
+//! `DASHI/Law/GenericRecursiveLegalFollowCampaignExact.agda` in dashi_agda.
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct GenericCampaignBudget {
