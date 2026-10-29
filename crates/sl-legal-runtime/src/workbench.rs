@@ -7,8 +7,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
-    InformationAction, LegalCampaignState, MatterWorkspaceProjection, WrongTypeIssueState,
-    project_matter_issue_workspace,
+    InformationAction, LegalCampaignState, LegalProjectionState, MatterWorkspaceProjection,
+    WrongTypeIssueState, project_matter_issue_workspace_from_state,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -187,10 +187,10 @@ impl MatterIssueWorkbench {
 /// evidence links already present in the WrongType issue state. Entities,
 /// event grouping, and temporal labels are projection metadata supplied by the
 /// caller; they cannot pay evidence or legal coordinates.
-pub fn project_matter_issue_workbench(
+pub fn project_matter_issue_workbench_from_state(
     matter_ref: impl Into<String>,
     issue_state: &WrongTypeIssueState,
-    campaign: &LegalCampaignState,
+    state: &LegalProjectionState,
     seed: MatterWorkbenchSeed,
 ) -> Result<MatterIssueWorkbench, String> {
     let matter_ref = matter_ref.into();
@@ -301,7 +301,7 @@ pub fn project_matter_issue_workbench(
             .then(left.item_ref.cmp(&right.item_ref))
     });
 
-    let issue = project_matter_issue_workspace(&matter_ref, issue_state, campaign);
+    let issue = project_matter_issue_workspace_from_state(&matter_ref, issue_state, state);
     let workbench = MatterIssueWorkbench {
         matter_ref,
         entities: seed.entities,
@@ -309,7 +309,7 @@ pub fn project_matter_issue_workbench(
         events: seed.events,
         documents,
         timeline,
-        next_action: campaign.selected_action.clone(),
+        next_action: state.selected_action.clone(),
         issue,
         candidate_only: true,
         projection_only: true,
@@ -317,6 +317,16 @@ pub fn project_matter_issue_workbench(
     };
     workbench.validate_projection_boundary()?;
     Ok(workbench)
+}
+
+pub fn project_matter_issue_workbench(
+    matter_ref: impl Into<String>,
+    issue_state: &WrongTypeIssueState,
+    campaign: &LegalCampaignState,
+    seed: MatterWorkbenchSeed,
+) -> Result<MatterIssueWorkbench, String> {
+    let state = LegalProjectionState::from(campaign);
+    project_matter_issue_workbench_from_state(matter_ref, issue_state, &state, seed)
 }
 
 #[cfg(test)]

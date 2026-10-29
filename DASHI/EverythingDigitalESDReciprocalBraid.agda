@@ -1,69 +1,105 @@
--- Everything Digital-ESD Reciprocal Braid
---
--- This module imports all schema and regression owners for the
--- Digital-ESD adaptive screening pipeline. It does not contain
--- any fabricated observed witnesses — those are generated from
--- real corpus runs.
---
--- Imports:
---   - DigitalESDERICStudyExecutionExact.agda   (schema/regression owner)
---   - DigitalESDERICStudyExecutionRegression.agda (schema/regression owner)
---   - DigitalESDAdaptiveScreeningExecutionExact.agda
---   - DigitalESDAdaptiveScreeningExecutionRegression.agda
---
--- The braid ensures that all Digital-ESD components share one canonical
--- evidence substrate and that non-promotion invariants hold across all
--- components.
---
--- This braid imports the schema/regression owners, NOT any fabricated
--- observed witness. The observed witness (DigitalESDERICStudyExecutionObserved.agda)
--- should be generated from a real retained corpus run.
-
 module DASHI.EverythingDigitalESDReciprocalBraid where
 
-open import DASHI.Education.DigitalESDERICStudyExecutionExact
-open import DASHI.Education.DigitalESDERICStudyExecutionRegression
-open import DASHI.Education.DigitalESDAdaptiveScreeningExecutionExact
-open import DASHI.Education.DigitalESDAdaptiveScreeningExecutionRegression
+open import Agda.Builtin.Bool using (Bool; false; true)
+open import Agda.Builtin.Equality using (_≡_; refl)
+open import Agda.Builtin.Nat using (Nat)
+open import Data.Empty using (⊥)
 
--- === Braid invariants ===
+import DASHI.Education.DigitalESDERICStudyExecutionExact as ERIC
+import DASHI.Education.DigitalESDERICStudyExecutionRegression as ERICRegression
+import DASHI.Education.DigitalESDAdaptiveScreeningExecutionExact as Screening
+import DASHI.Education.DigitalESDAdaptiveScreeningExecutionRegression as ScreeningRegression
 
--- All components share the same expected counts
-postulate
-  sharedCountExpectations :
-    expectedRawQueryOccurrenceCount ≡ 46597 ×
-    expectedUniqueERICRecordCount ≡ 43996
+------------------------------------------------------------------------
+-- DIGITAL-ESD RECIPROCAL BRAID
+--
+-- Schema/regression composition only.
+--
+-- No observed execution witness is imported here.  A real ERIC execution may
+-- generate DASHI.Generated.DigitalESDERICStudyExecutionObserved, but absence of
+-- that generated module does not let the braid fabricate an observation.
+------------------------------------------------------------------------
 
--- Non-promotion invariants hold across all components
-postulate
-  braidNonPromotionHeld : Bool
-  braidNonPromotionHeld = true
-
--- Abstract parsed != full text parsed firewall holds across braid
-postulate
-  braidAbstractNotFullText : Bool
-  braidAbstractNotFullText = true
-
--- Wrapper success != screening decision firewall holds across braid
-postulate
-  braidWrapperNotScreening : Bool
-  braidWrapperNotScreening = true
-
--- === Complete braid contract ===
-
-record DigitalESDReciprocalBraid : Set where
+record DigitalESDReciprocalBraidBoundary : Set where
+  constructor digital-esd-reciprocal-braid-boundary
   field
-    exactERIC : DigitalESDERICStudyExecutionExact.CompleteERICExecution
-    regressionERIC : DigitalESDERICStudyExecutionRegression.ERICExecutionRegression
-    exactScreening : DigitalESDAdaptiveScreeningExecutionExact.ScreeningRun
-    regressionScreening : DigitalESDAdaptiveScreeningExecutionRegression.ScreeningRun
-    braidInvariants : Bool
-    firewallsIntact : Bool
+    expectedERICQueryOccurrences : Nat
+    expectedERICQueryOccurrencesIs46597 :
+      expectedERICQueryOccurrences ≡ 46597
 
-postulate
-  verifyDigitalESDReciprocalBraid : (braid : DigitalESDReciprocalBraid) → ⊤
+    expectedERICUniqueRecords : Nat
+    expectedERICUniqueRecordsIs43996 :
+      expectedERICUniqueRecords ≡ 43996
 
-{-# FOREIGN GHC
-  main :: IO ()
-  main = putStrLn "EverythingDigitalESDReciprocalBraid: verified"
-#-}
+    parsedMetadataCountsAsFullText : Bool
+    parsedMetadataCountsAsFullTextIsFalse :
+      parsedMetadataCountsAsFullText ≡ false
+
+    candidateAssessmentCreatesDecision : Bool
+    candidateAssessmentCreatesDecisionIsFalse :
+      candidateAssessmentCreatesDecision ≡ false
+
+    paretoQueueCreatesDecision : Bool
+    paretoQueueCreatesDecisionIsFalse :
+      paretoQueueCreatesDecision ≡ false
+
+    missingFullTextCountsAsVerified : Bool
+    missingFullTextCountsAsVerifiedIsFalse :
+      missingFullTextCountsAsVerified ≡ false
+
+    fullTextVerificationCreatesSourceAuditAdmission : Bool
+    fullTextVerificationCreatesSourceAuditAdmissionIsFalse :
+      fullTextVerificationCreatesSourceAuditAdmission ≡ false
+
+open DigitalESDReciprocalBraidBoundary public
+
+canonicalDigitalESDReciprocalBraidBoundary :
+  DigitalESDReciprocalBraidBoundary
+canonicalDigitalESDReciprocalBraidBoundary =
+  digital-esd-reciprocal-braid-boundary
+    ERIC.expectedRawQueryOccurrenceCount
+    refl
+    ERIC.expectedUniqueERICRecordCount
+    refl
+    false refl
+    false refl
+    false refl
+    false refl
+    false refl
+
+data BraidCreatesObservedWitness : Set where
+data BraidPromotesMetadataToFullText : Set where
+data BraidPromotesCandidateAssessmentToDecision : Set where
+data BraidPromotesFullTextToAuditAdmission : Set where
+
+braidDoesNotCreateObservedWitness :
+  BraidCreatesObservedWitness → ⊥
+braidDoesNotCreateObservedWitness ()
+
+braidDoesNotPromoteMetadataToFullText :
+  BraidPromotesMetadataToFullText → ⊥
+braidDoesNotPromoteMetadataToFullText ()
+
+braidDoesNotPromoteCandidateAssessmentToDecision :
+  BraidPromotesCandidateAssessmentToDecision → ⊥
+braidDoesNotPromoteCandidateAssessmentToDecision ()
+
+braidDoesNotPromoteFullTextToAuditAdmission :
+  BraidPromotesFullTextToAuditAdmission → ⊥
+braidDoesNotPromoteFullTextToAuditAdmission ()
+
+------------------------------------------------------------------------
+-- Anchor the imported regression owners in this aggregate.
+------------------------------------------------------------------------
+
+ericMetadataNotFullText :
+  ERIC.metadataParsingCountsAsFullTextParsing
+    ERIC.canonicalERICExecutionBoundary
+  ≡ false
+ericMetadataNotFullText = ERICRegression.metadataDoesNotCountAsFullText
+
+screeningMetadataNotFullText :
+  Screening.allMetadataCountsAsVerifiedFullText
+    Screening.canonicalAdaptiveScreeningExecutionBoundary
+  ≡ false
+screeningMetadataNotFullText = ScreeningRegression.metadataIsNotFullText

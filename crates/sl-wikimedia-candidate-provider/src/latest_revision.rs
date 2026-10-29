@@ -93,3 +93,113 @@ pub fn fetch_latest_entity_rdf_revision_receipt(
     let revision_id = fetch_latest_revision_id(qid)?;
     fetch_entity_rdf_revision_receipt(qid, revision_id)
 }
+
+/// Parse the immediately preceding revision from a bounded MediaWiki revision
+/// history response. The response must contain the requested starting revision
+/// and at least one strictly older positive revision id.
+pub fn parse_previous_revision_id(
+    qid: &str,
+    starting_revision_id: u64,
+    json: &[u8],
+) -> Result<u64, ProviderError> {
+    if !valid_qid(qid) {
+        return Err(ProviderError::InvalidInput(format!("invalid QID {qid}")));
+    }
+    if starting_revision_id == 0 {
+        return Err(ProviderError::InvalidInput(
+            "starting revision ID must be greater than zero".into(),
+        ));
+    }
+    if json.len() > MAX_REVISION_LOOKUP_BYTES {
+        return Err(ProviderError::InvalidInput(
+            "revision-history response exceeds size limit".into(),
+        ));
+    }
+
+    let value: Value = serde_json::from_slice(json).map_err(|error| {
+        ProviderError::InvalidInput(format!("invalid revision-history JSON: {error}"))
+    })?;
+    let pages = value
+        .get("query")
+        .and_then(|query| query.get("pages"))
+        .and_then(Value::as_array)
+        .ok_or_else(|| {
+            ProviderError::InvalidInput("revision-history response has no pages".into())
+        })?;
+    let page = pages
+        .iter()
+        .find(|page| page.get("title").and_then(Value::as_str) == Some(qid))
+        .ok_or_else(|| {
+            ProviderError::InvalidInput(format!(
+                "revision-history response does not contain requested QID {qid}"
+            ))
+        })?;
+    let revisions = page
+        .get("revisions")
+        .and_then(Value::as_array)
+        .ok_or_else(|| {
+            ProviderError::InvalidInput(format!(
+                "revision-history response has no revisions for {qid}"
+            ))
+        })?;
+
+    let mut saw_start = false;
+    for revision in revisions {
+        let Some(revid) = revision.get("revid").and_then(Value::as_u64) else {
+            continue;
+        };
+        if revid == starting_revision_id {
+            saw_start = true;
+            continue;
+        }
+        if saw_start && revid > 0 && revid < starting_revision_id {
+            return Ok(revid);
+        }
+    }
+
+    Err(ProviderError::InvalidInput(format!(
+        "revision-history response has no predecessor for {qid} at {starting_revision_id}"
+    )))
+}
+
+pub fn previous_revision_api_url(
+    qid: &str,
+    starting_revision_id: u64,
+) -> Result<String, ProviderError> {
+    if !valid_qid(qid) {
+        return Err(ProviderError::InvalidInput(format!("invalid QID {qid}")));
+    }
+    if starting_revision_id == 0 {
+        return Err(ProviderError::InvalidInput(
+            "starting revision ID must be greater than zero".into(),
+        ));
+    }
+    Ok(format!(
+        "https://www.wikidata.org/w/api.php?action=query&format=json&formatversion=2&prop=revisions&rvprop=ids&rvdir=older&rvstartid={starting_revision_id}&rvlimit=2&titles={qid}"
+    ))
+}
+
+pub fn fetch_previous_revision_id(
+    qid: &str,
+    starting_revision_id: u64,
+) -> Result<u64, ProviderError> {
+    let url = previous_revision_api_url(qid, starting_revision_id)?;
+    let response = ureq::get(&url)
+        .set("Accept", "application/json")
+        .set(
+            "User-Agent",
+            "SensibLaw-SLR/0.1 (typed previous-revision coordinate lookup)",
+        )
+        .call()?;
+    let mut bytes = Vec::new();
+    response
+        .into_reader()
+        .take((MAX_REVISION_LOOKUP_BYTES + 1) as u64)
+        .read_to_end(&mut bytes)?;
+    if bytes.len() > MAX_REVISION_LOOKUP_BYTES {
+        return Err(ProviderError::InvalidInput(
+            "revision-history response exceeds size limit".into(),
+        ));
+    }
+    parse_previous_revision_id(qid, starting_revision_id, &bytes)
+}

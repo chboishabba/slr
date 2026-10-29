@@ -8,9 +8,10 @@
 
 use crate::residual_review_shortlist::ResidualShortlistedCitation;
 use sha2::{Digest, Sha256};
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CitationReviewUnit {
     pub review_unit_ref: String,
     pub document_ref: String,

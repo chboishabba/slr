@@ -49,6 +49,11 @@ pub enum LatentWorldError {
     EmptyBudget,
     #[error("max_hops exceeds the reader safety cap of 1000")]
     HopLimitTooLarge,
+    #[error("invalid context revision coordinate for {source_ref}: {source_revision_ref}")]
+    InvalidContextRevisionCoordinate {
+        source_ref: String,
+        source_revision_ref: String,
+    },
 }
 
 const NEIGHBOUR_SQL: &str = r#"
@@ -114,6 +119,124 @@ ORDER BY from_ref, to_ref, relation_ref, provenance_ref
 LIMIT $2
 "#;
 
+const REVISION_SLICED_NEIGHBOUR_SQL: &str = r#"
+WITH selected_wikidata_revision(source_ref, source_revision_ref) AS (
+    SELECT source_ref, source_revision_ref
+    FROM unnest($3::text[], $4::text[]) AS selected(source_ref, source_revision_ref)
+),
+edge_source(from_ref, to_ref, relation_ref, provenance_ref) AS (
+    SELECT relation.left_ref, relation.right_ref, relation.relation_type_ref,
+           COALESCE(
+               concat('context:', receipt.source_family_ref, ':', receipt.source_revision_ref),
+               concat('algebra.relation:', relation.left_ref, ':', relation.relation_type_ref, ':', relation.right_ref)
+           )
+    FROM algebra.relation AS relation
+    LEFT JOIN context.reviewed_relation_receipt AS receipt
+      ON receipt.relation_ref = relation.relation_ref
+    LEFT JOIN selected_wikidata_revision AS selected
+      ON selected.source_ref = relation.left_ref
+    WHERE receipt.relation_ref IS NULL
+       OR receipt.source_family_ref <> 'wikidata'
+       OR (
+            receipt.source_family_ref = 'wikidata'
+        AND selected.source_ref IS NOT NULL
+        AND receipt.source_revision_ref = selected.source_revision_ref
+       )
+    UNION ALL
+    SELECT dependent_ref, prerequisite_ref, 'execution:dependency',
+           concat('execution.dependency:', dependent_ref, ':', prerequisite_ref)
+    FROM execution.dependency
+    UNION ALL
+    SELECT subject_ref, build_ref, 'legal_ir:build', build_ref
+    FROM legal_ir.graph_revision
+    UNION ALL
+    SELECT gr.subject_ref, span_ref, 'legal_ir:source_span', span_ref
+    FROM legal_ir.graph_revision AS gr,
+         LATERAL unnest(gr.source_span_refs) AS span_ref
+    UNION ALL
+    SELECT build_ref, document_ref, 'legal_ir:document', build_ref
+    FROM legal_ir.semantic_build
+    UNION ALL
+    SELECT build_ref, source_revision_ref, 'legal_ir:source_revision', source_revision_ref
+    FROM legal_ir.semantic_build
+    UNION ALL
+    SELECT build_ref, pnf_build_ref, 'legal_ir:pnf_build', pnf_build_ref
+    FROM legal_ir.semantic_build
+    UNION ALL
+    SELECT build_ref, refined_pnf_graph_ref, 'legal_ir:pnf_graph', refined_pnf_graph_ref
+    FROM legal_ir.semantic_build
+    UNION ALL
+    SELECT build_ref, legal_ir_projection_ref, 'legal_ir:projection', legal_ir_projection_ref
+    FROM legal_ir.semantic_build
+    UNION ALL
+    SELECT p.projection_ref, o.observation_ref, 'legal_ir:observation', o.observation_ref
+    FROM legal_ir.projection AS p
+    JOIN legal_ir.observation AS o
+      ON o.projection_ref = p.projection_ref
+    UNION ALL
+    SELECT observation_ref, pnf_factor_ref, 'legal_ir:pnf_factor', observation_ref
+    FROM legal_ir.observation
+    UNION ALL
+    SELECT observation_ref, pnf_revision_ref, 'legal_ir:pnf_revision', observation_ref
+    FROM legal_ir.observation
+    UNION ALL
+    SELECT o.observation_ref, provenance_ref, 'legal_ir:provenance', provenance_ref
+    FROM legal_ir.observation AS o,
+         LATERAL unnest(o.provenance_refs) AS provenance_ref
+    UNION ALL
+    SELECT o.observation_ref, residual_ref, 'legal_ir:residual', residual_ref
+    FROM legal_ir.observation AS o,
+         LATERAL unnest(o.residual_refs) AS residual_ref
+)
+SELECT DISTINCT from_ref, to_ref, relation_ref, provenance_ref
+FROM edge_source
+WHERE from_ref = ANY($1::text[]) OR to_ref = ANY($1::text[])
+ORDER BY from_ref, to_ref, relation_ref, provenance_ref
+LIMIT $2
+"#;
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct ContextRevisionWorldSlice {
+    /// Wikidata source QID -> exact reviewed source revision ref selected into
+    /// this world. Historical reviewed revisions remain durable but invisible
+    /// to context traversal for this slice.
+    pub wikidata_source_revisions: BTreeMap<String, String>,
+}
+
+impl ContextRevisionWorldSlice {
+    pub fn validate(&self) -> Result<(), LatentWorldError> {
+        for (source_ref, revision_ref) in &self.wikidata_source_revisions {
+            let fields = revision_ref.split(':').collect::<Vec<_>>();
+            let valid_qid = source_ref
+                .strip_prefix('Q')
+                .is_some_and(|digits| {
+                    !digits.is_empty() && digits.bytes().all(|byte| byte.is_ascii_digit())
+                });
+            let valid_revision = fields.len() == 4
+                && fields[0] == "wikidata"
+                && fields[1] == source_ref
+                && fields[2] == "oldid"
+                && fields[3]
+                    .parse::<u64>()
+                    .is_ok_and(|revision_id| revision_id > 0);
+            if !valid_qid || !valid_revision {
+                return Err(LatentWorldError::InvalidContextRevisionCoordinate {
+                    source_ref: source_ref.clone(),
+                    source_revision_ref: revision_ref.clone(),
+                });
+            }
+        }
+        Ok(())
+    }
+
+    fn parallel_arrays(&self) -> (Vec<String>, Vec<String>) {
+        self.wikidata_source_revisions
+            .iter()
+            .map(|(source, revision)| (source.clone(), revision.clone()))
+            .unzip()
+    }
+}
+
 /// Read a deterministic, bounded latent semantic neighbourhood from already-
 /// existing semantic relations, execution dependencies, and legal-IR lineage.
 /// Traversal policy lives in Rust; PostgreSQL remains persistence/query
@@ -122,6 +245,35 @@ pub fn load_latent_world_rows_with_budget(
     config: &DatabaseConfig,
     seed_ref: &str,
     budget: LatentWorldBudget,
+) -> Result<LatentWorldRows, LatentWorldError> {
+    load_latent_world_rows_with_budget_and_context_slice(
+        config,
+        seed_ref,
+        budget,
+        None,
+    )
+}
+
+pub fn load_latent_world_rows_with_context_revision_slice(
+    config: &DatabaseConfig,
+    seed_ref: &str,
+    budget: LatentWorldBudget,
+    context_slice: &ContextRevisionWorldSlice,
+) -> Result<LatentWorldRows, LatentWorldError> {
+    context_slice.validate()?;
+    load_latent_world_rows_with_budget_and_context_slice(
+        config,
+        seed_ref,
+        budget,
+        Some(context_slice),
+    )
+}
+
+fn load_latent_world_rows_with_budget_and_context_slice(
+    config: &DatabaseConfig,
+    seed_ref: &str,
+    budget: LatentWorldBudget,
+    context_slice: Option<&ContextRevisionWorldSlice>,
 ) -> Result<LatentWorldRows, LatentWorldError> {
     if seed_ref.trim().is_empty() {
         return Err(LatentWorldError::EmptySeed);
@@ -159,7 +311,15 @@ pub fn load_latent_world_rows_with_budget(
 
         let remaining = budget.max_edges - edge_keys.len();
         let query_limit = i64::try_from(remaining.saturating_add(1)).unwrap_or(i64::MAX);
-        let rows = client.query(NEIGHBOUR_SQL, &[&frontier, &query_limit])?;
+        let rows = if let Some(context_slice) = context_slice {
+            let (source_refs, revision_refs) = context_slice.parallel_arrays();
+            client.query(
+                REVISION_SLICED_NEIGHBOUR_SQL,
+                &[&frontier, &query_limit, &source_refs, &revision_refs],
+            )?
+        } else {
+            client.query(NEIGHBOUR_SQL, &[&frontier, &query_limit])?
+        };
         let edge_budget_hit = rows.len() > remaining;
         if edge_budget_hit {
             residual_refs.insert("world-residual:edge-budget".to_owned());
@@ -279,4 +439,47 @@ pub fn load_latent_world_rows(
             max_edges,
         },
     )
+}
+
+#[cfg(test)]
+mod revision_slice_tests {
+    use super::*;
+
+    #[test]
+    fn context_revision_slice_requires_exact_same_qid_revision() {
+        let valid = ContextRevisionWorldSlice {
+            wikidata_source_revisions: BTreeMap::from([(
+                "Q1501525".into(),
+                "wikidata:Q1501525:oldid:2333409615".into(),
+            )]),
+        };
+        assert!(valid.validate().is_ok());
+
+        let invalid = ContextRevisionWorldSlice {
+            wikidata_source_revisions: BTreeMap::from([(
+                "Q1501525".into(),
+                "wikidata:Q999:oldid:2333409615".into(),
+            )]),
+        };
+        assert!(matches!(
+            invalid.validate(),
+            Err(LatentWorldError::InvalidContextRevisionCoordinate { .. })
+        ));
+    }
+
+    #[test]
+    fn context_revision_slice_parallel_arrays_are_stable() {
+        let slice = ContextRevisionWorldSlice {
+            wikidata_source_revisions: BTreeMap::from([
+                ("Q2".into(), "wikidata:Q2:oldid:20".into()),
+                ("Q1".into(), "wikidata:Q1:oldid:10".into()),
+            ]),
+        };
+        let (sources, revisions) = slice.parallel_arrays();
+        assert_eq!(sources, vec!["Q1", "Q2"]);
+        assert_eq!(
+            revisions,
+            vec!["wikidata:Q1:oldid:10", "wikidata:Q2:oldid:20"]
+        );
+    }
 }

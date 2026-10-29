@@ -1,176 +1,234 @@
 #!/usr/bin/env python3
-"""Digital-ESD full-text index preparation — P0-G verified full-text gate.
+"""Digital-ESD full-text index — fail-closed P0-G gate.
 
-Prepares the full-text index required by the P0-G verified gate stage.
-Reads from the 43,996-record Digital-ESD ledger, constructs the full-text
-index, validates every record's canonical text hash, and produces the
-deterministic gate manifest.
+A record is eligible for P0-G only after an authoritative screening decision
+of include|probable.  Verification requires a real retrieved artifact and a
+matching SHA-256 supplied by a retrieval manifest.
+
+Missing artifacts remain pending.  No record-id or metadata fallback is ever
+treated as full text.
 """
+
 from __future__ import annotations
 
 import argparse
 import csv
 import hashlib
 import json
-import logging
-import sys
 from datetime import datetime, timezone
 from pathlib import Path
-import uuid
-
-logger = logging.getLogger("digital_esd_index")
-logger.setLevel(logging.INFO)
-if not logger.handlers:
-    logger.addHandler(logging.StreamHandler(sys.stderr))
-
-LEDGER_SCHEMA = "sensiblaw.digital-esd-ledger.v0_1"
-INDEX_SCHEMA = "sensiblaw.digital-esd-fulltext-index.v0_1"
-GATE_SCHEMA = "sensiblaw.digital-esd-verified-gate.v0_1"
+from typing import Any
 
 
-def sha256_bytes(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
-
-
-def sha256_text(text: str) -> str:
-    return sha256_bytes(text.encode("utf-8"))
+RETAINED = {"include", "probable"}
 
 
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def sha256_file(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def read_tsv(path: Path) -> list[dict[str, str]]:
+    with path.open(newline="", encoding="utf-8") as fh:
+        return [dict(row) for row in csv.DictReader(fh, delimiter="\t")]
+
+
+def read_jsonl(path: Path | None) -> list[dict[str, Any]]:
+    if path is None or not path.exists():
+        return []
+    rows: list[dict[str, Any]] = []
+    with path.open("r", encoding="utf-8") as fh:
+        for n, line in enumerate(fh, 1):
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            if not isinstance(row, dict):
+                raise ValueError(f"{path}:{n}: expected JSON object")
+            rows.append(row)
+    return rows
+
+
 class DigitalESDFulltextIndexer:
-    def __init__(self, ledger_path: Path, output_dir: Path) -> None:
+    def __init__(
+        self,
+        ledger_path: Path,
+        output_dir: Path,
+        retrieved_manifest_path: Path | None = None,
+    ) -> None:
         self.ledger_path = ledger_path
         self.output_dir = output_dir
+        self.retrieved_manifest_path = retrieved_manifest_path
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
-    def load_ledger(self) -> list[dict]:
-        rows: list[dict] = []
-        with open(self.ledger_path, newline="") as fh:
-            reader = csv.DictReader(fh, delimiter="\t")
-            for row in reader:
-                rows.append(dict(row))
-        return rows
+    def load_ledger(self) -> list[dict[str, str]]:
+        return read_tsv(self.ledger_path)
 
-    def chunk_text(self, text: str, chunk_size: int = 4096) -> list[str]:
-        if len(text) <= chunk_size:
-            return [text]
-        return [text[i:i + chunk_size] for i in range(0, len(text), chunk_size)]
+    def load_retrieved(self) -> dict[str, dict[str, Any]]:
+        rows = read_jsonl(self.retrieved_manifest_path)
+        out: dict[str, dict[str, Any]] = {}
+        for row in rows:
+            ref = str(row.get("source_identity_reference") or "")
+            if not ref:
+                raise ValueError("retrieved manifest row lacks source_identity_reference")
+            if ref in out:
+                raise ValueError(f"duplicate retrieved manifest entry for {ref}")
+            out[ref] = row
+        return out
 
-    def build_fulltext_index(self, records: list[dict], run_id: str) -> list[dict]:
-        entries: list[dict] = []
-        for rec in records:
-            record_id = rec.get("record_id", "")
-            source_ref = rec.get("source_ref", "")
-            canonical_text = rec.get("canonical_text", "")
-            canonical_hash = sha256_text(canonical_text) if canonical_text else sha256_text(record_id)
-            domain = rec.get("domain", "unknown")
-            jurisdiction = rec.get("jurisdiction_ref", "")
-            fulltext = rec.get("fulltext", canonical_text or record_id)
-            chunks = self.chunk_text(fulltext)
-            for idx, chunk in enumerate(chunks):
-                entries.append({
-                    "record_id": record_id, "source_ref": source_ref,
-                    "canonical_text_hash": canonical_hash,
-                    "fulltext_chunk": sha256_text(chunk),
-                    "chunk_index": idx,
-                    "document_ref": rec.get("document_ref", ""),
-                    "domain": domain, "jurisdiction_ref": jurisdiction,
-                    "run_id": run_id,
-                })
-        return entries
+    def run(self) -> dict[str, Any]:
+        ledger = self.load_ledger()
+        retrieved = self.load_retrieved()
 
-    def write_index(self, entries: list[dict]) -> Path:
-        path = self.output_dir / "digital_esd_fulltext_index.tsv"
-        fields = list(entries[0].keys()) if entries else []
-        with open(path, "w", newline="") as fh:
-            writer = csv.DictWriter(fh, fieldnames=fields, delimiter="\t")
-            writer.writeheader()
-            for entry in entries:
-                writer.writerow(entry)
-        logger.info("Index written: %d entries", len(entries))
-        return path
+        ledger_by_ref = {
+            str(row.get("source_identity_reference") or ""): row
+            for row in ledger
+        }
+        eligible = {
+            ref: row
+            for ref, row in ledger_by_ref.items()
+            if str(row.get("decision") or "") in RETAINED
+        }
 
-    def verify_hashes(self, records: list[dict]) -> dict:
+        extra = sorted(set(retrieved) - set(eligible))
+        if extra:
+            raise ValueError(
+                "retrieved artifacts supplied for non-retained records: "
+                + ", ".join(extra[:20])
+            )
+
+        index_rows: list[dict[str, Any]] = []
         verified = 0
         failed = 0
-        for rec in records:
-            canonical_hash = rec.get("canonical_text_hash", "")
-            canonical_text = rec.get("canonical_text", "")
-            computed = sha256_text(canonical_text) if canonical_text else sha256_text(rec.get("record_id", ""))
-            if canonical_hash and computed != canonical_hash:
+        pending = 0
+
+        for ref, row in sorted(eligible.items()):
+            item = retrieved.get(ref)
+            if item is None:
+                pending += 1
+                index_rows.append({
+                    "source_identity_reference": ref,
+                    "decision_reference": row.get("decision_reference", ""),
+                    "status": "pending",
+                    "artifact_path": "",
+                    "expected_sha256": "",
+                    "observed_sha256": "",
+                    "retrieval_reference": "",
+                    "creates_source_truth": False,
+                    "creates_source_audit_admission": False,
+                })
+                continue
+
+            artifact = Path(str(item.get("artifact_path") or ""))
+            expected = str(item.get("sha256") or "").lower().removeprefix("sha256:")
+            retrieval_ref = str(item.get("retrieval_reference") or "")
+            if len(expected) != 64:
+                raise ValueError(f"{ref}: invalid expected sha256")
+            try:
+                int(expected, 16)
+            except ValueError as exc:
+                raise ValueError(f"{ref}: invalid expected sha256") from exc
+
+            if not artifact.exists() or not artifact.is_file():
                 failed += 1
+                index_rows.append({
+                    "source_identity_reference": ref,
+                    "decision_reference": row.get("decision_reference", ""),
+                    "status": "failed-missing-artifact",
+                    "artifact_path": str(artifact),
+                    "expected_sha256": expected,
+                    "observed_sha256": "",
+                    "retrieval_reference": retrieval_ref,
+                    "creates_source_truth": False,
+                    "creates_source_audit_admission": False,
+                })
+                continue
+
+            observed = sha256_file(artifact)
+            if observed != expected:
+                failed += 1
+                status = "failed-digest-mismatch"
             else:
                 verified += 1
-        return {"verified": verified, "failed": failed}
+                status = "verified"
 
-    def build_gate_manifest(self, records: list[dict], run_id: str) -> Path:
-        path = self.output_dir / "digital_esd_gate_manifest.tsv"
-        manifest: list[dict] = []
-        for rec in records:
-            record_id = rec.get("record_id", "")
-            canonical_hash = rec.get("canonical_text_hash", "")
-            fulltext = rec.get("fulltext", rec.get("canonical_text", ""))
-            fulltext_hash = sha256_text(fulltext) if fulltext else sha256_text(record_id)
-            verified = rec.get("verification_status") == "verified"
-            gate_digest = sha256_text(f"{run_id}\t{record_id}\t{canonical_hash}\t{fulltext_hash}\t{verified}")
-            manifest.append({
-                "run_id": run_id, "stage": "P0-G", "record_id": record_id,
-                "verified": str(verified).lower(), "canonical_hash": canonical_hash,
-                "fulltext_hash": fulltext_hash, "gate_digest": gate_digest,
+            index_rows.append({
+                "source_identity_reference": ref,
+                "decision_reference": row.get("decision_reference", ""),
+                "status": status,
+                "artifact_path": str(artifact),
+                "expected_sha256": expected,
+                "observed_sha256": observed,
+                "retrieval_reference": retrieval_ref,
+                "artifact_size_bytes": artifact.stat().st_size,
+                "creates_source_truth": False,
+                "creates_source_audit_admission": False,
             })
-        with open(path, "w", newline="") as fh:
-            writer = csv.DictWriter(fh, fieldnames=list(manifest[0].keys()), delimiter="\t")
+
+        index_path = self.output_dir / "digital_esd_fulltext_index.tsv"
+        fields = [
+            "source_identity_reference",
+            "decision_reference",
+            "status",
+            "artifact_path",
+            "expected_sha256",
+            "observed_sha256",
+            "retrieval_reference",
+            "artifact_size_bytes",
+            "creates_source_truth",
+            "creates_source_audit_admission",
+        ]
+        with index_path.open("w", newline="", encoding="utf-8") as fh:
+            writer = csv.DictWriter(fh, fieldnames=fields, delimiter="\t", extrasaction="ignore")
             writer.writeheader()
-            for entry in manifest:
-                writer.writerow(entry)
-        logger.info("Gate manifest written: %d entries", len(manifest))
-        return path
+            for row in index_rows:
+                writer.writerow(row)
 
-    def run(self, records: list[dict] | None = None) -> dict:
-        if records is None:
-            records = self.load_ledger()
-        run_id = uuid.uuid4().hex[:16]
-
-        logger.info("Building full-text index for %d records", len(records))
-        entries = self.build_fulltext_index(records, run_id)
-        self.write_index(entries)
-
-        verify = self.verify_hashes(records)
-        with open(self.output_dir / "digital_esd_hash_verify_report.json", "w") as fh:
-            json.dump(verify, fh, indent=2)
-
-        manifest_path = self.build_gate_manifest(records, run_id)
-
-        total = len(records)
-        logger.info("Full-text index complete: %d records, %d verified, %d failed",
-                    total, verify["verified"], verify["failed"])
-        return {
-            "run_id": run_id, "total_records": total,
-            "verified": verify["verified"], "failed": verify["failed"],
+        result = {
+            "schema": "sensiblaw.digital-esd-fulltext-index.v0_2",
             "completed_at": now_iso(),
+            "input_screening_records": len(ledger),
+            "eligible_for_fulltext": len(eligible),
+            "retrieved": len(retrieved),
+            "verified": verified,
+            "failed": failed,
+            "pending": pending,
+            "index_reference": str(index_path),
+            "fulltext_retrieval_creates_source_truth": False,
+            "fulltext_retrieval_creates_source_audit_admission": False,
         }
+        (self.output_dir / "digital_esd_fulltext_gate.json").write_text(
+            json.dumps(result, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        return result
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Digital-ESD full-text index preparation")
-    parser.add_argument("--ledger", type=Path, default=Path("fixtures/digital_esd_ledger.tsv"))
-    parser.add_argument("--output-dir", type=Path, default=Path("artifacts/digital_esd"))
+    parser = argparse.ArgumentParser(description="Digital-ESD fail-closed full-text gate")
+    parser.add_argument("--ledger", type=Path, required=True)
+    parser.add_argument("--retrieved-manifest", type=Path)
+    parser.add_argument("--output-dir", type=Path, default=Path("artifacts/digital_esd/fulltext"))
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
 
     if not args.ledger.exists():
-        logger.error("Ledger not found: %s", args.ledger)
-        return 1
+        raise SystemExit(f"ledger not found: {args.ledger}")
 
-    indexer = DigitalESDFulltextIndexer(args.ledger, args.output_dir)
-    records = indexer.load_ledger()
-    result = indexer.run(records=records)
+    result = DigitalESDFulltextIndexer(
+        ledger_path=args.ledger,
+        output_dir=args.output_dir,
+        retrieved_manifest_path=args.retrieved_manifest,
+    ).run()
     if args.json:
-        print(json.dumps(result, indent=2))
-    return 0
+        print(json.dumps(result, indent=2, sort_keys=True))
+    return 0 if result["failed"] == 0 else 2
 
 
 if __name__ == "__main__":
