@@ -507,3 +507,44 @@ This records exactly what the controller has established: there is no selectable
 residual in the current declared frontier.  It does not assert that every
 possible legal question is answered or that a formal query-indexed
 `FactorsThrough` witness exists.
+
+
+## Golden formal owner and TOE parity
+
+The golden policy owner is:
+
+`dashi_agda/DASHI/Law/AustralianContractsReviewedHopCompilerExact.agda`
+
+The runtime must stay below that boundary.
+
+The formal max-cut is:
+
+`pinned primary source -> reviewed authority identity -> reviewed proposition or treatment -> reviewed candidate delta -> recomputed frontier`
+
+The current implementation matches the following source-owned Agda invariants.
+
+- Corroborating reviewed units may collapse to one semantic treatment hop. All review-unit provenance remains attached.
+- Paid identity or treatment work cannot reappear as the same fresh work item.
+- A closed selectable frontier is operational closure only. It is not a proof of consumer adequacy.
+- Runtime coordinate coverage is not a formal `FactorsThrough` witness.
+- The generic campaign kernel accepts reviewed deltas. It has no raw-source-to-reviewed-delta operation.
+- The recursive campaign recomputes after every accepted hop. It does not consume a fixed upfront queue.
+- Research priority is scheduling only. It is not legal truth rank.
+- QID and other external identity work is supplemental. It cannot create legal authority or current-law truth.
+- The fleet planning receipt targets only 58 unformalised formal gaps. The 584 discharged fibres remain discharged. The 44 contradiction gaps remain separate.
+
+The canonical Agda TOE entry points expose this owner through:
+
+`DASHI/EverythingTOESymmetryResolved369.agda`
+
+`DASHI/Unifier.agda`
+
+`DASHI/Unified/Everything.agda`
+
+The Lean mirror is:
+
+`dashi_lean4/AgdaMirror/Law/AustralianContractsReviewedHopCompiler.lean`
+
+The Lean mirror is a parity surface. Agda remains the golden formal owner.
+
+The project governance lenses are process controls only. ITIL, ISO 9000, ISO/IEC 42001, ISO/IEC 27001, ISO/IEC 27701, ISO/IEC 23894, ISO 9241, NIST AI RMF, Six Sigma, C4, and PlantUML do not create legal truth, source authority, or theorem authority.
