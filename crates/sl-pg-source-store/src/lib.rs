@@ -45,6 +45,13 @@ mod mixed_source_review;
 mod correspondence_review_store;
 mod wikidata_ontology_review;
 mod epistemic_deliberation;
+mod epistemic_deliberation_store;
+pub use epistemic_deliberation_store::{
+    DeliberationSourceSeal, PersistedDeliberation, DeliberationStoreError,
+    DELIBERATION_SIDECAR_SQL, validate_deliberation_source_seals,
+    persist_deliberation_diagnostic, load_deliberation_diagnostic,
+    apply_deliberation_diagnostic_review,
+};
 pub use epistemic_deliberation::{
     assess_deliberation, project_s29_diagnostic_review_item,
     DeliberationAssessment, DeliberationError, DeliberationEvent,
