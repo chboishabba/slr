@@ -20,6 +20,17 @@ use crate::{
     GenericSourceContentStoreError, ReviewWorkstationStoreError,
 };
 
+use sensiblaw_core::source_ingest::{IngestRoleClass, SourceFamily, SourceIngestEnvelope};
+
+/// Only canonical wiki text supplied by a separately auditable acquisition
+/// producer may enter source persistence. This is a native entrypoint, not
+/// a network fetch, community-role verifier or a second source store.
+#[derive(Debug, Clone)]
+pub struct DeliberationSourceInput {
+    pub envelope: SourceIngestEnvelope,
+    pub canonical_text: String,
+}
+
 pub const DELIBERATION_SIDECAR_SQL: &str = r#"
 CREATE SCHEMA IF NOT EXISTS semantic;
 CREATE TABLE IF NOT EXISTS semantic.epistemic_deliberation_diagnostic (
@@ -233,6 +244,64 @@ fn item_equivalent(expected: &ReviewItem, actual: &ReviewItem) -> bool {
     && expected.affected_consumer_refs == actual.affected_consumer_refs
     && actual.candidate_only && !actual.creates_semantic_authority
     && !actual.applicability_promoted && !actual.claim_truth_promoted
+}
+
+/// Idempotently ingest a complete, source-typed proposal/policy/event
+/// evidence set through INGEST-1, then materialize the same byte-sealed S29
+/// diagnostic. No independent packet checker output or edit is invented.
+///
+/// A failure after source ingestion leaves only candidate-only content in the
+/// canonical source store. The S29 item and sidecar remain atomic together.
+pub fn persist_deliberation_from_source_inputs(
+    config: &DatabaseConfig,
+    packet: &DeliberationPacket,
+    sources: &[DeliberationSourceInput],
+    anchors: &[DeliberationEventAnchor],
+    consumer_scope_ref: &str,
+) -> Result<PersistedDeliberation,DeliberationStoreError> {
+    assess_deliberation(packet)?;
+    if !bound_ref(consumer_scope_ref)
+        || sources.len()!=source_refs(packet).len()
+    {
+        return Err(DeliberationStoreError::SourceBindingMismatch);
+    }
+    let required=source_refs(packet);
+    let mut observed=BTreeSet::new();
+    for input in sources {
+        let envelope=&input.envelope;
+        if envelope.family != SourceFamily::Wiki
+            || envelope.role_class != IngestRoleClass::ContentSource
+            || !required.contains(&envelope.source_revision_ref)
+            || !observed.insert(envelope.source_revision_ref.clone())
+            || input.canonical_text.is_empty()
+        {
+            return Err(DeliberationStoreError::SourceBindingMismatch);
+        }
+    }
+    if observed != required {
+        return Err(DeliberationStoreError::SourceBindingMismatch);
+    }
+    // Verify all local SHA-256 payload claims before the first mutation.
+    for input in sources {
+        if digest(input.canonical_text.as_bytes()) != input.envelope.content_digest_ref {
+            return Err(DeliberationStoreError::SourceBindingMismatch);
+        }
+        input.envelope.validate()
+            .map_err(GenericSourceContentStoreError::InvalidEnvelope)?;
+    }
+    // The original INGEST-1 canonical writer owns text and revision identity.
+    let mut seals=Vec::with_capacity(sources.len());
+    for input in sources {
+        let stored=crate::persist_generic_text_source(
+            config,&input.envelope,&input.canonical_text
+        )?;
+        seals.push(DeliberationSourceSeal {
+            source_revision_ref:stored.source_revision_ref,
+            content_digest_ref:stored.content_digest_ref,
+            acquisition_receipt_ref:stored.acquisition_receipt_ref,
+        });
+    }
+    persist_deliberation_diagnostic(config,packet,&seals,anchors,consumer_scope_ref)
 }
 
 /// Record a deliberation diagnostic only after reopening every original
