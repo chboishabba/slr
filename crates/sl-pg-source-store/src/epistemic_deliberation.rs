@@ -108,10 +108,10 @@ fn nonempty(s: &str) -> bool {
     !s.trim().is_empty() && s.len() <= MAX_REF_CHARS && !s.chars().any(char::is_control)
 }
 fn optional_valid(value: &Option<String>) -> bool {
-    value.as_ref().is_none_or(|v| nonempty(v))
+    value.as_ref().map_or(true, |v| nonempty(v))
 }
 fn supplied(value: &Option<String>) -> bool {
-    value.as_ref().is_some_and(|v| nonempty(v))
+    value.as_ref().map_or(false, |v| nonempty(v))
 }
 
 /// Evaluate evidence completeness only. Source ID, role receipt and consensus
@@ -138,7 +138,7 @@ pub fn assess_deliberation(packet: &DeliberationPacket) -> Result<DeliberationAs
         if !nonempty(&event.event_ref) || !nonempty(&event.source_revision_ref)
             || !nonempty(&event.actor_ref) || !seen.insert(event.event_ref.as_str())
             || event.at_unix_seconds < 0
-            || previous.is_some_and(|p| event.at_unix_seconds < p)
+            || previous.map_or(false, |p| event.at_unix_seconds < p)
             || ended
             || (i == 0) != (event.kind == DeliberationKind::Proposal)
         {
