@@ -50,7 +50,7 @@ pub use epistemic_deliberation_store::{
     DeliberationSourceSeal, DeliberationEventAnchor, PersistedDeliberation, DeliberationStoreError,
     DELIBERATION_SIDECAR_SQL, validate_deliberation_source_seals,
     validate_deliberation_event_anchors,
-    persist_deliberation_diagnostic, load_deliberation_diagnostic,
+    persist_deliberation_diagnostic, load_deliberation_diagnostic_scoped,
     apply_deliberation_diagnostic_review,
 };
 pub use epistemic_deliberation::{
