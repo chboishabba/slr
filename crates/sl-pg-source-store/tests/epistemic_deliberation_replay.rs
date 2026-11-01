@@ -138,6 +138,8 @@ fn persisted_event_spans_and_scoped_s29_review_reopen_without_promotion() {
         "slr_source_seals":seals,
         "slr_event_anchors":anchors,
         "slr_source_inputs":replay_sources,
+        "historical_policy_drift_status":"unchanged_across_proposal_window",
+        "normative_policy_hold":false,
         "holds":serde_json::to_value(&result.assessment.holds).unwrap(),
         "record_completeness":if result.assessment.record_reviewable {
             "reviewable"
@@ -160,6 +162,19 @@ fn persisted_event_spans_and_scoped_s29_review_reopen_without_promotion() {
     mismatched["slr_source_inputs"][0]["canonical_text"]="MISMATCH".into();
     assert!(persist_deliberation_source_replay_json(
         &config,&mismatched.to_string(),&scope
+    ).is_err());
+    let mut unexamined=replay.clone();
+    unexamined["historical_policy_drift_status"]="closure_policy_not_examined".into();
+    unexamined["normative_policy_hold"]=true.into();
+    assert!(persist_deliberation_source_replay_json(
+        &config,&unexamined.to_string(),&scope,
+    ).is_err());
+    let mut changed=replay.clone();
+    changed["historical_policy_drift_status"]=
+        "changed_during_proposal_requires_independent_rule_adjudication".into();
+    changed["normative_policy_hold"]=true.into();
+    assert!(persist_deliberation_source_replay_json(
+        &config,&changed.to_string(),&scope,
     ).is_err());
     let mut forged=replay;
     forged["authority"]["wikidata_edit_authorised"]=true.into();
