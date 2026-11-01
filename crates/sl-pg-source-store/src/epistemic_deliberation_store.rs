@@ -281,7 +281,7 @@ pub fn persist_deliberation_diagnostic(
           &json,&seal_json,&digest(seal_json.as_bytes()),
           &anchor_json,&digest(anchor_json.as_bytes())],
     )?;
-    let reopened = load_deliberation_diagnostic(config,&diagnostic_ref)?
+    let reopened = load_deliberation_diagnostic_scoped(config,&diagnostic_ref,consumer_scope_ref)?
         .ok_or(DeliberationStoreError::IdentityConflict)?;
     if reopened.packet != *packet
         || reopened.source_seals != ordered
@@ -295,7 +295,7 @@ pub fn persist_deliberation_diagnostic(
 
 /// Replay checks content and source seals again, not only a PG sidecar row.
 /// All S29 status changes remain in its existing review-workstation tables.
-pub fn load_deliberation_diagnostic(
+fn load_deliberation_diagnostic(
     config: &DatabaseConfig, diagnostic_ref: &str,
 ) -> Result<Option<PersistedDeliberation>, DeliberationStoreError> {
     let mut client = Client::connect(config.database_url(),NoTls)?;
@@ -350,19 +350,35 @@ pub fn load_deliberation_diagnostic(
         grants_wikidata_edit_authority:false,ao_dispatch_allowed:false,
     }))
 }
+/// Public S30-facing loader must be called with a separately chosen scope.
+/// The diagnostic identity itself does not confer read permission. Caller must
+/// additionally enforce its recipient/role/purpose/knowledge-cut matter policy.
+pub fn load_deliberation_diagnostic_scoped(
+    config: &DatabaseConfig, diagnostic_ref: &str, consumer_scope_ref: &str,
+) -> Result<Option<PersistedDeliberation>,DeliberationStoreError> {
+    if !bound_ref(consumer_scope_ref) {
+        return Err(DeliberationStoreError::IdentityConflict);
+    }
+    let found=load_deliberation_diagnostic(config,diagnostic_ref)?;
+    if found.as_ref().map_or(false,|p|p.consumer_scope_ref != consumer_scope_ref) {
+        return Err(DeliberationStoreError::IdentityConflict);
+    }
+    Ok(found)
+}
 /// Apply only an S29 action already offered by the projection. A deliberate
 /// omission of Accept prevents a local diagnostic from being mistaken for
 /// community approval. Locking and review receipts are owned by S29.
 pub fn apply_deliberation_diagnostic_review(
-    config: &DatabaseConfig, diagnostic_ref: &str, command: &ReviewCommand,
+    config: &DatabaseConfig, diagnostic_ref: &str, consumer_scope_ref: &str,
+    command: &ReviewCommand,
 ) -> Result<(ReviewReceipt,PersistedDeliberation),DeliberationStoreError> {
-    let before=load_deliberation_diagnostic(config,diagnostic_ref)?
+    let before=load_deliberation_diagnostic_scoped(config,diagnostic_ref,consumer_scope_ref)?
         .ok_or(DeliberationStoreError::UnknownDiagnostic)?;
     if command.review_item_ref!=before.review_item.review_item_ref {
         return Err(DeliberationStoreError::IdentityConflict);
     }
     let (receipt,item)=crate::apply_persisted_review_command(config,command)?;
-    let after=load_deliberation_diagnostic(config,diagnostic_ref)?
+    let after=load_deliberation_diagnostic_scoped(config,diagnostic_ref,consumer_scope_ref)?
         .ok_or(DeliberationStoreError::IdentityConflict)?;
     if !receipt.candidate_only || receipt.creates_semantic_authority
         || receipt.applicability_promoted || receipt.claim_truth_promoted
