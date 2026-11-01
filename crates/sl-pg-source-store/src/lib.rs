@@ -47,8 +47,9 @@ mod wikidata_ontology_review;
 mod epistemic_deliberation;
 mod epistemic_deliberation_store;
 pub use epistemic_deliberation_store::{
-    DeliberationSourceSeal, PersistedDeliberation, DeliberationStoreError,
+    DeliberationSourceSeal, DeliberationEventAnchor, PersistedDeliberation, DeliberationStoreError,
     DELIBERATION_SIDECAR_SQL, validate_deliberation_source_seals,
+    validate_deliberation_event_anchors,
     persist_deliberation_diagnostic, load_deliberation_diagnostic,
     apply_deliberation_diagnostic_review,
 };
