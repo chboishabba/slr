@@ -34,7 +34,11 @@ fn persisted_event_spans_and_scoped_s29_review_reopen_without_promotion() {
     for label in source_kinds {
         let source_text=format!("Source revision for {label} from {unique}. Case under review.");
         let content_digest=hash(source_text.as_bytes());
-        let source_ref=format!("source:{unique}:{label}");
+        let source_ref=if label=="historical-policy" {
+            "wikidata:page:1002".to_owned()
+        } else {
+            format!("source:{unique}:{label}")
+        };
         let acquisition_ref=format!("acquisition:{unique}:{label}");
         let revision=canonical_generic_source_revision_ref(
             &source_ref,"wikidata:mediawiki-api",&acquisition_ref,
@@ -139,6 +143,18 @@ fn persisted_event_spans_and_scoped_s29_review_reopen_without_promotion() {
         "slr_event_anchors":anchors,
         "slr_source_inputs":replay_sources,
         "historical_policy_drift_status":"unchanged_across_proposal_window",
+        "historical_policy_window_source_witness":{
+            "opening_policy_page_oldid":1002,
+            "closing_policy_page_oldid":1002,
+            "opening_policy_revision_time":"2021-12-30T00:00:00Z",
+            "closing_policy_revision_time":"2021-12-30T00:00:00Z",
+            "policy_content_digest_ref":source_inputs[1].envelope.content_digest_ref,
+            "closing_policy_content_digest_ref":source_inputs[1].envelope.content_digest_ref,
+            "closing_acquisition_url":"https://www.wikidata.org/w/api.php?revid=1002",
+            "comparison_status":"unchanged_across_proposal_window",
+            "candidate_only":true,
+            "policy_normatively_verified":false,
+        },
         "normative_policy_hold":false,
         "holds":serde_json::to_value(&result.assessment.holds).unwrap(),
         "record_completeness":if result.assessment.record_reviewable {
@@ -158,6 +174,11 @@ fn persisted_event_spans_and_scoped_s29_review_reopen_without_promotion() {
         &config,&replay.to_string(),&scope
     ).expect("exact full ITIR JSON must deserialize into same SLR review");
     assert_eq!(replayed.diagnostic_ref,result.diagnostic_ref);
+    let mut bad_window=replay.clone();
+    bad_window["historical_policy_window_source_witness"]["opening_policy_page_oldid"]=1003.into();
+    assert!(persist_deliberation_source_replay_json(
+        &config,&bad_window.to_string(),&scope
+    ).is_err());
     let mut mismatched=replay.clone();
     mismatched["slr_source_inputs"][0]["canonical_text"]="MISMATCH".into();
     assert!(persist_deliberation_source_replay_json(
