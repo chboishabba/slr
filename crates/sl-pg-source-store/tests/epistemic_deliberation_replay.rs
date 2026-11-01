@@ -37,18 +37,18 @@ fn persisted_event_spans_and_scoped_s29_review_reopen_without_promotion() {
         let source_ref=format!("source:{unique}:{label}");
         let acquisition_ref=format!("acquisition:{unique}:{label}");
         let revision=canonical_generic_source_revision_ref(
-            &source_ref,"provider:fictional-wiki",&acquisition_ref,
+            &source_ref,"wikidata:mediawiki-api",&acquisition_ref,
             &content_digest,"text/plain",
         );
         let envelope=SourceIngestEnvelope {
             source_ref,
             source_revision_ref:revision.clone(),
-            provider_ref:"provider:fictional-wiki".into(),
+            provider_ref:"wikidata:mediawiki-api".into(),
             family:SourceFamily::Wiki,
             role_class:IngestRoleClass::ContentSource,
             content_digest_ref:content_digest.clone(),
             acquisition_receipt_ref:acquisition_ref.clone(),
-            media_type_ref:"text/plain".into(),
+            media_type_ref:"text/x-wiki".into(),
             candidate_only:true,creates_semantic_authority:false,
             applicability_promoted:false,claim_truth_promoted:false,
         };
