@@ -246,6 +246,141 @@ fn item_equivalent(expected: &ReviewItem, actual: &ReviewItem) -> bool {
     && !actual.applicability_promoted && !actual.claim_truth_promoted
 }
 
+/// Strict de-serialisation boundary for the ITIR read-only replay handoff.
+/// This schema intentionally carries canonical bytes and requires separate
+/// caller-supplied S30 recipient/role/purpose admission before display.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SourceEnvelopeWire {
+    source_ref: String,
+    source_revision_ref: String,
+    provider_ref: String,
+    family: String,
+    role_class: String,
+    content_digest_ref: String,
+    acquisition_receipt_ref: String,
+    media_type_ref: String,
+    candidate_only: bool,
+    creates_semantic_authority: bool,
+    applicability_promoted: bool,
+    claim_truth_promoted: bool,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SourceInputWire {
+    envelope: SourceEnvelopeWire,
+    canonical_text: String,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SourceReplayAuthority {
+    candidate_only: bool,
+    slr_pg_reopened: bool,
+    community_consensus_verified: bool,
+    wikidata_edit_authorised: bool,
+    ao_dispatch_allowed: bool,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SourceReplayWire {
+    version: String,
+    origin: String,
+    slr_input: DeliberationPacket,
+    slr_source_seals: Vec<DeliberationSourceSeal>,
+    slr_event_anchors: Vec<DeliberationEventAnchor>,
+    slr_source_inputs: Vec<SourceInputWire>,
+    holds: Vec<String>,
+    record_completeness: String,
+    scope: String,
+    independent_source_verification: String,
+    community_creator_role_verification: String,
+    community_consensus_verification: String,
+    authority: SourceReplayAuthority,
+}
+/// Read and validate ITIR's *complete* captured-source handoff, then use only
+/// original INGEST-1 + S29 persistence owners. The packet's recorded 'approve'
+/// remains a claimed historical decision, not an authenticated community rule.
+pub fn persist_deliberation_source_replay_json(
+    config: &DatabaseConfig,
+    validated_handoff_json: &str,
+    explicit_consumer_scope_ref: &str,
+) -> Result<PersistedDeliberation,DeliberationStoreError> {
+    let wire: SourceReplayWire = serde_json::from_str(validated_handoff_json)?;
+    if wire.version != "itir.governance.wikidata_source_replay_handoff.v1"
+        || wire.origin != "sl.wikidata_deliberation_slr_handoff_draft.v0_1"
+        || wire.scope != "not_assigned_until_s29"
+        || wire.independent_source_verification != "not_completed"
+        || wire.community_creator_role_verification != "not_completed"
+        || wire.community_consensus_verification != "not_completed"
+        || !wire.authority.candidate_only
+        || wire.authority.slr_pg_reopened
+        || wire.authority.community_consensus_verified
+        || wire.authority.wikidata_edit_authorised
+        || wire.authority.ao_dispatch_allowed
+        || !bound_ref(explicit_consumer_scope_ref)
+    {
+        return Err(DeliberationStoreError::SourceBindingMismatch);
+    }
+    let assessment = assess_deliberation(&wire.slr_input)?;
+    let hold_codes: Vec<String> = serde_json::from_value(serde_json::to_value(
+        &assessment.holds
+    )?)?;
+    if wire.holds != hold_codes
+        || wire.record_completeness != if assessment.record_reviewable {
+            "reviewable"
+        } else {
+            "needs_evidence"
+        }
+    {
+        return Err(DeliberationStoreError::SourceBindingMismatch);
+    }
+    let expected = validate_deliberation_source_seals(
+        &wire.slr_input,&wire.slr_source_seals
+    )?;
+    validate_deliberation_event_anchors(&wire.slr_input,&wire.slr_event_anchors)?;
+    let mut source_inputs = Vec::new();
+    for source in wire.slr_source_inputs {
+        let e=source.envelope;
+        if e.family != "wiki" || e.role_class != "content_source"
+            || e.provider_ref != "wikidata:mediawiki-api"
+            || e.media_type_ref != "text/x-wiki"
+        {
+            return Err(DeliberationStoreError::SourceBindingMismatch);
+        }
+        source_inputs.push(DeliberationSourceInput {
+            envelope: SourceIngestEnvelope {
+                source_ref:e.source_ref,
+                source_revision_ref:e.source_revision_ref,
+                provider_ref:e.provider_ref,
+                family:SourceFamily::Wiki,
+                role_class:IngestRoleClass::ContentSource,
+                content_digest_ref:e.content_digest_ref,
+                acquisition_receipt_ref:e.acquisition_receipt_ref,
+                media_type_ref:e.media_type_ref,
+                candidate_only:e.candidate_only,
+                creates_semantic_authority:e.creates_semantic_authority,
+                applicability_promoted:e.applicability_promoted,
+                claim_truth_promoted:e.claim_truth_promoted,
+            },
+            canonical_text:source.canonical_text,
+        });
+    }
+    // Prevent receipts from being silently reinterpreted by the native store.
+    let mut supplied = source_inputs.iter().map(|s| DeliberationSourceSeal {
+        source_revision_ref:s.envelope.source_revision_ref.clone(),
+        content_digest_ref:s.envelope.content_digest_ref.clone(),
+        acquisition_receipt_ref:s.envelope.acquisition_receipt_ref.clone(),
+    }).collect::<Vec<_>>();
+    supplied.sort_by(|a,b|a.source_revision_ref.cmp(&b.source_revision_ref));
+    if supplied != expected {
+        return Err(DeliberationStoreError::SourceBindingMismatch);
+    }
+    persist_deliberation_from_source_inputs(
+        config,&wire.slr_input,&source_inputs,&wire.slr_event_anchors,
+        explicit_consumer_scope_ref
+    )
+}
+
 /// Idempotently ingest a complete, source-typed proposal/policy/event
 /// evidence set through INGEST-1, then materialize the same byte-sealed S29
 /// diagnostic. No independent packet checker output or edit is invented.
