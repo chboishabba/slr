@@ -145,7 +145,8 @@ pub fn assess_deliberation(packet: &DeliberationPacket) -> Result<DeliberationAs
             return Err(DeliberationError::InvalidEventHistory);
         }
         if let Some(superseded) = &event.supersedes_ref {
-            if event.kind != DeliberationKind::Amendment || !seen.contains(superseded.as_str()) {
+            if event.kind != DeliberationKind::Amendment || superseded == &event.event_ref
+                || !seen.contains(superseded.as_str()) {
                 return Err(DeliberationError::InvalidEventHistory);
             }
         }
