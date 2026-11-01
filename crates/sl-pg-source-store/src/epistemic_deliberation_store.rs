@@ -134,8 +134,6 @@ pub fn validate_deliberation_source_seals(
     Ok(lookup.into_values().collect())
 }
 
-/// Reopen canonical source *bytes* through SLR's one generic source owner.
-/// A caller-supplied seal cannot authenticate itself.
 /// Bound every observed event to an exact byte range in the original source.
 /// The span authenticates a quotation's provenance, not its interpretation.
 pub fn validate_deliberation_event_anchors(
@@ -187,6 +185,8 @@ fn reopen_event_anchors(
     }
     Ok(())
 }
+/// Reopen canonical source bytes through the single generic source owner.
+/// Caller-supplied seals never authenticate themselves.
 fn reopen_sources(
     config: &DatabaseConfig, seals: &[DeliberationSourceSeal],
 ) -> Result<(), DeliberationStoreError> {
@@ -228,7 +228,8 @@ fn item_equivalent(expected: &ReviewItem, actual: &ReviewItem) -> bool {
     && expected.reason == actual.reason
     && expected.provenance_refs == actual.provenance_refs
     && expected.source_refs == actual.source_refs
-    && expected.available_actions == actual.available_actions
+    && expected.available_actions.iter().copied().collect::<BTreeSet<_>>()
+       == actual.available_actions.iter().copied().collect::<BTreeSet<_>>()
     && expected.affected_consumer_refs == actual.affected_consumer_refs
     && actual.candidate_only && !actual.creates_semantic_authority
     && !actual.applicability_promoted && !actual.claim_truth_promoted
