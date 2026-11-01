@@ -44,6 +44,13 @@ mod transcript_chat_correspondence;
 mod mixed_source_review;
 mod correspondence_review_store;
 mod wikidata_ontology_review;
+mod epistemic_deliberation;
+pub use epistemic_deliberation::{
+    assess_deliberation, project_s29_diagnostic_review_item,
+    DeliberationAssessment, DeliberationError, DeliberationEvent,
+    DeliberationHold, DeliberationJudgement, DeliberationKind,
+    DeliberationPacket, DELIBERATION_SCHEMA,
+};
 mod jmail_adapter;
 mod plain_text_document_adapter;
 mod long_document_ingest_store;
