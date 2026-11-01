@@ -283,6 +283,16 @@ pub fn persist_deliberation_from_source_inputs(
     }
     // Verify all local SHA-256 payload claims before the first mutation.
     for input in sources {
+        let canonical = crate::canonical_generic_source_revision_ref(
+            &input.envelope.source_ref,
+            &input.envelope.provider_ref,
+            &input.envelope.acquisition_receipt_ref,
+            &input.envelope.content_digest_ref,
+            &input.envelope.media_type_ref,
+        );
+        if input.envelope.source_revision_ref != canonical {
+            return Err(DeliberationStoreError::SourceBindingMismatch);
+        }
         if digest(input.canonical_text.as_bytes()) != input.envelope.content_digest_ref {
             return Err(DeliberationStoreError::SourceBindingMismatch);
         }
