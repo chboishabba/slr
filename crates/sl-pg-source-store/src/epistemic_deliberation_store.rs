@@ -262,14 +262,11 @@ pub fn persist_deliberation_diagnostic(
     crate::install_review_workstation_schema(config)?;
     let mut client = Client::connect(config.database_url(),NoTls)?;
     client.batch_execute(DELIBERATION_SIDECAR_SQL)?;
-    if let Some(existing) = crate::load_review_item(config,&item.review_item_ref)? {
-        if !item_equivalent(&item,&existing) {
-            return Err(DeliberationStoreError::IdentityConflict);
-        }
-    } else {
-        let _ = crate::persist_review_item(config,&item)?;
-    }
-    client.execute(
+    // One atomic S29 + sidecar write: a failed sidecar never leaves a review
+    // row orphan. The generic S29 store remains the sole review writer.
+    let mut tx=client.transaction()?;
+    let _=crate::review_workstation_store::persist_review_projection_on_tx(&mut tx,&item)?;
+    tx.execute(
         "INSERT INTO semantic.epistemic_deliberation_diagnostic
          (diagnostic_ref,review_item_ref,packet_ref,source_revision_ref,consumer_scope_ref,
           packet_digest_ref,packet_json,source_seals_json,source_seals_digest_ref,
@@ -282,6 +279,7 @@ pub fn persist_deliberation_diagnostic(
           &json,&seal_json,&digest(seal_json.as_bytes()),
           &anchor_json,&digest(anchor_json.as_bytes())],
     )?;
+    tx.commit()?;
     let reopened = load_deliberation_diagnostic_scoped(config,&diagnostic_ref,consumer_scope_ref)?
         .ok_or(DeliberationStoreError::IdentityConflict)?;
     if reopened.packet != *packet
