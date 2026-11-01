@@ -289,6 +289,8 @@ struct SourceReplayWire {
     slr_source_seals: Vec<DeliberationSourceSeal>,
     slr_event_anchors: Vec<DeliberationEventAnchor>,
     slr_source_inputs: Vec<SourceInputWire>,
+    historical_policy_drift_status: String,
+    normative_policy_hold: bool,
     holds: Vec<String>,
     record_completeness: String,
     scope: String,
@@ -306,6 +308,13 @@ pub fn persist_deliberation_source_replay_json(
     explicit_consumer_scope_ref: &str,
 ) -> Result<PersistedDeliberation,DeliberationStoreError> {
     let wire: SourceReplayWire = serde_json::from_str(validated_handoff_json)?;
+    if wire.historical_policy_drift_status != "unchanged_across_proposal_window"
+        || wire.normative_policy_hold
+    {
+        // A proposal-time policy source cannot pay a changed or unexamined
+        // closure-time rule. Review the actual historical policy first.
+        return Err(DeliberationStoreError::SourceBindingMismatch);
+    }
     if wire.version != "itir.governance.wikidata_source_replay_handoff.v1"
         || wire.origin != "sl.wikidata_deliberation_slr_handoff_draft.v0_1"
         || wire.scope != "not_assigned_until_s29"
