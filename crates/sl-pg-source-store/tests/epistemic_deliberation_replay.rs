@@ -5,6 +5,7 @@ use sensiblaw_pg_source_store::{
     apply_deliberation_diagnostic_review, canonical_generic_source_revision_ref,
     load_database_config, load_deliberation_diagnostic_scoped,
     persist_deliberation_diagnostic, persist_deliberation_from_source_inputs,
+    persist_deliberation_source_replay_json,
     DeliberationSourceInput,
     DeliberationEvent, DeliberationEventAnchor, DeliberationKind, DeliberationJudgement,
     DeliberationPacket, DeliberationSourceSeal, ReviewAction, ReviewCommand, ReviewStatus,
@@ -112,6 +113,59 @@ fn persisted_event_spans_and_scoped_s29_review_reopen_without_promotion() {
     ).expect("idempotent source+sidecar replay");
     assert_eq!(again.diagnostic_ref,result.diagnostic_ref);
     assert_eq!(again.review_item.review_item_ref,result.review_item.review_item_ref);
+
+    // Exact ITIR handoff format, with the same canonical source inputs that
+    // the standalone INGEST-1 path just persisted. No faux 2022 policy is used.
+    let replay_sources=source_inputs.iter().map(|input| {
+        let e=&input.envelope;
+        serde_json::json!({
+            "envelope":{
+                "source_ref":e.source_ref,"source_revision_ref":e.source_revision_ref,
+                "provider_ref":e.provider_ref,"family":"wiki",
+                "role_class":"content_source","content_digest_ref":e.content_digest_ref,
+                "acquisition_receipt_ref":e.acquisition_receipt_ref,
+                "media_type_ref":e.media_type_ref,
+                "candidate_only":true,"creates_semantic_authority":false,
+                "applicability_promoted":false,"claim_truth_promoted":false,
+            },
+            "canonical_text":input.canonical_text,
+        })
+    }).collect::<Vec<_>>();
+    let replay=serde_json::json!({
+        "version":"itir.governance.wikidata_source_replay_handoff.v1",
+        "origin":"sl.wikidata_deliberation_slr_handoff_draft.v0_1",
+        "slr_input":packet,
+        "slr_source_seals":seals,
+        "slr_event_anchors":anchors,
+        "slr_source_inputs":replay_sources,
+        "holds":serde_json::to_value(&result.assessment.holds).unwrap(),
+        "record_completeness":if result.assessment.record_reviewable {
+            "reviewable"
+        } else {"needs_evidence"},
+        "scope":"not_assigned_until_s29",
+        "independent_source_verification":"not_completed",
+        "community_creator_role_verification":"not_completed",
+        "community_consensus_verification":"not_completed",
+        "authority":{
+            "candidate_only":true,"slr_pg_reopened":false,
+            "community_consensus_verified":false,
+            "wikidata_edit_authorised":false,"ao_dispatch_allowed":false,
+        },
+    });
+    let replayed=persist_deliberation_source_replay_json(
+        &config,&replay.to_string(),&scope
+    ).expect("exact full ITIR JSON must deserialize into same SLR review");
+    assert_eq!(replayed.diagnostic_ref,result.diagnostic_ref);
+    let mut mismatched=replay.clone();
+    mismatched["slr_source_inputs"][0]["canonical_text"]="MISMATCH".into();
+    assert!(persist_deliberation_source_replay_json(
+        &config,&mismatched.to_string(),&scope
+    ).is_err());
+    let mut forged=replay;
+    forged["authority"]["wikidata_edit_authorised"]=true.into();
+    assert!(persist_deliberation_source_replay_json(
+        &config,&forged.to_string(),&scope
+    ).is_err());
 
     assert!(load_deliberation_diagnostic_scoped(
         &config,&result.diagnostic_ref,"matter:unrelated"
