@@ -578,14 +578,25 @@ fn load_deliberation_diagnostic(
 pub fn load_deliberation_diagnostic_scoped(
     config: &DatabaseConfig, diagnostic_ref: &str, consumer_scope_ref: &str,
 ) -> Result<Option<PersistedDeliberation>,DeliberationStoreError> {
-    if !bound_ref(consumer_scope_ref) {
+    if !bound_ref(consumer_scope_ref) || !bound_ref(diagnostic_ref) {
         return Err(DeliberationStoreError::IdentityConflict);
     }
-    let found=load_deliberation_diagnostic(config,diagnostic_ref)?;
-    if found.as_ref().map_or(false,|p|p.consumer_scope_ref != consumer_scope_ref) {
+    // Check only the scope coordinate BEFORE loading any candidate source
+    // text, event details or S29 packet. This is not S30 role/purpose
+    // authorisation; callers still need the independent S30 audience gate.
+    let mut client = Client::connect(config.database_url(),NoTls)?;
+    client.batch_execute(DELIBERATION_SIDECAR_SQL)?;
+    let scoped = client.query_opt(
+        "SELECT consumer_scope_ref FROM semantic.epistemic_deliberation_diagnostic
+         WHERE diagnostic_ref=$1",
+        &[&diagnostic_ref],
+    )?;
+    let Some(row)=scoped else {return Ok(None)};
+    if row.get::<_,String>(0)!=consumer_scope_ref {
         return Err(DeliberationStoreError::IdentityConflict);
     }
-    Ok(found)
+    // Source reopen is intentionally after the scope equality check.
+    load_deliberation_diagnostic(config,diagnostic_ref)
 }
 /// Apply only an S29 action already offered by the projection. A deliberate
 /// omission of Accept prevents a local diagnostic from being mistaken for
