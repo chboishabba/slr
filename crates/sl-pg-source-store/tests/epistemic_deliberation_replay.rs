@@ -4,7 +4,8 @@
 use sensiblaw_pg_source_store::{
     apply_deliberation_diagnostic_review, canonical_generic_source_revision_ref,
     load_database_config, load_deliberation_diagnostic_scoped,
-    persist_deliberation_diagnostic, persist_generic_text_source,
+    persist_deliberation_diagnostic, persist_deliberation_from_source_inputs,
+    DeliberationSourceInput,
     DeliberationEvent, DeliberationEventAnchor, DeliberationKind, DeliberationJudgement,
     DeliberationPacket, DeliberationSourceSeal, ReviewAction, ReviewCommand, ReviewStatus,
 };
@@ -28,6 +29,7 @@ fn persisted_event_spans_and_scoped_s29_review_reopen_without_promotion() {
     let mut source_refs=Vec::new();
     let mut seals=Vec::new();
     let mut anchor_refs=Vec::new();
+    let mut source_inputs=Vec::new();
     for label in source_kinds {
         let source_text=format!("Source revision for {label} from {unique}. Case under review.");
         let content_digest=hash(source_text.as_bytes());
@@ -49,9 +51,10 @@ fn persisted_event_spans_and_scoped_s29_review_reopen_without_promotion() {
             candidate_only:true,creates_semantic_authority:false,
             applicability_promoted:false,claim_truth_promoted:false,
         };
-        let persisted=persist_generic_text_source(&config,&envelope,&source_text)
-            .expect("source content must be physically persisted");
-        assert_eq!(persisted.content_digest_ref,content_digest);
+        assert_eq!(envelope.content_digest_ref,content_digest);
+        source_inputs.push(DeliberationSourceInput {
+            envelope,canonical_text:source_text.clone(),
+        });
         source_refs.push(revision.clone());
         seals.push(DeliberationSourceSeal {
             source_revision_ref:revision.clone(),content_digest_ref:content_digest,
@@ -64,7 +67,7 @@ fn persisted_event_spans_and_scoped_s29_review_reopen_without_promotion() {
             excerpt_digest_ref:hash(source_text.as_bytes()),
         });
     }
-    let mut decision=DeliberationEvent {
+    let decision=DeliberationEvent {
         event_ref:"event:decision".into(),source_revision_ref:source_refs[4].clone(),
         actor_ref:"editor:other-closer".into(),at_unix_seconds:400000,
         kind:DeliberationKind::Decision,supersedes_ref:None,
@@ -97,14 +100,16 @@ fn persisted_event_spans_and_scoped_s29_review_reopen_without_promotion() {
     // on SLR persistence and refer only to source-native observed events.
     let anchors=anchor_refs.into_iter().skip(2).collect::<Vec<_>>();
     let scope=format!("matter:{unique}");
-    let result=persist_deliberation_diagnostic(&config,&packet,&seals,&anchors,&scope)
-        .expect("source-sealed diagnostic must persist and reopen");
+    let result=persist_deliberation_from_source_inputs(
+        &config,&packet,&source_inputs,&anchors,&scope,
+    ).expect("source, byte seals and S29 sidecar must persist and reopen");
     assert!(!result.assessment.record_reviewable);
     assert!(!result.grants_wikidata_edit_authority);
     assert!(!result.ao_dispatch_allowed);
     assert_eq!(result.s29_status,ReviewStatus::Pending);
-    let again=persist_deliberation_diagnostic(&config,&packet,&seals,&anchors,&scope)
-        .expect("idempotent replay");
+    let again=persist_deliberation_from_source_inputs(
+        &config,&packet,&source_inputs,&anchors,&scope,
+    ).expect("idempotent source+sidecar replay");
     assert_eq!(again.diagnostic_ref,result.diagnostic_ref);
     assert_eq!(again.review_item.review_item_ref,result.review_item.review_item_ref);
 
