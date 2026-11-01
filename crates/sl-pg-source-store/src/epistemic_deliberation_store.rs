@@ -282,6 +282,20 @@ struct SourceReplayAuthority {
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
+struct PolicyWindowSourceWire {
+    opening_policy_page_oldid: u64,
+    closing_policy_page_oldid: u64,
+    opening_policy_revision_time: String,
+    closing_policy_revision_time: String,
+    policy_content_digest_ref: String,
+    closing_policy_content_digest_ref: String,
+    closing_acquisition_url: String,
+    comparison_status: String,
+    candidate_only: bool,
+    policy_normatively_verified: bool,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct SourceReplayWire {
     version: String,
     origin: String,
@@ -290,6 +304,7 @@ struct SourceReplayWire {
     slr_event_anchors: Vec<DeliberationEventAnchor>,
     slr_source_inputs: Vec<SourceInputWire>,
     historical_policy_drift_status: String,
+    historical_policy_window_source_witness: Option<PolicyWindowSourceWire>,
     normative_policy_hold: bool,
     holds: Vec<String>,
     record_completeness: String,
@@ -347,6 +362,22 @@ pub fn persist_deliberation_source_replay_json(
         &wire.slr_input,&wire.slr_source_seals
     )?;
     validate_deliberation_event_anchors(&wire.slr_input,&wire.slr_event_anchors)?;
+    let window = wire.historical_policy_window_source_witness.as_ref()
+        .ok_or(DeliberationStoreError::SourceBindingMismatch)?;
+    if !window.candidate_only || window.policy_normatively_verified
+        || window.comparison_status != wire.historical_policy_drift_status
+        || window.opening_policy_page_oldid == 0
+        || window.closing_policy_page_oldid != window.opening_policy_page_oldid
+        || window.policy_content_digest_ref != window.closing_policy_content_digest_ref
+        || !window.closing_acquisition_url.starts_with("https://www.wikidata.org/w/api.php?")
+        || window.opening_policy_revision_time.len() != 20
+        || window.closing_policy_revision_time.len() != 20
+        || !window.opening_policy_revision_time.ends_with('Z')
+        || !window.closing_policy_revision_time.ends_with('Z')
+        || window.opening_policy_revision_time > window.closing_policy_revision_time
+    {
+        return Err(DeliberationStoreError::SourceBindingMismatch);
+    }
     let mut source_inputs = Vec::new();
     for source in wire.slr_source_inputs {
         let e=source.envelope;
@@ -373,6 +404,15 @@ pub fn persist_deliberation_source_replay_json(
             },
             canonical_text:source.canonical_text,
         });
+    }
+    let opening = source_inputs.iter().find(|source| {
+        source.envelope.source_revision_ref == wire.slr_input.policy_revision_ref
+    }).ok_or(DeliberationStoreError::SourceBindingMismatch)?;
+    if opening.envelope.source_ref !=
+        format!("wikidata:page:{}",window.opening_policy_page_oldid)
+        || opening.envelope.content_digest_ref != window.policy_content_digest_ref
+    {
+        return Err(DeliberationStoreError::SourceBindingMismatch);
     }
     // Prevent receipts from being silently reinterpreted by the native store.
     let mut supplied = source_inputs.iter().map(|s| DeliberationSourceSeal {
