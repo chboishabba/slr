@@ -51,6 +51,7 @@ pub use epistemic_deliberation_store::{
     DELIBERATION_SIDECAR_SQL, validate_deliberation_source_seals,
     validate_deliberation_event_anchors,
     persist_deliberation_diagnostic, persist_deliberation_from_source_inputs,
+    persist_deliberation_source_replay_json,
     load_deliberation_diagnostic_scoped,
     apply_deliberation_diagnostic_review,
 };
