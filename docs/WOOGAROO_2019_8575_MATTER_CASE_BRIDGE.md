@@ -256,3 +256,14 @@ three-stage cube **adjacency**. The other permutations cannot
 be welded into legal claim changes, genuine mediation of Z,
 Monster/Spin identity or habitat outcomes. [DASHI
 source-first mathematical/legal crosscut](https://github.com/chboishabba/dashi_agda/blob/research/woogaroo-approval-benefit-gas-20261027/Docs/Woogaroo1414S3ChartTransportAndOriginalSourceMaxCut20261028.md).
+
+
+---
+
+## 6 November 2026 — signed decision and SAT source-acquisition reconciliation
+
+This **does not pay any SLR reviewed-evidence span or change the 80 original unpaid obligations / 12 original packets**. The user now holds a **50-page signed Part 9 instrument**, dated **16 October 2026** (rather than the 15 October portal publication status), signed by Mark Hall for Cherish Enterprises, Annexure A containing conditions. Supplied PDF SHA-256: **f9b591f230458939dbeafc8b6178c148dbbec3e68e5e75f66fd187e2a402b808**. It has not been materialised as a canonical SLR source revision or reviewed Matter span. Therefore the existing **None** fields in this production fixture remain honest; the earlier “not acquired” notes above are **dated historical status**, not a statement of current document possession.
+
+Separate proponent-authored January 2026 Preliminary Documentation A15 (Avonvale, One Environment) and A16 (Mount Walker West, Saunders Havill) report koala scat-positive tree-slot counts of **17/150** and **3/150**, respectively; A16 also assigns **10/10 for presence-on/adjacent** to all four AUs, a source-reconciliation/scoring-rubric question, **not** an independently validated error, population prevalence, actual breach or judicial finding. SLR should not infer true AU occupancy or ecological offset adequacy from these reported tallies. Missing independent ecological calibration and approved 15 October OAMP versions remain open.
+
+The **golden source-typed** implementation, with two-sided AU/rubric countermodels, finite checks, explicit source provenance and the exact S0–S6/V gates, is owned by [DASHI PR #1276](https://github.com/chboishabba/dashi_agda/pull/1276), specifically [its dated 6 November source/technical max-cut](https://github.com/chboishabba/dashi_agda/blob/research/woogaroo-approval-benefit-gas-20261027/docs/research/Woogaroo20198575OffsetSATAdversarialMaxCut20261106.md). **No new SLR Matter observation, reviewer admission, source payment, persistence, court filing, FOI submission, compliance determination, contract price or asset transfer is claimed.** Reuse the existing SLR adversarial engine when exact source revisions and reviewer receipts become available rather than creating a second proof system. Original QUT/QCC, consultant and earlier DASHI/SLR authorship preserved.
