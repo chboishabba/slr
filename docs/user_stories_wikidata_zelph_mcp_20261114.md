@@ -1,5 +1,14 @@
 # SLR production user stories — existing ITIR MCP / Wikidata / Zelph / NORA
 
+## 2026-11-15 ITIR native-P0 verification linkage
+
+Operator has reported ITIR's prior 58 regression tests plus 32 newer synthetic physical suites **all passing after two local worktree repairs** (90/90). The upstream `bcbf7c3` Git tree failed 9 of those before the fixes were committed. The originally validated native Zelph C++ decoder compiles on this workstation with `clang++ -fuse-ld=lld`; a genuine native packed fixture roundtrip and same-process rehash have since been source-written and remain **not yet run**. Run [ITIR's exact-head offline acceptance](https://github.com/chboishabba/ITIR-suite/blob/agent/nat-filtered-route-producer/tools/check_zelph_physical_maxcut_offline.sh) then execute the [real physical original-bin ↔ pinned HF witness](https://github.com/chboishabba/ITIR-suite/blob/agent/nat-filtered-route-producer/docs/planning/zelph_original_bin_hf_ranges_maxcut_20261114.md).
+
+SLR's independent production gate remains unchanged: native Wikidata `(QID, GUID)`, qualified quantitative/period facts, P854 evidence and persisted S29 reviewed dependencies. Selected graph neighbourhood equality cannot pay that evidence. No new SLR database or source-of-truth duplicate is justified.
+
+
+
+
 ## Agda/kernel and physical stage gate (after 58-test reported ITIR replay)
 
 Upstream ITIR PR #14's new raw-replay, full-manifest-listed name-cover and synthetic adjacency tests are **reported 58/58 green at head `a119add`**. This is stronger evidence of deterministic validation behaviour, **not** proof that the original graph's entire name universe or the real selected physical HF shards were inspected. DASHI PR #1506 now contains a corrected Agda source import chain and a pinned exact-head local kernel runner; the operator reported a clean **local patched-overlay** Agda 2.9 check, with current remote head replay still pending.
