@@ -9,6 +9,7 @@
 
 pub mod bundle;
 pub mod external_reference;
+pub mod zelph_graph_native_join;
 
 pub const SOURCE_UNIT_SCHEMA: &str = "sl.source_unit.v1";
 pub const SOURCE_HANDOFF_SCHEMA: &str = "sl.source_handoff.v0_1";
