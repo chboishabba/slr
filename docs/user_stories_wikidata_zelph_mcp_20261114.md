@@ -1,5 +1,13 @@
 # SLR production user stories — existing ITIR MCP / Wikidata / Zelph / NORA
 
+## Agda/kernel and physical stage gate (after 58-test reported ITIR replay)
+
+Upstream ITIR PR #14's new raw-replay, full-manifest-listed name-cover and synthetic adjacency tests are **reported 58/58 green at head `a119add`**. This is stronger evidence of deterministic validation behaviour, **not** proof that the original graph's entire name universe or the real selected physical HF shards were inspected. DASHI PR #1506 now contains a corrected Agda source import chain and a pinned exact-head local kernel runner; the operator reported a clean **local patched-overlay** Agda 2.9 check, with current remote head replay still pending.
+
+**SLR production acceptance still requires:** original native `(QID, statement GUID)` values and qualified P14143/P854 provenance, true graph/native source correspondence, persisted S29 review and restart, sparse dependency reopening, and the exact query/consumer scope. The four reported Rust tests pay the *candidate join* only. Maintain the prior single production Rust/PostgreSQL owner and avoid a second transport scheduler or review store.
+
+
+
 ## 2026-11-14 verification checkpoint / upstream A1–A2 development
 
 Operator reported four passing `sensiblaw-source-handoff` candidate-join tests at PR #10 head `27c706c`. That validates the tested Rust source separation, **not** PostgreSQL S29 persistence, native P854 document inspection, the completeness of Zelph graph answers or external Wikidata actions.
