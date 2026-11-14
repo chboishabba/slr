@@ -105,8 +105,7 @@ pub fn join_raw_native_receipt_read_only(
         return Err(NativeRawReceiptError::NumericP14143QuantityMissing);
     }
     if joined.source_support_paid || joined.owns_semantic_promotion || joined.owns_edit_authority
-        || receipt.upstream_http_provenance_independently_verified
-        || receipt.p854_documents_independently_verified || receipt.reviewed_source_support_paid
+        || receipt.reviewed_source_support_paid
         || receipt.persisted_s29_review_verified || receipt.edit_authority
     {
         return Err(NativeRawReceiptError::UnsafeAuthorityClaim);
@@ -232,8 +231,13 @@ mod tests {
         assert_eq!(join_raw_native_receipt_read_only(&joined, &receipt).unwrap_err(),
                    NativeRawReceiptError::UnsafeAuthorityClaim);
         receipt = orig.clone();
+        // An external boolean asserting upstream source validity remains
+        // untrusted metadata here; it must not become a verified SLR payment.
         receipt.p854_documents_independently_verified = true;
-        assert_eq!(join_raw_native_receipt_read_only(&joined, &receipt).unwrap_err(),
-                   NativeRawReceiptError::UnsafeAuthorityClaim);
+        receipt.upstream_http_provenance_independently_verified = true;
+        let result = join_raw_native_receipt_read_only(&joined, &receipt).unwrap();
+        assert!(!result.primary_p854_documents_verified);
+        assert!(!result.original_http_response_authenticated_in_slr);
+        assert!(!result.source_support_paid);
     }
 }
