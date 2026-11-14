@@ -1,5 +1,15 @@
 # SLR production user stories — existing ITIR MCP / Wikidata / Zelph / NORA
 
+## 2026-11-14 verification checkpoint / upstream A1–A2 development
+
+Operator reported four passing `sensiblaw-source-handoff` candidate-join tests at PR #10 head `27c706c`. That validates the tested Rust source separation, **not** PostgreSQL S29 persistence, native P854 document inspection, the completeness of Zelph graph answers or external Wikidata actions.
+
+[ITIR #14](https://github.com/chboishabba/ITIR-suite/pull/14) now adds: (i) exact raw four-file source/route/manifest/receipt replay, (ii) manifest name-cover structural audit, (iii) bounded original-bin one-hop `left/right` adjacency oracle, and (iv) byte-checked selected physical adjacency comparison. None of these new additions has a native replay receipt here yet.
+
+Next SLR acceptance must ingest the *verified* same-object route identity, then independently bind the native `(QID,GUID)` statement, mainsnak, quantity/period/qualifiers/rank/P854 source and review dependency graph. Same-QID presence or source-bin one-hop equality never pays native source support. Reuse existing S29 persistence and selective sparse reopening; **do not** introduce another production database or acquisition scheduler.
+
+
+
 Date: 2026-11-14. **Owner hierarchy:** DASHI/Agda golden formal contracts; SLR (Rust/PostgreSQL) production execution; ITIR-suite existing MCP tool-library and operator workflows; SensibLaw (Python) historical reference and Nat fixtures. This file cross-links rather than duplicates the [ITIR user stories](https://github.com/chboishabba/ITIR-suite/blob/agent/nat-filtered-route-producer/docs/user_stories.md).
 
 ## SLR-WIKI-US-01 — Production acquisition from an already registered ITIR MCP tool
