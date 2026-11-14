@@ -61,7 +61,7 @@ The [full DASHI golden theorem and implementation cut](https://github.com/chbois
 
 ## Evidence / verification status
 
-This document crosswalks existing source contracts and newly proposed exact-route MCP handling. It does **not** claim a new SLR Rust implementation or a live HF/PG run in PR #10. Original source and code authorship remains with the respective contributors; do not attribute NORA to SLR or any Zelph implementation to NORA.
+This document crosswalks existing source contracts and exact-route MCP handling. PR #10 now contains a source-written SLR Rust **candidate graph/native join and tests** (see implementation delta below), but it does **not** claim a live HF/PG/S29 run or source-support adjudication. Original source and code authorship remains with the respective contributors; do not attribute NORA to SLR or any Zelph implementation to NORA.
 
 
 ## 2026-11-14 concrete implementation delta — native/graph candidate join
