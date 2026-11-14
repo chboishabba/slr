@@ -1,5 +1,16 @@
 # SLR production user stories — existing ITIR MCP / Wikidata / Zelph / NORA
 
+## New B5 raw native statement bytes -> typed SLR candidate crosswalk — 15 November 2026
+
+**Latest operator exact-head preflight:** SLR #10 `4e0f150` cargo `sensiblaw-source-handoff` **19/19 PASS**; ITIR #14 `7385872` **120/120 Python + full native Cap'n Proto original-mini-bin route**; DASHI #1506 Agda **9/9**; SensibLaw #514 NORA **17/17**. These are local checked source-specific gates.
+
+**New committed source not yet cargo checked:** existing SLR source-handoff crate exports `native_raw_receipt_join.rs`. It accepts a `NativeEntityRawReceipt` from the *actual offline raw-native full Wikibase JSON verifier* in ITIR, matches QID, full native statement GUID, property, exact native entity revision, raw SHA256, P854 candidate URLs and nonempty P14143 quantity/unit to the already typed `GraphNativeStatementCandidate`; all claimed S29/source payment/edit authority is rejected and even source/document true flags remain untrusted. It does not reparse/re-hash the raw entity bytes in Rust; the read-only output explicitly reports `original_http_response_authenticated_in_slr=false`, `primary_p854_documents_verified=false`, `s29_persistent_review_verified=false` and `source_support_paid=false`. Four focused Rust test functions source-written. The previous 19/19 Rust receipt does not certify them.
+
+**ITIR new raw-byte verifier and original physical driver:** `verify_wikidata_native_entity_snapshot.py` has 19 isolated local adversarial tests; `run_zelph_local_physical_maxcut.py` has six isolated orchestration tests. Both require new clean exact-head ITIR run. Neither a self-computed expected SHA nor a typed witness object establishes upstream original authenticity. Full original native record means *full Wikibase JSON*, not the restructured REST statement response. Preserve exact P14143 native quantity, qualifiers, references, P854 URLs and the 1-to-N migration split.
+
+**Still OPEN:** authentic native entity raw bytes and trusted origin, independent P854 document fetch/verification, actual period/unit/source semantics, graph-original revision correspondence, S29 PostgreSQL persistence, restart/reopen and downstream reviewer decisions. Reuse existing production owners, no new database or action scheduler.
+
+
 ## P4 B5 concrete source-bound native statement candidate — 15 November 2026
 
 **New Rust implementation committed on existing SLR #10 (not yet cargo-checked):** `crates/sl-source-handoff/src/native_statement_evidence.rs`, exported by the existing `sl-source-handoff` crate, makes a *read-only* full statement candidate join from the existing `GraphNativeEvidencePair`, `StatementBundleReview` and independently supplied `NativeWikibaseStatementObservation`. It refuses QID/property/native revision/mainsnak/rank/qualifier/reference disagreement, missing native statement GUID/snapshot, malformed SHA256 claim and mismatched P854 URL values. Four focused Rust test cases exercise a successful retained candidate and multiple fail-closed drifts. This is **not** an assertion that native entity bytes, source document contents or provenance were acquired in this chat. `source_support_paid`, promotion and edit rights remain hard false; no GUID is generated from a Zelph numeric node ID.
