@@ -62,3 +62,19 @@ The [full DASHI golden theorem and implementation cut](https://github.com/chbois
 ## Evidence / verification status
 
 This document crosswalks existing source contracts and newly proposed exact-route MCP handling. It does **not** claim a new SLR Rust implementation or a live HF/PG run in PR #10. Original source and code authorship remains with the respective contributors; do not attribute NORA to SLR or any Zelph implementation to NORA.
+
+
+## 2026-11-14 concrete implementation delta — native/graph candidate join
+
+On existing **SLR PR #10**, `crates/sl-source-handoff/src/zelph_graph_native_join.rs` is now registered under the existing source-handoff crate. `candidate_graph_native_join` checks subject QID, physical name-shard witness, graph revision and separately asserted native source revision correspondence. It transports bundle-level qualifiers and references without manufacturing native statement GUIDs from internal node IDs. Four Rust negative-control/unit tests cover evidence retention, source/QID mismatch, graph/native revision mismatch and missing physical routes.
+
+The correspondence *receipt string* is a dependency for future verification, not a cryptographically checked graph-native identity proof. `GraphCoverage::DeclaredQueryFamily` is not original-graph completeness, and even a successful join remains `candidate_only=true`, with zero truth, source-support or edit authority. There is **no new PostgreSQL/S29 write** or P854 content adjudication in this change.
+
+Local acceptance, at this PR's exact head:
+```bash
+cargo test -p sensiblaw-source-handoff
+```
+
+**Next decisive source/production cuts**: (1) import real ITIR raw digests + source/route object identities; (2) bind native Wikidata actual GUID/mainsnak/rank/period/quantity/qualifiers/P854 and revision proof; (3) register the existing S29 persisted review and sparse dependency-based reopen; (4) compare real saved/reloaded review with a pinned Agda certificate, and keep external NORA review as separately authorised. Reuse SLR #28/#57/#76; do not build another store, scheduler or invented NORA API.
+
+[DASHI consolidated A1–A6, B1–B6, C1–C6 and P0–P5 owner roadmap](https://github.com/chboishabba/dashi_agda/blob/agent/nora-perspective-consumer-maxcut-20261114/Docs/ZelphTrieHyperfabricNatNoraMaximumCut20261114.md).
