@@ -47,6 +47,12 @@ Reuse [NORA author-facing handoff #514](https://github.com/chboishabba/SensibLaw
 
 Acceptance: real NORA source/revision/fixture; exact same-source, same-QID and GUID mapping; rank/qualifier/reference preserving 1-to-N split; independent source-proposition adjudication; source-version scoped selective reopen; read-only candidate output. The original **57,989** Nat statements are historical programme scale, whereas the pinned five-QID/57-slot sample is only a regression fixture. Full population completion requires gap-free `(QID, GUID)` cursor exhaustion on the contemporary source.
 
+## Reported live name-shard execution (2026-11-14)
+
+An ITIR local operator has reported pinned full-graph HF manifest revision `0d4bd670959ebddae72f70d973410fdea8917ec1`, 21 targeted passing tests, direct C++ Cap'n Proto `nodeOfName` decoding for five Nat QIDs and a packaged exact route receipt. [ITIR physical-route report, including QID→node→chunk and sha256 receipts](https://github.com/chboishabba/ITIR-suite/blob/agent/nat-filtered-route-producer/docs/planning/nat_zelph_hf_physical_route_execution_20261114.md).
+
+**These receipts are reported by the operator, not locally rerun in SLR.** Raw route/request/manifest bytes remain local. The original strict MCP route blocked as designed because no `nodeRouteIndex` was advertised; a separate physical shard scan established exact name mappings. Before SLR admission, verify physical source-manifest consistency, raw route digest and claimed producer lineage, decode adjacency/nameOfNode sections, collect bytes/GET metrics and bind native P14143 statement/qualifier/reference source family independently. This entity-linked graph does not carry all required quantitative or reference claims. S29 persisted same-source review and Agda golden kernel check remain unexecuted.
+
 ## Evidence / verification status
 
 This document crosswalks existing source contracts and newly proposed exact-route MCP handling. It does **not** claim a new SLR Rust implementation or a live HF/PG run in PR #10. Original source and code authorship remains with the respective contributors; do not attribute NORA to SLR or any Zelph implementation to NORA.
