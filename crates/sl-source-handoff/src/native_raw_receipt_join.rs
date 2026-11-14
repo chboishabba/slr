@@ -87,8 +87,13 @@ pub fn join_raw_native_receipt_read_only(
     if joined.property_id != receipt.property_id {
         return Err(NativeRawReceiptError::PropertyMismatch);
     }
+    // The existing SLR source handoff uses both rev<N> and revision-<N>
+    // spellings in established fixtures. Both bind the *same numeric*
+    // native original entity revision; no unchecked substring equality.
+    let rev_short = format!("wikidata:rev{}", receipt.native_entity_revision_id);
+    let rev_long = format!("wikidata:revision-{}", receipt.native_entity_revision_id);
     if receipt.native_entity_revision_id == 0
-        || joined.native_revision != format!("wikidata:rev{}", receipt.native_entity_revision_id)
+        || (joined.native_revision != rev_short && joined.native_revision != rev_long)
     {
         return Err(NativeRawReceiptError::NativeRevisionMismatch);
     }
@@ -221,6 +226,17 @@ mod tests {
         receipt.snapshot_bytes_match_pinned_digest = false;
         assert_eq!(join_raw_native_receipt_read_only(&joined, &receipt).unwrap_err(),
                    NativeRawReceiptError::UncheckedRawDigest);
+    }
+
+    #[test]
+    fn existing_slr_long_revision_spelling_binds_same_integer() {
+        let (mut joined, receipt) = fixture();
+        joined.native_revision = "wikidata:revision-123".into();
+        let output = join_raw_native_receipt_read_only(&joined, &receipt).unwrap();
+        assert_eq!(output.native_revision, "wikidata:revision-123");
+        joined.native_revision = "wikidata:revision-1234".into();
+        assert_eq!(join_raw_native_receipt_read_only(&joined, &receipt).unwrap_err(),
+                   NativeRawReceiptError::NativeRevisionMismatch);
     }
 
     #[test]
