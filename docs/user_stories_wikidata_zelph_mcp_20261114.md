@@ -1,5 +1,14 @@
 # SLR production user stories — existing ITIR MCP / Wikidata / Zelph / NORA
 
+## Verified upstream offline 95/95 + physical/native-source boundary — 15 November 2026
+
+**New operator exact-head receipt:** ITIR #14 at `e64c04f32f791502f6feccd3d918ece9a426c122` passes `bash tools/check_zelph_physical_maxcut_offline.sh` on a clean worktree: **95/95 Python** across ten modules plus compiled upstream-schema Cap'n Proto **four packed roundtrips and five fail-closed controls** using Clang/lld. Golden DASHI A1–A6 conditional Agda source remains checked at source commit `4c89edb` (7/7). This **closes only the offline input/decoder contract**. No real published HF byte-range equality or complete query-family closure has been reported.
+
+**SLR P4 decisive obligations:** B5 `zelphGraphNativeStatementJoinIsEvidenceOnly` must consume independently sourced same-revision `(QID, statement GUID)` with native mainsnak, rank, amount/units, qualifiers/period, references and actual P854 source-evidence receipt; graph candidate route/one-hop edge equality does not pay a proposition. B6 `natZelphNoraReviewReplaySameSource` and C4 need persisted S29 review, restart/readback and dependency-indexed selective reopening while preserving held/rejected alternatives. C3 requires the real source-bound split receipts, not fixture-only Rust tests. Reuse existing SLR source and S29 owners without creating parallel stores.
+
+**Run order:** ITIR real manifest/source-bin/range/native-selected receipt (P0–P2) and native Wikibase statement evidence can be gathered independently. Join only after source/revision/QID/GUID/consumer correspondence is established. Then do S29 durable replay. See the [authoritative A/B/C exact lemma and phase cut](https://github.com/chboishabba/dashi_agda/blob/agent/nora-perspective-consumer-maxcut-20261114/Docs/ZelphTrieHyperfabricNatNoraMaximumCut20261114.md) and [real physical execution record](https://github.com/chboishabba/ITIR-suite/blob/agent/nat-filtered-route-producer/docs/planning/zelph_original_bin_hf_ranges_maxcut_20261114.md).
+
+
 ## 2026-11-15 ITIR native-P0 verification linkage
 
 Operator has reported ITIR's prior 58 regression tests plus 32 newer synthetic physical suites **all passing after two local worktree repairs** (90/90). The upstream `bcbf7c3` Git tree failed 9 of those before the fixes were committed. The originally validated native Zelph C++ decoder compiles on this workstation with `clang++ -fuse-ld=lld`; a genuine native packed fixture roundtrip and same-process rehash have since been source-written and remain **not yet run**. Run [ITIR's exact-head offline acceptance](https://github.com/chboishabba/ITIR-suite/blob/agent/nat-filtered-route-producer/tools/check_zelph_physical_maxcut_offline.sh) then execute the [real physical original-bin ↔ pinned HF witness](https://github.com/chboishabba/ITIR-suite/blob/agent/nat-filtered-route-producer/docs/planning/zelph_original_bin_hf_ranges_maxcut_20261114.md).
