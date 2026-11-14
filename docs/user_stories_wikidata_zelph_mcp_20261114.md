@@ -1,5 +1,12 @@
 # SLR production user stories — existing ITIR MCP / Wikidata / Zelph / NORA
 
+## Native raw evidence accepted source head; remaining P4 actual document boundary
+
+Operator performed exact-head **24/24 PASS** for `cargo test -p sensiblaw-source-handoff` at `fc819e652be4e78dcfaa3bcc0c1dafad8d6f3840`. This validates the new five native raw receipt coordinate-join tests. ITIR `712011a` passed 145/145 Python and native original mini `.bin`; DASHI 9/9 Agda and SensibLaw 17/17 reference suites also accepted. All are *offline* source tests.
+
+**Next physically distinct deliverables:** acquire revision-specific actual full Wikibase JSON entity bytes plus independently sourced expected SHA, independently verify exact `(QID, native statement GUID, property, mainsnak, qualifier, rank, references)` with ITIR's raw entity parser, inspect real P854 document content, and persist S29 reviewer dispositions across restart/readback and source-triggered sparse reopen. `GraphNativeStatementCandidate` and `NativeRawReceipt` joins are read-only and cannot substitute for any of these operations. Do not create a second database or invent edit authority.
+
+
 ## New B5 raw native statement bytes -> typed SLR candidate crosswalk — 15 November 2026
 
 **Latest operator exact-head preflight:** SLR #10 `4e0f150` cargo `sensiblaw-source-handoff` **19/19 PASS**; ITIR #14 `7385872` **120/120 Python + full native Cap'n Proto original-mini-bin route**; DASHI #1506 Agda **9/9**; SensibLaw #514 NORA **17/17**. These are local checked source-specific gates.
