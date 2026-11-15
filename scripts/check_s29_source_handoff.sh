@@ -3,8 +3,9 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
-python3 -m py_compile scripts/s29_source_review_postgres.py tests/test_s29_source_review_postgres.py
+python3 -m py_compile scripts/s29_source_review_postgres.py scripts/s29_zelph_finite_boundary_postgres.py tests/test_s29_source_review_postgres.py tests/test_s29_zelph_finite_boundary_postgres.py
 python3 -m unittest discover -s tests -p 'test_s29_source_review_postgres.py' -v
+python3 -m unittest discover -s tests -p 'test_s29_zelph_finite_boundary_postgres.py' -v
 if [ "${SLR_S29_REQUIRE_REAL_PG:-0}" = "1" ]; then
   test -n "${SLR_S29_TEST_DATABASE_URL:-}" || {
     echo "BLOCKED: SLR_S29_TEST_DATABASE_URL required" >&2
