@@ -104,3 +104,33 @@ missing POS/DEP labels, schema promotion flags, repeated source revisions,
 cross-split hashes, and forbidden reserved/F5 manifests **before DB access**.
 Stored parser observations remain distinct from reviewed propositions,
 legal applicability, world truth and FLM/Monster representation claims.
+
+
+## CPU exporter and concurrent Leech/HIP execution (15 November 2026)
+
+The native PostgreSQL source reader is **CPU/I/O-bound**, owned by SLR and
+always executed in the SLR Python interpreter. The source scan/PG transaction
+remains one complete **read-only REPEATABLE READ snapshot**; no GPU is required
+and it must not create an extra persistence/schema layer. SLR token/grammar
+observations are raw parser evidence only.
+
+LeechTransformer PR #4 is responsible for multi-device orchestration, not SLR:
+it now implements a real source-aware CPU/GPU dependency scheduler:
+- CPU SLR PG source export and RX580 GPU F3 C3 evaluation launch concurrently.
+- When native SLR exits with a validated original JSONL SHA, CPU frozen grammar
+  starts **immediately**, even if F3 GPU is still running.
+- GPU five-arm original-Leech fit waits for original SLR data and the optional
+  original F3 GPU receipt; one HIP device has at most one GPU process.
+- CPU subprocess HIP/CUDA device visibility is explicitly hidden; CPU BLAS
+  worker budgets for SLR/probe and GPU host-side feeders are separate.
+- The PostgreSQL DATABASE_URL is inherited only by the CPU SLR exporter,
+  not the frozen grammar or GPU source/training processes.
+- On failed/timeout stage the other source processes are terminated, no
+  completed physical receipt is emitted; a reserved/F5 manifest fails before
+  **any GPU launch**, not merely before a PostgreSQL query.
+
+A production host run still requires actual SLR completed parser run rows;
+fixture testing does NOT prove such source data exists. The user's host reports
+the previous SLR source tests passed **8/8** after diagnostic repairs, now
+committed on this PR branch; a fresh HEAD test run should be recorded for this
+new roadmap revision before an original data-quality claim.
