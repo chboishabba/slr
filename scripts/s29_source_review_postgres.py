@@ -156,6 +156,13 @@ def persist_candidate(conn, data: dict, *, consumer_ref: str | None = None,
         for source_ref, revision, raw_sha in sources:
             cur.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (source_ref,))
             cur.execute(
+                """SELECT DISTINCT source_digest FROM sl_s29_sources_v1
+                   WHERE source_ref=%s AND source_revision=%s""",
+                (source_ref, revision))
+            previous_hashes = [row[0] for row in cur.fetchall()]
+            if any(prior != raw_sha for prior in previous_hashes):
+                raise ValueError("immutable source/ref revision has conflicting original byte digest")
+            cur.execute(
                 """INSERT INTO sl_s29_sources_v1
                    (receipt_digest, source_ref, source_revision, source_digest)
                    VALUES (%s,%s,%s,%s) ON CONFLICT DO NOTHING""",
