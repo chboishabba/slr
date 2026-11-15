@@ -79,7 +79,7 @@ class S29RealDatabase(unittest.TestCase):
         except ImportError:
             self.fail("psycopg v3 required for actual S29 acceptance")
         # Unique fixture coordinate, not actual Wikibase or paid P854 evidence.
-        qid = "Q" + str(uuid.uuid4().int)[:14]
+        qid = "Q1" + str(uuid.uuid4().int)[:14]
         database = os.environ["SLR_S29_TEST_DATABASE_URL"]
         first = candidate(qid=qid)
         query_ref = "test:query:" + uuid.uuid4().hex
