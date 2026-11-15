@@ -1,5 +1,12 @@
 # S29 live PostgreSQL original-source candidate/review integration (2026-11-15)
 
+## 15 November — new source P0-S partial verified, downstream S29 remains open
+
+Operator reported a genuine `nodeOfName:0` original HF `.bin` HTTP206/published shard byte equality (22,755,697 bytes, SHA `0bbfc205a26caeb8a0daf5e1b265cc10a0895d43e5c7828c0c4ad8109efc8508`). This is **P0-S positive selected source-byte evidence only**. ITIR has now added a route-free selected-chunk matrix and positive native QID roots from retained original-equal Cap'n Proto shards. SLR `dcf8d95` locally passed **24/24 Rust + 4/4 Python offline**, but there is **no new actual PostgreSQL commit/readback/reopen execution receipt** and no original same-object five-QID source/primary P854 claim yet. Never import a selected name chunk as an authoritative P14143 statement or a reviewed source.
+
+---
+
+
 **Owner:** existing [SLR PR #10](https://github.com/chboishabba/slr/pull/10), stacked on #7, not a new repo/DB/container. ITIR #14 emits the original `source-bound-cohort-candidate.json`; DASHI #1505/1506 own mathematics; SensibLaw #514 owns historical NORA reference. No automatically sourced author/publication authority.
 
 ## What is implemented
