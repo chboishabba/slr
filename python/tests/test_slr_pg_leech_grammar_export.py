@@ -134,6 +134,69 @@ class TestNativePgLeechBoundary(unittest.TestCase):
                     lambda:called.append(True))
             self.assertFalse(called)
 
+    def test_one_readonly_repeatable_snapshot_reopens_two_canonical_sources(self):
+        first=fixture()
+        second=fixture(source_text="Éli saw Bob.",rev="revision:2",
+                       run="parser:2",split="development")
+        second[1]["document_ref"]="document:2"
+        second[0]["document_ref"]="document:2"
+        second[2][0]["compilation_key"]="comp:2"
+        for token in second[3]:
+            token["compilation_key"]="comp:2"
+            if token["surface"]=="Max":
+                token["surface"]="Bob"
+        pairs={first[0]["parser_run_ref"]:first,
+               second[0]["parser_run_ref"]:second}
+        class FakeConnection:
+            def __init__(self):
+                self.trace=[]
+                self.closed=False
+                self.committed=False
+                self.last=[]
+                self.description=[]
+            def set_session(self,**kwargs): self.trace.append(("set_session",kwargs))
+            def cursor(self):return self
+            def __enter__(self):return self
+            def __exit__(self,*args):return False
+            def execute(self,sql,params):
+                self.trace.append(("execute",sql,params))
+                if sql==SOURCE_SQL:
+                    rows=[pairs[params[0]][1]]
+                elif sql==JOB_SQL:
+                    rows=pairs[params[0]][2]
+                elif sql==TOKEN_SQL:
+                    rows=pairs[params[0]][3]
+                else:raise AssertionError("unexpected PG query")
+                self.last=[tuple(obj.values()) for obj in rows]
+                self.description=[(key,) for key in rows[0].keys()]
+            def fetchall(self):return self.last
+            def commit(self):self.committed=True
+            def rollback(self):raise AssertionError("unexpected rollback")
+            def close(self):self.closed=True
+        fake=FakeConnection()
+        with TemporaryDirectory() as td:
+            root=Path(td)
+            manifest=root/"manifest.json"
+            manifest.write_text(json.dumps([first[0],second[0]]))
+            dst=root/"native.jsonl"
+            result=export_native_pg_manifest(manifest,dst,lambda:fake)
+            self.assertEqual(result["train_count"],1)
+            self.assertEqual(result["development_count"],1)
+            self.assertEqual(result["source_count"],2)
+            self.assertTrue(fake.committed and fake.closed)
+            self.assertEqual(fake.trace[0][1]["isolation_level"],
+                             "REPEATABLE READ")
+            self.assertTrue(fake.trace[0][1]["readonly"])
+            records=[json.loads(x) for x in dst.read_text().splitlines()]
+            self.assertEqual(len(records),2)
+            self.assertEqual({x["document_id"] for x in records},
+                             {"document:1","document:2"})
+            self.assertNotEqual(records[0]["source_sha256"],
+                                records[1]["source_sha256"])
+            self.assertFalse(result["F5_source_read"])
+            self.assertFalse(any("CREATE " in event[1] for event in fake.trace
+                                 if event[0]=="execute"))
+
     def test_native_PG_SQL_uses_existing_corpus_and_parser_tables(self):
         self.assertIn("corpus.canonical_content",SOURCE_SQL)
         self.assertIn("ingest.generic_source_revision",SOURCE_SQL)
