@@ -187,9 +187,18 @@ def project_native_pg_document(spec,source,jobs,tokens):
         if ordinal is not None and (type(ordinal) is not int or
                                     (key[0],ordinal) not in seen):
             raise ValueError("dependency head not found in same SLR parser region")
+    # Parser contract is model/family/config identity shared across
+    # distinct source revisions. Run and revision belong to RECEIPT, not
+    # contract; otherwise identical parsers on train/dev look unrelated.
+    contract=dict(parser_family=source["parser_family"],
+        parser_version=source["parser_version"],
+        model_ref=source["model_ref"],
+        config_digest_ref=source["config_digest_ref"])
+    contract_sha=_sha(_canon(contract).encode("utf-8"))
     digest_lists={}
     for kind in ("pos","dependency","morph"):
-        digest_lists[kind]=sorted({_digest("slr-pg-"+kind+":v1",labels[kind])
+        digest_lists[kind]=sorted({_digest(
+            "slr-pg-"+kind+":v1:"+contract_sha,labels[kind])
             for _,_,_,labels in all_rows if labels[kind] is not None})
     # Small stable (within-document) positive label IDs; cross-run identity
     # is the full SHA256 digest, NOT these compact ephemeral ranks.
@@ -197,7 +206,7 @@ def project_native_pg_document(spec,source,jobs,tokens):
              for kind in digest_lists}
     out=[]
     for n,t,key,labels in all_rows:
-        digests={kind:(_digest("slr-pg-"+kind+":v1",labels[kind])
+        digests={kind:(_digest("slr-pg-"+kind+":v1:"+contract_sha,labels[kind])
                        if labels[kind] is not None else None)
                  for kind in labels}
         out.append(dict(token_id=n,source_occurrence_ref=f"{key[0]}:{key[1]}",
@@ -213,16 +222,12 @@ def project_native_pg_document(spec,source,jobs,tokens):
             morph_set_id=(numbers["morph"][digests["morph"]]
                           if digests["morph"] is not None else None),
             morph_set_digest=digests["morph"]))
-    contract=dict(source_revision_ref=source["source_revision_ref"],
-        parser_run_ref=source["parser_run_ref"],
-        parser_family=source["parser_family"],
-        parser_version=source["parser_version"],
-        model_ref=source["model_ref"],
-        config_digest_ref=source["config_digest_ref"])
-    contract_sha=_sha(_canon(contract).encode("utf-8"))
+
     receipt_sha=_sha(_canon(dict(domain=DOMAIN,source_sha256=_sha(raw),
-        parser_contract_sha256=contract_sha,jobs=[
-            (j["compilation_key"],j["region_ref"]) for j in jobs],
+        parser_contract_sha256=contract_sha,
+        parser_run_ref=source["parser_run_ref"],
+        source_revision_ref=source["source_revision_ref"],
+        jobs=[(j["compilation_key"],j["region_ref"]) for j in jobs],
         token_observations=out)).encode("utf-8"))
     return dict(schema_version=SCHEMA,
         document_id=source["document_ref"],split=spec["split"],
@@ -259,6 +264,7 @@ def export_native_pg_manifest(manifest,output,connect):
         conn.set_session(isolation_level="REPEATABLE READ",readonly=True,
                          autocommit=False)
         records=[];content_splits={}
+        active_parser_contract=None
         for spec in specs:
             selector=(spec["parser_run_ref"],spec["source_revision_ref"])
             source=_read(conn,SOURCE_SQL,selector)
@@ -267,6 +273,10 @@ def export_native_pg_manifest(manifest,output,connect):
             jobs=_read(conn,JOB_SQL,(spec["parser_run_ref"],))
             tokens=_read(conn,TOKEN_SQL,(spec["parser_run_ref"],))
             doc=project_native_pg_document(spec,source[0],jobs,tokens)
+            if active_parser_contract is None:
+                active_parser_contract=doc["parser_contract_sha256"]
+            elif active_parser_contract!=doc["parser_contract_sha256"]:
+                raise ValueError("native SLR train/development parser model/config contracts differ")
             sha=doc["source_sha256"]
             if sha in content_splits and content_splits[sha]!=spec["split"]:
                 raise ValueError("same canonical SLR source across train/development")
