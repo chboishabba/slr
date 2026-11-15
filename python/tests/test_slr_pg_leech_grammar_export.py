@@ -70,6 +70,32 @@ class TestNativePgLeechBoundary(unittest.TestCase):
         self.assertFalse(a["parser_observation_is_semantic_authority"])
         self.assertEqual(len(a["parser_receipt_sha256"]),64)
 
+    def test_parser_model_is_stable_label_authority_across_distinct_revisions(self):
+        a=fixture()
+        b=fixture(source_text="Éli saw Bob.",rev="revision:2",
+                  run="parser:2",split="development")
+        b[1]["document_ref"]="document:2"
+        b[0]["document_ref"]="document:2"
+        b[2][0]["compilation_key"]="comp:2"
+        for token in b[3]:
+            token["compilation_key"]="comp:2"
+            if token["surface"]=="Max":token["surface"]="Bob"
+        left=project_native_pg_document(*a)
+        right=project_native_pg_document(*b)
+        self.assertEqual(left["parser_contract_sha256"],
+                         right["parser_contract_sha256"])
+        self.assertNotEqual(left["parser_receipt_sha256"],
+                            right["parser_receipt_sha256"])
+        self.assertEqual(left["slr_tokens"][0]["pos_symbol_digest"],
+                         right["slr_tokens"][0]["pos_symbol_digest"])
+        # Different model authority must not silently re-use same class SHA.
+        changed=dict(b[1],model_ref="other_spacy_model")
+        foreign=project_native_pg_document(b[0],changed,b[2],b[3])
+        self.assertNotEqual(left["parser_contract_sha256"],
+                            foreign["parser_contract_sha256"])
+        self.assertNotEqual(left["slr_tokens"][0]["pos_symbol_digest"],
+                            foreign["slr_tokens"][0]["pos_symbol_digest"])
+
     def test_fails_on_source_SHA_or_noncanonical_document(self):
         spec,source,jobs,tokens=fixture()
         bad=dict(spec,source_sha256="f"*64)
