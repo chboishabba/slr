@@ -115,14 +115,14 @@ def project_native_pg_document(spec,source,jobs,tokens):
         raise ValueError("SLR PG source/run row missing")
     for key in ("parser_run_ref","source_revision_ref"):
         if source[key]!=spec[key]:
-            raise ValueError("parser/source revision mismatch")
+            raise ValueError("parser run mismatch: source revision identity differs")
     if source["status"]!="complete":
         raise ValueError("native SLR parser run not complete")
     if not source["candidate_only"] or any(source[k] for k in (
             "creates_semantic_authority","applicability_promoted",
             "claim_truth_promoted","source_authority",
             "source_applicability","source_truth")) or not source["source_candidate_only"]:
-        raise ValueError("native SLR source/parser cannot promote truth")
+        raise ValueError("native SLR source/parser cannot promote truth (nonpromoting required)")
     if spec.get("document_ref") and spec["document_ref"]!=source["document_ref"]:
         raise ValueError("canonical document identity mismatch")
     raw=source["payload"]
