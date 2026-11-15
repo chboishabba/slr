@@ -43,6 +43,11 @@ retained on each token, and each head is resolved within the **same
 compilation region**. Numeric POS/DEP/MORPH label IDs are likewise
 export-local ranks; **full SHA256 category digests** are the portable
 cross-run label identity used by Leech's train-only compact vocabulary.
+Stable label digests are scoped to the native **parser family, version, model
+and config digest**; source revision and parser run belong to the per-document
+receipt, not to that shared contract. The exporter rejects a train/development
+batch mixing different parser-model contracts rather than treating identical
+`POS=VERB` spellings from unrelated parsers as interchangeable.
 
 Native `morph_json` and `head_ordinal` are nullable. Their absence
 remains absent/masked, NOT a fabricated morphology or "neutral zero".
@@ -87,7 +92,7 @@ different and are never interchanged**.
 |---|---|---|
 | S0 | Native canonical source, parser job/token schema inspected | **Closed (source)** |
 | S1 | Strict export from existing native PG rows, no new schema | **Source implemented** |
-| S2 | SLR source/manifest/Unicode/head/F5 regression tests | **Written; host run open** |
+| S2 | SLR source/manifest/Unicode/head/F5 regression tests | **Eight source tests written; host run open** |
 | S3 | Physical PG completed parser runs for original train/dev TinyStories | **Open** |
 | S4 | Real SLR-PG → Leech SentencePiece alignment & lexical coverage | **Open** |
 | S5 | Original frozen model syntax CE/F1/UAS/LAS vs controls | **Open** |
