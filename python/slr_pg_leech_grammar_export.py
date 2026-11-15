@@ -79,6 +79,8 @@ def validate_manifest(rows):
     if not isinstance(rows,list) or not rows:
         raise ValueError("nonempty manifest array required")
     seen=set()
+    seen_revisions=set()
+    split_for_sha={}
     out=[]
     for row in rows:
         if not isinstance(row,dict) or row.get("split") not in ("train","development"):
@@ -94,9 +96,13 @@ def validate_manifest(rows):
             not isinstance(row["document_ref"],str) or not row["document_ref"]):
             raise ValueError("invalid canonical document reference")
         key=(row["source_revision_ref"],row["parser_run_ref"])
-        if key in seen:
-            raise ValueError("duplicate original SLR source+run")
+        if key in seen or row["source_revision_ref"] in seen_revisions:
+            raise ValueError("duplicate original SLR source revision/run")
         seen.add(key)
+        seen_revisions.add(row["source_revision_ref"])
+        if (sha in split_for_sha and split_for_sha[sha]!=row["split"]):
+            raise ValueError("same canonical source across train/development manifest")
+        split_for_sha[sha]=row["split"]
         out.append(row)
     if {r["split"] for r in out}!={"train","development"}:
         raise ValueError("source-disjoint train/development both required")
