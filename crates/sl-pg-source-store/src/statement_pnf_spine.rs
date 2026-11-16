@@ -153,12 +153,18 @@ impl ReviewedStatementPnf {
             .iter()
             .map(|candidate| candidate.candidate_ref.as_str())
             .collect();
+        let mut reviewed = BTreeSet::new();
         for review in &self.reviews {
             if review.review_ref.trim().is_empty() || review.candidate_ref.trim().is_empty() {
                 return Err(StatementPnfSpineError::EmptyReviewCoordinate);
             }
             if !available.contains(review.candidate_ref.as_str()) {
                 return Err(StatementPnfSpineError::UnknownCandidateReview);
+            }
+            // A candidate cannot simultaneously have incompatible parse-review
+            // dispositions. A later review belongs in a new reviewed revision.
+            if !reviewed.insert(review.candidate_ref.clone()) {
+                return Err(StatementPnfSpineError::DuplicateCandidateReview);
             }
             if matches!(review.disposition, ParseReviewDisposition::Qualified)
                 && review
@@ -169,7 +175,32 @@ impl ReviewedStatementPnf {
                 return Err(StatementPnfSpineError::MissingQualification);
             }
         }
+        let unreviewed: BTreeSet<String> = available
+            .iter()
+            .filter(|candidate_ref| !reviewed.contains(**candidate_ref))
+            .map(|candidate_ref| (*candidate_ref).to_owned())
+            .collect();
+        if self.reviewed_candidate_refs != reviewed
+            || self.retained_unreviewed_candidate_refs != unreviewed
+        {
+            return Err(StatementPnfSpineError::ReviewIndexMismatch);
+        }
         Ok(())
+    }
+
+    /// Only an explicit accepted parse review may enter an admission-review
+    /// worklist. This is not semantic admission, a world-identity resolution,
+    /// a legal proposition, or a formal-proof demand.
+    pub fn accepted_for_admission_review_refs(
+        &self,
+    ) -> Result<BTreeSet<String>, StatementPnfSpineError> {
+        self.validate()?;
+        Ok(self
+            .reviews
+            .iter()
+            .filter(|review| matches!(review.disposition, ParseReviewDisposition::AcceptedForAdmissionReview))
+            .map(|review| review.candidate_ref.clone())
+            .collect())
     }
 }
 
@@ -193,6 +224,10 @@ pub enum StatementPnfSpineError {
     EmptyReviewCoordinate,
     #[error("parse review references a candidate absent from this statement")]
     UnknownCandidateReview,
+    #[error("a candidate has more than one parse review in the same revision")]
+    DuplicateCandidateReview,
+    #[error("stored reviewed/unreviewed candidate indices disagree with source reviews")]
+    ReviewIndexMismatch,
     #[error("qualified parse review requires a qualification reference")]
     MissingQualification,
     #[error("statement origin does not match the requested compiler entry point")]
@@ -430,6 +465,81 @@ mod tests {
         assert!(!reviewed.proposition_support_paid);
         assert!(!reviewed.applicability_paid);
         assert!(!reviewed.claim_truth_paid);
+    }
+
+    #[test]
+    fn forged_review_indices_cannot_enter_admission_worklist() {
+        let candidate = compile_initial_intake_statement(
+            &parser(), statement(StatementOrigin::InitialIntake), "parse:1"
+        ).unwrap();
+        let mut reviewed = review_statement_parse(candidate, vec![]).unwrap();
+        let forged = reviewed.candidate.pnf.candidates[0].candidate_ref.clone();
+        reviewed.reviewed_candidate_refs.insert(forged.clone());
+        assert!(matches!(
+            reviewed.accepted_for_admission_review_refs(),
+            Err(StatementPnfSpineError::ReviewIndexMismatch)
+        ));
+
+        reviewed.reviewed_candidate_refs.clear();
+        reviewed.retained_unreviewed_candidate_refs.remove(&forged);
+        assert!(matches!(
+            reviewed.validate(),
+            Err(StatementPnfSpineError::ReviewIndexMismatch)
+        ));
+    }
+
+    #[test]
+    fn conflicting_reviews_cannot_bypass_selection() {
+        let candidate = compile_initial_intake_statement(
+            &parser(), statement(StatementOrigin::InitialIntake), "parse:1"
+        ).unwrap();
+        let candidate_ref = candidate.pnf.candidates[0].candidate_ref.clone();
+        let reviews = vec![
+            StatementParseReview {
+                review_ref: "review:a".into(),
+                candidate_ref: candidate_ref.clone(),
+                disposition: ParseReviewDisposition::AcceptedForAdmissionReview,
+                qualification_ref: None,
+            },
+            StatementParseReview {
+                review_ref: "review:b".into(),
+                candidate_ref,
+                disposition: ParseReviewDisposition::Rejected,
+                qualification_ref: None,
+            },
+        ];
+        assert!(matches!(
+            review_statement_parse(candidate, reviews),
+            Err(StatementPnfSpineError::DuplicateCandidateReview)
+        ));
+    }
+
+    #[test]
+    fn reviewed_does_not_mean_accepted_for_admission_review() {
+        let candidate = compile_initial_intake_statement(
+            &parser(), statement(StatementOrigin::InitialIntake), "parse:1"
+        ).unwrap();
+        let accepted_ref = candidate.pnf.candidates[0].candidate_ref.clone();
+        let rejected_ref = candidate.pnf.candidates[1].candidate_ref.clone();
+        let reviewed = review_statement_parse(candidate, vec![
+            StatementParseReview {
+                review_ref: "review:accepted".into(),
+                candidate_ref: accepted_ref.clone(),
+                disposition: ParseReviewDisposition::AcceptedForAdmissionReview,
+                qualification_ref: None,
+            },
+            StatementParseReview {
+                review_ref: "review:rejected".into(),
+                candidate_ref: rejected_ref.clone(),
+                disposition: ParseReviewDisposition::Rejected,
+                qualification_ref: None,
+            },
+        ]).unwrap();
+        let accepted = reviewed.accepted_for_admission_review_refs().unwrap();
+        assert!(accepted.contains(&accepted_ref));
+        assert!(!accepted.contains(&rejected_ref));
+        assert!(reviewed.reviewed_candidate_refs.contains(&rejected_ref));
+        assert!(!reviewed.semantic_admission_paid);
     }
 
     #[test]
