@@ -1645,13 +1645,18 @@ pub fn load_parser_evidence_region(
 /// silently upgraded to a semantic or legal assertion.
 pub fn audit_candidate_pnf_evidence(
     source: &ExactSourceSpan,
+    source_revision_ref: &str,
     batch: &CandidatePnfBatch,
     evidence: &ParserEvidenceRegion,
 ) -> Result<(), CandidatePnfError> {
     if source.start_char >= source.end_char {
         return Err(CandidatePnfError::InvalidExactSpan);
     }
-    if batch.exact_span_ref != source.span_ref || evidence.region_ref != source.span_ref {
+    if source_revision_ref.is_empty()
+        || evidence.source_revision_ref != source_revision_ref
+        || batch.exact_span_ref != source.span_ref
+        || evidence.region_ref != source.span_ref
+    {
         return Err(CandidatePnfError::MissingPersistedParserRegion(source.span_ref.clone()));
     }
     if !evidence.candidate_only || batch.proposition_support_paid
@@ -1674,7 +1679,12 @@ pub fn audit_candidate_pnf_evidence(
         });
     }
     for (token, candidate) in overlapping.into_iter().zip(&batch.candidates) {
-        if candidate.source_start_char != token.start_char
+        if candidate.candidate_ref != format!(
+            "candidate-pnf-db:{}:{}:{}:{}:{}",
+            evidence.parser_run_ref, source.span_ref, token.token_ordinal,
+            token.start_char, token.end_char,
+        )
+            || candidate.source_start_char != token.start_char
             || candidate.source_end_char != token.end_char
             || candidate.surface != token.surface
             || candidate.lemma != token.lemma
@@ -1715,7 +1725,7 @@ mod tests {
             artifact: None, candidate_only: true,
         };
         let factor = CandidatePnfFactor {
-            candidate_ref: "candidate:1".into(), role: CandidatePnfRole::Actor,
+            candidate_ref: "candidate-pnf-db:run:1:sentence:1:0:0:5".into(), role: CandidatePnfRole::Actor,
             source_start_char: token.start_char, source_end_char: token.end_char,
             surface: token.surface.clone(), lemma: token.lemma.clone(),
             dependency_ref: token.dependency_ref.clone(), candidate_only: true,
@@ -1726,19 +1736,19 @@ mod tests {
             proposition_support_paid: false, applicability_paid: false,
             claim_truth_paid: false,
         };
-        assert!(audit_candidate_pnf_evidence(&source, &batch, &evidence).is_ok());
+        assert!(audit_candidate_pnf_evidence(&source, "revision:1", &batch, &evidence).is_ok());
         let mut changed = batch.clone();
         changed.candidates[0].dependency_ref = "dobj".into();
-        assert!(audit_candidate_pnf_evidence(&source, &changed, &evidence).is_err());
+        assert!(audit_candidate_pnf_evidence(&source, "revision:1", &changed, &evidence).is_err());
         let mut missing = batch.clone();
         missing.candidates.clear();
-        assert!(audit_candidate_pnf_evidence(&source, &missing, &evidence).is_err());
+        assert!(audit_candidate_pnf_evidence(&source, "revision:1", &missing, &evidence).is_err());
         let mut promoted = batch;
         promoted.claim_truth_paid = true;
-        assert!(audit_candidate_pnf_evidence(&source, &promoted, &evidence).is_err());
+        assert!(audit_candidate_pnf_evidence(&source, "revision:1", &promoted, &evidence).is_err());
         let mut wrong_region = evidence;
         wrong_region.region_ref = "sentence:2".into();
-        assert!(audit_candidate_pnf_evidence(&source, &CandidatePnfBatch {
+        assert!(audit_candidate_pnf_evidence(&source, "revision:1", &CandidatePnfBatch {
             exact_span_ref: source.span_ref.clone(), candidates: vec![factor],
             proposition_support_paid: false, applicability_paid: false,
             claim_truth_paid: false,
