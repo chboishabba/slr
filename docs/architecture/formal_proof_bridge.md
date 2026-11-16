@@ -24,6 +24,63 @@ source/span
 
 Upstream typing remains separate. DASHI PR #1222 supplies the formal PNF/consumer-WrongType -> explicitly witnessed Lee residual adapter; SLR PR #66 supplies same-Matter consumer-informativeness receipts. Neither authorizes this formal route by itself: only an existing **open proof obligation** and reviewed PNF revision enter this bridge.
 
+## Parser evidence reconstruction for language-as-algebra consumers
+
+The M12 statement compiler remains the source-bound candidate PNF owner. Typed
+PostgreSQL stores surface, lemma, POS, morphology, dependency heads, labels,
+entity spans, and optionally full artifact bytes/locators. CandidatePnfFactor
+is a coarse candidate projection, not the complete parser representation.
+
+- load_parser_evidence_region reopens one successful candidate-only run/region
+  with original tokens, entity annotations and parser artifact coordinates.
+- compile_statement_pnf_with_parser_evidence reuses the ordinary M12 compiler
+  and checks its candidate factors against the original exact parser evidence.
+- audit_candidate_pnf_evidence rejects mismatched run-derived candidate IDs,
+  source revisions, spans, surface, lemma, dependencies, role and authority.
+  Success certifies parser projection parity ONLY, not semantic adequacy.
+
+For a consumer question Q_c, the distinct factorisation obligation is:
+
+    forall x y. pi(x) = pi(y) => Q_c(x) = Q_c(y)
+
+Suppressed syntax must be explicitly reconstructed or marked unresolved.
+Do not conflate dependency roles with legal scope, identity or proposition truth.
+
+## Lean -> SLR -> Lean and the global proof world
+
+Forward: Lean/Agda declaration or discovered artifact -> canonical statement
+and dependency fingerprint -> exact repository commit/source coordinates ->
+SLR source and reviewed PNF/proof obligation. Reverse: FormalProofDemand ->
+exact formal statement and source/dependency set -> dashi-repo reuse or
+Agda-to-Lean translation candidate -> independent Lean/Agda kernel check ->
+SLR FormalEvidenceReceipt -> exact payment -> selective dependency reopening.
+Structural shape and round-trip translation alone do not certify equality.
+Source code stays at its original repository owner; avoid full copies in SLR.
+
+## Marchenko-Pastur (PNF MP) spectral candidate gate
+
+Reuse the existing owners rather than building a second classifier:
+
+- dashi_agda/DASHI/Information/PNFMarchenkoPasturAdmissionExact.agda
+- dashi_agda/scripts/pnf_marchenko_pastur_numeric.py
+- ITIR-suite/itir-mcp/src/itir_mcp/pnf_spectral_packet.py
+
+MP describes a numerical feature-panel null. Spectral eigen-motifs may rank
+candidate proof-world joins and guide retrieval; they do not establish
+declaration equivalence, legal applicability, Wikidata truth or proof soundness.
+The Agda mpCandidateCannotPromoteNumericABI explicitly maintains this boundary.
+No MP result pays SLR proof obligations without exact statement/dependency
+evidence and independent kernel-certified checker receipts.
+
+### Remaining acceptance gates
+
+- Cargo/PostgreSQL tests for the new reopened evidence path (not yet executed).
+- Live provider revision -> parser run -> evidence-backed M12 candidate ->
+  reviewed proposition -> formal demand -> independent kernel receipt.
+- Consumer-specific MP/PNF factorisation and missing-feature residual checks.
+- Agda/Lean round-trip equivalence of statement and dependencies.
+- End-to-end Lean -> SLR -> Lean proof-world reuse and invalidation acceptance.
+
 ## Storage boundary
 
 `formal_bridge.*` stores only demand/route/evidence/payment joins. It does not copy PNF graphs, proposition payloads, controversy state, or proof-obligation bodies. `FormalProofDemand` must reopen an existing open `legal_controversy.proof_obligation` and an existing `algebra.factor_revision` before it can be persisted.
