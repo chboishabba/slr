@@ -1511,14 +1511,33 @@ impl CandidatePnfProducer for DbNativeParserSnapshot {
 /// reviewed PNF, a semantic equivalence certificate, or a formal proof.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParserEvidenceRegion {
-    pub parser_run_ref: String,
-    pub source_revision_ref: String,
-    pub region_ref: String,
-    pub compilation_key: String,
-    pub tokens: Vec<ParserTokenRecord>,
-    pub entities: Vec<ParserEntityRecord>,
-    pub artifact: Option<ParserArtifactRecord>,
-    pub candidate_only: bool,
+    parser_run_ref: String,
+    source_revision_ref: String,
+    region_ref: String,
+    compilation_key: String,
+    tokens: Vec<ParserTokenRecord>,
+    entities: Vec<ParserEntityRecord>,
+    artifact: Option<ParserArtifactRecord>,
+    candidate_only: bool,
+}
+
+impl ParserEvidenceRegion {
+    #[must_use]
+    pub fn parser_run_ref(&self) -> &str { &self.parser_run_ref }
+    #[must_use]
+    pub fn source_revision_ref(&self) -> &str { &self.source_revision_ref }
+    #[must_use]
+    pub fn region_ref(&self) -> &str { &self.region_ref }
+    #[must_use]
+    pub fn compilation_key(&self) -> &str { &self.compilation_key }
+    #[must_use]
+    pub fn tokens(&self) -> &[ParserTokenRecord] { &self.tokens }
+    #[must_use]
+    pub fn entities(&self) -> &[ParserEntityRecord] { &self.entities }
+    #[must_use]
+    pub fn artifact(&self) -> Option<&ParserArtifactRecord> { self.artifact.as_ref() }
+    #[must_use]
+    pub fn candidate_only(&self) -> bool { self.candidate_only }
 }
 
 /// Reopen the *original* parser observations, including morphology, dependency
