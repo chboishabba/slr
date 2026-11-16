@@ -1537,7 +1537,6 @@ pub fn load_parser_evidence_region(
         return Err(DbNativeParserError::EmptyCoordinate);
     }
     let mut client = Client::connect(config.database_url(), NoTls)?;
-    client.batch_execute(DB_NATIVE_PARSER_SCHEMA_SQL)?;
     let job = client.query_opt(
         "SELECT j.compilation_key, j.source_revision_ref
          FROM ingest.parser_job j
