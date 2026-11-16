@@ -7,6 +7,7 @@ use sensiblaw_pg_source_store::{
     load_claims_for_event, load_contestation_relations_for_claims,
     load_database_config, load_temporal_assertions_for_event,
     load_source_statement, load_observation_event_links_for_event,
+    load_statement_observation_links_for_observation,
 };
 use std::collections::BTreeSet;
 
@@ -85,6 +86,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
             "statement_sha256": digest,
             "candidate_only": statement.candidate_only,
             "creates_semantic_authority": statement.creates_semantic_authority,
+            "applicability_promoted": statement.applicability_promoted,
             "claim_truth_promoted": statement.claim_truth_promoted,
         }));
     }
@@ -103,8 +105,63 @@ pub fn run(args: &[String]) -> Result<(), String> {
         "assembly_receipt_ref": link.assembly_receipt_ref,
         "candidate_only": link.candidate_only,
         "creates_semantic_authority": link.creates_semantic_authority,
+        "applicability_promoted": link.applicability_promoted,
         "claim_truth_promoted": link.claim_truth_promoted,
     })).collect();
+    // Preserve the *original* M12 statement -> observation relationship.
+    // A PNF label, shared QID, or event-ref alone never fabricates this join.
+    let mut observation_refs = BTreeSet::<String>::new();
+    for assertion in &assertions {
+        observation_refs.extend(assertion.observation_refs.iter().cloned());
+    }
+    for claim in &claims {
+        observation_refs.extend(claim.observation_refs.iter().cloned());
+    }
+    for relation in &contestations {
+        observation_refs.extend(relation.observation_refs.iter().cloned());
+    }
+    let linked_observations: BTreeSet<_> = event_links.iter()
+        .map(|link| link.observation_ref.as_str()).collect();
+    let obs_to_event_join_complete = observation_refs.iter()
+        .all(|reference| linked_observations.contains(reference.as_str()));
+    let mut statement_observation_rows = Vec::new();
+    let mut observations_with_source = BTreeSet::<String>::new();
+    for observation_ref in observation_refs {
+        let relations = load_statement_observation_links_for_observation(
+            &config, &observation_ref
+        ).map_err(|e| e.to_string())?;
+        for link in relations {
+            link.validate().map_err(|e| format!("invalid M12 statement/observation link: {e:?}"))?;
+            // A source row must be reopened independently, even if it was
+            // absent from the S28 statementRefs lists.
+            let source = load_source_statement(&config, &link.statement_ref)
+                .map_err(|e| e.to_string())?
+                .ok_or_else(|| format!("missing M12 source for observation {}", link.observation_ref))?;
+            if source.statement_ref != link.statement_ref {
+                return Err("M12 source/observation identity mismatch".into());
+            }
+            observations_with_source.insert(observation_ref.clone());
+            statement_observation_rows.push(serde_json::json!({
+                "link_ref":link.link_ref,
+                "statement_ref":link.statement_ref,
+                "source_revision_ref":source.source_revision_ref,
+                "exact_span_ref":source.exact_span_ref,
+                "observation_ref":link.observation_ref,
+                "candidate_pnf_ref":link.candidate_pnf_ref,
+                "parser_receipt_ref":link.parser_receipt_ref,
+                "parse_review_ref":link.parse_review_ref,
+                "admission_receipt_ref":link.admission_receipt_ref,
+                "disposition":format!("{:?}",link.disposition),
+                "candidate_only":link.candidate_only,
+                "creates_semantic_authority":link.creates_semantic_authority,
+                "applicability_promoted":link.applicability_promoted,
+                "claim_truth_promoted":link.claim_truth_promoted,
+            }));
+        }
+    }
+    let source_trace_join_complete = obs_to_event_join_complete &&
+        event_links.iter().all(|link|
+            observations_with_source.contains(&link.observation_ref));
     let times: Vec<_> = assertions.iter().map(|a| serde_json::json!({
         "temporal_ref":a.temporal_ref,
         "form":temporal_form(&a.form),
@@ -153,6 +210,8 @@ pub fn run(args: &[String]) -> Result<(), String> {
         "contestation_relations":relations,
         "source_statements":source_rows,
         "observation_event_links":assembly_rows,
+        "statement_observation_links":statement_observation_rows,
+        "source_trace_join_complete":source_trace_join_complete,
         "candidate_only":true,
         "source_or_review_receipts_are_world_truth":false,
         "event_occurrence_paid":false,
