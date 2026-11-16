@@ -94,6 +94,37 @@ fn object_negation_and_clause_shapes_preserve_agda_fragment_families() {
 }
 
 #[test]
+fn predicate_root_and_numeric_quantifier_emit_distinct_candidate_algebra_fragments() {
+    let cases = [
+        (DependencyShape::RootPredicate, FragmentKind::Relation),
+        (DependencyShape::NumericQuantifier, FragmentKind::Quantifier),
+    ];
+    for (shape, expected) in cases {
+        let records = [manifestation(), token(shape, 0, 0, "x", "x")];
+        let mut input = Vec::new();
+        for record in &records {
+            encode_observation(&mut input, record).unwrap();
+        }
+        let mut output = Vec::new();
+        let receipt = compile_observation_stream(
+            &mut Cursor::new(input), &mut output, 13,
+        ).unwrap();
+        assert_eq!(receipt.pnf_candidates, 1);
+        assert_eq!(receipt.world_atoms, 1);
+        assert!(!receipt.semantic_promotion);
+        let mut cursor = Cursor::new(output);
+        let _manifestation = decode_record(&mut cursor).unwrap().unwrap();
+        let pnf = decode_record(&mut cursor).unwrap().unwrap();
+        let atom = decode_record(&mut cursor).unwrap().unwrap();
+        assert_eq!(pnf.kind, WorldRecordKind::PnfCandidate);
+        assert_eq!(pnf.payload[4], expected as u8);
+        assert_eq!(atom.kind, WorldRecordKind::WorldAtom);
+        // World atoms are candidate-only envelopes, not legal truth proofs.
+        assert!(atom.payload.starts_with(b"ATM1"));
+    }
+}
+
+#[test]
 fn unresolved_dependency_does_not_silently_promote_semantics() {
     let records = [manifestation(), token(DependencyShape::UnresolvedDependency, 0, 0, "x", "x")];
     let mut input = Vec::new();
