@@ -242,6 +242,18 @@ pub fn compile_statement_pnf_with_parser_evidence(
             },
         ));
     }
+    let parser_receipt_ref = parser_receipt_ref.into();
+    let expected_receipt = format!(
+        "db-parser:{}:{}", snapshot.parser_run_ref(), statement.span.span_ref
+    );
+    if parser_receipt_ref != expected_receipt {
+        return Err(StatementPnfSpineError::CandidatePnf(
+            CandidatePnfError::PersistedParserResidual {
+                span_ref: statement.span.span_ref.clone(),
+                error_ref: "parser-evidence-receipt-mismatch".into(),
+            },
+        ));
+    }
     let compiled = compile_statement_pnf(snapshot, statement, parser_receipt_ref)?;
     crate::audit_candidate_pnf_evidence(
         &compiled.statement.span,
@@ -250,6 +262,33 @@ pub fn compile_statement_pnf_with_parser_evidence(
         evidence,
     )?;
     Ok(compiled)
+}
+
+/// Source-bound PG entry point: load original parser observations,
+/// run the existing M12 candidate compiler and enforce exact parity.
+#[derive(Debug, thiserror::Error)]
+pub enum DbStatementPnfCheckedError {
+    #[error("parser evidence load failed: {0}")]
+    Parser(#[from] crate::DbNativeParserError),
+    #[error("M12 candidate/parity check failed: {0}")]
+    Statement(#[from] StatementPnfSpineError),
+}
+
+pub fn compile_db_statement_pnf_checked(
+    config: &crate::DatabaseConfig,
+    snapshot: &crate::DbNativeParserSnapshot,
+    statement: SourceStatementEnvelope,
+) -> Result<(StatementCandidatePnf, crate::ParserEvidenceRegion), DbStatementPnfCheckedError> {
+    let evidence = crate::load_parser_evidence_region(
+        config, snapshot.parser_run_ref(), &statement.span.span_ref,
+    )?;
+    let receipt = format!(
+        "db-parser:{}:{}", snapshot.parser_run_ref(), statement.span.span_ref
+    );
+    let compiled = compile_statement_pnf_with_parser_evidence(
+        snapshot, statement, &evidence, receipt,
+    )?;
+    Ok((compiled, evidence))
 }
 
 pub fn compile_initial_intake_statement<P: CandidatePnfProducer>(
