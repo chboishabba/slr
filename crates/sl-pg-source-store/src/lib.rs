@@ -258,6 +258,7 @@ pub use reviewed_source_expansion::{
 pub use statement_pnf_spine::{
     compile_initial_intake_statement, compile_research_reentry_statement,
     compile_statement_pnf, compile_statement_pnf_with_parser_evidence,
+    compile_db_statement_pnf_checked, DbStatementPnfCheckedError,
     review_statement_parse, ParseReviewDisposition,
     ReviewedStatementPnf, SourceStatementEnvelope, StatementCandidatePnf,
     StatementOrigin, StatementParseReview, StatementPnfSpineError,
