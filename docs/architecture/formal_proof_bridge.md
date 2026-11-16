@@ -33,11 +33,25 @@ is a coarse candidate projection, not the complete parser representation.
 
 - load_parser_evidence_region reopens one successful candidate-only run/region
   with original tokens, entity annotations and parser artifact coordinates.
-- compile_statement_pnf_with_parser_evidence reuses the ordinary M12 compiler
-  and checks its candidate factors against the original exact parser evidence.
+- compile_db_statement_pnf_checked(config, snapshot, statement) is the
+  canonical one-call DB handoff. It loads exact parser observations, checks
+  the canonical receipt db-parser:<run>:<region>, and reuses ordinary M12.
+- compile_statement_pnf_with_parser_evidence also accepts a preloaded,
+  sealed ParserEvidenceRegion and requires the original source literal
+  to match SLR's existing parser_product_key (region text digest plus
+  parser family/version/model/configuration). Missing product keys fail closed.
+- ParserEvidenceRegion::matches_observation_coverage verifies complete
+  non-whitespace token coverage, source-relative token surfaces,
+  dependency head ordinals and named-entity spans. This is a bounded
+  region-local check, not document-wide re-materialization.
 - audit_candidate_pnf_evidence rejects mismatched run-derived candidate IDs,
-  source revisions, spans, surface, lemma, dependencies, role and authority.
+  source revisions, persisted region boundaries, surface, lemma, dependency,
+  role, missing tokens and claimed authority payment.
   Success certifies parser projection parity ONLY, not semantic adequacy.
+
+This strict path expects a parser job with a product identity from SLR's
+existing content-reuse enqueue path. Older rows with a NULL parser_product_key
+are unresolved here; the broader legacy adapter remains unchanged.
 
 For a consumer question Q_c, the distinct factorisation obligation is:
 
@@ -71,6 +85,12 @@ declaration equivalence, legal applicability, Wikidata truth or proof soundness.
 The Agda mpCandidateCannotPromoteNumericABI explicitly maintains this boundary.
 No MP result pays SLR proof obligations without exact statement/dependency
 evidence and independent kernel-certified checker receipts.
+
+The formal bridge's certification_state = "kernel-certified" value is
+currently a supplied receipt field: validating this string and matching
+statement digests does not independently execute a Lean/Agda kernel or
+authenticate the checker. That trust gate remains open, regardless of the
+stronger source/parser parity achieved above.
 
 ### Remaining acceptance gates
 
