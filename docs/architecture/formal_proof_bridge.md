@@ -71,6 +71,42 @@ SLR FormalEvidenceReceipt -> exact payment -> selective dependency reopening.
 Structural shape and round-trip translation alone do not certify equality.
 Source code stays at its original repository owner; avoid full copies in SLR.
 
+## Checked M12 -> world-algebra candidate transport
+
+`sensiblaw-world-compiler::checked_parser_world::compile_checked_statement_world`
+consumes the sealed `ParserEvidenceRegion` and the checked `StatementCandidatePnf`
+without rerunning spaCy or copying full document source. It rechecks the
+canonical parser receipt, exact revision/region, content-derived parser
+product key, source-character coverage and M12 candidate-token parity.
+
+The existing versioned SLRO observation and SLRW world compiler then emits
+source-scoped `PnfCandidate` and `WorldAtom` records. The new dependency
+shape tags are append-only: `RootPredicate = 17` maps to existing
+`FragmentKind::Relation`; `NumericQuantifier = 18` maps to existing
+`FragmentKind::Quantifier`. Inferences about scope, modality and Hebrew
+transliteration do not follow from a POS/dependency label. Missing/ambiguous
+heads and unlicensed dependency families remain unresolved.
+
+Previously an unresolved dependency merely incremented a counter.
+The compiler now writes a source-bound, candidate-only `WorldRecordKind::Gap`
+payload (GAP1) so the world store can retain the *exact* reason for
+consumer-driven deepening. Existing PNF1/ATM1 world atoms remain
+non-authoritative; the binary shape extension requires compatibility
+review for external consumers of SLRO/PNF1 records.
+
+The independent Agda correspondence in DASHI PR #1522 imports the
+source-typed KeyShoe R13 `Body13 × Side` chart, SLR numeric->evidential
+PNF correspondence, consumer descent, and DASHI's existing
+`PredicateNormalWorldModelCore`. It proves a body-only encoding cannot
+answer every letter-side query, and expresses world interpretation as
+an explicit, consumer-specific commuting-square obligation. It does
+NOT assert that Hebrew Shem72, R13, legal propositions and world actions
+have a canonical same-meaning map.
+
+**Unpaid checks:** exact-head Cargo/Rust test, live PostgreSQL source
+revision->checked M12->candidate world stream, Agda kernel check,
+licensed reviewed interpretation, independent Lean kernel receipt,
+formal payment and revision-driven selective reopening.
 ## Marchenko-Pastur (PNF MP) spectral candidate gate
 
 Reuse the existing owners rather than building a second classifier:
