@@ -1547,6 +1547,42 @@ impl ParserEvidenceRegion {
         );
         self.parser_product_key.as_deref() == Some(expected.as_str())
     }
+    /// Exact non-whitespace source coverage by the stored tokens, with token
+    /// surfaces/head ordinals and named-entity spans checked against source.
+    /// This is syntax integrity only, not semantic validity.
+    #[must_use]
+    pub fn matches_observation_coverage(&self, literal: &str) -> bool {
+        let chars = literal.chars().collect::<Vec<_>>();
+        let expected_len = (self.end_char - self.start_char) as usize;
+        if chars.len() != expected_len { return false; }
+        let mut covered = vec![false; expected_len];
+        let ordinals = self.tokens.iter()
+            .map(|token| token.token_ordinal)
+            .collect::<BTreeSet<_>>();
+        if ordinals.len() != self.tokens.len() { return false; }
+        for token in &self.tokens {
+            if token.start_char < self.start_char || token.end_char > self.end_char
+                || token.start_char >= token.end_char
+                || token.head_ordinal.is_some_and(|h| !ordinals.contains(&h))
+            { return false; }
+            let a = (token.start_char - self.start_char) as usize;
+            let b = (token.end_char - self.start_char) as usize;
+            if chars[a..b].iter().collect::<String>() != token.surface { return false; }
+            for idx in a..b {
+                if covered[idx] { return false; }
+                covered[idx] = true;
+            }
+        }
+        for entity in &self.entities {
+            if entity.start_char < self.start_char || entity.end_char > self.end_char
+                || entity.start_char >= entity.end_char
+            { return false; }
+            let a = (entity.start_char - self.start_char) as usize;
+            let b = (entity.end_char - self.start_char) as usize;
+            if chars[a..b].iter().collect::<String>() != entity.surface { return false; }
+        }
+        chars.iter().enumerate().all(|(i, ch)| ch.is_whitespace() || covered[i])
+    }
     #[must_use]
     pub fn tokens(&self) -> &[ParserTokenRecord] { &self.tokens }
     #[must_use]
@@ -1760,23 +1796,23 @@ mod tests {
     #[test]
     fn source_bound_candidate_evidence_audit_matches_original_tokens() {
         let source = ExactSourceSpan {
-            span_ref: "sentence:1".into(), start_char: 0, end_char: 13,
+            span_ref: "sentence:1".into(), start_char: 0, end_char: 5,
         };
         let token = ParserTokenRecord {
             token_ordinal: 0,
             start_char: 0, end_char: 5,
             surface: "Alice".into(), lemma: "Alice".into(), pos: "PROPN".into(),
             morph_json: Some(r#"{"Number":"Sing"}"#.into()),
-            head_ordinal: Some(1), dependency_ref: "nsubj".into(),
+            head_ordinal: Some(0), dependency_ref: "nsubj".into(),
         };
         let evidence = ParserEvidenceRegion {
             parser_run_ref: "run:1".into(),
             source_revision_ref: "revision:1".into(),
             region_ref: source.span_ref.clone(),
             compilation_key: "compilation:1".into(),
-            start_char: 0, end_char: 13,
+            start_char: 0, end_char: 5,
             parser_product_key: Some(parser_product_key(
-                "Alice called.", "spacy", "3.8", "en_core", "cfg:1",
+                "Alice", "spacy", "3.8", "en_core", "cfg:1",
             )),
             parser_family: "spacy".into(), parser_version: "3.8".into(),
             model_ref: "en_core".into(), config_digest_ref: "cfg:1".into(),
@@ -1795,11 +1831,21 @@ mod tests {
             proposition_support_paid: false, applicability_paid: false,
             claim_truth_paid: false,
         };
-        assert!(evidence.matches_source_literal("Alice called."));
-        assert!(!evidence.matches_source_literal("Alice called?"));
+        assert!(evidence.matches_source_literal("Alice"));
+        assert!(evidence.matches_observation_coverage("Alice"));
+        let mut omitted = evidence.clone();
+        omitted.tokens.clear();
+        assert!(!omitted.matches_observation_coverage("Alice"));
+        let mut forged_head = evidence.clone();
+        forged_head.tokens[0].head_ordinal = Some(99);
+        assert!(!forged_head.matches_observation_coverage("Alice"));
+        let mut forged_surface = evidence.clone();
+        forged_surface.tokens[0].surface = "Alicf".into();
+        assert!(!forged_surface.matches_observation_coverage("Alice"));
+        assert!(!evidence.matches_source_literal("Alice?"));
         let mut legacy_evidence = evidence.clone();
         legacy_evidence.parser_product_key = None;
-        assert!(!legacy_evidence.matches_source_literal("Alice called."));
+        assert!(!legacy_evidence.matches_source_literal("Alice"));
         assert!(audit_candidate_pnf_evidence(&source, "revision:1", &batch, &evidence).is_ok());
         let mut changed = batch.clone();
         changed.candidates[0].dependency_ref = "dobj".into();
@@ -1812,7 +1858,7 @@ mod tests {
         assert!(audit_candidate_pnf_evidence(&source, "revision:1", &forged_id, &evidence).is_err());
         assert!(audit_candidate_pnf_evidence(&source, "revision:changed", &batch, &evidence).is_err());
         let truncated_source = ExactSourceSpan {
-            span_ref: source.span_ref.clone(), start_char: 0, end_char: 5,
+            span_ref: source.span_ref.clone(), start_char: 0, end_char: 4,
         };
         assert!(audit_candidate_pnf_evidence(
             &truncated_source, "revision:1", &batch, &evidence
