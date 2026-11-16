@@ -44,9 +44,18 @@ pub fn run(args: &[String]) -> Result<(), String> {
     if assertions.is_empty() && claims.is_empty() {
         return Err("no persisted S28 claim or temporal observation for event".into());
     }
+    for observation in &assertions {
+        observation.validate().map_err(|e| format!("S28 temporal row invalid: {e:?}"))?;
+    }
+    for claim in &claims {
+        claim.validate().map_err(|e| format!("S28 claim row invalid: {e:?}"))?;
+    }
     let claim_refs: Vec<_> = claims.iter().map(|c| c.claim_ref.clone()).collect();
     let contestations = load_contestation_relations_for_claims(&config,&claim_refs)
         .map_err(|e| e.to_string())?;
+    for relation in &contestations {
+        relation.validate().map_err(|e| format!("S28 relation row invalid: {e:?}"))?;
+    }
     let times: Vec<_> = assertions.iter().map(|a| serde_json::json!({
         "temporal_ref":a.temporal_ref,
         "form":temporal_form(&a.form),
@@ -55,6 +64,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
         "review_ref":a.review_ref,
         "candidate_only":a.candidate_only,
         "creates_semantic_authority":a.creates_semantic_authority,
+        "applicability_promoted":a.applicability_promoted,
         "claim_truth_promoted":a.claim_truth_promoted,
     })).collect();
     let leaves: Vec<_> = claims.iter().map(|c| serde_json::json!({
@@ -69,6 +79,8 @@ pub fn run(args: &[String]) -> Result<(), String> {
         "temporal_refs":c.temporal_refs,
         "scope_refs":c.scope_refs,
         "candidate_only":c.candidate_only,
+        "creates_semantic_authority":c.creates_semantic_authority,
+        "applicability_promoted":c.applicability_promoted,
         "claim_truth_promoted":c.claim_truth_promoted,
     })).collect();
     let relations: Vec<_> = contestations.iter().map(|r| serde_json::json!({
@@ -80,6 +92,8 @@ pub fn run(args: &[String]) -> Result<(), String> {
         "statement_refs":r.statement_refs,
         "observation_refs":r.observation_refs,
         "candidate_only":r.candidate_only,
+        "creates_semantic_authority":r.creates_semantic_authority,
+        "applicability_promoted":r.applicability_promoted,
         "claim_truth_promoted":r.claim_truth_promoted,
     })).collect();
     println!("{}",serde_json::json!({
