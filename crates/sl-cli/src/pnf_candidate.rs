@@ -71,6 +71,55 @@ mod tests {
     use super::*;
 
     #[test]
+    fn sentence_actor_predicate_patient_do_not_pay_event_occurrence() {
+        let tsv = concat!(
+            "T\t1\t0\t5\t0\tAlice\talice\tPROPN\t2\tnsubj\n",
+            "T\t2\t6\t12\t0\tcalled\tcall\tVERB\t2\tROOT\n",
+            "T\t3\t13\t16\t0\tBob\tbob\tPROPN\t2\tdobj\n",
+        );
+        let parser = IndexedSpacyTsvAdapter::parse(tsv).unwrap();
+        let source = ExactSourceSpan {
+            span_ref: "source:rev1:sentence1".to_owned(),
+            start_char: 0,
+            end_char: 16,
+        };
+        let batch = parser.produce(&source).unwrap();
+        assert_eq!(batch.exact_span_ref, source.span_ref);
+        assert_eq!(
+            batch.candidates.iter().map(|x| role_name(x.role)).collect::<Vec<_>>(),
+            vec!["actor", "predicate", "patient"]
+        );
+        assert!(batch.candidates.iter().all(|x| x.candidate_only));
+        assert!(batch.candidates.iter().all(|x| {
+            x.source_start_char >= source.start_char && x.source_end_char <= source.end_char
+        }));
+        assert!(!batch.proposition_support_paid);
+        assert!(!batch.applicability_paid);
+        assert!(!batch.claim_truth_paid);
+    }
+
+    #[test]
+    fn negation_is_not_automatically_an_event_denial_or_world_fact() {
+        let tsv = concat!(
+            "T\t1\t0\t5\t0\tAlice\talice\tPROPN\t2\tnsubj\n",
+            "T\t2\t6\t9\t0\tdid\tdo\tAUX\t2\tROOT\n",
+            "T\t3\t10\t13\t0\tnot\tnot\tPART\t2\tneg\n",
+            "T\t4\t14\t18\t0\tcall\tcall\tVERB\t2\txcomp\n",
+            "T\t5\t19\t22\t0\tBob\tbob\tPROPN\t4\tdobj\n",
+        );
+        let parser = IndexedSpacyTsvAdapter::parse(tsv).unwrap();
+        let batch = parser.produce(&ExactSourceSpan {
+            span_ref: "source:rev1:negative-sentence".to_owned(),
+            start_char: 0,
+            end_char: 22,
+        }).unwrap();
+        assert_eq!(batch.candidates.len(), 5);
+        assert!(!batch.claim_truth_paid);
+        assert!(!batch.proposition_support_paid);
+        assert!(!batch.applicability_paid);
+    }
+
+    #[test]
     fn producer_keeps_propn_role_and_does_not_pay_truth() {
         let tsv = "T\t1\t0\t5\t0\tAlice\talice\tPROPN\t2\tnsubj\nT\t2\t6\t12\t0\tcalled\tcall\tVERB\t2\tROOT\n";
         let p = IndexedSpacyTsvAdapter::parse(tsv).unwrap();
