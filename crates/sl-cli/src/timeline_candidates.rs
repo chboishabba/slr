@@ -76,6 +76,11 @@ pub fn run(args: &[String]) -> Result<(), String> {
         let statement = load_source_statement(&config, &statement_ref)
             .map_err(|e| e.to_string())?
             .ok_or_else(|| format!("missing original M12 source statement: {statement_ref}"))?;
+        if !statement.candidate_only || statement.creates_semantic_authority
+            || statement.applicability_promoted || statement.claim_truth_promoted
+        {
+            return Err("M12 source row attempts authority promotion".into());
+        }
         let digest = statement.statement_sha256.iter()
             .map(|b| format!("{b:02x}")).collect::<String>();
         source_rows.push(serde_json::json!({
@@ -159,8 +164,10 @@ pub fn run(args: &[String]) -> Result<(), String> {
             }));
         }
     }
-    let source_trace_join_complete = obs_to_event_join_complete &&
-        event_links.iter().all(|link|
+    let source_trace_join_complete =
+        !event_links.is_empty() && !statement_observation_rows.is_empty()
+        && obs_to_event_join_complete
+        && event_links.iter().all(|link|
             observations_with_source.contains(&link.observation_ref));
     let times: Vec<_> = assertions.iter().map(|a| serde_json::json!({
         "temporal_ref":a.temporal_ref,
