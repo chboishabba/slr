@@ -242,6 +242,14 @@ pub fn compile_statement_pnf_with_parser_evidence(
             },
         ));
     }
+    if !evidence.matches_source_literal(&statement.literal_text) {
+        return Err(StatementPnfSpineError::CandidatePnf(
+            CandidatePnfError::PersistedParserResidual {
+                span_ref: statement.span.span_ref.clone(),
+                error_ref: "parser-evidence-source-literal-mismatch-or-missing-product-key".into(),
+            },
+        ));
+    }
     let parser_receipt_ref = parser_receipt_ref.into();
     let expected_receipt = format!(
         "db-parser:{}:{}", snapshot.parser_run_ref(), statement.span.span_ref
