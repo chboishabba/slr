@@ -7,6 +7,8 @@ use sensiblaw_world_store::{encode_record, WireRecord, WorldRecordKind};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
+pub mod checked_parser_world;
+
 pub const OBS_MAGIC: [u8; 4] = *b"SLRO";
 pub const OBS_VERSION: u16 = 1;
 const MAX_TEXT_BYTES: usize = 4 << 20;
@@ -40,6 +42,8 @@ pub enum DependencyShape {
     ClausalModifier = 14,
     RelativeClause = 15,
     UnresolvedDependency = 16,
+    RootPredicate = 17,
+    NumericQuantifier = 18,
 }
 
 impl DependencyShape {
@@ -51,6 +55,8 @@ impl DependencyShape {
             10 => Ok(Self::TemporalModifier), 11 => Ok(Self::ClausalComplement), 12 => Ok(Self::OpenClausalComplement),
             13 => Ok(Self::AdverbialClause), 14 => Ok(Self::ClausalModifier), 15 => Ok(Self::RelativeClause),
             16 => Ok(Self::UnresolvedDependency),
+            17 => Ok(Self::RootPredicate),
+            18 => Ok(Self::NumericQuantifier),
             _ => Err(CompilerError::InvalidObservation(format!("unknown dependency shape {value}"))),
         }
     }
@@ -195,6 +201,8 @@ fn fragment_for_shape(shape: DependencyShape) -> Option<FragmentKind> {
         DependencyShape::TemporalModifier => Some(FragmentKind::Temporal),
         DependencyShape::ClausalComplement | DependencyShape::OpenClausalComplement => Some(FragmentKind::ContentClause),
         DependencyShape::AdverbialClause | DependencyShape::ClausalModifier | DependencyShape::RelativeClause => Some(FragmentKind::ClauseAttachment),
+        DependencyShape::RootPredicate => Some(FragmentKind::Relation),
+        DependencyShape::NumericQuantifier => Some(FragmentKind::Quantifier),
         DependencyShape::Determiner | DependencyShape::UnresolvedDependency => None,
     }
 }
