@@ -71,6 +71,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
     for relation in &contestations {
         source_refs.extend(relation.statement_refs.iter().cloned());
     }
+    let included_statement_refs = source_refs.clone();
     let mut source_rows = Vec::new();
     for statement_ref in source_refs {
         let statement = load_source_statement(&config, &statement_ref)
@@ -168,7 +169,10 @@ pub fn run(args: &[String]) -> Result<(), String> {
         !event_links.is_empty() && !statement_observation_rows.is_empty()
         && obs_to_event_join_complete
         && event_links.iter().all(|link|
-            observations_with_source.contains(&link.observation_ref));
+            observations_with_source.contains(&link.observation_ref))
+        && statement_observation_rows.iter().all(|row|
+            row.get("statement_ref").and_then(serde_json::Value::as_str)
+                .is_some_and(|statement_ref| included_statement_refs.contains(statement_ref)));
     let times: Vec<_> = assertions.iter().map(|a| serde_json::json!({
         "temporal_ref":a.temporal_ref,
         "form":temporal_form(&a.form),
