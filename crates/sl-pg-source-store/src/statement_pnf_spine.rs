@@ -222,6 +222,36 @@ pub fn compile_statement_pnf<P: CandidatePnfProducer>(
     Ok(compiled)
 }
 
+/// Checked M12 handoff for the database-native parser. Reuses the ordinary
+/// source->candidate PNF compiler, then reopens the complete parser region.
+/// No additional semantic authority or legal proposition is generated.
+pub fn compile_statement_pnf_with_parser_evidence(
+    snapshot: &crate::DbNativeParserSnapshot,
+    statement: SourceStatementEnvelope,
+    evidence: &crate::ParserEvidenceRegion,
+    parser_receipt_ref: impl Into<String>,
+) -> Result<StatementCandidatePnf, StatementPnfSpineError> {
+    if evidence.parser_run_ref != snapshot.parser_run_ref()
+        || evidence.source_revision_ref != snapshot.source_revision_ref()
+        || evidence.source_revision_ref != statement.source_revision_ref
+    {
+        return Err(StatementPnfSpineError::CandidatePnf(
+            crate::CandidatePnfError::PersistedParserResidual {
+                span_ref: statement.span.span_ref.clone(),
+                error_ref: "parser-evidence-revision-or-run-mismatch".into(),
+            },
+        ));
+    }
+    let compiled = compile_statement_pnf(snapshot, statement, parser_receipt_ref)?;
+    crate::audit_candidate_pnf_evidence(
+        &compiled.statement.span,
+        &compiled.statement.source_revision_ref,
+        &compiled.pnf,
+        evidence,
+    )?;
+    Ok(compiled)
+}
+
 pub fn compile_initial_intake_statement<P: CandidatePnfProducer>(
     producer: &P,
     statement: SourceStatementEnvelope,
