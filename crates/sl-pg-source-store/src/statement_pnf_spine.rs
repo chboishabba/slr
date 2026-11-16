@@ -177,7 +177,7 @@ impl ReviewedStatementPnf {
         }
         let unreviewed: BTreeSet<String> = available
             .iter()
-            .filter(|candidate_ref| !reviewed.contains(**candidate_ref))
+            .filter(|candidate_ref| !reviewed.contains(*candidate_ref))
             .map(|candidate_ref| (*candidate_ref).to_owned())
             .collect();
         if self.reviewed_candidate_refs != reviewed
