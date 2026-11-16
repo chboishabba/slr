@@ -1776,6 +1776,16 @@ mod tests {
         let mut missing = batch.clone();
         missing.candidates.clear();
         assert!(audit_candidate_pnf_evidence(&source, "revision:1", &missing, &evidence).is_err());
+        let mut forged_id = batch.clone();
+        forged_id.candidates[0].candidate_ref = "candidate:forged".into();
+        assert!(audit_candidate_pnf_evidence(&source, "revision:1", &forged_id, &evidence).is_err());
+        assert!(audit_candidate_pnf_evidence(&source, "revision:changed", &batch, &evidence).is_err());
+        let truncated_source = ExactSourceSpan {
+            span_ref: source.span_ref.clone(), start_char: 0, end_char: 5,
+        };
+        assert!(audit_candidate_pnf_evidence(
+            &truncated_source, "revision:1", &batch, &evidence
+        ).is_err());
         let mut promoted = batch;
         promoted.claim_truth_paid = true;
         assert!(audit_candidate_pnf_evidence(&source, "revision:1", &promoted, &evidence).is_err());
