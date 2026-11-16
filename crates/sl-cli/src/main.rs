@@ -8,6 +8,7 @@ mod case_follow;
 mod s14_adaptive_fixture;
 mod waltons;
 mod waltons_live;
+mod pnf_candidate;
 
 use std::env;
 use std::path::PathBuf;
@@ -18,6 +19,7 @@ fn usage() {
         "SensibLaw native CLI
 
 USAGE:
+  sensiblaw pnf-candidate TSV_PATH SPAN_REF START_CHAR END_CHAR
   sensiblaw legal-follow case acquire --citation '[YYYY] COURT N' [options]
   sensiblaw legal-follow cullen pnf --operator-opt-in [--output-dir PATH] [--spacy-model MODEL]
   sensiblaw legal-follow contracts landscape <plan|status|expand|acquire> [--as-at YYYY-MM-DD] [--jurisdiction AU-QLD]
@@ -177,6 +179,9 @@ fn waltons_command(mut args: Vec<String>) -> Result<(), String> {
 fn run() -> Result<(), String> {
     let args = env::args().skip(1).collect::<Vec<_>>();
     match args.as_slice() {
+        [command, rest @ ..] if command == "pnf-candidate" => {
+            pnf_candidate::run(rest)
+        }
         [domain, matter, rest @ ..] if domain == "legal-follow" && matter == "waltons" => {
             waltons_command(rest.to_vec())
         }
