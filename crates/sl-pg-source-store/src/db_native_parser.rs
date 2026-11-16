@@ -1552,6 +1552,7 @@ impl ParserEvidenceRegion {
     /// This is syntax integrity only, not semantic validity.
     #[must_use]
     pub fn matches_observation_coverage(&self, literal: &str) -> bool {
+        if self.start_char >= self.end_char { return false; }
         let chars = literal.chars().collect::<Vec<_>>();
         let expected_len = (self.end_char - self.start_char) as usize;
         if chars.len() != expected_len { return false; }
