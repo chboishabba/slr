@@ -6,7 +6,9 @@ use sensiblaw_core::chronology_contestation::TemporalForm;
 use sensiblaw_pg_source_store::{
     load_claims_for_event, load_contestation_relations_for_claims,
     load_database_config, load_temporal_assertions_for_event,
+    load_source_statement, load_observation_event_links_for_event,
 };
+use std::collections::BTreeSet;
 
 fn temporal_form(value: &TemporalForm) -> serde_json::Value {
     match value {
@@ -56,6 +58,53 @@ pub fn run(args: &[String]) -> Result<(), String> {
     for relation in &contestations {
         relation.validate().map_err(|e| format!("S28 relation row invalid: {e:?}"))?;
     }
+    // Reopen canonical M12 source identities for every statement referenced
+    // by the S28 overlay. These are provenance joins, never occurrence proofs.
+    let mut source_refs = BTreeSet::<String>::new();
+    for assertion in &assertions {
+        source_refs.extend(assertion.statement_refs.iter().cloned());
+    }
+    for claim in &claims {
+        source_refs.extend(claim.statement_refs.iter().cloned());
+    }
+    for relation in &contestations {
+        source_refs.extend(relation.statement_refs.iter().cloned());
+    }
+    let mut source_rows = Vec::new();
+    for statement_ref in source_refs {
+        let statement = load_source_statement(&config, &statement_ref)
+            .map_err(|e| e.to_string())?
+            .ok_or_else(|| format!("missing original M12 source statement: {statement_ref}"))?;
+        let digest = statement.statement_sha256.iter()
+            .map(|b| format!("{b:02x}")).collect::<String>();
+        source_rows.push(serde_json::json!({
+            "statement_ref": statement.statement_ref,
+            "document_ref": statement.document_ref,
+            "source_revision_ref": statement.source_revision_ref,
+            "exact_span_ref": statement.exact_span_ref,
+            "statement_sha256": digest,
+            "candidate_only": statement.candidate_only,
+            "creates_semantic_authority": statement.creates_semantic_authority,
+            "claim_truth_promoted": statement.claim_truth_promoted,
+        }));
+    }
+    let event_links = load_observation_event_links_for_event(&config, event_ref)
+        .map_err(|e| e.to_string())?;
+    for link in &event_links {
+        link.validate().map_err(|e| format!("invalid M12 event assembly link: {e:?}"))?;
+        if link.event_ref != *event_ref {
+            return Err("M12 observation/event join changed requested event identity".into());
+        }
+    }
+    let assembly_rows: Vec<_> = event_links.iter().map(|link| serde_json::json!({
+        "link_ref": link.link_ref,
+        "observation_ref": link.observation_ref,
+        "event_ref": link.event_ref,
+        "assembly_receipt_ref": link.assembly_receipt_ref,
+        "candidate_only": link.candidate_only,
+        "creates_semantic_authority": link.creates_semantic_authority,
+        "claim_truth_promoted": link.claim_truth_promoted,
+    })).collect();
     let times: Vec<_> = assertions.iter().map(|a| serde_json::json!({
         "temporal_ref":a.temporal_ref,
         "form":temporal_form(&a.form),
@@ -102,6 +151,8 @@ pub fn run(args: &[String]) -> Result<(), String> {
         "temporal_assertions":times,
         "claim_leaves":leaves,
         "contestation_relations":relations,
+        "source_statements":source_rows,
+        "observation_event_links":assembly_rows,
         "candidate_only":true,
         "source_or_review_receipts_are_world_truth":false,
         "event_occurrence_paid":false,
