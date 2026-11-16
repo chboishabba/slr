@@ -1517,6 +1517,11 @@ pub struct ParserEvidenceRegion {
     compilation_key: String,
     start_char: u32,
     end_char: u32,
+    parser_product_key: Option<String>,
+    parser_family: String,
+    parser_version: String,
+    model_ref: String,
+    config_digest_ref: String,
     tokens: Vec<ParserTokenRecord>,
     entities: Vec<ParserEntityRecord>,
     artifact: Option<ParserArtifactRecord>,
@@ -1534,6 +1539,13 @@ impl ParserEvidenceRegion {
     pub fn compilation_key(&self) -> &str { &self.compilation_key }
     #[must_use]
     pub fn span(&self) -> (u32, u32) { (self.start_char, self.end_char) }
+    #[must_use]
+    pub fn matches_source_literal(&self, literal: &str) -> bool {
+        self.parser_product_key.as_deref() == Some(parser_product_key(
+            literal, &self.parser_family, &self.parser_version,
+            &self.model_ref, &self.config_digest_ref,
+        ).as_str())
+    }
     #[must_use]
     pub fn tokens(&self) -> &[ParserTokenRecord] { &self.tokens }
     #[must_use]
@@ -1562,7 +1574,8 @@ pub fn load_parser_evidence_region(
     let mut client = Client::connect(config.database_url(), NoTls)?;
     let job = client.query_opt(
         "SELECT j.compilation_key, j.source_revision_ref,
-                j.region_start_char, j.region_end_char
+                j.region_start_char, j.region_end_char, j.parser_product_key,
+                r.parser_family, r.parser_version, r.model_ref, r.config_digest_ref
          FROM ingest.parser_job j
          JOIN ingest.parser_run r ON r.parser_run_ref = j.parser_run_ref
          WHERE j.parser_run_ref = $1 AND j.region_ref = $2
@@ -1584,6 +1597,11 @@ pub fn load_parser_evidence_region(
     let source_revision_ref: String = job.get(1);
     let region_start: i64 = job.get(2);
     let region_end: i64 = job.get(3);
+    let product_key: Option<String> = job.get(4);
+    let parser_family: String = job.get(5);
+    let parser_version: String = job.get(6);
+    let model_ref: String = job.get(7);
+    let config_digest_ref: String = job.get(8);
     if region_start < 0 || region_end <= region_start
         || region_start > u32::MAX as i64 || region_end > u32::MAX as i64
     { return Err(DbNativeParserError::InvalidRegionSpan); }
@@ -1662,6 +1680,8 @@ pub fn load_parser_evidence_region(
         compilation_key,
         start_char: region_start as u32,
         end_char: region_end as u32,
+        parser_product_key: product_key,
+        parser_family, parser_version, model_ref, config_digest_ref,
         tokens,
         entities,
         artifact,
@@ -1754,6 +1774,11 @@ mod tests {
             region_ref: source.span_ref.clone(),
             compilation_key: "compilation:1".into(),
             start_char: 0, end_char: 13,
+            parser_product_key: Some(parser_product_key(
+                "Alice called.", "spacy", "3.8", "en_core", "cfg:1",
+            )),
+            parser_family: "spacy".into(), parser_version: "3.8".into(),
+            model_ref: "en_core".into(), config_digest_ref: "cfg:1".into(),
             tokens: vec![token.clone()], entities: Vec::new(),
             artifact: None, candidate_only: true,
         };
