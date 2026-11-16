@@ -1695,6 +1695,59 @@ mod tests {
     use super::*;
 
     #[test]
+    fn source_bound_candidate_evidence_audit_matches_original_tokens() {
+        let source = ExactSourceSpan {
+            span_ref: "sentence:1".into(), start_char: 0, end_char: 13,
+        };
+        let token = ParserTokenRecord {
+            token_ordinal: 0,
+            start_char: 0, end_char: 5,
+            surface: "Alice".into(), lemma: "Alice".into(), pos: "PROPN".into(),
+            morph_json: Some(r#"{"Number":"Sing"}"#.into()),
+            head_ordinal: Some(1), dependency_ref: "nsubj".into(),
+        };
+        let evidence = ParserEvidenceRegion {
+            parser_run_ref: "run:1".into(),
+            source_revision_ref: "revision:1".into(),
+            region_ref: source.span_ref.clone(),
+            compilation_key: "compilation:1".into(),
+            tokens: vec![token.clone()], entities: Vec::new(),
+            artifact: None, candidate_only: true,
+        };
+        let factor = CandidatePnfFactor {
+            candidate_ref: "candidate:1".into(), role: CandidatePnfRole::Actor,
+            source_start_char: token.start_char, source_end_char: token.end_char,
+            surface: token.surface.clone(), lemma: token.lemma.clone(),
+            dependency_ref: token.dependency_ref.clone(), candidate_only: true,
+        };
+        let batch = CandidatePnfBatch {
+            exact_span_ref: source.span_ref.clone(),
+            candidates: vec![factor.clone()],
+            proposition_support_paid: false, applicability_paid: false,
+            claim_truth_paid: false,
+        };
+        assert!(audit_candidate_pnf_evidence(&source, &batch, &evidence).is_ok());
+        let mut changed = batch.clone();
+        changed.candidates[0].dependency_ref = "dobj".into();
+        assert!(audit_candidate_pnf_evidence(&source, &changed, &evidence).is_err());
+        let mut missing = batch.clone();
+        missing.candidates.clear();
+        assert!(audit_candidate_pnf_evidence(&source, &missing, &evidence).is_err());
+        let mut promoted = batch;
+        promoted.claim_truth_paid = true;
+        assert!(audit_candidate_pnf_evidence(&source, &promoted, &evidence).is_err());
+        let mut wrong_region = evidence;
+        wrong_region.region_ref = "sentence:2".into();
+        assert!(audit_candidate_pnf_evidence(&source, &CandidatePnfBatch {
+            exact_span_ref: source.span_ref.clone(), candidates: vec![factor],
+            proposition_support_paid: false, applicability_paid: false,
+            claim_truth_paid: false,
+        }, &wrong_region).is_err());
+    }
+
+
+
+    #[test]
     fn canonical_json_makes_config_digest_order_independent() {
         let a = canonical_json_text(r#"{"model":"x","flags":{"b":2,"a":1}}"#).unwrap();
         let b = canonical_json_text(r#"{"flags":{"a":1,"b":2},"model":"x"}"#).unwrap();
