@@ -1515,6 +1515,8 @@ pub struct ParserEvidenceRegion {
     source_revision_ref: String,
     region_ref: String,
     compilation_key: String,
+    start_char: u32,
+    end_char: u32,
     tokens: Vec<ParserTokenRecord>,
     entities: Vec<ParserEntityRecord>,
     artifact: Option<ParserArtifactRecord>,
@@ -1530,6 +1532,8 @@ impl ParserEvidenceRegion {
     pub fn region_ref(&self) -> &str { &self.region_ref }
     #[must_use]
     pub fn compilation_key(&self) -> &str { &self.compilation_key }
+    #[must_use]
+    pub fn span(&self) -> (u32, u32) { (self.start_char, self.end_char) }
     #[must_use]
     pub fn tokens(&self) -> &[ParserTokenRecord] { &self.tokens }
     #[must_use]
@@ -1557,7 +1561,8 @@ pub fn load_parser_evidence_region(
     }
     let mut client = Client::connect(config.database_url(), NoTls)?;
     let job = client.query_opt(
-        "SELECT j.compilation_key, j.source_revision_ref
+        "SELECT j.compilation_key, j.source_revision_ref,
+                j.region_start_char, j.region_end_char
          FROM ingest.parser_job j
          JOIN ingest.parser_run r ON r.parser_run_ref = j.parser_run_ref
          WHERE j.parser_run_ref = $1 AND j.region_ref = $2
@@ -1577,6 +1582,11 @@ pub fn load_parser_evidence_region(
     ))?;
     let compilation_key: String = job.get(0);
     let source_revision_ref: String = job.get(1);
+    let region_start: i64 = job.get(2);
+    let region_end: i64 = job.get(3);
+    if region_start < 0 || region_end <= region_start
+        || region_start > u32::MAX as i64 || region_end > u32::MAX as i64
+    { return Err(DbNativeParserError::InvalidRegionSpan); }
     let token_rows = client.query(
         "SELECT token_ordinal, start_char, end_char, surface, lemma, pos,
                 morph_json, head_ordinal, dependency_ref
@@ -1650,6 +1660,8 @@ pub fn load_parser_evidence_region(
         source_revision_ref,
         region_ref: region_ref.to_owned(),
         compilation_key,
+        start_char: region_start as u32,
+        end_char: region_end as u32,
         tokens,
         entities,
         artifact,
@@ -1674,6 +1686,8 @@ pub fn audit_candidate_pnf_evidence(
         || evidence.source_revision_ref != source_revision_ref
         || batch.exact_span_ref != source.span_ref
         || evidence.region_ref != source.span_ref
+        || evidence.start_char != source.start_char
+        || evidence.end_char != source.end_char
     {
         return Err(CandidatePnfError::MissingPersistedParserRegion(source.span_ref.clone()));
     }
@@ -1739,6 +1753,7 @@ mod tests {
             source_revision_ref: "revision:1".into(),
             region_ref: source.span_ref.clone(),
             compilation_key: "compilation:1".into(),
+            start_char: 0, end_char: 13,
             tokens: vec![token.clone()], entities: Vec::new(),
             artifact: None, candidate_only: true,
         };
