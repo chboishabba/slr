@@ -3,6 +3,7 @@
 //! and the versioned WorldCompiler PNF1/ATM1 binary record owners.
 //! Does not review claims, determine source meaning, or pay legal/proof authority.
 
+use std::collections::HashMap;
 use std::io::{Cursor, Write};
 
 use sensiblaw_pg_source_store::{
@@ -93,8 +94,8 @@ pub fn compile_checked_statement_world<W: Write>(
         "db-parser:{}:{}", evidence.parser_run_ref(), evidence.region_ref(),
     );
     if !evidence.candidate_only()
-        || evidence.source_revision_ref() != statement.source_revision_ref
-        || evidence.region_ref() != statement.span.span_ref
+        || evidence.source_revision_ref() != statement.source_revision_ref.as_str()
+        || evidence.region_ref() != statement.span.span_ref.as_str()
         || evidence.span() != (statement.span.start_char, statement.span.end_char)
         || candidate.parser_receipt_ref != expected_receipt
     {
@@ -130,10 +131,13 @@ pub fn compile_checked_statement_world<W: Write>(
         revision_ref: statement.source_revision_ref.clone(),
         source_sha256,
     })?;
+    let tokens_by_ordinal: HashMap<u32, &ParserTokenRecord> = evidence.tokens()
+        .iter()
+        .map(|token| (token.token_ordinal, token))
+        .collect();
     for token in evidence.tokens() {
-        let head = token.head_ordinal.and_then(|index| {
-            evidence.tokens().iter().find(|candidate| candidate.token_ordinal == index)
-        });
+        let head = token.head_ordinal
+            .and_then(|index| tokens_by_ordinal.get(&index).copied());
         let shape = dependency_shape_for_parser(token, head.is_some());
         let head_token = head.unwrap_or(token);
         encode_observation(&mut observations, &ObservationRecord::Token {
