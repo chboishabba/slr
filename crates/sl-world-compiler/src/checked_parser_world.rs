@@ -116,8 +116,12 @@ pub fn compile_checked_statement_world<W: Write>(
     // Scope the document key to an exact statement and revision; the existing
     // world compiler hashes this key into each candidate/atom identity.
     let document_key = format!(
-        "{}#{}#{}", statement.document_ref,
-        statement.statement_ref, statement.source_revision_ref,
+        "{}#{}#{}#{}#{}",
+        statement.document_ref,
+        statement.statement_ref,
+        statement.source_revision_ref,
+        evidence.parser_run_ref(),
+        evidence.compilation_key(),
     );
     let source_digest = Sha256::digest(statement.literal_text.as_bytes());
     let mut source_sha256 = [0u8; 32];
