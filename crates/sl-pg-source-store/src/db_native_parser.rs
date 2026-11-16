@@ -1507,6 +1507,138 @@ impl CandidatePnfProducer for DbNativeParserSnapshot {
     }
 }
 
+/// Exact, read-only evidence for a persisted parser region. This is not a
+/// reviewed PNF, a semantic equivalence certificate, or a formal proof.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParserEvidenceRegion {
+    pub parser_run_ref: String,
+    pub source_revision_ref: String,
+    pub region_ref: String,
+    pub compilation_key: String,
+    pub tokens: Vec<ParserTokenRecord>,
+    pub entities: Vec<ParserEntityRecord>,
+    pub artifact: Option<ParserArtifactRecord>,
+    pub candidate_only: bool,
+}
+
+/// Reopen the *original* parser observations, including morphology, dependency
+/// heads and entity annotations, which the coarse CandidatePnfFactor intentionally
+/// does not duplicate. The join fixes run, source revision, region and completed
+/// compilation identity; incomplete/residual regions fail closed.
+///
+/// A caller must separately establish the connection between a candidate PNF
+/// batch and these exact source/run coordinates before using any observation.
+pub fn load_parser_evidence_region(
+    config: &DatabaseConfig,
+    parser_run_ref: &str,
+    region_ref: &str,
+) -> Result<ParserEvidenceRegion, DbNativeParserError> {
+    if parser_run_ref.trim().is_empty() || region_ref.trim().is_empty() {
+        return Err(DbNativeParserError::EmptyCoordinate);
+    }
+    let mut client = Client::connect(config.database_url(), NoTls)?;
+    client.batch_execute(DB_NATIVE_PARSER_SCHEMA_SQL)?;
+    let job = client.query_opt(
+        "SELECT j.compilation_key, j.source_revision_ref
+         FROM ingest.parser_job j
+         JOIN ingest.parser_run r ON r.parser_run_ref = j.parser_run_ref
+         WHERE j.parser_run_ref = $1 AND j.region_ref = $2
+           AND j.source_revision_ref = r.source_revision_ref
+           AND j.status = 'succeeded'
+           AND j.candidate_only = TRUE
+           AND j.creates_semantic_authority = FALSE
+           AND j.applicability_promoted = FALSE
+           AND j.claim_truth_promoted = FALSE
+           AND r.candidate_only = TRUE
+           AND r.creates_semantic_authority = FALSE
+           AND r.applicability_promoted = FALSE
+           AND r.claim_truth_promoted = FALSE",
+        &[&parser_run_ref, &region_ref],
+    )?.ok_or_else(|| DbNativeParserError::MissingJob(
+        format!("{parser_run_ref}:{region_ref}:succeeded-candidate-only")
+    ))?;
+    let compilation_key: String = job.get(0);
+    let source_revision_ref: String = job.get(1);
+    let token_rows = client.query(
+        "SELECT token_ordinal, start_char, end_char, surface, lemma, pos,
+                morph_json, head_ordinal, dependency_ref
+         FROM ingest.parser_token WHERE compilation_key = $1
+         ORDER BY token_ordinal",
+        &[&compilation_key],
+    )?;
+    let mut tokens = Vec::with_capacity(token_rows.len());
+    for row in token_rows {
+        let ordinal: i32 = row.get(0);
+        let start: i64 = row.get(1);
+        let end: i64 = row.get(2);
+        let head: Option<i32> = row.get(7);
+        if ordinal < 0 || start < 0 || end <= start
+            || start > u32::MAX as i64 || end > u32::MAX as i64
+            || head.is_some_and(|h| h < 0)
+        {
+            return Err(DbNativeParserError::InvalidRegionSpan);
+        }
+        tokens.push(ParserTokenRecord {
+            token_ordinal: ordinal as u32,
+            start_char: start as u32,
+            end_char: end as u32,
+            surface: row.get(3),
+            lemma: row.get(4),
+            pos: row.get(5),
+            morph_json: row.get(6),
+            head_ordinal: head.map(|h| h as u32),
+            dependency_ref: row.get(8),
+        });
+    }
+    let entity_rows = client.query(
+        "SELECT entity_ordinal, start_char, end_char, surface, label_ref
+         FROM ingest.parser_entity WHERE compilation_key = $1
+         ORDER BY entity_ordinal",
+        &[&compilation_key],
+    )?;
+    let mut entities = Vec::with_capacity(entity_rows.len());
+    for row in entity_rows {
+        let ordinal: i32 = row.get(0);
+        let start: i64 = row.get(1);
+        let end: i64 = row.get(2);
+        if ordinal < 0 || start < 0 || end <= start
+            || start > u32::MAX as i64 || end > u32::MAX as i64
+        {
+            return Err(DbNativeParserError::InvalidRegionSpan);
+        }
+        entities.push(ParserEntityRecord {
+            entity_ordinal: ordinal as u32,
+            start_char: start as u32,
+            end_char: end as u32,
+            surface: row.get(3),
+            label_ref: row.get(4),
+        });
+    }
+    let artifact = client.query_opt(
+        "SELECT format_ref, content_digest_ref, artifact_json, object_locator
+         FROM ingest.parser_artifact WHERE compilation_key = $1
+           AND candidate_only = TRUE
+           AND creates_semantic_authority = FALSE
+           AND claim_truth_promoted = FALSE",
+        &[&compilation_key],
+    )?.map(|row| ParserArtifactRecord {
+        format_ref: row.get(0),
+        content_digest_ref: row.get(1),
+        artifact_json: row.get(2),
+        object_locator: row.get(3),
+    });
+    Ok(ParserEvidenceRegion {
+        parser_run_ref: parser_run_ref.to_owned(),
+        source_revision_ref,
+        region_ref: region_ref.to_owned(),
+        compilation_key,
+        tokens,
+        entities,
+        artifact,
+        candidate_only: true,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
