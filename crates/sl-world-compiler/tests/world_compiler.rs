@@ -134,6 +134,13 @@ fn unresolved_dependency_does_not_silently_promote_semantics() {
     assert_eq!(receipt.pnf_candidates, 0);
     assert_eq!(receipt.world_atoms, 0);
     assert_eq!(receipt.unresolved_dependencies, 1);
+    let mut cursor = Cursor::new(output);
+    let _manifestation = decode_record(&mut cursor).unwrap().unwrap();
+    let gap = decode_record(&mut cursor).unwrap().unwrap();
+    assert_eq!(gap.kind, WorldRecordKind::Gap);
+    assert!(gap.id.starts_with("gap:parser-pnf:"));
+    assert_eq!(&gap.payload[..4], b"GAP1");
+    assert_eq!(&gap.payload[gap.payload.len()-2..], &[1, 0]);
 }
 
 #[test]
