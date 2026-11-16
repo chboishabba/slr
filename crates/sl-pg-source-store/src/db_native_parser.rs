@@ -1541,10 +1541,11 @@ impl ParserEvidenceRegion {
     pub fn span(&self) -> (u32, u32) { (self.start_char, self.end_char) }
     #[must_use]
     pub fn matches_source_literal(&self, literal: &str) -> bool {
-        self.parser_product_key.as_deref() == Some(parser_product_key(
+        let expected = parser_product_key(
             literal, &self.parser_family, &self.parser_version,
             &self.model_ref, &self.config_digest_ref,
-        ).as_str())
+        );
+        self.parser_product_key.as_deref() == Some(expected.as_str())
     }
     #[must_use]
     pub fn tokens(&self) -> &[ParserTokenRecord] { &self.tokens }
@@ -1794,6 +1795,11 @@ mod tests {
             proposition_support_paid: false, applicability_paid: false,
             claim_truth_paid: false,
         };
+        assert!(evidence.matches_source_literal("Alice called."));
+        assert!(!evidence.matches_source_literal("Alice called?"));
+        let mut legacy_evidence = evidence.clone();
+        legacy_evidence.parser_product_key = None;
+        assert!(!legacy_evidence.matches_source_literal("Alice called."));
         assert!(audit_candidate_pnf_evidence(&source, "revision:1", &batch, &evidence).is_ok());
         let mut changed = batch.clone();
         changed.candidates[0].dependency_ref = "dobj".into();
