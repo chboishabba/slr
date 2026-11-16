@@ -1639,6 +1639,57 @@ pub fn load_parser_evidence_region(
     })
 }
 
+/// Fail-closed proof-consumer audit: the coarse PNF candidate projection
+/// must agree with *every* overlapping source token in its original parser run.
+/// Rich morphology/head/entity evidence remains in ParserEvidenceRegion, never
+/// silently upgraded to a semantic or legal assertion.
+pub fn audit_candidate_pnf_evidence(
+    source: &ExactSourceSpan,
+    batch: &CandidatePnfBatch,
+    evidence: &ParserEvidenceRegion,
+) -> Result<(), CandidatePnfError> {
+    if source.start_char >= source.end_char {
+        return Err(CandidatePnfError::InvalidExactSpan);
+    }
+    if batch.exact_span_ref != source.span_ref || evidence.region_ref != source.span_ref {
+        return Err(CandidatePnfError::MissingPersistedParserRegion(source.span_ref.clone()));
+    }
+    if !evidence.candidate_only || batch.proposition_support_paid
+        || batch.applicability_paid || batch.claim_truth_paid
+        || batch.candidates.iter().any(|candidate| !candidate.candidate_only)
+    {
+        return Err(CandidatePnfError::PersistedParserResidual {
+            span_ref: source.span_ref.clone(),
+            error_ref: "candidate-projection-authority-boundary".into(),
+        });
+    }
+    let overlapping = evidence.tokens.iter()
+        .filter(|token| token.start_char < source.end_char
+            && token.end_char > source.start_char)
+        .collect::<Vec<_>>();
+    if overlapping.len() != batch.candidates.len() {
+        return Err(CandidatePnfError::PersistedParserResidual {
+            span_ref: source.span_ref.clone(),
+            error_ref: "candidate-projection-token-count-mismatch".into(),
+        });
+    }
+    for (token, candidate) in overlapping.into_iter().zip(&batch.candidates) {
+        if candidate.source_start_char != token.start_char
+            || candidate.source_end_char != token.end_char
+            || candidate.surface != token.surface
+            || candidate.lemma != token.lemma
+            || candidate.dependency_ref != token.dependency_ref
+            || candidate.role != role_for(&token.pos, &token.dependency_ref)
+        {
+            return Err(CandidatePnfError::PersistedParserResidual {
+                span_ref: source.span_ref.clone(),
+                error_ref: "candidate-projection-token-mismatch".into(),
+            });
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
