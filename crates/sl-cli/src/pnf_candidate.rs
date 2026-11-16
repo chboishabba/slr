@@ -5,6 +5,7 @@ use sensiblaw_pg_source_store::{
     CandidatePnfProducer, CandidatePnfRole, ExactSourceSpan, IndexedSpacyTsvAdapter,
 };
 use std::fs;
+use sha2::Digest;
 
 fn role_name(role: CandidatePnfRole) -> &'static str {
     match role {
