@@ -9,6 +9,7 @@ mod s14_adaptive_fixture;
 mod waltons;
 mod waltons_live;
 mod pnf_candidate;
+mod pnf_db_checked;
 
 use std::env;
 use std::path::PathBuf;
@@ -20,6 +21,7 @@ fn usage() {
 
 USAGE:
   sensiblaw pnf-candidate TSV_PATH SPAN_REF START_CHAR END_CHAR
+  sensiblaw pnf-db-checked PARSER_RUN STATEMENT_REF DOCUMENT_REF SOURCE_REV REGION_REF START_CHAR END_CHAR LITERAL_FILE
   sensiblaw legal-follow case acquire --citation '[YYYY] COURT N' [options]
   sensiblaw legal-follow cullen pnf --operator-opt-in [--output-dir PATH] [--spacy-model MODEL]
   sensiblaw legal-follow contracts landscape <plan|status|expand|acquire> [--as-at YYYY-MM-DD] [--jurisdiction AU-QLD]
@@ -181,6 +183,9 @@ fn run() -> Result<(), String> {
     match args.as_slice() {
         [command, rest @ ..] if command == "pnf-candidate" => {
             pnf_candidate::run(rest)
+        }
+        [command, rest @ ..] if command == "pnf-db-checked" => {
+            pnf_db_checked::run(rest)
         }
         [domain, matter, rest @ ..] if domain == "legal-follow" && matter == "waltons" => {
             waltons_command(rest.to_vec())
