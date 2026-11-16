@@ -231,9 +231,9 @@ pub fn compile_statement_pnf_with_parser_evidence(
     evidence: &crate::ParserEvidenceRegion,
     parser_receipt_ref: impl Into<String>,
 ) -> Result<StatementCandidatePnf, StatementPnfSpineError> {
-    if evidence.parser_run_ref != snapshot.parser_run_ref()
-        || evidence.source_revision_ref != snapshot.source_revision_ref()
-        || evidence.source_revision_ref != statement.source_revision_ref
+    if evidence.parser_run_ref() != snapshot.parser_run_ref()
+        || evidence.source_revision_ref() != snapshot.source_revision_ref()
+        || evidence.source_revision_ref() != statement.source_revision_ref
     {
         return Err(StatementPnfSpineError::CandidatePnf(
             crate::CandidatePnfError::PersistedParserResidual {
