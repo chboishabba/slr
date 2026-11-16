@@ -228,6 +228,29 @@ fn atom_body(candidate_id:&str, pnf_body:&[u8]) -> Result<Vec<u8>,CompilerError>
     let mut out=Vec::new(); out.extend_from_slice(b"ATM1"); write_text(&mut out,candidate_id)?; write_u32(&mut out,pnf_body.len() as u32)?; out.extend_from_slice(pnf_body); out.push(1); out.push(0); Ok(out)
 }
 
+// Persist the exact unresolved observation as a queryable world gap.
+// A count alone cannot support consumer-driven reparse or selective reopening.
+#[allow(clippy::too_many_arguments)]
+fn gap_body(
+    shape: DependencyShape, sentence_id: u64, local_ordinal: u32,
+    head_ordinal: u32, start_char: u32, end_char: u32,
+    orth: &str, lemma: &str,
+) -> Result<Vec<u8>, CompilerError> {
+    let mut out = Vec::new();
+    out.extend_from_slice(b"GAP1");
+    out.push(shape as u8);
+    write_u64(&mut out, sentence_id)?;
+    write_u32(&mut out, local_ordinal)?;
+    write_u32(&mut out, head_ordinal)?;
+    write_u32(&mut out, start_char)?;
+    write_u32(&mut out, end_char)?;
+    write_text(&mut out, orth)?;
+    write_text(&mut out, lemma)?;
+    out.push(1); // candidate only
+    out.push(0); // no semantic authority
+    Ok(out)
+}
+
 fn iteration_body(receipt:&CompileReceipt) -> Vec<u8> {
     let mut out=Vec::new(); out.extend_from_slice(b"ITR1");
     out.extend_from_slice(&receipt.manifestations.to_le_bytes()); out.extend_from_slice(&receipt.pnf_candidates.to_le_bytes());
@@ -334,6 +357,28 @@ pub fn compile_observation_stream<R:Read,W:Write>(reader:&mut R, writer:&mut W, 
                     encode_record(writer,&WireRecord{kind:WorldRecordKind::WorldAtom,id:atom_id,iteration_index:Some(iteration_index),aux1:Some(document_ref),payload:atom})?;
                     receipt.pnf_candidates+=1; receipt.world_atoms+=1;
                 } else {
+                    let gap_id = sha_id(
+                        "gap:parser-pnf:",
+                        &[
+                            document_ref.as_bytes(),
+                            revision_ref.as_bytes(),
+                            &sentence_id.to_le_bytes(),
+                            &local_ordinal.to_le_bytes(),
+                            &start_char.to_le_bytes(),
+                            &end_char.to_le_bytes(),
+                        ],
+                    );
+                    let body = gap_body(
+                        shape, sentence_id, local_ordinal, head_ordinal,
+                        start_char, end_char, &orth, &lemma,
+                    )?;
+                    encode_record(writer, &WireRecord {
+                        kind: WorldRecordKind::Gap,
+                        id: gap_id,
+                        iteration_index: Some(iteration_index),
+                        aux1: Some(document_ref),
+                        payload: body,
+                    })?;
                     receipt.unresolved_dependencies+=1;
                 }
             }
