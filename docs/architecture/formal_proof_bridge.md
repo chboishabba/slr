@@ -24,6 +24,119 @@ source/span
 
 Upstream typing remains separate. DASHI PR #1222 supplies the formal PNF/consumer-WrongType -> explicitly witnessed Lee residual adapter; SLR PR #66 supplies same-Matter consumer-informativeness receipts. Neither authorizes this formal route by itself: only an existing **open proof obligation** and reviewed PNF revision enter this bridge.
 
+## Parser evidence reconstruction for language-as-algebra consumers
+
+The M12 statement compiler remains the source-bound candidate PNF owner. Typed
+PostgreSQL stores surface, lemma, POS, morphology, dependency heads, labels,
+entity spans, and optionally full artifact bytes/locators. CandidatePnfFactor
+is a coarse candidate projection, not the complete parser representation.
+
+- load_parser_evidence_region reopens one successful candidate-only run/region
+  with original tokens, entity annotations and parser artifact coordinates.
+- compile_db_statement_pnf_checked(config, snapshot, statement) is the
+  canonical one-call DB handoff. It loads exact parser observations, checks
+  the canonical receipt db-parser:<run>:<region>, and reuses ordinary M12.
+- compile_statement_pnf_with_parser_evidence also accepts a preloaded,
+  sealed ParserEvidenceRegion and requires the original source literal
+  to match SLR's existing parser_product_key (region text digest plus
+  parser family/version/model/configuration). Missing product keys fail closed.
+- ParserEvidenceRegion::matches_observation_coverage verifies complete
+  non-whitespace token coverage, source-relative token surfaces,
+  dependency head ordinals and named-entity spans. This is a bounded
+  region-local check, not document-wide re-materialization.
+- audit_candidate_pnf_evidence rejects mismatched run-derived candidate IDs,
+  source revisions, persisted region boundaries, surface, lemma, dependency,
+  role, missing tokens and claimed authority payment.
+  Success certifies parser projection parity ONLY, not semantic adequacy.
+
+This strict path expects a parser job with a product identity from SLR's
+existing content-reuse enqueue path. Older rows with a NULL parser_product_key
+are unresolved here; the broader legacy adapter remains unchanged.
+
+For a consumer question Q_c, the distinct factorisation obligation is:
+
+    forall x y. pi(x) = pi(y) => Q_c(x) = Q_c(y)
+
+Suppressed syntax must be explicitly reconstructed or marked unresolved.
+Do not conflate dependency roles with legal scope, identity or proposition truth.
+
+## Lean -> SLR -> Lean and the global proof world
+
+Forward: Lean/Agda declaration or discovered artifact -> canonical statement
+and dependency fingerprint -> exact repository commit/source coordinates ->
+SLR source and reviewed PNF/proof obligation. Reverse: FormalProofDemand ->
+exact formal statement and source/dependency set -> dashi-repo reuse or
+Agda-to-Lean translation candidate -> independent Lean/Agda kernel check ->
+SLR FormalEvidenceReceipt -> exact payment -> selective dependency reopening.
+Structural shape and round-trip translation alone do not certify equality.
+Source code stays at its original repository owner; avoid full copies in SLR.
+
+## Checked M12 -> world-algebra candidate transport
+
+`sensiblaw-world-compiler::checked_parser_world::compile_checked_statement_world`
+consumes the sealed `ParserEvidenceRegion` and the checked `StatementCandidatePnf`
+without rerunning spaCy or copying full document source. It rechecks the
+canonical parser receipt, exact revision/region, content-derived parser
+product key, source-character coverage and M12 candidate-token parity.
+
+The existing versioned SLRO observation and SLRW world compiler then emits
+source-scoped `PnfCandidate` and `WorldAtom` records. The new dependency
+shape tags are append-only: `RootPredicate = 17` maps to existing
+`FragmentKind::Relation`; `NumericQuantifier = 18` maps to existing
+`FragmentKind::Quantifier`. Inferences about scope, modality and Hebrew
+transliteration do not follow from a POS/dependency label. Missing/ambiguous
+heads and unlicensed dependency families remain unresolved.
+
+Previously an unresolved dependency merely incremented a counter.
+The compiler now writes a source-bound, candidate-only `WorldRecordKind::Gap`
+payload (GAP1) so the world store can retain the *exact* reason for
+consumer-driven deepening. Existing PNF1/ATM1 world atoms remain
+non-authoritative; the binary shape extension requires compatibility
+review for external consumers of SLRO/PNF1 records.
+
+The independent Agda correspondence in DASHI PR #1522 imports the
+source-typed KeyShoe R13 `Body13 × Side` chart, SLR numeric->evidential
+PNF correspondence, consumer descent, and DASHI's existing
+`PredicateNormalWorldModelCore`. It proves a body-only encoding cannot
+answer every letter-side query, and expresses world interpretation as
+an explicit, consumer-specific commuting-square obligation. It does
+NOT assert that Hebrew Shem72, R13, legal propositions and world actions
+have a canonical same-meaning map.
+
+**Unpaid checks:** exact-head Cargo/Rust test, live PostgreSQL source
+revision->checked M12->candidate world stream, Agda kernel check,
+licensed reviewed interpretation, independent Lean kernel receipt,
+formal payment and revision-driven selective reopening.
+## Marchenko-Pastur (PNF MP) spectral candidate gate
+
+Reuse the existing owners rather than building a second classifier:
+
+- dashi_agda/DASHI/Information/PNFMarchenkoPasturAdmissionExact.agda
+- dashi_agda/scripts/pnf_marchenko_pastur_numeric.py
+- ITIR-suite/itir-mcp/src/itir_mcp/pnf_spectral_packet.py
+
+MP describes a numerical feature-panel null. Spectral eigen-motifs may rank
+candidate proof-world joins and guide retrieval; they do not establish
+declaration equivalence, legal applicability, Wikidata truth or proof soundness.
+The Agda mpCandidateCannotPromoteNumericABI explicitly maintains this boundary.
+No MP result pays SLR proof obligations without exact statement/dependency
+evidence and independent kernel-certified checker receipts.
+
+The formal bridge's certification_state = "kernel-certified" value is
+currently a supplied receipt field: validating this string and matching
+statement digests does not independently execute a Lean/Agda kernel or
+authenticate the checker. That trust gate remains open, regardless of the
+stronger source/parser parity achieved above.
+
+### Remaining acceptance gates
+
+- Cargo/PostgreSQL tests for the new reopened evidence path (not yet executed).
+- Live provider revision -> parser run -> evidence-backed M12 candidate ->
+  reviewed proposition -> formal demand -> independent kernel receipt.
+- Consumer-specific MP/PNF factorisation and missing-feature residual checks.
+- Agda/Lean round-trip equivalence of statement and dependencies.
+- End-to-end Lean -> SLR -> Lean proof-world reuse and invalidation acceptance.
+
 ## Storage boundary
 
 `formal_bridge.*` stores only demand/route/evidence/payment joins. It does not copy PNF graphs, proposition payloads, controversy state, or proof-obligation bodies. `FormalProofDemand` must reopen an existing open `legal_controversy.proof_obligation` and an existing `algebra.factor_revision` before it can be persisted.

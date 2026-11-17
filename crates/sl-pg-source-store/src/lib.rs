@@ -257,7 +257,9 @@ pub use reviewed_source_expansion::{
 };
 pub use statement_pnf_spine::{
     compile_initial_intake_statement, compile_research_reentry_statement,
-    compile_statement_pnf, review_statement_parse, ParseReviewDisposition,
+    compile_statement_pnf, compile_statement_pnf_with_parser_evidence,
+    compile_db_statement_pnf_checked, DbStatementPnfCheckedError,
+    review_statement_parse, ParseReviewDisposition,
     ReviewedStatementPnf, SourceStatementEnvelope, StatementCandidatePnf,
     StatementOrigin, StatementParseReview, StatementPnfSpineError,
 };
@@ -353,13 +355,13 @@ pub use db_native_parser::{
     claim_parser_jobs, complete_parser_run, compilation_key,
     defer_parser_job_retry, enqueue_parser_regions,
     enqueue_parser_regions_with_content_reuse, install_db_native_parser_schema,
-    load_claimed_job_text,
+    load_claimed_job_text, load_parser_evidence_region, audit_candidate_pnf_evidence,
     parser_product_key, parser_run_ref, parser_run_state, persist_parser_residual,
     persist_parser_success, persist_parser_success_with_entities,
     renew_parser_job_lease, start_parser_run, ClaimedParserJob,
     DbNativeParserError, DbNativeParserSnapshot, DbNativeParserWriter, ParserArtifactRecord,
     ParserEnqueueReceipt, ParserEntityRecord, ParserRegionJobSpec, ParserRunReceipt, ParserRunState,
-    ParserTokenRecord,
+    ParserTokenRecord, ParserEvidenceRegion,
     PersistedParserOutputReceipt, DB_NATIVE_PARSER_SCHEMA_SQL,
 };
 pub use db_native_long_document::{

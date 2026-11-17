@@ -19,6 +19,7 @@ sensiblaw-governed-legal-provider = { path = "../sl-governed-legal-provider" }
 sensiblaw-legal-runtime = { path = "../sl-legal-runtime" }
 sensiblaw-proof-search-loop = { path = "../sl-proof-search-loop" }
 sensiblaw-pg-source-store = { path = "../sl-pg-source-store" }
+sensiblaw-core = { path = "../sl-core" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"
