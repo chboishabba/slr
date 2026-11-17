@@ -145,10 +145,6 @@ pub fn run(args: &[String]) -> Result<(), String> {
         observation_refs.extend(relation.observation_refs.iter().cloned());
     }
     let observation_refs_for_gate = observation_refs.clone();
-    let linked_observations: BTreeSet<_> = event_links.iter()
-        .map(|link| link.observation_ref.as_str()).collect();
-    let obs_to_event_join_complete = observation_refs.iter()
-        .all(|reference| linked_observations.contains(reference.as_str()));
     let mut statement_observation_rows = Vec::new();
     let mut observations_with_source = BTreeSet::<String>::new();
     for observation_ref in observation_refs {
