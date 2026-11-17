@@ -11,6 +11,24 @@ use sensiblaw_pg_source_store::{
 };
 use std::collections::BTreeSet;
 
+// Consumer-facing provenance is an executable gate, not a suggestive boolean.
+// All observations attached to this S28 event must have an actual M12 path.
+// S28-only statement IDs and event identity labels cannot fabricate that path.
+fn complete_trace(
+    event_observations: &BTreeSet<String>,
+    s28_observations: &BTreeSet<String>,
+    sourced_observations: &BTreeSet<String>,
+    s28_statements: &BTreeSet<String>,
+    linked_statements: &BTreeSet<String>,
+) -> bool {
+    !event_observations.is_empty()
+        && !s28_observations.is_empty()
+        && s28_observations.is_subset(event_observations)
+        && event_observations.is_subset(sourced_observations)
+        && linked_statements.is_subset(s28_statements)
+        && !linked_statements.is_empty()
+}
+
 fn temporal_form(value: &TemporalForm) -> serde_json::Value {
     match value {
         TemporalForm::ExactInstant { instant_ref } =>
@@ -126,6 +144,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
     for relation in &contestations {
         observation_refs.extend(relation.observation_refs.iter().cloned());
     }
+    let observation_refs_for_gate = observation_refs.clone();
     let linked_observations: BTreeSet<_> = event_links.iter()
         .map(|link| link.observation_ref.as_str()).collect();
     let obs_to_event_join_complete = observation_refs.iter()
@@ -138,6 +157,9 @@ pub fn run(args: &[String]) -> Result<(), String> {
         ).map_err(|e| e.to_string())?;
         for link in relations {
             link.validate().map_err(|e| format!("invalid M12 statement/observation link: {e:?}"))?;
+            if link.observation_ref != observation_ref {
+                return Err("M12 statement/observation link changed requested observation identity".into());
+            }
             // A source row must be reopened independently, even if it was
             // absent from the S28 statementRefs lists.
             let source = load_source_statement(&config, &link.statement_ref)
@@ -145,6 +167,11 @@ pub fn run(args: &[String]) -> Result<(), String> {
                 .ok_or_else(|| format!("missing M12 source for observation {}", link.observation_ref))?;
             if source.statement_ref != link.statement_ref {
                 return Err("M12 source/observation identity mismatch".into());
+            }
+            if !source.candidate_only || source.creates_semantic_authority
+                || source.applicability_promoted || source.claim_truth_promoted
+            {
+                return Err("M12 observation/source path attempts semantic authority promotion".into());
             }
             observations_with_source.insert(observation_ref.clone());
             statement_observation_rows.push(serde_json::json!({
@@ -165,14 +192,20 @@ pub fn run(args: &[String]) -> Result<(), String> {
             }));
         }
     }
-    let source_trace_join_complete =
-        !event_links.is_empty() && !statement_observation_rows.is_empty()
-        && obs_to_event_join_complete
-        && event_links.iter().all(|link|
-            observations_with_source.contains(&link.observation_ref))
-        && statement_observation_rows.iter().all(|row|
-            row.get("statement_ref").and_then(serde_json::Value::as_str)
-                .is_some_and(|statement_ref| included_statement_refs.contains(statement_ref)));
+    let event_observations: BTreeSet<String> = event_links.iter()
+        .map(|link| link.observation_ref.clone()).collect();
+    let linked_statements: BTreeSet<String> = statement_observation_rows.iter()
+        .filter_map(|row| row.get("statement_ref")
+            .and_then(serde_json::Value::as_str).map(str::to_owned))
+        .collect();
+    let source_trace_join_complete = complete_trace(
+        &event_observations, &observation_refs_for_gate,
+        &observations_with_source, &included_statement_refs,
+        &linked_statements,
+    );
+    if !source_trace_join_complete {
+        return Err("incomplete M12 source -> observation -> S28 event trace; refusing proof handoff".into());
+    }
     let times: Vec<_> = assertions.iter().map(|a| serde_json::json!({
         "temporal_ref":a.temporal_ref,
         "form":temporal_form(&a.form),
@@ -233,13 +266,36 @@ pub fn run(args: &[String]) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{run,temporal_form};
+    use super::{run,temporal_form,complete_trace};
+    use std::collections::BTreeSet;
     use sensiblaw_core::chronology_contestation::TemporalForm;
 
     #[test]
     fn event_identity_is_required() {
         assert!(run(&[]).is_err());
         assert!(run(&["".into()]).is_err());
+    }
+
+    #[test]
+    fn proof_handoff_requires_actual_complete_m12_s28_trace() {
+        fn refs(items: &[&str]) -> BTreeSet<String> {
+            items.iter().map(|x| (*x).to_owned()).collect()
+        }
+        let linked = refs(&["obs:1", "obs:2"]);
+        let mentioned = refs(&["obs:1"]);
+        let sourced = refs(&["obs:1", "obs:2"]);
+        let statements = refs(&["statement:1", "statement:2"]);
+        let linked_statements = refs(&["statement:1"]);
+        assert!(complete_trace(&linked, &mentioned, &sourced,
+                               &statements, &linked_statements));
+        assert!(!complete_trace(&linked, &mentioned, &refs(&["obs:1"]),
+                                &statements, &linked_statements));
+        assert!(!complete_trace(&linked, &refs(&["obs:missing"]), &sourced,
+                                &statements, &linked_statements));
+        assert!(!complete_trace(&linked, &mentioned, &sourced,
+                                &statements, &refs(&["statement:missing"])));
+        assert!(!complete_trace(&linked, &mentioned, &sourced,
+                                &statements, &BTreeSet::new()));
     }
 
     #[test]
