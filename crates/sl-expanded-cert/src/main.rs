@@ -1,7 +1,7 @@
 mod relation_attachment;
 
 use relation_attachment::{
-    RELATION_ATTACHMENT_KINDS, direct_candidates as direct_relation_candidates,
+    StableRelationHead, RELATION_ATTACHMENT_KINDS, direct_candidates as direct_relation_candidates,
     kind_from_dependency_label, reference_candidates as reference_relation_candidates,
 };
 use sensiblaw_core::{
@@ -50,6 +50,7 @@ fn observation_summary(observation: &ExpandedConsumerObservation) -> String {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let export_relations = std::env::args().any(|arg| arg == "--export-relations");
     let stdin = io::stdin();
     let mut symbols = SymbolTable::default();
     let mut framing_active = ActiveTimer::default();
@@ -182,6 +183,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 relation_candidates =
                     relation_candidates.saturating_add(direct_relations.len() as u64);
                 for candidate in &direct_relations {
+                    if export_relations {
+                        let head = match candidate.head {
+                            StableRelationHead::Root => "root".to_owned(),
+                            StableRelationHead::LocalOrdinal(n) => n.to_string(),
+                        };
+                        println!("R\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+                            candidate.span.revision_id, candidate.address.sentence_id,
+                            candidate.address.local_ordinal, candidate.span.start_char,
+                            candidate.span.end_char, candidate.kind.name(), head,
+                            candidate.candidate_only, candidate.context_resolution_required);
+                    }
                     let count = relation_attachment_frontier
                         .entry(candidate.kind.name())
                         .or_default();
