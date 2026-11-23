@@ -36,6 +36,7 @@ mod reviewed_pnf;
 mod reviewed_source_expansion;
 mod review_workstation_store;
 mod native_antecedent_review;
+mod native_antecedent_frontier;
 mod statement_pnf_spine;
 mod generic_source_compiler;
 mod source_candidate_persistence;
@@ -237,6 +238,10 @@ pub use reviewed_pnf::{
     materialize_reviewed_pnf_revision, validate_reviewed_pnf_revision,
     ReviewedPnfMaterializationError, ReviewedPnfMaterializationReceipt, ReviewedPnfRevision,
     ReviewedPnfValidationError,
+};
+pub use native_antecedent_frontier::{
+    native_antecedent_frontier, NativeAntecedentFrontier,
+    NativeAntecedentFrontierError, NativeCandidateNomination,
 };
 pub use native_antecedent_review::{
     inspect_native_antecedent_review, prepare_native_antecedent_review,
