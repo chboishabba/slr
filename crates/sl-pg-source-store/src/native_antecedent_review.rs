@@ -175,17 +175,17 @@ fn original_statement(
     text: &str,
 ) -> Result<(), NativeAntecedentReviewError> {
     let rows=client.query(
-        "SELECT r.start_char,r.end_char,s.literal_text,s.candidate_only,\
-                s.creates_semantic_authority,s.applicability_promoted,\
-                s.claim_truth_promoted,r.candidate_only,r.creates_semantic_authority,\
-                r.claim_truth_promoted\
-         FROM ingest.long_document_region r\
-         JOIN corpus.source_statement s\
-           ON s.source_revision_ref=r.source_revision_ref\
-          AND s.exact_span_ref=r.region_ref\
-          AND s.document_ref=$1\
-         WHERE r.source_revision_ref=$2 AND r.region_ref=$3\
-           AND s.statement_ref=$4 AND r.region_kind='sentence'",
+        r#"SELECT r.start_char,r.end_char,s.literal_text,s.candidate_only,
+                s.creates_semantic_authority,s.applicability_promoted,
+                s.claim_truth_promoted,r.candidate_only,r.creates_semantic_authority,
+                r.claim_truth_promoted
+         FROM ingest.long_document_region r
+         JOIN corpus.source_statement s
+           ON s.source_revision_ref=r.source_revision_ref
+          AND s.exact_span_ref=r.region_ref
+          AND s.document_ref=$1
+         WHERE r.source_revision_ref=$2 AND r.region_ref=$3
+           AND s.statement_ref=$4 AND r.region_kind='sentence'"#,
         &[&c.document_ref,&c.source_revision_ref,&region_ref,&statement_ref],
     )?;
     if rows.len()!=1 { return Err(NativeAntecedentReviewError::OriginalSourceMismatch); }
@@ -213,13 +213,13 @@ fn original_source_match(
     c: &NativeAntecedentSourceCandidate,
 ) -> Result<(), NativeAntecedentReviewError> {
     let rows=client.query(
-        "SELECT g.source_ref,g.document_ref,g.content_digest_ref,\
-                g.candidate_only,g.creates_semantic_authority,\
-                g.applicability_promoted,g.claim_truth_promoted,c.payload\
-         FROM ingest.generic_source_revision g\
-         JOIN corpus.document d ON d.document_ref=g.document_ref\
-         JOIN corpus.canonical_content c ON c.canonical_ref=d.canonical_ref\
-         WHERE g.source_revision_ref=$1",
+        r#"SELECT g.source_ref,g.document_ref,g.content_digest_ref,
+                g.candidate_only,g.creates_semantic_authority,
+                g.applicability_promoted,g.claim_truth_promoted,c.payload
+         FROM ingest.generic_source_revision g
+         JOIN corpus.document d ON d.document_ref=g.document_ref
+         JOIN corpus.canonical_content c ON c.canonical_ref=d.canonical_ref
+         WHERE g.source_revision_ref=$1"#,
         &[&c.source_revision_ref],
     )?;
     if rows.len()!=1 { return Err(NativeAntecedentReviewError::OriginalSourceMismatch); }
