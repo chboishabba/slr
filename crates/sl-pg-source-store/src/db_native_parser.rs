@@ -1793,6 +1793,7 @@ pub fn audit_candidate_pnf_evidence(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::CandidatePnfRole;
 
     #[test]
     fn source_bound_candidate_evidence_audit_matches_original_tokens() {
