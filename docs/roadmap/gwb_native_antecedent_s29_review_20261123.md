@@ -2,6 +2,41 @@
 
 ## Controlling SLR P0 programme reset — 23 November 2026
 
+### Integrated M1 producer packet source-written (not yet accepted)
+
+SLR #78 now has \`native_antecedent_frontier.rs\`: exact original
+C4.12/S29 source, five pre-focus/focus sentence parser regions
+via existing \`db_native_parser::load_parser_evidence_region\`,
+source-literal/product-key/Unicode coverage/NER/POS/morph
+verification, parser-run discovery, all original
+NOUN/PROPN/PRON/entity nominations with original references,
+and explicit unresolved identity, quotation-scope and
+typed-accessibility flags. CLI:
+\`sensiblaw native-antecedent-review runs REVIEW_ITEM_REF\`;
+\`sensiblaw native-antecedent-review frontier REVIEW_ITEM_REF
+[PARSER_RUN_REF]\`. Automatic selection occurs **only** if precisely
+one persisted run covers all five source regions. No second parser,
+no automatic identity, no S29 command and no QID inferred.
+
+DASHI #112 wraps this in one local source/Lean/negative proof run:
+\`scripts/run_gwb_native_maxcut_packet.sh\`, which emits a
+full review worksheet plus a book-vs-Q207 two-source obligation
+ledger and explicit unresolved consumer answer. Optional exact
+original SensibLaw typed-binding producer weld (reference
+\`compact_binding_artifacts\`) requires same original full book
+canonical bytes, PNF graph document ref, original parser-token
+coordinate roundtrip and exact he/Bush factor spans. It never
+asserts uniqueness or performs semantic admission.
+
+**Operator work still needed:** run the single script on the local
+SLR DB/Cargo and Lean 4.28 checkouts, then inspect typed rival
+candidate evidence and obtain an actual human S29 and semantic
+resolution witness. M2 positive book answer and M3 reviewed JMD
+property alignment remain unpaid. SLR's accepted C4.12 inspection
+and current Pending queue item are unchanged.
+
+
+
 **C4.09–C4.12 are paid as source/inspection infrastructure. Stop
 building sequential wrappers and deliver a complete original-source
 semantic review + consumer ticket in one integration packet.**
