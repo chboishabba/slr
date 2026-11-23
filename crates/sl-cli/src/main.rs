@@ -25,6 +25,7 @@ USAGE:
   sensiblaw pnf-candidate TSV_PATH SPAN_REF START_CHAR END_CHAR
   sensiblaw pnf-db-checked PARSER_RUN STATEMENT_REF DOCUMENT_REF SOURCE_REV REGION_REF START_CHAR END_CHAR LITERAL_FILE
   sensiblaw native-antecedent-review prepare ORIGINAL_C410_RECEIPT.json
+  sensiblaw native-antecedent-review inspect REVIEW_ITEM_REF
   sensiblaw timeline-candidates EVENT_REF
   sensiblaw legal-follow case acquire --citation '[YYYY] COURT N' [options]
   sensiblaw legal-follow cullen pnf --operator-opt-in [--output-dir PATH] [--spacy-model MODEL]
