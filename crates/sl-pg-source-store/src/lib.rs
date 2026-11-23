@@ -240,8 +240,9 @@ pub use reviewed_pnf::{
     ReviewedPnfValidationError,
 };
 pub use native_antecedent_frontier::{
-    native_antecedent_frontier, NativeAntecedentFrontier,
-    NativeAntecedentFrontierError, NativeCandidateNomination,
+    native_antecedent_frontier, native_antecedent_parser_runs,
+    NativeAntecedentFrontier, NativeAntecedentFrontierError,
+    NativeCandidateNomination, NativeParserRunCoverage,
 };
 pub use native_antecedent_review::{
     inspect_native_antecedent_review, prepare_native_antecedent_review,
