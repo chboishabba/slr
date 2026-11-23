@@ -558,7 +558,7 @@ pub fn inspect_native_antecedent_review(
         let en:i64=row.get(2);
         let literal:String=row.get(4);
         if st<0 || en<=st || (en as usize)>original_chars.len()
-            || st as usize<last_end
+            || (st as usize) < last_end
             || !row.get::<_,bool>(5) || row.get::<_,bool>(6)
             || row.get::<_,bool>(7) || row.get::<_,bool>(8)
             || !row.get::<_,bool>(9) || row.get::<_,bool>(10)
