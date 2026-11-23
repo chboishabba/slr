@@ -6,6 +6,7 @@
 //! *bounded source observation* frontier, NOT complete semantic readings.
 
 use serde::Serialize;
+use postgres::{Client, NoTls};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 use std::collections::BTreeSet;
@@ -30,6 +31,10 @@ pub enum NativeAntecedentFrontierError {
     MissingNamedSourceAnchor,
     #[error("parser run reference cannot be empty")]
     MissingParserRun,
+    #[error("no uniquely selectable complete original parser run; pass one explicitly")]
+    AmbiguousParserRuns,
+    #[error(transparent)]
+    Postgres(#[from] postgres::Error),
 }
 
 #[derive(Debug,Clone,PartialEq,Eq,Serialize)]
@@ -86,6 +91,68 @@ pub struct NativeAntecedentFrontier {
     pub external_qid_paid: bool,
     pub claim_truth_paid: bool,
     pub unresolved_obligations: Vec<&'static str>,
+}
+
+#[derive(Debug,Clone,PartialEq,Eq,Serialize)]
+pub struct NativeParserRunCoverage {
+    pub parser_run_ref: String,
+    pub run_status: String,
+    pub original_source_revision_ref: String,
+    pub covered_source_regions: usize,
+    pub required_source_regions: usize,
+    pub structurally_eligible_for_frontier: bool,
+}
+
+/// Enumerate only ORIGINAL persisted parser runs sharing the exact native
+/// source revision and all five before/focus SLR regions. Does not rerun NLP.
+pub fn native_antecedent_parser_runs(
+    config: &DatabaseConfig,
+    review_item_ref: &str,
+) -> Result<Vec<NativeParserRunCoverage>,NativeAntecedentFrontierError> {
+    let inspect=inspect_native_antecedent_review(config,review_item_ref)?;
+    let mut region_refs=inspect.before.iter()
+        .map(|s|s.region_ref.clone()).collect::<Vec<_>>();
+    region_refs.push(inspect.focus_statement.region_ref.clone());
+    if region_refs.len()!=5 {
+        return Err(NativeAntecedentFrontierError::ParserSourceMismatch);
+    }
+    let mut client=Client::connect(config.database_url(),NoTls)?;
+    let rows=client.query(
+        r#"SELECT r.parser_run_ref,r.status,COUNT(DISTINCT j.region_ref)
+           FROM ingest.parser_run r
+           JOIN ingest.parser_job j
+             ON j.parser_run_ref=r.parser_run_ref
+            AND j.source_revision_ref=r.source_revision_ref
+           WHERE r.source_revision_ref=$1
+             AND j.region_ref=ANY($2::text[])
+             AND j.status='succeeded'
+             AND j.parser_product_key IS NOT NULL
+             AND r.candidate_only=TRUE
+             AND r.creates_semantic_authority=FALSE
+             AND r.applicability_promoted=FALSE
+             AND r.claim_truth_promoted=FALSE
+             AND j.candidate_only=TRUE
+             AND j.creates_semantic_authority=FALSE
+             AND j.applicability_promoted=FALSE
+             AND j.claim_truth_promoted=FALSE
+           GROUP BY r.parser_run_ref,r.status
+           ORDER BY r.parser_run_ref"#,
+        &[&inspect.source_revision_ref,&region_refs],
+    )?;
+    let mut output=Vec::with_capacity(rows.len());
+    for row in rows {
+        let covered:i64=row.get(2);
+        if covered<0 {return Err(NativeAntecedentFrontierError::ParserSourceMismatch);}
+        output.push(NativeParserRunCoverage{
+            parser_run_ref:row.get(0),
+            run_status:row.get(1),
+            original_source_revision_ref:inspect.source_revision_ref.clone(),
+            covered_source_regions:covered as usize,
+            required_source_regions:region_refs.len(),
+            structurally_eligible_for_frontier:covered as usize==region_refs.len(),
+        });
+    }
+    Ok(output)
 }
 
 fn sha_parts(parts: &[&str]) -> String {
@@ -183,9 +250,9 @@ fn audited_parser_region(
     let e=load_parser_evidence_region(config,run,&sentence.region_ref)?;
     if e.source_revision_ref()!=expected_source_revision
         || e.region_ref()!=sentence.region_ref
-        || e.span()!=(sentence.start_char as u32,sentence.end_char as u32)
         || sentence.start_char>u32::MAX as u64
         || sentence.end_char>u32::MAX as u64
+        || e.span()!=(sentence.start_char as u32,sentence.end_char as u32)
         || !e.candidate_only()
         || !e.matches_source_literal(&sentence.literal)
         || !e.matches_observation_coverage(&sentence.literal) {
@@ -330,6 +397,17 @@ mod tests {
         assert_ne!(a,nomination_key("runB","comp","token",1,4310,4314));
         assert_ne!(a,nomination_key("runA","comp","token",1,4310,4315));
         assert_ne!(a,nomination_key("runA","comp","entity",1,4310,4314));
+    }
+    #[test] fn source_run_coverage_must_match_all_five_original_regions() {
+        let runs=vec![
+            NativeParserRunCoverage{parser_run_ref:"runA".into(),run_status:"complete".into(),
+                original_source_revision_ref:"rev".into(),covered_source_regions:4,
+                required_source_regions:5,structurally_eligible_for_frontier:false},
+            NativeParserRunCoverage{parser_run_ref:"runB".into(),run_status:"active".into(),
+                original_source_revision_ref:"rev".into(),covered_source_regions:5,
+                required_source_regions:5,structurally_eligible_for_frontier:true}
+        ];
+        assert_eq!(runs.iter().filter(|x|x.structurally_eligible_for_frontier).count(),1);
     }
     #[test] fn no_empty_parser_run() {
         assert_eq!(NativeAntecedentFrontierError::MissingParserRun.to_string(),
