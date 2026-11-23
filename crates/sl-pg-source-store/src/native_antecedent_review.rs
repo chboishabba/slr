@@ -190,8 +190,10 @@ fn original_statement(
           AND s.exact_span_ref=r.region_ref
           AND s.document_ref=$1
          WHERE r.source_revision_ref=$2 AND r.region_ref=$3
-           AND s.statement_ref=$4 AND r.region_kind='sentence'"#,
-        &[&c.document_ref,&c.source_revision_ref,&region_ref,&statement_ref],
+           AND s.statement_ref=$4 AND r.source_ref=$5
+           AND r.region_kind='sentence'"#,
+        &[&c.document_ref,&c.source_revision_ref,&region_ref,&statement_ref,
+          &c.original_source_ref],
     )?;
     if rows.len()!=1 { return Err(NativeAntecedentReviewError::OriginalSourceMismatch); }
     let row=&rows[0];
@@ -207,7 +209,10 @@ fn original_statement(
     let full=text.chars().skip(st as usize).take((en-st) as usize).collect::<String>();
     let found=text.chars().skip(start_char as usize)
         .take((end_char-start_char) as usize).collect::<String>();
-    if original != full || found != surface {
+    if original != full || found != surface
+        || original.chars().count() != (en-st) as usize
+        || surface.chars().count() != (end_char-start_char) as usize
+    {
         return Err(NativeAntecedentReviewError::OriginalSourceMismatch);
     }
     Ok(())
