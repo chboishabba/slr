@@ -2,6 +2,24 @@
 
 ## Controlling SLR P0 programme reset — 23 November 2026
 
+
+### Exact formal proof obligation now written (DASHI #112)
+
+`GwbCoreferenceFormalRepair.lean` now encodes the rigorous
+S29 Pending/no-payment theorem; omitted live candidate/no-coverage
+(the original typed binder may cap at 64); source-local uniqueness
+over **typed, complete and reviewed** surviving factor classes;
+consumer invariance; rival refutation; Level-3 retraction; and
+separate external-world identity. Source of mathematical evidence:
+`docs/gwb_coreference_formal_repair_20261123.md` in DASHI.
+Kernel check added to the same integrated M1–M3 runner; local
+acceptance **pending**. This does not change the SLR S29 queue
+(Pending, zero actual review commands) or pay its semantic authority.
+Do not substitute the formal conditional theorem for the runtime
+original binder candidate graph, complete scope, original reviewer
+receipt, semantic resolution and source-relative consumer.
+
+
 ### 2026-11-23 real native M1 frontier accepted; semantic review priority
 
 Original operator run `dashi_lean4/.dashi/gwb-relation/m1-m3-maxcut/run-PELWk2Yh/`,
