@@ -114,6 +114,11 @@ pub enum NativeAntecedentReviewError {
 }
 
 fn nonempty(s: &str) -> bool { !s.trim().is_empty() }
+fn same_set<T: Ord + Clone>(a: &[T], b: &[T]) -> bool {
+    use std::collections::BTreeSet;
+    a.iter().cloned().collect::<BTreeSet<_>>()
+        == b.iter().cloned().collect::<BTreeSet<_>>()
+}
 fn digest(parts: &[&str]) -> String {
     let mut hash = Sha256::new();
     for part in std::iter::once("native-antecedent-review:v1").chain(parts.iter().copied()) {
@@ -303,16 +308,13 @@ pub fn prepare_native_antecedent_review(
     };
     crate::install_review_workstation_schema(config)?;
     if let Some(existing)=crate::load_review_item(config,&review_item_ref)? {
-        use std::collections::BTreeSet;
-        let as_set = |xs: &[String]| xs.iter().collect::<BTreeSet<_>>();
-        let actions = |xs: &[ReviewAction]| xs.iter().collect::<BTreeSet<_>>();
         if existing.semantic_ref != item.semantic_ref
             || existing.item_kind != item.item_kind
             || existing.reason != item.reason
-            || as_set(&existing.provenance_refs) != as_set(&item.provenance_refs)
-            || as_set(&existing.source_refs) != as_set(&item.source_refs)
-            || actions(&existing.available_actions) != actions(&item.available_actions)
-            || as_set(&existing.affected_consumer_refs) != as_set(&item.affected_consumer_refs)
+            || !same_set(&existing.provenance_refs, &item.provenance_refs)
+            || !same_set(&existing.source_refs, &item.source_refs)
+            || !same_set(&existing.available_actions, &item.available_actions)
+            || !same_set(&existing.affected_consumer_refs, &item.affected_consumer_refs)
             || !existing.candidate_only || existing.creates_semantic_authority
             || existing.applicability_promoted || existing.claim_truth_promoted
         { return Err(NativeAntecedentReviewError::ImmutableConflict); }
