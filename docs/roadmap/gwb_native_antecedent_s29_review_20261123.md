@@ -1,5 +1,122 @@
 # C4.11: source-native antecedent review on original SLR S29
 
+## Controlling SLR P0 programme reset — 23 November 2026
+
+**C4.09–C4.12 are paid as source/inspection infrastructure. Stop
+building sequential wrappers and deliver a complete original-source
+semantic review + consumer ticket in one integration packet.**
+
+Current accepted ledger:
+
+| Gate | Verified execution | Authority |
+| --- | --- | --- |
+| C4.09 | Original read-only context reopen, 4 before / 2 after | Exact original text only |
+| C4.10 | Original Bush sentence 22 [4310,4314) -> he sentence 23 [4534,4536), 14/14 checks | Candidate/source-coordinate equivalence only |
+| C4.11 | 4/4 source-store lib and 1/1 CLI; PostgreSQL candidate queued | S29 workflow Pending, candidate only |
+| C4.12 | **7/7** source-store, **1/1** CLI and real PostgreSQL `inspect` PASS; sentences **19–25** reopened; operator pushed syntax fix `1c40100` to PR #78 | Read-only S29 source review; no promotion |
+
+S29 review item:
+`review-item:native-antecedent-candidate:sha256:25e927f12a0092fbed143669f6a0621fa004636d728074d576275b361da8f7d1`
+is **Pending** with `identity_admission=false`,
+`external_qid=false` and `claim_truth=false`.
+Previously appended instructions to rerun C4.11/C4.12 are historical
+snapshots, not the next work package.
+
+### One production packet, four cooperating parts (no new parser)
+
+**A. Replayable discourse candidate review:** use the accepted
+`native-antecedent-review inspect` PostgreSQL record as the
+source-of-truth. Reuse SensibLaw reference
+`src/pnf/binding_candidate_sets.py` accessibility, quote-depth,
+scope, morphological compatibility and typed candidate-set rules,
+plus the original proof-relevant identity acceptance contract. For
+`he` list all actually accessible original entity/object candidates,
+their full original exact source coordinates, candidate-set identity,
+why each is compatible/excluded and ambiguity outcome. `Bush` is
+a candidate coordinate, not the referent class. No nearest-name,
+word co-presence, QID-from-surname, or fictional exclusivity witness.
+If independent constraints do not select a unique referent, explicitly
+return `CandidateSet`/`Narrowed`/unresolved, not false `Resolved`.
+
+**B. Real S29 review and distinct *semantic* payment:** create a
+review packet for a genuine authorized reviewer that includes actual
+candidate-set refs, accessibility/exclusion witnesses, source text,
+policy/resolver revision and comparison to other candidates. The
+existing S29 review command/history is the workflow owner. No
+assistant-generated `Accept` or forged human reviewer reference.
+Even an S29 `Accepted` receipt must be separately consumed by an
+owner-checked `AntecedentResolutionReceipt` and appropriate
+`IdentityResolutionReceipt`; the typed status structs alone are
+not an admission API. The semantic owner must check exact witness
+ancestry, uniqueness or explicitly declared bounded-scoped
+alternatives, source/mention equality, review authority and retraction.
+Persist a distinct identity payment/revision keyed to actual original
+candidate+review+policy, not a freeform success flag; prove it can be
+reopened and invalidated when evidence or review changes.
+Keep Level-1 source tokens unchanged and Level-3 identity
+substitution explicitly reversible.
+
+**C. One consumer-relative source answer and provenance transport:**
+if B pays unique local identity, emit a licensed source-relative
+`he` referent answer; otherwise produce a justified unresolved result
+with retained alternatives. Bind original sentence/mention
+coordinates, concrete reviewed PNF and typed query, and existing
+`SourceQueryLicence`/finite consumer proof owner in DASHI Lean.
+For a *separate* source assertion, demand event/time review before
+claiming an occurrence. Round trip original producer object -> every
+canonical observation -> original character interval and evidence
+retraction; preserve alternate producer/representation mismatches.
+
+**D. Independent external identity and formal query:** the source-work
+of this book is *41: Inside the Presidency of George H. W. Bush*
+(2014); `Bush` might correspond to George H. W. Bush/Q23505,
+but neither work identity nor QID is paid by S29. Keep the original
+pinned George W. Bush Wikipedia Q207 article, different
+`a88ef63b...` source SHA and independently checked JMD
+`GWB_Q207_MINIMAL_ACCEPTED` **separate**. Match local actor to a
+revision-pinned external identity only through distinct owned
+external-authority evidence. Reject Q207 as a default attachment
+for the book. JMD property proof, article-source ↔ KB alignment,
+world truth, event time and formal obligation payment are independent
+from local antecedent resolution. Do not create a legal/formal proof
+obligation solely to claim the bridge was exercised.
+
+### Integrated acceptance contract: one packet, not serial checklists
+
+Run the focused original source-store and CLI tests and one live
+PostgreSQL integration + one targeted Lean proof/consumer check **after
+the entire packet is implemented**, checkpoint locally. Positive
+outcome is either (i) truly reviewed, reversible unique local
+antecedent + scoped consumer answer or (ii) honest checked
+unresolved/ambiguous fibre. Include **simultaneous negative controls**
+for wrong source hash; wrong statement/span; surname collision;
+plural/expletive; second accessible Bush/referent; quotation boundary;
+S29 Accepted with no semantic witness; changed reviewer/policy;
+retraction; forged Q23505/Q207; cross-source book↔Wikipedia
+attachment; unsupported event/time/claim truth; missing formal
+obligation or KB statement digest. Run against original source owner,
+never a duplicate parser, generic label or archived numeric SQLite
+fixture.
+
+This packet is **not implemented or paid** in SLR as of the C4.12
+operator acceptance. The existing C4.11/C4.12 code is reusable
+infrastructure. No more C4.xx-only code work is the priority.
+
+### Programme-wide handoff
+
+DASHI controlling roadmap
+`docs/gwb_automatic_proof_maxcut_20261117.md` on PR #112 now
+specifies M1 (this local SLR semantic cut), M2 (one licensed source
+answer and independently reviewed Q23505-if-paid KB check),
+M3 (separately aligned pinned Wikipedia Q207 source-to-JMD theorem).
+Do not call the three deliverables one source or one identity.
+After one full vertical slice and negative controls, scale to the
+original **29,043 mention/3,078 pronoun-like candidate inventory**
+with measured resolved/ambiguous counts and existing dependency
+reopening, not a fixed 51-QID complete-world claim.
+
+---
+
 Date: 2026-11-23. Owner: original SLR/Rust/PostgreSQL/S29. Source of
 coordinates: dashi_lean4 C4.10 same-source gate; not an identity authority.
 Target: GWB corpus original sentence 22 Bush [4310,4314) and sentence
