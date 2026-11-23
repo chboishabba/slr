@@ -1,0 +1,31 @@
+{
+  "schema": "sensiblaw.digital-esd-eric-query-set.v1",
+  "source_authority": "DASHI/Education/DigitalESDDatabaseTranslatedQueriesExact.agda",
+  "source_branch": "agent/digital-esd-paper-methodology-primary-sources",
+  "public_api": "https://api.ies.ed.gov/eric/",
+  "rows": 200,
+  "request_interval_seconds": 4,
+  "query_families": {
+    "Q1": "((\"digital education\" OR \"digital learning\" OR \"educational technology\" OR edtech OR \"online learning\" OR \"blended learning\" OR \"digital learning platform\" OR \"digital learning platforms\" OR \"generative AI\" OR GenAI OR \"artificial intelligence\") AND (\"education for sustainable development\" OR ESD OR \"sustainable development education\" OR \"sustainability education\" OR \"environmental education\" OR \"sustainable education\"))",
+    "Q2": "((\"digital education\" OR \"digital learning\" OR \"educational technology\" OR edtech OR \"online learning\" OR \"blended learning\" OR \"digital learning platform\" OR \"digital learning platforms\" OR \"generative AI\" OR GenAI OR \"artificial intelligence\") AND (\"education for sustainable development\" OR ESD OR \"sustainable development education\" OR \"sustainability education\" OR \"environmental education\" OR \"sustainable education\") AND (transform OR transformation OR transformative OR \"system change\" OR institution OR institutional OR institutionalisation OR institutionalization OR \"institutional change\" OR \"whole institution\" OR curriculum OR pedagogy OR competence OR competencies OR \"learning environment\" OR \"learning environments\"))",
+    "Q3": "((\"digital education\" OR \"digital learning\" OR \"educational technology\" OR edtech OR \"online learning\" OR \"blended learning\" OR \"digital learning platform\" OR \"digital learning platforms\" OR \"generative AI\" OR GenAI OR \"artificial intelligence\") AND (\"life cycle assessment\" OR LCA OR energy OR electricity OR carbon OR emission OR emissions OR water OR \"e-waste\" OR circular OR circularity OR repair OR repairability OR reuse OR recycle OR recycling OR upgrade OR upgrades OR durability OR \"service life\"))",
+    "Q4": "(\"life cycle assessment\" OR LCA OR energy OR electricity OR carbon OR emission OR emissions OR water OR \"e-waste\" OR circular OR circularity OR repair OR repairability OR reuse OR recycle OR recycling OR upgrade OR upgrades OR durability OR \"service life\")",
+    "Q5": "((\"digital education\" OR \"digital learning\" OR \"educational technology\" OR edtech OR \"online learning\" OR \"blended learning\" OR \"digital learning platform\" OR \"digital learning platforms\" OR \"generative AI\" OR GenAI OR \"artificial intelligence\") AND (\"education for sustainable development\" OR ESD OR \"sustainable development education\" OR \"sustainability education\" OR \"environmental education\" OR \"sustainable education\") AND (\"student voice\" OR \"learner voice\" OR \"learner agency\" OR \"student agency\" OR participatory OR \"participatory research\" OR co-design OR codesign OR governance OR \"public accountability\"))",
+    "Q6": "((\"digital education\" OR \"digital learning\" OR \"educational technology\" OR edtech OR \"online learning\" OR \"blended learning\" OR \"digital learning platform\" OR \"digital learning platforms\" OR \"generative AI\" OR GenAI OR \"artificial intelligence\") AND (\"education for sustainable development\" OR ESD OR \"sustainable development education\" OR \"sustainability education\" OR \"environmental education\" OR \"sustainable education\") AND (longitudinal OR long-term OR durability OR sustainability OR sustainable OR institutionalisation OR institutionalization OR persistence OR retention OR follow-up OR \"follow up\"))",
+    "Q7": "((\"digital education\" OR \"digital learning\" OR \"educational technology\" OR edtech OR \"online learning\" OR \"blended learning\" OR \"digital learning platform\" OR \"digital learning platforms\" OR \"generative AI\" OR GenAI OR \"artificial intelligence\") AND (interoperability OR interoperable OR \"open standard\" OR \"open standards\" OR \"open source\" OR OER OR \"open educational resource\" OR \"open educational resources\" OR portability OR migration OR export OR exports OR exporting OR \"vendor lock-in\" OR repairable OR repairability OR \"right to repair\"))"
+  },
+  "historical_observed_counts_2026_09_19": {
+    "Q1": 642,
+    "Q2": 290,
+    "Q3": 1594,
+    "Q4": 41889,
+    "Q5": 214,
+    "Q6": 293,
+    "Q7": 1675
+  },
+  "note": "Historical counts are provenance only; a fresh public-API execution may legitimately drift. Retained page hashes and observed numFound are authoritative for each run.",
+  "source_repository": "chboishabba/dashi_agda",
+  "source_commit": "67dc63f51b7efd5014f7ed8b64edc143da25cc7b",
+  "source_blob_sha": "0683c1a275159614410ddd6489f583a3b3b373db",
+  "source_path": "DASHI/Education/DigitalESDDatabaseTranslatedQueriesExact.agda"
+}

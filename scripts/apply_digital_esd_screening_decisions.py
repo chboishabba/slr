@@ -53,7 +53,13 @@ def read_jsonl(path: Path) -> list[dict[str, Any]]:
 def write_tsv(path: Path, rows: list[dict[str, Any]]) -> None:
     if not rows:
         raise ValueError("screening ledger cannot be empty")
-    fields = list(rows[0].keys())
+    fields: list[str] = []
+    seen: set[str] = set()
+    for row in rows:
+        for key in row:
+            if key not in seen:
+                seen.add(key)
+                fields.append(key)
     with path.open("w", newline="", encoding="utf-8") as fh:
         writer = csv.DictWriter(fh, fieldnames=fields, delimiter="\t", extrasaction="ignore")
         writer.writeheader()

@@ -25,6 +25,9 @@ import hashlib
 import json
 import sys
 import time
+import urllib.error
+import urllib.parse
+import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -34,7 +37,12 @@ ROOT = Path(__file__).resolve().parents[1]
 
 DEFAULT_CACHE_DIR = Path("artifacts/digital-esd/fulltext/cache")
 DEFAULT_EXPORT_ROOT = Path("artifacts/digital-esd/eric")
-DEFAULT_API_BASE = "https://eric.ed.gov/api/"
+DEFAULT_API_BASE = "https://api.ies.ed.gov/eric/"
+DEFAULT_QUERY_CONFIG = ROOT / "fixtures" / "digital_esd_eric_queries.json"
+DEFAULT_REQUEST_INTERVAL_SECONDS = 4.0
+DEFAULT_TIMEOUT_SECONDS = 45.0
+DEFAULT_ROWS = 200
+DEFAULT_ALLOWED_FULLTEXT_HOSTS = ("files.eric.ed.gov",)
 
 
 def now_iso() -> str:
@@ -90,145 +98,309 @@ def fmt_bytes(bytes_count: int) -> str:
     return f"{bytes_count} B"
 
 
+def sha256_bytes(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def load_eric_query_config(path: Path = DEFAULT_QUERY_CONFIG) -> dict[str, Any]:
+    payload = read_json(path)
+    families = payload.get("query_families")
+    if not isinstance(families, dict):
+        raise ValueError(f"{path}: missing query_families object")
+    expected = {f"Q{n}" for n in range(1, 8)}
+    if set(families) != expected:
+        raise ValueError(
+            f"{path}: expected exactly Q1..Q7, got {sorted(families)}"
+        )
+    for name, query in families.items():
+        if not isinstance(query, str) or not query.strip():
+            raise ValueError(f"{path}: {name} query is empty")
+    return payload
+
+
+def _safe_http_json(url: str, *, timeout: float) -> dict[str, Any]:
+    request = urllib.request.Request(
+        url,
+        headers={
+            "User-Agent": "SensibLaw-DigitalESD/1.0 (+https://github.com/chboishabba/slr)",
+            "Accept": "application/json",
+        },
+    )
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        raw = response.read()
+    payload = json.loads(raw.decode("utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("HTTP JSON response is not an object")
+    return payload
+
+
 # ------------------------------------------------------------------
 # ERIC API fetcher
 # ------------------------------------------------------------------
 
 class ERICFetcher:
-    """Fetches ERIC API JSON responses (Q1-Q7)."""
+    """Fetch the seven frozen ERIC query families through the public API.
+
+    Network access is opt-in.  The authoritative on-disk representation is the
+    retained page/summary layout already consumed by digital_esd_eric.py.
+    """
 
     def __init__(
         self,
         export_root: Path = DEFAULT_EXPORT_ROOT,
         api_base: str = DEFAULT_API_BASE,
         api_key: str | None = None,
+        *,
+        query_config: Path = DEFAULT_QUERY_CONFIG,
+        network_enabled: bool = False,
+        request_interval_seconds: float = DEFAULT_REQUEST_INTERVAL_SECONDS,
+        timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
+        rows: int = DEFAULT_ROWS,
     ) -> None:
         self.export_root = export_root
-        self.api_base = api_base.rstrip("/")
+        self.api_base = api_base.rstrip("/") + "/"
+        # Kept only for CLI/backward compatibility.  The documented public ERIC
+        # API path used here does not require or transmit a secret API key.
         self.api_key = api_key or ""
+        self.query_config_path = query_config
+        self.query_config = load_eric_query_config(query_config)
+        self.network_enabled = network_enabled
+        self.request_interval_seconds = max(0.0, request_interval_seconds)
+        self.timeout_seconds = timeout_seconds
+        self.rows = rows
+        if self.rows < 20 or self.rows > 200:
+            raise ValueError("ERIC rows must be in [20, 200]")
+
+    def _query(self, query_num: int) -> str:
+        key = f"Q{query_num}"
+        try:
+            return str(self.query_config["query_families"][key])
+        except KeyError as exc:
+            raise ValueError(f"unknown ERIC query family {key}") from exc
 
     def plan(self) -> list[dict[str, Any]]:
-        """List the 7 query families that need fetching."""
-        queries = []
+        queries: list[dict[str, Any]] = []
         for q in range(1, 8):
             query_dir = self.export_root / f"Q{q}"
+            summary = query_dir / "summary.json"
+            pages = sorted(query_dir.glob("page-*.json")) if query_dir.exists() else []
+            complete = False
+            if summary.exists() and pages:
+                try:
+                    summary_payload = read_json(summary)
+                    complete = bool(summary_payload.get("pagination_complete"))
+                except (OSError, ValueError, json.JSONDecodeError):
+                    complete = False
+            query = self._query(q)
             queries.append({
                 "query_num": q,
                 "query": f"Q{q}",
+                "canonical_search": query,
+                "canonical_search_sha256": sha256_bytes(query.encode("utf-8")),
                 "query_dir": str(query_dir),
-                "needs_fetch": not query_dir.exists() or not any(query_dir.glob("*.json")),
+                "needs_fetch": not complete,
             })
         return queries
+
+    def _request_page(self, query: str, *, start: int) -> tuple[dict[str, Any], str]:
+        if not self.network_enabled:
+            raise RuntimeError("live ERIC network disabled; pass --live explicitly")
+        params = {
+            "search": query,
+            "rows": self.rows,
+            "format": "json",
+            "start": start,
+        }
+        url = self.api_base + "?" + urllib.parse.urlencode(params)
+        return _safe_http_json(url, timeout=self.timeout_seconds), url
 
     def fetch(
         self,
         query_num: int,
         *,
-        max_pages: int = 100,
+        max_pages: int = 1000,
         dry_run: bool = False,
     ) -> dict[str, Any]:
-        """Fetch a single ERIC query family's JSON responses."""
+        query = self._query(query_num)
         query_dir = self.export_root / f"Q{query_num}"
-        query_dir.mkdir(parents=True, exist_ok=True)
 
         if dry_run:
             return {
                 "query": f"Q{query_num}",
                 "dry_run": True,
                 "query_dir": str(query_dir),
+                "canonical_search": query,
+                "canonical_search_sha256": sha256_bytes(query.encode("utf-8")),
                 "status": "dry-run",
             }
 
-        # ERIC API uses a paginated endpoint with query parameters
-        # The actual endpoint structure is documented at:
-        # https://eric.ed.gov/pdf/Using_ERIC_API_for_Research_Topics.pdf
-        page = 0
-        all_docs: list[dict[str, Any]] = []
-        total_pages = 0
+        if not self.network_enabled:
+            return {
+                "query": f"Q{query_num}",
+                "query_dir": str(query_dir),
+                "canonical_search": query,
+                "status": "network-disabled",
+                "docs_fetched": 0,
+                "pages": 0,
+            }
 
-        while True:
-            page += 1
-            if page > max_pages:
-                break
+        query_dir.mkdir(parents=True, exist_ok=True)
+        start = 0
+        page_index = 0
+        num_found: int | None = None
+        fetched = 0
+        page_receipts: list[dict[str, Any]] = []
+        started_at = now_iso()
 
-            url = (
-                f"{self.api_base}/?"
-                f"q=digital%20education&"
-                f"ff1=dtdYearRange%3A{2020 + query_num}-{2020 + query_num + 1}&"
-                f"p={page}&"
-                f"results=100"
-            )
+        while num_found is None or fetched < num_found:
+            if page_index >= max_pages:
+                raise RuntimeError(
+                    f"Q{query_num}: pagination exceeded max_pages={max_pages}"
+                )
+            try:
+                payload, url = self._request_page(query, start=start)
+            except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError) as exc:
+                raise RuntimeError(
+                    f"Q{query_num}: ERIC request failed at start={start}: {exc}"
+                ) from exc
 
-            # Placeholder for actual HTTP request
-            # In production, this uses requests or httpx with the API key
-            response = self._http_get(url)
-            if response is None:
-                break
+            response = payload.get("response")
+            if not isinstance(response, dict):
+                raise ValueError(f"Q{query_num}: response object missing")
+            observed = response.get("numFound")
+            docs = response.get("docs")
+            if not isinstance(observed, int):
+                raise ValueError(f"Q{query_num}: numFound missing/non-integer")
+            if not isinstance(docs, list):
+                raise ValueError(f"Q{query_num}: docs missing/non-list")
+            if num_found is None:
+                num_found = observed
+            elif observed != num_found:
+                raise RuntimeError(
+                    f"Q{query_num}: numFound drift during pagination "
+                    f"{num_found} -> {observed}"
+                )
 
-            docs = self._extract_docs(response)
+            raw = (
+                json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+                + "\n"
+            ).encode("utf-8")
+            page_path = query_dir / f"page-{page_index:06d}.json"
+            page_path.write_bytes(raw)
+            page_receipts.append({
+                "page_index": page_index,
+                "start": start,
+                "rows_requested": self.rows,
+                "docs_returned": len(docs),
+                "request_url": url,
+                "path": str(page_path),
+                "sha256": sha256_bytes(raw),
+            })
+
+            fetched += len(docs)
             if not docs:
                 break
+            start += len(docs)
+            page_index += 1
+            if fetched < num_found and self.request_interval_seconds:
+                time.sleep(self.request_interval_seconds)
 
-            all_docs.extend(docs)
-            total_pages += 1
+        pagination_complete = num_found is not None and fetched >= num_found
+        if not pagination_complete:
+            raise RuntimeError(
+                f"Q{query_num}: pagination incomplete fetched={fetched} numFound={num_found}"
+            )
 
-            # Rate limit: ERIC API has strict per-second limits
-            time.sleep(0.5)
+        historical = self.query_config.get(
+            "historical_observed_counts_2026_09_19", {}
+        ).get(f"Q{query_num}")
 
-        # Write combined JSON response for the query family
-        output_path = query_dir / "combined.json"
-        write_json(output_path, {
-            "query": f"Q{query_num}",
-            "total_pages": total_pages,
-            "total_docs": len(all_docs),
-            "fetched_at": now_iso(),
-            "docs": all_docs,
-        })
+        summary = {
+            "schema": "sensiblaw.digital-esd-eric-export-summary.v1",
+            "query_id": f"Q{query_num}",
+            "canonical_unencoded_query": query,
+            "canonical_search_sha256": sha256_bytes(query.encode("utf-8")),
+            "endpoint": self.api_base,
+            "format": "json",
+            "rows_requested": self.rows,
+            "execution_started": started_at,
+            "execution_completed": now_iso(),
+            "numFound": num_found,
+            "fetched_docs": fetched,
+            "pagination_complete": True,
+            "historical_numFound_2026_09_19": historical,
+            "historical_count_matches": historical == num_found if historical is not None else None,
+            "pages": page_receipts,
+            "api_key_used": False,
+            "candidate_only": True,
+            "creates_source_truth": False,
+            "creates_source_audit_admission": False,
+        }
+        summary_path = query_dir / "summary.json"
+        write_json(summary_path, summary)
 
         return {
             "query": f"Q{query_num}",
             "query_dir": str(query_dir),
-            "docs_fetched": len(all_docs),
-            "pages": total_pages,
-            "output_path": str(output_path),
+            "docs_fetched": fetched,
+            "pages": len(page_receipts),
+            "numFound": num_found,
+            "summary_path": str(summary_path),
             "status": "fetched",
         }
 
-    def fetch_all(self, *, dry_run: bool = False) -> dict[str, Any]:
-        """Fetch all 7 ERIC query families."""
+    def fetch_all(
+        self,
+        *,
+        dry_run: bool = False,
+        force: bool = False,
+        query_nums: set[int] | None = None,
+    ) -> dict[str, Any]:
         plans = self.plan()
         results: list[dict[str, Any]] = []
-
         for plan in plans:
-            if not plan["needs_fetch"]:
+            if query_nums is not None and plan["query_num"] not in query_nums:
+                results.append({
+                    "query": plan["query"],
+                    "query_dir": plan["query_dir"],
+                    "status": "not-selected",
+                })
+                continue
+            if not force and not plan["needs_fetch"]:
                 results.append({
                     "query": plan["query"],
                     "query_dir": plan["query_dir"],
                     "status": "already-exists",
                 })
                 continue
-            result = self.fetch(plan["query_num"], dry_run=dry_run)
-            results.append(result)
+            results.append(self.fetch(plan["query_num"], dry_run=dry_run))
 
         total_docs = sum(r.get("docs_fetched", 0) for r in results)
         return {
-            "schema": "sensiblaw.digital-esd-eric-fetch.v0_1",
+            "schema": "sensiblaw.digital-esd-eric-fetch.v0_2",
             "fetched_at": now_iso(),
             "dry_run": dry_run,
+            "network_enabled": self.network_enabled,
             "query_families": len(results),
+            "selected_query_families": sum(
+                1 for r in results if r["status"] != "not-selected"
+            ),
+            "force": force,
             "total_docs": total_docs,
+            "api_key_used": False,
             "results": results,
         }
 
-    @staticmethod
-    def _http_get(url: str) -> dict[str, Any] | None:
-        """Placeholder for actual HTTP GET. Must be implemented with requests/httpx."""
-        return None
+    def _http_get(self, url: str) -> dict[str, Any] | None:
+        """Compatibility hook used by older tests/callers."""
+        if not self.network_enabled:
+            return None
+        return _safe_http_json(url, timeout=self.timeout_seconds)
 
     @staticmethod
     def _extract_docs(response: dict[str, Any]) -> list[dict[str, Any]]:
-        """Extract document entries from ERIC API response."""
-        return response.get("response", {}).get("docs", [])
+        docs = response.get("response", {}).get("docs", [])
+        return docs if isinstance(docs, list) else []
 
 
 # ------------------------------------------------------------------
@@ -236,15 +408,36 @@ class ERICFetcher:
 # ------------------------------------------------------------------
 
 class FullTextFetcher:
-    """Fetches full-text artifacts identified by the cache plan."""
+    """Fetch full-text artifacts for already retained include|probable records.
+
+    By default only ERIC's public full-text host is allowed.  External publisher
+    or institutional URLs must be explicitly supplied and allowlisted.
+    """
 
     def __init__(
         self,
         cache_dir: Path = DEFAULT_CACHE_DIR,
         output_dir: Path = DEFAULT_CACHE_DIR.parent,
+        *,
+        network_enabled: bool = False,
+        request_interval_seconds: float = DEFAULT_REQUEST_INTERVAL_SECONDS,
+        timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
+        url_map: Path | None = None,
+        allowed_hosts: tuple[str, ...] = DEFAULT_ALLOWED_FULLTEXT_HOSTS,
     ) -> None:
         self.cache_dir = cache_dir
         self.output_dir = output_dir
+        self.network_enabled = network_enabled
+        self.request_interval_seconds = max(0.0, request_interval_seconds)
+        self.timeout_seconds = timeout_seconds
+        self.allowed_hosts = tuple(h.lower() for h in allowed_hosts)
+        self.url_by_ref: dict[str, str] = {}
+        if url_map is not None and url_map.exists():
+            for row in read_jsonl(url_map):
+                ref = str(row.get("source_identity_reference") or "")
+                url = str(row.get("url") or row.get("fulltext_url") or "")
+                if ref and url:
+                    self.url_by_ref[ref] = url
 
     def plan(
         self,
@@ -252,33 +445,100 @@ class FullTextFetcher:
         priority_queue: Path | None = None,
         max_items: int = 20,
     ) -> dict[str, Any]:
-        """Build a fetch plan from the retained worklist."""
         if worklist is None:
             worklist = self.cache_dir.parent / "fulltext-worklist.jsonl"
         if priority_queue is None:
-            priority_queue = self.cache_dir.parent.parent.parent / "screening" / "adaptive" / "screening-pareto-queue.jsonl"
+            priority_queue = (
+                self.cache_dir.parent.parent.parent
+                / "screening" / "adaptive" / "screening-pareto-queue.jsonl"
+            )
 
         rows = read_jsonl(worklist) if worklist.exists() else []
-        retained = [r for r in rows if str(r.get("decision") or "") in ("include", "probable")]
+        retained = [
+            r for r in rows
+            if str(r.get("decision") or "") in ("include", "probable")
+        ]
+        retained_by_ref = {
+            str(r.get("source_identity_reference") or ""): r for r in retained
+        }
 
-        priority = read_jsonl(priority_queue) if priority_queue and priority_queue.exists() else []
+        priority = (
+            read_jsonl(priority_queue)
+            if priority_queue and priority_queue.exists()
+            else []
+        )
         priority_order: list[str] = []
         for item in priority:
             ref = str(item.get("source_identity_reference") or "")
-            if ref in {str(r.get("source_identity_reference") or "") for r in retained} and ref not in priority_order:
+            if ref in retained_by_ref and ref not in priority_order:
                 priority_order.append(ref)
 
-        selected_refs = priority_order[:max_items] if priority_order else [
-            str(r.get("source_identity_reference") or "") for r in retained[:max_items]
-        ]
+        if priority_order:
+            selected_refs = priority_order[:max_items]
+        else:
+            selected_refs = list(retained_by_ref)[:max_items]
 
         return {
-            "schema": "sensiblaw.digital-esd-fulltext-fetch-plan.v0_1",
+            "schema": "sensiblaw.digital-esd-fulltext-fetch-plan.v0_2",
             "generated_at": now_iso(),
             "max_items": max_items,
             "selected_count": len(selected_refs),
             "selected_refs": selected_refs,
+            "candidate_only": True,
+            "creates_screening_decision": False,
         }
+
+    @staticmethod
+    def _accession_from_ref(ref: str) -> str | None:
+        if ref.startswith("ERIC:"):
+            accession = ref.split(":", 1)[1].strip()
+            if accession.startswith(("ED", "EJ")) and accession[2:].isdigit():
+                return accession
+        return None
+
+    def _resolve_url(self, ref: str) -> str | None:
+        explicit = self.url_by_ref.get(ref)
+        if explicit:
+            return explicit
+        accession = self._accession_from_ref(ref)
+        if accession:
+            return f"https://files.eric.ed.gov/fulltext/{accession}.pdf"
+        return None
+
+    def _url_allowed(self, url: str) -> bool:
+        parsed = urllib.parse.urlparse(url)
+        return parsed.scheme == "https" and (parsed.hostname or "").lower() in self.allowed_hosts
+
+    def _merge_retrieved_manifest(
+        self,
+        downloaded_rows: list[dict[str, Any]],
+    ) -> Path:
+        manifest_path = self.output_dir / "retrieved-manifest.jsonl"
+        existing = read_jsonl(manifest_path)
+        by_ref = {
+            str(row.get("source_identity_reference") or ""): row
+            for row in existing
+            if str(row.get("source_identity_reference") or "")
+        }
+        for row in downloaded_rows:
+            ref = str(row.get("source_identity_reference") or "")
+            if ref:
+                by_ref[ref] = {
+                    "source_identity_reference": ref,
+                    "artifact_path": row["artifact_path"],
+                    "sha256": row["sha256"],
+                    "retrieval_reference": row["retrieval_reference"],
+                    "retrieval_timestamp": row["retrieval_timestamp"],
+                    "source_revision_reference": row["source_revision_reference"],
+                    "candidate_only": True,
+                    "creates_source_truth": False,
+                    "creates_source_audit_admission": False,
+                }
+        write_jsonl(
+            manifest_path,
+            [by_ref[key] for key in sorted(by_ref)],
+        )
+        return manifest_path
 
     def fetch(
         self,
@@ -287,60 +547,189 @@ class FullTextFetcher:
         dry_run: bool = False,
         retry_count: int = 3,
     ) -> dict[str, Any]:
-        """Fetch selected full-text artifacts to the cache directory."""
         selected_refs = fetch_plan.get("selected_refs", [])
         results: list[dict[str, Any]] = []
         total_bytes = 0
 
+        manifest_path = self.output_dir / "retrieved-manifest.jsonl"
+        existing_manifest = read_jsonl(manifest_path) if manifest_path.exists() else []
+        existing_by_ref = {
+            str(row.get("source_identity_reference") or ""): row
+            for row in existing_manifest
+            if str(row.get("source_identity_reference") or "")
+        }
+
         for ref in selected_refs:
             artifact_path = self.cache_dir / f"{ref}.pdf"
-            artifact_path.parent.mkdir(parents=True, exist_ok=True)
+            url = self._resolve_url(ref)
+
+            existing = existing_by_ref.get(ref)
+            if existing is not None and artifact_path.exists() and artifact_path.is_file():
+                expected = str(existing.get("sha256") or "").lower().removeprefix("sha256:")
+                observed = sha256_file(artifact_path)
+                if expected and observed == expected:
+                    size = artifact_path.stat().st_size
+                    results.append({
+                        "source_identity_reference": ref,
+                        "artifact_path": str(artifact_path),
+                        "resolved_url": url,
+                        "status": "cache-hit",
+                        "actual_bytes": size,
+                        "sha256": observed,
+                        "source_revision_reference": str(
+                            existing.get("source_revision_reference")
+                            or f"fulltext-sha256:{observed}"
+                        ),
+                        "retrieval_reference": str(
+                            existing.get("retrieval_reference")
+                            or f"retained-cache:{artifact_path.resolve()}"
+                        ),
+                        "retrieval_timestamp": str(
+                            existing.get("retrieval_timestamp") or now_iso()
+                        ),
+                        "candidate_only": True,
+                        "creates_source_truth": False,
+                        "creates_source_audit_admission": False,
+                    })
+                    continue
 
             if dry_run:
                 results.append({
                     "source_identity_reference": ref,
                     "artifact_path": str(artifact_path),
+                    "resolved_url": url,
                     "status": "dry-run",
                     "actual_bytes": 0,
                 })
                 continue
 
-            # In production, this downloads from the actual repository
-            # (ERIC, publisher, or institutional repository)
-            # Placeholder for actual HTTP download
-            downloaded = self._download_artifact(ref, artifact_path, retry_count)
-
-            if downloaded:
-                total_bytes += artifact_path.stat().st_size
+            if not self.network_enabled:
                 results.append({
                     "source_identity_reference": ref,
                     "artifact_path": str(artifact_path),
-                    "status": "downloaded",
-                    "actual_bytes": artifact_path.stat().st_size,
+                    "resolved_url": url,
+                    "status": "network-disabled",
+                    "actual_bytes": 0,
                 })
+                continue
+
+            if not url:
+                results.append({
+                    "source_identity_reference": ref,
+                    "artifact_path": str(artifact_path),
+                    "status": "no-fulltext-url",
+                    "actual_bytes": 0,
+                })
+                continue
+            if not self._url_allowed(url):
+                results.append({
+                    "source_identity_reference": ref,
+                    "artifact_path": str(artifact_path),
+                    "resolved_url": url,
+                    "status": "host-not-allowlisted",
+                    "actual_bytes": 0,
+                })
+                continue
+
+            artifact_path.parent.mkdir(parents=True, exist_ok=True)
+            downloaded = self._download_artifact(
+                url, artifact_path, retry_count
+            )
+            if downloaded:
+                size = artifact_path.stat().st_size
+                total_bytes += size
+                digest = sha256_file(artifact_path)
+                results.append({
+                    "source_identity_reference": ref,
+                    "artifact_path": str(artifact_path),
+                    "resolved_url": url,
+                    "status": "downloaded",
+                    "actual_bytes": size,
+                    "sha256": digest,
+                    "source_revision_reference": f"fulltext-sha256:{digest}",
+                    "retrieval_reference": url,
+                    "retrieval_timestamp": now_iso(),
+                    "candidate_only": True,
+                    "creates_source_truth": False,
+                    "creates_source_audit_admission": False,
+                })
+                if self.request_interval_seconds:
+                    time.sleep(self.request_interval_seconds)
             else:
                 results.append({
                     "source_identity_reference": ref,
                     "artifact_path": str(artifact_path),
+                    "resolved_url": url,
                     "status": "download-failed",
                     "actual_bytes": 0,
                 })
 
+        failed_statuses = {
+            "download-failed", "network-disabled", "no-fulltext-url",
+            "host-not-allowlisted",
+        }
+        downloaded_rows = [r for r in results if r["status"] == "downloaded"]
+        if downloaded_rows and not dry_run:
+            manifest_path = self._merge_retrieved_manifest(downloaded_rows)
         return {
-            "schema": "sensiblaw.digital-esd-fulltext-fetch.v0_1",
+            "schema": "sensiblaw.digital-esd-fulltext-fetch.v0_2",
             "fetched_at": now_iso(),
             "dry_run": dry_run,
+            "network_enabled": self.network_enabled,
             "selected_count": len(selected_refs),
-            "downloaded_count": sum(1 for r in results if r["status"] == "downloaded"),
-            "failed_count": sum(1 for r in results if r["status"] == "download-failed"),
+            "downloaded_count": sum(
+                1 for r in results if r["status"] == "downloaded"
+            ),
+            "cache_hit_count": sum(
+                1 for r in results if r["status"] == "cache-hit"
+            ),
+            "failed_count": sum(
+                1 for r in results if r["status"] in failed_statuses
+            ),
             "total_bytes": total_bytes,
             "total_bytes_fmt": fmt_bytes(total_bytes),
+            "retrieved_manifest_path": str(manifest_path) if manifest_path else None,
             "results": results,
+            "creates_source_truth": False,
+            "creates_source_audit_admission": False,
         }
 
-    @staticmethod
-    def _download_artifact(ref: str, path: Path, retries: int) -> bool:
-        """Placeholder for actual artifact download."""
+    def _download_artifact(self, url: str, path: Path, retries: int) -> bool:
+        if not self.network_enabled:
+            return False
+        temp = path.with_suffix(path.suffix + ".part")
+        for attempt in range(max(1, retries)):
+            try:
+                request = urllib.request.Request(
+                    url,
+                    headers={
+                        "User-Agent": "SensibLaw-DigitalESD/1.0 (+https://github.com/chboishabba/slr)",
+                        "Accept": "application/pdf,application/octet-stream;q=0.8,*/*;q=0.1",
+                    },
+                )
+                with urllib.request.urlopen(
+                    request, timeout=self.timeout_seconds
+                ) as response:
+                    with temp.open("wb") as fh:
+                        while True:
+                            chunk = response.read(1024 * 1024)
+                            if not chunk:
+                                break
+                            fh.write(chunk)
+                if temp.stat().st_size == 0:
+                    temp.unlink(missing_ok=True)
+                    return False
+                with temp.open("rb") as fh:
+                    prefix = fh.read(5)
+                if prefix != b"%PDF-":
+                    temp.unlink(missing_ok=True)
+                    return False
+                temp.replace(path)
+                return True
+            except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, OSError):
+                temp.unlink(missing_ok=True)
+                if attempt + 1 < max(1, retries) and self.request_interval_seconds:
+                    time.sleep(self.request_interval_seconds)
         return False
 
 
@@ -353,7 +742,12 @@ def retrieve_all(
     eric_export_root: Path = DEFAULT_EXPORT_ROOT,
     fulltext_cache_dir: Path = DEFAULT_CACHE_DIR,
     api_key: str = "",
+    api_base: str = DEFAULT_API_BASE,
     dry_run: bool = False,
+    live: bool = False,
+    query_config: Path = DEFAULT_QUERY_CONFIG,
+    fulltext_url_map: Path | None = None,
+    allowed_fulltext_hosts: tuple[str, ...] = DEFAULT_ALLOWED_FULLTEXT_HOSTS,
 ) -> dict[str, Any]:
     """Run the full retrieval pipeline.
 
@@ -361,14 +755,25 @@ def retrieve_all(
     2. Fetch selected full-text artifacts
     3. Verify downloaded files against plan
     """
-    eric_fetcher = ERICFetcher(export_root=eric_export_root, api_key=api_key)
-    ft_fetcher = FullTextFetcher(cache_dir=fulltext_cache_dir)
+    eric_fetcher = ERICFetcher(
+        export_root=eric_export_root,
+        api_key=api_key,
+        api_base=api_base,
+        query_config=query_config,
+        network_enabled=live,
+    )
+    ft_fetcher = FullTextFetcher(
+        cache_dir=fulltext_cache_dir,
+        network_enabled=live,
+        url_map=fulltext_url_map,
+        allowed_hosts=allowed_fulltext_hosts,
+    )
 
     eric_plan = eric_fetcher.plan()
     eric_needs_fetch = any(p["needs_fetch"] for p in eric_plan)
 
     eric_result = eric_fetcher.fetch_all(dry_run=dry_run) if eric_needs_fetch else {
-        "schema": "sensiblaw.digital-esd-eric-fetch.v0_1",
+        "schema": "sensiblaw.digital-esd-eric-fetch.v0_2",
         "fetched_at": now_iso(),
         "dry_run": dry_run,
         "query_families": len(eric_plan),
@@ -380,7 +785,7 @@ def retrieve_all(
     ft_result = ft_fetcher.fetch(ft_plan, dry_run=dry_run)
 
     return {
-        "schema": "sensiblaw.digital-esd-retrieval.v0_1",
+        "schema": "sensiblaw.digital-esd-retrieval.v0_2",
         "retrieved_at": now_iso(),
         "dry_run": dry_run,
         "eric": eric_result,
@@ -410,8 +815,13 @@ def main() -> int:
 
     e = sub.add_parser("eric", help="fetch ERIC API JSON responses")
     e.add_argument("--export-root", type=Path, default=DEFAULT_EXPORT_ROOT)
-    e.add_argument("--api-key", type=str, default="")
+    e.add_argument("--api-key", type=str, default="", help="deprecated; public ERIC API path uses no key")
     e.add_argument("--api-base", type=str, default=DEFAULT_API_BASE)
+    e.add_argument("--query-config", type=Path, default=DEFAULT_QUERY_CONFIG)
+    e.add_argument("--live", action="store_true", help="explicitly permit network requests")
+    e.add_argument("--request-interval-seconds", type=float, default=DEFAULT_REQUEST_INTERVAL_SECONDS)
+    e.add_argument("--query", action="append", choices=[f"Q{n}" for n in range(1, 8)])
+    e.add_argument("--force", action="store_true", help="re-fetch selected query families even if retained exports exist")
     e.add_argument("--dry-run", action="store_true")
     e.add_argument("--json", action="store_true")
 
@@ -420,14 +830,22 @@ def main() -> int:
     f.add_argument("--worklist", type=Path)
     f.add_argument("--priority-queue", type=Path)
     f.add_argument("--max-items", type=int, default=20)
+    f.add_argument("--url-map", type=Path)
+    f.add_argument("--allow-host", action="append", default=[])
+    f.add_argument("--live", action="store_true", help="explicitly permit network requests")
+    f.add_argument("--request-interval-seconds", type=float, default=DEFAULT_REQUEST_INTERVAL_SECONDS)
     f.add_argument("--dry-run", action="store_true")
     f.add_argument("--json", action="store_true")
 
     a = sub.add_parser("all", help="full retrieval pipeline")
     a.add_argument("--export-root", type=Path, default=DEFAULT_EXPORT_ROOT)
     a.add_argument("--cache-dir", type=Path, default=DEFAULT_CACHE_DIR)
-    a.add_argument("--api-key", type=str, default="")
+    a.add_argument("--api-key", type=str, default="", help="deprecated; public ERIC API path uses no key")
     a.add_argument("--api-base", type=str, default=DEFAULT_API_BASE)
+    a.add_argument("--query-config", type=Path, default=DEFAULT_QUERY_CONFIG)
+    a.add_argument("--fulltext-url-map", type=Path)
+    a.add_argument("--allow-host", action="append", default=[])
+    a.add_argument("--live", action="store_true", help="explicitly permit network requests")
     a.add_argument("--dry-run", action="store_true")
     a.add_argument("--json", action="store_true")
 
@@ -441,15 +859,38 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.command == "eric":
-        fetcher = ERICFetcher(export_root=args.export_root, api_key=args.api_key, api_base=args.api_base)
-        result = fetcher.fetch_all(dry_run=args.dry_run)
+        fetcher = ERICFetcher(
+            export_root=args.export_root,
+            api_key=args.api_key,
+            api_base=args.api_base,
+            query_config=args.query_config,
+            network_enabled=args.live,
+            request_interval_seconds=args.request_interval_seconds,
+        )
+        selected = (
+            {int(q[1:]) for q in args.query}
+            if args.query
+            else None
+        )
+        result = fetcher.fetch_all(
+            dry_run=args.dry_run,
+            force=args.force,
+            query_nums=selected,
+        )
         if args.json:
             print(json.dumps(result, indent=2, sort_keys=True))
         else:
             print(f"eric: {result['total_docs']} docs across {result['query_families']} families")
 
     elif args.command == "fulltext":
-        fetcher = FullTextFetcher(cache_dir=args.cache_dir)
+        allowed_hosts = tuple(DEFAULT_ALLOWED_FULLTEXT_HOSTS) + tuple(args.allow_host)
+        fetcher = FullTextFetcher(
+            cache_dir=args.cache_dir,
+            network_enabled=args.live,
+            request_interval_seconds=args.request_interval_seconds,
+            url_map=args.url_map,
+            allowed_hosts=allowed_hosts,
+        )
         plan = fetcher.plan(max_items=args.max_items, worklist=args.worklist, priority_queue=args.priority_queue)
         result = fetcher.fetch(plan, dry_run=args.dry_run)
         if args.json:
@@ -463,6 +904,10 @@ def main() -> int:
             fulltext_cache_dir=args.cache_dir,
             api_key=args.api_key,
             api_base=args.api_base,
+            query_config=args.query_config,
+            fulltext_url_map=args.fulltext_url_map,
+            allowed_fulltext_hosts=tuple(DEFAULT_ALLOWED_FULLTEXT_HOSTS) + tuple(args.allow_host),
+            live=args.live,
             dry_run=args.dry_run,
         )
         if args.json:
