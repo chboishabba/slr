@@ -4,6 +4,7 @@ use std::io::{self, BufReader, BufWriter, Write};
 use std::path::PathBuf;
 
 use sensiblaw_world_compiler::compile_observation_stream;
+mod chat_compile;
 
 fn arg_value(args: &[String], key: &str) -> Option<String> {
     args.iter().position(|x| x == key).and_then(|i| args.get(i + 1)).cloned()
@@ -19,8 +20,18 @@ fn required_i64(args: &[String], key: &str) -> i64 {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();
     let command = args.get(1).map(String::as_str).unwrap_or("");
+    if command == "compile-chat" {
+        let input = arg_value(&args, "--input").ok_or("compile-chat requires --input")?;
+        let output = arg_value(&args, "--output").ok_or("compile-chat requires --output")?;
+        let iteration = required_i64(&args, "--iteration");
+        let limit = arg_value(&args, "--max-messages").unwrap_or_else(|| "1000".into())
+            .parse::<usize>()?;
+        return Ok(chat_compile::compile_chat(
+            &PathBuf::from(input), &PathBuf::from(output), iteration, limit,
+        )?);
+    }
     if command != "compile" {
-        eprintln!("usage: sensiblaw-world-compiler compile --iteration N [--input observations.slro] [--output world.slrw]");
+        eprintln!("usage: sensiblaw-world-compiler compile --iteration N [--input observations.slro] [--output world.slrw] | compile-chat --iteration N --input archived.jsonl --output world.slrw [--max-messages N]");
         std::process::exit(2);
     }
 
