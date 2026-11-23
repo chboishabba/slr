@@ -397,6 +397,43 @@ pub fn prepare_native_antecedent_review(
     })
 }
 
+/// Check original S29 ownership without treating workflow acceptance as identity.
+fn verify_s29_review_item(
+    item: &ReviewItem,
+    candidate: &NativeAntecedentSourceCandidate,
+    proposal_ref: &str,
+) -> Result<(), NativeAntecedentReviewError> {
+    let wanted_provenance=[
+        format!("original-context-sha256:{}",candidate.original_context_sha256),
+        candidate.focus.mention_ref.clone(),candidate.focus.candidate_ref.clone()
+    ];
+    let wanted_sources=[
+        candidate.source_revision_ref.clone(),candidate.document_ref.clone(),
+        candidate.focus.statement_ref.clone(),
+        candidate.antecedent_source_span.statement_ref.clone()
+    ];
+    let wanted_actions=[
+        ReviewAction::Accept,ReviewAction::Reject,ReviewAction::Abstain,
+        ReviewAction::Qualify,ReviewAction::RequestEvidence,
+        ReviewAction::OpenSource
+    ];
+    if item.item_kind!=ReviewItemKind::Observation
+        || item.review_item_ref!=format!("review-item:{proposal_ref}")
+        || item.semantic_ref!=proposal_ref
+        || item.reason!="Review SAME-SOURCE antecedent candidate; S29 acceptance alone does not resolve coreference"
+        || !item.candidate_only || item.creates_semantic_authority
+        || item.applicability_promoted || item.claim_truth_promoted
+        || !same_set(&item.provenance_refs,&wanted_provenance)
+        || !same_set(&item.source_refs,&wanted_sources)
+        || !same_set(&item.available_actions,&wanted_actions)
+        || !same_set(&item.affected_consumer_refs,
+                     &[candidate.focus.mention_ref.clone()])
+    {return Err(NativeAntecedentReviewError::ImmutableConflict);}
+    // Deliberately independent of item.current_status: even S29 Accepted is
+    // only workflow acceptance. The caller always returns identity=false.
+    Ok(())
+}
+
 /// Immutable, source-revalidated view of one persisted C4.11 candidate.
 /// S29 workflow status is exposed as workflow status, not as identity proof.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -556,23 +593,7 @@ pub fn inspect_native_antecedent_review(
     if !target_found {return Err(NativeAntecedentReviewError::OriginalSourceMismatch);}
     let item=crate::load_review_item(config,review_item_ref)?
         .ok_or(NativeAntecedentReviewError::ImmutableConflict)?;
-    let wanted_provenance=[
-        format!("original-context-sha256:{}",candidate.original_context_sha256),
-        candidate.focus.mention_ref.clone(),candidate.focus.candidate_ref.clone()
-    ];
-    let wanted_sources=[
-        candidate.source_revision_ref.clone(),candidate.document_ref.clone(),
-        candidate.focus.statement_ref.clone(),target.statement_ref.clone()
-    ];
-    if item.item_kind!=ReviewItemKind::Observation
-        || item.semantic_ref!=proposal_ref
-        || !item.candidate_only || item.creates_semantic_authority
-        || item.applicability_promoted || item.claim_truth_promoted
-        || !same_set(&item.provenance_refs,&wanted_provenance)
-        || !same_set(&item.source_refs,&wanted_sources)
-        || !same_set(&item.affected_consumer_refs,
-                     &[candidate.focus.mention_ref.clone()])
-    {return Err(NativeAntecedentReviewError::ImmutableConflict);}
+    verify_s29_review_item(&item,&candidate,&proposal_ref)?;
     // Audit history is stable-reference sorted, NOT falsely timestamp ordered.
     let receipt_rows=client.query(
         r#"SELECT command_ref,semantic_ref,candidate_only,
