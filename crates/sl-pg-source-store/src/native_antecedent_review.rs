@@ -221,7 +221,7 @@ fn original_statement(
 fn original_source_match(
     client: &mut Client,
     c: &NativeAntecedentSourceCandidate,
-) -> Result<(), NativeAntecedentReviewError> {
+) -> Result<String, NativeAntecedentReviewError> {
     let rows=client.query(
         r#"SELECT g.source_ref,g.document_ref,g.content_digest_ref,
                 g.candidate_only,g.creates_semantic_authority,
@@ -250,7 +250,8 @@ fn original_source_match(
                        &c.antecedent_source_span.region_ref,
                        c.antecedent_source_span.start_char,
                        c.antecedent_source_span.end_char,
-                       &c.antecedent_source_span.surface,&body)
+                       &c.antecedent_source_span.surface,&body)?;
+    Ok(body)
 }
 
 fn proposal_identity(c: &NativeAntecedentSourceCandidate) -> String {
@@ -393,6 +394,219 @@ pub fn prepare_native_antecedent_review(
         review_status:owned.current_status,
         antecedent_resolution:"REVIEW_REQUIRED",
         identity_admission_paid:false,external_qid_paid:false,
+    })
+}
+
+/// Immutable, source-revalidated view of one persisted C4.11 candidate.
+/// S29 workflow status is exposed as workflow status, not as identity proof.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct NativeAntecedentReviewInspection {
+    pub schema: &'static str,
+    pub review_item_ref: String,
+    pub proposal_ref: String,
+    pub original_source_ref: String,
+    pub source_revision_ref: String,
+    pub document_ref: String,
+    pub canonical_content_sha256: String,
+    pub original_context_sha256: String,
+    pub focus: NativeSourceMention,
+    pub candidate_antecedent: NativeSourceSpan,
+    pub before: Vec<NativeReviewSentence>,
+    pub focus_statement: NativeReviewSentence,
+    pub after: Vec<NativeReviewSentence>,
+    pub s29_review_status: String,
+    pub s29_receipt_commands: Vec<String>,
+    pub candidate_only: bool,
+    pub antecedent_resolution: &'static str,
+    pub identity_admission_paid: bool,
+    pub external_qid_paid: bool,
+    pub claim_truth_paid: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct NativeReviewSentence {
+    pub statement_ref: String,
+    pub region_ref: String,
+    pub start_char: u64,
+    pub end_char: u64,
+    pub literal: String,
+}
+
+/// Read the *original* SLR text and source statements, plus the actual S29
+/// queue state, without creating review decisions, identity or new parse rows.
+pub fn inspect_native_antecedent_review(
+    config: &DatabaseConfig,
+    review_item_ref: &str,
+) -> Result<NativeAntecedentReviewInspection, NativeAntecedentReviewError> {
+    if !nonempty(review_item_ref) || !review_item_ref.starts_with(
+        "review-item:native-antecedent-candidate:sha256:"
+    ) {
+        return Err(NativeAntecedentReviewError::InvalidCandidate);
+    }
+    let mut client = Client::connect(config.database_url(), NoTls)?;
+    let rows = client.query(
+        r#"SELECT proposal_ref,original_source_ref,source_revision_ref,
+                  document_ref,canonical_content_sha256,original_context_sha256,
+                  focus_mention_ref,focus_candidate_ref,focus_statement_ref,
+                  focus_region_ref,focus_start_char,focus_end_char,focus_surface,
+                  candidate_statement_ref,candidate_region_ref,
+                  candidate_start_char,candidate_end_char,candidate_surface,
+                  candidate_only,semantic_authority_promoted,qid_admitted
+           FROM semantic.native_antecedent_candidate_review
+           WHERE review_item_ref=$1"#,
+        &[&review_item_ref],
+    )?;
+    if rows.len()!=1 {return Err(NativeAntecedentReviewError::ImmutableConflict);}
+    let row=&rows[0];
+    let coords:Vec<i64>=[10,11,15,16].iter().map(|&i|row.get(i)).collect();
+    if coords.iter().any(|&v|v<0)
+        || !row.get::<_,bool>(18) || row.get::<_,bool>(19)
+        || row.get::<_,bool>(20) {
+        return Err(NativeAntecedentReviewError::ImmutableConflict);
+    }
+    let proposal_ref:String=row.get(0);
+    let candidate=NativeAntecedentSourceCandidate {
+        schema:SCHEMA.into(),
+        original_context_sha256:row.get(5),
+        original_source_ref:row.get(1),
+        source_revision_ref:row.get(2),
+        document_ref:row.get(3),
+        canonical_content_sha256:row.get(4),
+        focus:NativeSourceMention {
+            mention_ref:row.get(6),candidate_ref:row.get(7),
+            statement_ref:row.get(8),region_ref:row.get(9),
+            start_char:coords[0] as u64,end_char:coords[1] as u64,
+            surface:row.get(12),
+        },
+        antecedent_source_span:NativeSourceSpan {
+            statement_ref:row.get(13),region_ref:row.get(14),
+            start_char:coords[2] as u64,end_char:coords[3] as u64,
+            surface:row.get(17),
+        },
+        candidate_only:true,same_source_span_geometry_checked:true,
+        antecedent_resolution:"REVIEW_REQUIRED".into(),
+        identity_admission:"NOT_PAID".into(),
+        external_qid:"NOT_TESTED".into(),
+        claim_truth_paid:false,semantic_authority_promoted:false,
+        review_owner:"SLR_GOVERNED_ANTECEDENT_REVIEW".into(),
+    };
+    validate_native_antecedent_candidate(&candidate)?;
+    if proposal_identity(&candidate)!=proposal_ref
+        || review_item_ref!=format!("review-item:{proposal_ref}") {
+        return Err(NativeAntecedentReviewError::ImmutableConflict);
+    }
+    let original_text=original_source_match(&mut client,&candidate)?;
+    let rows=client.query(
+        r#"SELECT r.region_ref,r.start_char,r.end_char,s.statement_ref,
+                  s.literal_text,s.candidate_only,s.creates_semantic_authority,
+                  s.applicability_promoted,s.claim_truth_promoted,
+                  r.candidate_only,r.creates_semantic_authority,r.claim_truth_promoted
+           FROM ingest.long_document_region r
+           JOIN corpus.source_statement s
+             ON s.source_revision_ref=r.source_revision_ref
+            AND s.exact_span_ref=r.region_ref
+            AND s.document_ref=$1
+           WHERE r.source_revision_ref=$2 AND r.source_ref=$3
+             AND r.region_kind='sentence'
+           ORDER BY r.start_char,r.end_char,r.region_ref,s.statement_ref"#,
+        &[&candidate.document_ref,&candidate.source_revision_ref,
+          &candidate.original_source_ref],
+    )?;
+    let mut sentences=Vec::with_capacity(rows.len());
+    let mut last_end=0usize;
+    for row in rows {
+        let st:i64=row.get(1);
+        let en:i64=row.get(2);
+        let literal:String=row.get(4);
+        if st<0 || en<=st || (en as usize)>original_text.chars().count()
+            || st as usize<last_end
+            || !row.get::<_,bool>(5) || row.get::<_,bool>(6)
+            || row.get::<_,bool>(7) || row.get::<_,bool>(8)
+            || !row.get::<_,bool>(9) || row.get::<_,bool>(10)
+            || row.get::<_,bool>(11)
+            || original_text.chars().skip(st as usize)
+                .take((en-st) as usize).collect::<String>() != literal {
+            return Err(NativeAntecedentReviewError::OriginalSourceMismatch);
+        }
+        last_end=en as usize;
+        sentences.push(NativeReviewSentence {
+            region_ref:row.get(0),start_char:st as u64,
+            end_char:en as u64,statement_ref:row.get(3),
+            literal,
+        });
+    }
+    let positions=sentences.iter().enumerate()
+        .filter_map(|(i,s)| {
+            if s.statement_ref==candidate.focus.statement_ref
+                && s.region_ref==candidate.focus.region_ref {
+                Some(i)
+            } else {None}
+        }).collect::<Vec<_>>();
+    if positions.len()!=1 {return Err(NativeAntecedentReviewError::OriginalSourceMismatch);}
+    let focus_idx=positions[0];
+    let target=&candidate.antecedent_source_span;
+    let target_found=sentences.iter().take(focus_idx+1).any(|s|
+        s.statement_ref==target.statement_ref
+        && s.region_ref==target.region_ref
+        && s.start_char<=target.start_char
+        && s.end_char>=target.end_char
+    );
+    if !target_found {return Err(NativeAntecedentReviewError::OriginalSourceMismatch);}
+    let item=crate::load_review_item(config,review_item_ref)?
+        .ok_or(NativeAntecedentReviewError::ImmutableConflict)?;
+    let wanted_provenance=[
+        format!("original-context-sha256:{}",candidate.original_context_sha256),
+        candidate.focus.mention_ref.clone(),candidate.focus.candidate_ref.clone()
+    ];
+    let wanted_sources=[
+        candidate.source_revision_ref.clone(),candidate.document_ref.clone(),
+        candidate.focus.statement_ref.clone(),target.statement_ref.clone()
+    ];
+    if item.item_kind!=ReviewItemKind::Observation
+        || item.semantic_ref!=proposal_ref
+        || !item.candidate_only || item.creates_semantic_authority
+        || item.applicability_promoted || item.claim_truth_promoted
+        || !same_set(&item.provenance_refs,&wanted_provenance)
+        || !same_set(&item.source_refs,&wanted_sources)
+        || !same_set(&item.affected_consumer_refs,
+                     &[candidate.focus.mention_ref.clone()])
+    {return Err(NativeAntecedentReviewError::ImmutableConflict);}
+    // Audit history is stable-reference sorted, NOT falsely timestamp ordered.
+    let receipt_rows=client.query(
+        r#"SELECT command_ref,semantic_ref,candidate_only,
+                  creates_semantic_authority,applicability_promoted,
+                  claim_truth_promoted
+           FROM semantic.review_receipt
+           WHERE review_item_ref=$1 ORDER BY command_ref"#,
+        &[&review_item_ref],
+    )?;
+    let mut s29_receipt_commands=Vec::with_capacity(receipt_rows.len());
+    for r in receipt_rows {
+        if r.get::<_,String>(1)!=proposal_ref
+            || !r.get::<_,bool>(2) || r.get::<_,bool>(3)
+            || r.get::<_,bool>(4) || r.get::<_,bool>(5) {
+            return Err(NativeAntecedentReviewError::ImmutableConflict);
+        }
+        s29_receipt_commands.push(r.get(0));
+    }
+    let before=sentences[focus_idx.saturating_sub(4)..focus_idx].to_vec();
+    let focus_statement=sentences[focus_idx].clone();
+    let after=sentences[focus_idx+1..(focus_idx+3).min(sentences.len())].to_vec();
+    Ok(NativeAntecedentReviewInspection{
+        schema:"slr-native-antecedent-s29-inspection-v1",
+        review_item_ref:review_item_ref.into(),proposal_ref,
+        original_source_ref:candidate.original_source_ref,
+        source_revision_ref:candidate.source_revision_ref,
+        document_ref:candidate.document_ref,
+        canonical_content_sha256:candidate.canonical_content_sha256,
+        original_context_sha256:candidate.original_context_sha256,
+        focus:candidate.focus,candidate_antecedent:target.clone(),
+        before,focus_statement,after,
+        s29_review_status:format!("{:?}",item.current_status),
+        s29_receipt_commands,candidate_only:true,
+        antecedent_resolution:"REVIEW_REQUIRED",
+        identity_admission_paid:false,external_qid_paid:false,
+        claim_truth_paid:false,
     })
 }
 
