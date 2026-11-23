@@ -239,9 +239,11 @@ pub use reviewed_pnf::{
     ReviewedPnfValidationError,
 };
 pub use native_antecedent_review::{
-    prepare_native_antecedent_review, validate_native_antecedent_candidate,
-    NativeAntecedentReviewError, NativeAntecedentReviewProposal,
-    NativeAntecedentSourceCandidate, NativeSourceMention, NativeSourceSpan,
+    inspect_native_antecedent_review, prepare_native_antecedent_review,
+    validate_native_antecedent_candidate, NativeAntecedentReviewError,
+    NativeAntecedentReviewInspection, NativeAntecedentReviewProposal,
+    NativeAntecedentSourceCandidate, NativeReviewSentence, NativeSourceMention,
+    NativeSourceSpan,
 };
 pub use review_workstation_store::{
     apply_persisted_review_command, install_review_workstation_schema,
