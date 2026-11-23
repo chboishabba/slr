@@ -10,6 +10,7 @@ mod waltons;
 mod waltons_live;
 mod pnf_candidate;
 mod pnf_db_checked;
+mod native_antecedent_review;
 mod timeline_candidates;
 
 use std::env;
@@ -23,6 +24,7 @@ fn usage() {
 USAGE:
   sensiblaw pnf-candidate TSV_PATH SPAN_REF START_CHAR END_CHAR
   sensiblaw pnf-db-checked PARSER_RUN STATEMENT_REF DOCUMENT_REF SOURCE_REV REGION_REF START_CHAR END_CHAR LITERAL_FILE
+  sensiblaw native-antecedent-review prepare ORIGINAL_C410_RECEIPT.json
   sensiblaw timeline-candidates EVENT_REF
   sensiblaw legal-follow case acquire --citation '[YYYY] COURT N' [options]
   sensiblaw legal-follow cullen pnf --operator-opt-in [--output-dir PATH] [--spacy-model MODEL]
@@ -188,6 +190,9 @@ fn run() -> Result<(), String> {
         }
         [command, rest @ ..] if command == "pnf-db-checked" => {
             pnf_db_checked::run(rest)
+        }
+        [command, rest @ ..] if command == "native-antecedent-review" => {
+            native_antecedent_review::run(rest)
         }
         [command, rest @ ..] if command == "timeline-candidates" => {
             timeline_candidates::run(rest)
