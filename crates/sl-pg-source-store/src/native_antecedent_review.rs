@@ -684,6 +684,75 @@ mod tests {
         c=example();c.original_context_sha256="malformed".into();
         assert!(validate_native_antecedent_candidate(&c).is_err());
     }
+    fn review_item(c: &NativeAntecedentSourceCandidate, status: ReviewStatus) -> ReviewItem {
+        let ref_=proposal_identity(c);
+        ReviewItem {
+            review_item_ref:format!("review-item:{ref_}"),
+            semantic_ref:ref_,
+            item_kind:ReviewItemKind::Observation,
+            reason:"Review SAME-SOURCE antecedent candidate; S29 acceptance alone does not resolve coreference".into(),
+            provenance_refs:vec![
+                c.focus.candidate_ref.clone(),
+                c.focus.mention_ref.clone(),
+                format!("original-context-sha256:{}",c.original_context_sha256)
+            ],
+            source_refs:vec![
+                c.document_ref.clone(),
+                c.antecedent_source_span.statement_ref.clone(),
+                c.focus.statement_ref.clone(),
+                c.source_revision_ref.clone()
+            ],
+            current_status:status,
+            available_actions:vec![
+                ReviewAction::Accept,ReviewAction::Reject,
+                ReviewAction::Abstain,ReviewAction::Qualify,
+                ReviewAction::RequestEvidence,ReviewAction::OpenSource
+            ],
+            affected_consumer_refs:vec![c.focus.mention_ref.clone()],
+            candidate_only:true,creates_semantic_authority:false,
+            applicability_promoted:false,claim_truth_promoted:false
+        }
+    }
+    #[test]
+    fn s29_accepted_remains_workflow_only() {
+        let c=example();
+        let ref_=proposal_identity(&c);
+        for status in [ReviewStatus::Pending,ReviewStatus::Accepted,
+                       ReviewStatus::Rejected,ReviewStatus::NeedsEvidence] {
+            let item=review_item(&c,status);
+            verify_s29_review_item(&item,&c,&ref_).unwrap();
+            assert_eq!(c.identity_admission,"NOT_PAID");
+            assert_eq!(c.external_qid,"NOT_TESTED");
+        }
+    }
+    #[test]
+    fn s29_foreign_evidence_or_nonowned_review_is_rejected() {
+        let c=example();
+        let ref_=proposal_identity(&c);
+        let mut item=review_item(&c,ReviewStatus::Pending);
+        item.provenance_refs.push("foreign:unsupported".into());
+        assert!(verify_s29_review_item(&item,&c,&ref_).is_err());
+        item=review_item(&c,ReviewStatus::Pending);
+        item.source_refs.retain(|x|x!=&c.focus.statement_ref);
+        assert!(verify_s29_review_item(&item,&c,&ref_).is_err());
+        item=review_item(&c,ReviewStatus::Pending);
+        item.semantic_ref="another-proposal".into();
+        assert!(verify_s29_review_item(&item,&c,&ref_).is_err());
+    }
+    #[test]
+    fn s29_promoted_review_state_is_rejected() {
+        let c=example();
+        let ref_=proposal_identity(&c);
+        for variant in 0..3 {
+            let mut item=review_item(&c,ReviewStatus::Accepted);
+            match variant {
+                0=>item.candidate_only=false,
+                1=>item.creates_semantic_authority=true,
+                _=>item.claim_truth_promoted=true
+            }
+            assert!(verify_s29_review_item(&item,&c,&ref_).is_err());
+        }
+    }
     #[test]
     fn proposal_key_distinguishes_candidate_positions() {
         let c=example();let mut d=c.clone();d.antecedent_source_span.start_char=4309;
