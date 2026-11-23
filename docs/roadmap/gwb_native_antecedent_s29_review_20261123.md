@@ -2,6 +2,44 @@
 
 ## Controlling SLR P0 programme reset — 23 November 2026
 
+### 2026-11-23 real native M1 frontier accepted; semantic review priority
+
+Original operator run `dashi_lean4/.dashi/gwb-relation/m1-m3-maxcut/run-PELWk2Yh/`,
+published in DASHI commit `1a639892849db7df37fecb24a697f03a263d0472`:
+one exact complete original parser run, 5/5 before/focus regions,
+27 parser nominations = 25 unique exact character spans
+(13 NOUN, 6 PROPN, 4 PRON, 2 PERSON, 1 ORG, 1 ORDINAL).
+The exact `Bush` spans at [4061,4065) and [4310,4314) each
+have token+NER representations. Do not mistake these 27 observations
+for 27 distinct person referents. Seven original sentences 19–25
+were reopened, with only 19–23 parser-scoped.
+
+Original discourse nominates the chain
+`Bush@19 ↔ this amiable fellow@21 ↔ Bush@22 ↔ he@23 ↔ him@23`
+as a strong **candidate**, with Reagan named *after* he as
+a distinct actor. Keep origin/quotation/competing referents
+and source attribution independent from truth and QID.
+
+**Production status**: native parser source frontier accepted,
+S29 review Pending with 0 receipts, local identity unpaid.
+Exact original SensibLaw typed factor/annotation graph crosswalk
+was NOT paid in this run. The original reference owner
+`compact_binding_artifacts` and proof-relevant
+`resolved_unique` contract must now be consumed on real
+same-manifestation factors, not ported as another parser.
+Final outcome from this packet is `EXPLICIT_UNRESOLVED`,
+not an admitted Bush or Q23505 identity.
+Lean source/frontier kernel check PASS is not an actual S29
+review or consumer-live completeness.
+
+**Next big cut:** one end-to-end native typed binding, genuine
+reviewer dossier, semantic payment/retraction and licensed
+consumer result (or source-justified unresolved result),
+then independent JMD property-level alignment.
+Do not add more C4.xx inspection gates.
+
+
+
 ### Integrated M1 producer packet source-written (not yet accepted)
 
 SLR #78 now has `native_antecedent_frontier.rs`: exact original
