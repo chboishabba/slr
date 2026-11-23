@@ -270,7 +270,6 @@ review/payment != legal applicability
 reachable legal route != predicted judicial outcome
 ```
 
-
 # 2026-10-23 cross-suite research-cockpit interface addendum
 
 **Owner boundary:** `itir-dioxus` owns operator visual projections and wgpu interaction; ITIR MCP/AO owns governed fleet dispatch, receipt lookup and reconciliation; StatiBaker owns temporal observer memory; SLR owns producer-side canonical evidence, scoped semantic admission and **experimental candidate-only** proof-search scheduler/loop. Neither Dioxus nor the fleet may turn model output, PNF lexical hints or a good-looking graph into admitted truth.
@@ -285,3 +284,126 @@ reachable legal route != predicted judicial outcome
 - P2: experimental Cogentic-style prover/critic population and Self-Harness/MESH-inspired optimisation may only select **candidate** strategies; verify on held-out tasks with explicit resource budgets, negative-result retention and a human/typed admission gate.
 
 **References:** `itir-dioxus/docs/M10_UNIFIED_WORKBENCH.md`; `ITIR-suite/itir-mcp/README.md`; `ITIR-suite/docs/planning/governed_revival_handoff_v1.md`; `StatiBaker/docs/user_stories.md`; Cogentic https://arxiv.org/abs/2609.40324, Self-Harness https://arxiv.org/abs/2606.09498, MESH https://arxiv.org/abs/2610.05300. External studies motivate research hypotheses, not production performance claims. **Status:** planning only; original Sprint 1 certification and all existing acceptance gates unchanged.
+## PRODUCER-CONFORMANCE-1 — ubiquitous external-producer acceptance (2026-11-21)
+
+**Status:** proposed targets / OPEN; no live CourtListener ingestion, differential
+benchmark, or full-stack acceptance is claimed by this roadmap update.
+
+**Goal:** make every external or internal competing system a possible upstream
+producer and independent comparator for the existing SLR/SensibLaw/ITIR world
+fabric. Integration must not create another canonical parser, PNF engine,
+semantic store, legal truth authority, reviewer, or fleet controller. SLR remains
+the production legal evidence/admission consumer; PostgreSQL is the canonical
+semantic persistence authority; DASHI/Agda is the golden reference; ITIR/MCP
+owns governed operation receipts and `itir-dioxus` M10/M11 owns new production
+user-facing projections. Producer agreement corroborates but does not prove;
+disagreement is preserved as a reviewable obligation.
+
+**Existing implementation donors (reuse before writing adapters):**
+
+- SLR [#57](https://github.com/chboishabba/slr/pull/57) provider-pinned
+  source materialisation; [#56](https://github.com/chboishabba/slr/pull/56)
+  reviewed-evidence durability; [#55](https://github.com/chboishabba/slr/pull/55)
+  heterogeneous REL/interlingua;
+  [#61](https://github.com/chboishabba/slr/pull/61) provider-authoritative
+  external bindings;
+  [#62](https://github.com/chboishabba/slr/pull/62) consumer-relative parity;
+  [#65](https://github.com/chboishabba/slr/pull/65) formal proof routing;
+  [#67](https://github.com/chboishabba/slr/pull/67) sibling-manifestation
+  equivalence; [#78](https://github.com/chboishabba/slr/pull/78)
+  source-bound parser evidence reopening.
+- SensibLaw
+  [#494](https://github.com/chboishabba/SensibLaw/pull/494) atomic legal parity,
+  [#514](https://github.com/chboishabba/SensibLaw/pull/514) cross-repo
+  source-preserving user-story handoff, and
+  [#515](https://github.com/chboishabba/SensibLaw/pull/515) raw UTF-8 source digest
+  alignment.
+- ITIR-suite [#17](https://github.com/chboishabba/ITIR-suite/pull/17)
+  federated typed world,
+  [#18](https://github.com/chboishabba/ITIR-suite/pull/18)
+  proof-directed acquisition, and
+  [#57](https://github.com/chboishabba/ITIR-suite/pull/57)/
+  [#58](https://github.com/chboishabba/ITIR-suite/pull/58) canonical PostgreSQL
+  and formal referee boundaries.
+- User-story coverage: ITIR-US-01–03/17, SL-US-09–14/18–24/31,
+  WIKI-US-01–04, SLR-US-01–08 in
+  [ITIR suite stories](https://github.com/chboishabba/ITIR-suite/blob/main/docs/user_stories.md);
+  platform integrator, institutional buyer, auditor, annotation and
+  cross-institutional handoff personas in
+  [SensibLaw stories](https://github.com/chboishabba/SensibLaw/blob/main/docs/user_stories.md).
+
+### PC1 acceptance targets (all OPEN until independently executed)
+
+- **PC1.01 — Producer inventory and contract:** enumerate source families,
+  record API/schema/library versions, permissions, terms/licences, access
+  limits, export availability, and trusted identifier scope; distinguish a
+  source producer, derived extractor, retrieval index, and formal referee.
+- **PC1.02 — Lossless, revision-pinned intake:** a live externally fetched
+  object enters existing manifestation/source-revision/observation paths with
+  producer-native IDs, original bytes or immutable provider reference,
+  digest, precise source coordinates, acquisition timestamps, access scope,
+  provider revision and transformation ancestry. A cache hit performs no
+  network work. No inference or ingestion receipt promotes semantic truth.
+- **PC1.03 — Native-output preservation:** retain provider assertions,
+  metadata, document/entry relationships and extractor output separately from
+  canonical reviewed evidence; refuse guessed identity equivalence and
+  distinguish multiple manifestations of one authority from independent
+  authorities. Missing/partial/restricted input must remain explicit.
+- **PC1.04 — Differential reference corpus:** for the *same* source bytes and
+  pinned producer versions, compare native SLR output against independent
+  producer outputs on text/OCR, structural segmentation, citation boundaries
+  and targets, case/actor identity, docket chronology, assertion status and
+  citation-graph edges. Record exact mismatches, false joins, omissions,
+  abstentions and reference-provider errors; manually adjudicate selected
+  disputed cases. Third-party agreement is not ground truth.
+- **PC1.05 — Correction, replay and nonpromotion:** restart, cursor pagination,
+  retries, deduplication, provider amendments, retractions, access revocation
+  and deletion signals reproduce durable lineage; previous receipts remain
+  auditable under access policy. Updated evidence reopens only dependent
+  consumer fibres; no producer or UI silently overwrites reviewed history.
+- **PC1.06 — Cross-provider contradiction:** inject contradictory and
+  partially overlapping source assertions; persist independent competing
+  claims and residuals with provenance. Convergence must not manufacture
+  consensus, case identity, legal holding, or authority from common phrasing.
+- **PC1.07 — Reviewed semantic and formal handoff:** reuse existing SLR
+  candidate PNF/REL, review/payment, normative order, proof-gap and DA51
+  referee boundaries. Independently certified proof artifacts are distinct
+  from parser evidence, source retrieval, and proposed legal conclusions.
+- **PC1.08 — Consumer and UX acceptance:** project the *same* persisted Matter
+  into client/community, solicitor/counsel, and court/associate read-only
+  views in production `itir-dioxus`; exact source and discrepancy receipts
+  reopen. Unknown, absent, blocked and restricted are distinct. Display,
+  sorting or graph depth cannot create authority.
+- **PC1.09 — Repeatable campaign receipt:** deliver an exact-head, pinned
+  corpus, source hashes, upstream versions, deterministic test outputs,
+  latency/request/byte cost, failure cases and independently reviewable
+  acceptance report. Unit tests, mock API payloads or documentation alone
+  do not close a live empirical gate.
+
+### First candidate campaign — US federal judicial producers
+
+- **CourtListener/RECAP:** a governed, bounded read-only ingestion specimen
+  using available documented API/bulk interfaces for court, docket, docket
+  entry, RECAP document, opinion and citation relationships. Preserve native
+  IDs and docket/document revision ancestry. Authenticate and respect provider
+  limits; do not assume every PACER document is publicly available.
+- **Eyecite:** independent citation extraction/annotation comparator.
+- **Centralia:** independent opinion segmentation/structure comparator.
+- **Doctor:** document conversion/OCR/text-extraction comparator.
+- Keep the original source PDF or authoritative docket record, upstream
+  derived output, and SLR derived output as three separately identifiable
+  comparison layers. Sample before considering bulk embeddings or full
+  archive replication. Check licence compatibility before incorporating
+  upstream source code.
+- Compare on the same judicial records; keep US federal jurisdiction separate
+  from existing Australian OALC/HCA/legislation authority and applicability
+  targets. Include a second provider family after the first campaign passes,
+  without adding a provider-specific semantic engine.
+
+**Delivery boundaries:** PC1 is a cross-cutting acceptance campaign for
+Sprint-2 acquisition, Sprint-3 legal semantics, and Sprint-4 product
+projections, not a new sprint or a reason to reopen paid canonical
+architecture. Prefer a bounded test against an actual consumer residual over
+indiscriminate corpus crawling. All targets remain OPEN until exact producer
+receipts and locally repeatable empirical results are recorded.
+
