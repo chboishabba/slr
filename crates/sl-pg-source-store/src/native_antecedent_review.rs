@@ -303,13 +303,18 @@ pub fn prepare_native_antecedent_review(
     };
     crate::install_review_workstation_schema(config)?;
     if let Some(existing)=crate::load_review_item(config,&review_item_ref)? {
+        use std::collections::BTreeSet;
+        let as_set = |xs: &[String]| xs.iter().collect::<BTreeSet<_>>();
+        let actions = |xs: &[ReviewAction]| xs.iter().collect::<BTreeSet<_>>();
         if existing.semantic_ref != item.semantic_ref
             || existing.item_kind != item.item_kind
-            || existing.provenance_refs != item.provenance_refs
-            || existing.source_refs != item.source_refs
-            || existing.available_actions != item.available_actions
-            || existing.affected_consumer_refs != item.affected_consumer_refs
+            || existing.reason != item.reason
+            || as_set(&existing.provenance_refs) != as_set(&item.provenance_refs)
+            || as_set(&existing.source_refs) != as_set(&item.source_refs)
+            || actions(&existing.available_actions) != actions(&item.available_actions)
+            || as_set(&existing.affected_consumer_refs) != as_set(&item.affected_consumer_refs)
             || !existing.candidate_only || existing.creates_semantic_authority
+            || existing.applicability_promoted || existing.claim_truth_promoted
         { return Err(NativeAntecedentReviewError::ImmutableConflict); }
     } else {
         let _=crate::persist_review_item(config,&item)?;
