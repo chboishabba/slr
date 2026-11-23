@@ -458,7 +458,8 @@ pub fn inspect_native_antecedent_review(
     )?;
     if rows.len()!=1 {return Err(NativeAntecedentReviewError::ImmutableConflict);}
     let row=&rows[0];
-    let coords:Vec<i64>=[10,11,15,16].iter().map(|&i|row.get(i)).collect();
+    let coords:Vec<i64>=[10_usize,11,15,16].iter()
+        .map(|&i|row.get(i)).collect();
     if coords.iter().any(|&v|v<0)
         || !row.get::<_,bool>(18) || row.get::<_,bool>(19)
         || row.get::<_,bool>(20) {
@@ -513,19 +514,20 @@ pub fn inspect_native_antecedent_review(
           &candidate.original_source_ref],
     )?;
     let mut sentences=Vec::with_capacity(rows.len());
+    let original_chars=original_text.chars().collect::<Vec<_>>();
     let mut last_end=0usize;
     for row in rows {
         let st:i64=row.get(1);
         let en:i64=row.get(2);
         let literal:String=row.get(4);
-        if st<0 || en<=st || (en as usize)>original_text.chars().count()
+        if st<0 || en<=st || (en as usize)>original_chars.len()
             || st as usize<last_end
             || !row.get::<_,bool>(5) || row.get::<_,bool>(6)
             || row.get::<_,bool>(7) || row.get::<_,bool>(8)
             || !row.get::<_,bool>(9) || row.get::<_,bool>(10)
             || row.get::<_,bool>(11)
-            || original_text.chars().skip(st as usize)
-                .take((en-st) as usize).collect::<String>() != literal {
+            || original_chars[st as usize..en as usize]
+                .iter().collect::<String>() != literal {
             return Err(NativeAntecedentReviewError::OriginalSourceMismatch);
         }
         last_end=en as usize;
