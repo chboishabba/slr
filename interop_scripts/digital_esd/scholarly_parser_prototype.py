@@ -11,7 +11,9 @@ Supported formats:
   DOCX  (requires python-docx)
   PDF   (requires pypdf or PyMuPDF/fitz)
 
-PDF uses either pypdf or PyMuPDF/fitz and fails closed if neither is available.
+Binary formats are first lowered through interop_scripts.document_text.
+PDF extraction uses pypdf, PyMuPDF/fitz, or pdftotext and fails closed if no
+trusted text engine produces text. OCR is never implicit.
 
 Output contains document_nodes with anchored:
   heading, paragraph, table_cell, ...
@@ -32,6 +34,15 @@ import re
 import sys
 from pathlib import Path
 from typing import Any
+
+from interop_scripts.document_text import (
+    DocumentTextMaterialisation,
+    DocumentTextMaterialisationError,
+    materialise_document_text,
+)
+
+ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_PROTOTYPE = ROOT / "interop_scripts" / "digital_esd" / "scholarly_fulltext.prototype.json"
 
 
 STRUCTURE_PATTERNS = {
@@ -147,20 +158,33 @@ class ScholarlyParserPrototype:
 
     def parse_file(self, artifact_path: Path, request: dict[str, Any]) -> dict[str, Any]:
         """Parse a single scholarly document and return structure + candidates."""
-        content = artifact_path.read_text(encoding="utf-8", errors="replace")
-        file_ext = artifact_path.suffix.lower()
-        format_type = self._detect_format(file_ext)
+        materialised = materialise_document_text(
+            artifact_path,
+            expected_source_sha256=str(request.get("content_sha256") or "") or None,
+        )
+        content = materialised.extracted_text
+        format_type = materialised.source_format
 
-        document_nodes = self._extract_structure(content, format_type)
+        document_nodes = self._extract_structure(
+            content,
+            format_type,
+            materialised,
+        )
         facets = self._extract_facets(content)
 
         return {
             "request_reference": request.get("request_reference", ""),
             "source_identity_reference": request.get("source_identity_reference", ""),
             "source_revision_reference": request.get("source_revision_reference", ""),
-            "content_sha256": request.get("content_sha256", ""),
+            "content_sha256": materialised.source_artifact_sha256,
             "artifact_path": str(artifact_path),
             "format_type": format_type,
+            "extracted_text_sha256": materialised.extracted_text_sha256,
+            "extraction_engine": materialised.extraction_engine,
+            "extraction_engine_version": materialised.extraction_engine_version,
+            "page_count": materialised.page_count,
+            "paragraph_count": materialised.paragraph_count,
+            "extraction_receipt": materialised.receipt(),
             "document_nodes": document_nodes,
             "study_facets": facets,
             "candidate_only": True,
@@ -175,12 +199,31 @@ class ScholarlyParserPrototype:
                    ".tex": "latex", ".csv": "csv"}
         return mapping.get(ext, "plaintext")
 
-    def _extract_structure(self, content: str, format_type: str) -> list[dict[str, Any]]:
-        """Extract document structure with exact anchors."""
+    @staticmethod
+    def _page_for_char(materialised: DocumentTextMaterialisation, offset: int) -> int | None:
+        for anchor in materialised.anchors:
+            if anchor.page_number is None:
+                continue
+            if anchor.start_char <= offset <= anchor.end_char:
+                return anchor.page_number
+        return None
+
+    def _extract_structure(
+        self,
+        content: str,
+        format_type: str,
+        materialised: DocumentTextMaterialisation,
+    ) -> list[dict[str, Any]]:
+        """Extract document structure with exact extracted-text anchors."""
         nodes: list[dict[str, Any]] = []
         lines = content.split("\n")
+        cursor = 0
 
         for i, line in enumerate(lines, 1):
+            start_char = cursor
+            end_char = start_char + len(line)
+            page_number = self._page_for_char(materialised, start_char)
+
             for node_type, pattern in STRUCTURE_PATTERNS.items():
                 match = pattern.match(line)
                 if match:
@@ -190,6 +233,10 @@ class ScholarlyParserPrototype:
                         "line": i,
                         "content_ref": f"line:{i}",
                         "format_type": format_type,
+                        "start_char": start_char,
+                        "end_char": end_char,
+                        "page_number": page_number,
+                        "extracted_text_sha256": materialised.extracted_text_sha256,
                     }
                     if node_type == "heading":
                         node["heading_level"] = len(match.group(1))
@@ -198,6 +245,8 @@ class ScholarlyParserPrototype:
                         node["cell_content"] = line.strip()
                     nodes.append(node)
                     break
+
+            cursor = end_char + 1
 
         return nodes
 
@@ -246,7 +295,23 @@ class ScholarlyParserPrototype:
                 })
                 continue
 
-            result = self.parse_file(artifact, req)
+            try:
+                result = self.parse_file(artifact, req)
+            except DocumentTextMaterialisationError as exc:
+                results.append({
+                    "request_reference": req.get("request_reference", ""),
+                    "source_identity_reference": req.get("source_identity_reference", ""),
+                    "source_revision_reference": req.get("source_revision_reference", ""),
+                    "content_sha256": req.get("content_sha256", ""),
+                    "artifact_path": str(artifact),
+                    "parser_success": False,
+                    "reason": "document-text-materialisation-failed",
+                    "failure_reference": str(exc),
+                    "candidate_only": True,
+                    "creates_study_truth": False,
+                    "creates_source_audit_admission": False,
+                })
+                continue
             results.append(result)
 
         output_path.parent.mkdir(parents=True, exist_ok=True)
