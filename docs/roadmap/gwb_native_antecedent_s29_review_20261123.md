@@ -82,3 +82,69 @@ validated semantic anaphor-resolution contract with explicit
 scope/competition evidence, materialize a separate local antecedent
 identity witness (NOT an external QID). Wikidata linking, claim truth,
 and article equivalence are separate obligations.
+
+
+## C4.11 local acceptance and C4.12 source-native reviewer inspection
+
+Operator acceptance on SLR source head `263766a38e0697f77e12bcf18d81eecdf1647fbd`
+(2026-11-23):
+
+- C4.11 source-store review tests **4/4 PASS** (focused `--lib`);
+- C4.11 native CLI review test **1/1 PASS**;
+- PostgreSQL C4.10 candidate preparation **PASS**;
+- persisted S29 status: `Pending`;
+- persisted review item:
+  `review-item:native-antecedent-candidate:sha256:25e927f12a0092fbed143669f6a0621fa004636d728074d576275b361da8f7d1`;
+- identity admission false, external QID false.
+
+The head also contains real targeted Rust compilation repairs: the
+`BTreeSet::contains(**candidate_ref)` ownership fix and missing
+`CandidatePnfRole` test import. Unrelated untracked binaries and
+local `Cargo.lock` changes were preserved. This acceptance covers
+C4.11, **not** the new C4.12 source inspection.
+
+**C4.12** extends the same production owner; it does not define a
+new identity authority. The command is:
+
+```sh
+cargo run -p sensiblaw-cli -- native-antecedent-review inspect \
+  review-item:native-antecedent-candidate:sha256:25e927f12a0092fbed143669f6a0621fa004636d728074d576275b361da8f7d1
+```
+
+It reopens the persisted immutable candidate, checks its source
+revision/document/digest/proposal hash and original source-anchored
+`Bush`/`he` statement surfaces from the database, then displays
+four prior and two subsequent original source sentences. It verifies
+S29 review-item identity/provenance, returns the current workflow
+state and its stable sorted command references. The source statement
+content is checked against the canonical UTF-8 bytes using Unicode
+character spans, with no NLP rerun or uploaded intermediate JSON
+required. No automatic semantic alternatives, QID or antecedent
+identity claim is constructed.
+
+C4.12 adds Rust pure contract regressions for:
+
+- S29 Pending, Accepted, Rejected, NeedsEvidence all remain
+  **identity not paid** and **QID not tested**;
+- mutated source/semantic/provenance replay must fail closed;
+- an S29 receipt with illicit semantic/truth promotion is rejected;
+- missing/foreign original source or malformed original coordinate
+  fails source reinspection.
+
+Source code/CLI written and pushed; the **C4.12** local Cargo and
+original PostgreSQL `inspect` execution still require an operator
+run. Run:
+
+```sh
+cargo test -p sensiblaw-pg-source-store --lib native_antecedent_review
+cargo test -p sensiblaw-cli native_antecedent_review
+cargo run -p sensiblaw-cli -- native-antecedent-review inspect \
+  review-item:native-antecedent-candidate:sha256:25e927f12a0092fbed143669f6a0621fa004636d728074d576275b361da8f7d1
+```
+
+P0 semantic step after inspection: a governed reviewer must assess
+the 4+2 true source sentences and other plausible mention candidates,
+record their evidence, and author a *separate* antecedent-resolution
+receipt. S29 `Accept` alone is not identity admission. Do not
+silently promote the crosschecked G. H. W. Bush source-work label to
+a Q23505 object or reuse the unrelated Q207 proof.
