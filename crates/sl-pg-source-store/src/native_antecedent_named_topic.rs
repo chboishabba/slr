@@ -229,7 +229,7 @@ pub fn derive_native_named_topic(
         .any(|s|quoted(&s.literal));
     let matched_groups=groups.iter().filter(|(_,mentions)|
         mentions.iter().any(|n|
-            n.original_statement_ref==review.candidate_antecedent.statement_ref &&
+            n.statement_ref==review.candidate_antecedent.statement_ref &&
             n.region_ref==review.candidate_antecedent.region_ref &&
             n.start_char==review.candidate_antecedent.start_char &&
             n.end_char==review.candidate_antecedent.end_char &&
