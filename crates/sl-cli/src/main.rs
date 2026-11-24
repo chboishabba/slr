@@ -29,6 +29,8 @@ USAGE:
   sensiblaw native-antecedent-review runs REVIEW_ITEM_REF
   sensiblaw native-antecedent-review frontier REVIEW_ITEM_REF [PARSER_RUN_REF]
   sensiblaw native-antecedent-review derive REVIEW_ITEM_REF [PARSER_RUN_REF]
+  sensiblaw native-antecedent-review answer REVIEW_ITEM_REF [PARSER_RUN_REF]
+  sensiblaw native-antecedent-review replay REVIEW_ITEM_REF ANSWER.json [PARSER_RUN_REF]
   sensiblaw timeline-candidates EVENT_REF
   sensiblaw legal-follow case acquire --citation '[YYYY] COURT N' [options]
   sensiblaw legal-follow cullen pnf --operator-opt-in [--output-dir PATH] [--spacy-model MODEL]
