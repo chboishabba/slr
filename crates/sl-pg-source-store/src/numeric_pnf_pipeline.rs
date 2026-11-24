@@ -277,10 +277,73 @@ pub fn run_native_numeric_exact_source_slice(
     let run_ref=deterministic_numeric_run_ref(&original.manifest);
     let plan:NativeNumericParserPlan=
         plan_original_native_numeric_parser(&original,&run_ref)?;
-    let persisted=persist_original_numeric_parser_plan(
-        numeric_database_url,source_root,&canonical,&plan,&original.manifest
-    )?;
+    // One indexed read of existing immutable sentence refs; source bootstrap
+    // and numeric work use independent <=64-sentence bounded cursors.
+    let mut bootstrap_db=Client::connect(numeric_database_url,NoTls)?;
+    let known=bootstrap_db.query(
+        "SELECT sentence_ref
+         FROM execution.semantic_parser_sentence
+         WHERE run_ref=$1 AND document_ref=$2
+           AND representation_version=2",
+        &[&run_ref,&original.manifest.document_ref])?
+        .into_iter().map(|r|r.get::<_,String>(0))
+        .collect::<BTreeSet<_>>();
+    let expected=plan.sentences.iter().map(|s|s.sentence_ref.clone())
+        .collect::<BTreeSet<_>>();
+    if !known.is_subset(&expected) {
+        return Err(NumericPipelineError::ForeignRun);
+    }
+    let mut selected=Vec::new();
+    let mut token_budget=0usize;
+    for sentence in &plan.sentences{
+        if known.contains(&sentence.sentence_ref){continue;}
+        if sentence.tokens.len()>12_000 {
+            return Err(NumericPipelineError::Budget);
+        }
+        if selected.len()>=max_sentences
+            ||token_budget+sentence.tokens.len()>12_000 {
+            break;
+        }
+        token_budget+=sentence.tokens.len();
+        selected.push(sentence.clone());
+    }
+    let just_inserted=if selected.is_empty(){
+        0
+    }else{
+        let mut slice=plan.clone();
+        slice.sentences=selected;
+        persist_original_numeric_parser_plan(
+            numeric_database_url,source_root,&canonical,&slice,&original.manifest
+        )?.numeric_sentences
+    };
+    // The source is already registered if there were no missing sentences;
+    // it cannot be accepted solely because the run string matches.
+    let source=bootstrap_db.query(
+        "SELECT content_sha256,byte_count,char_count
+         FROM execution.semantic_parser_source
+         WHERE run_ref=$1 AND document_ref=$2",
+        &[&run_ref,&original.manifest.document_ref])?;
+    if source.len()!=1
+        ||source[0].get::<_,Vec<u8>>(0)!=Sha256::digest(&canonical).to_vec()
+        ||source[0].get::<_,i64>(1)!=canonical.len() as i64
+        ||source[0].get::<_,i64>(2)!=original.manifest.source_codepoint_length as i64{
+        return Err(NumericPipelineError::ForeignRun);
+    }
+    let current=bootstrap_db.query(
+        "SELECT sentence_ref
+         FROM execution.semantic_parser_sentence
+         WHERE run_ref=$1 AND document_ref=$2 AND representation_version=2",
+        &[&run_ref,&original.manifest.document_ref])?
+        .into_iter().map(|r|r.get::<_,String>(0))
+        .collect::<BTreeSet<_>>();
+    if !current.is_subset(&expected) ||current.len()>expected.len(){
+        return Err(NumericPipelineError::ForeignRun);
+    }
+    let pending_parser_sentences=expected.len()-current.len();
     let lex=lexicon(numeric_database_url)?;
+    // The number staged in this invocation is a receipt fact, not a
+    // claim about global source coverage or completed numeric work.
+    let _newly_registered_sentences=just_inserted;
     let mut completed=0usize;
     let mdl=NumericMdlWeights::default();
     while completed<max_sentences{
@@ -307,6 +370,12 @@ pub fn run_native_numeric_exact_source_slice(
            AND state_id<>3",
         &[&run_ref,&original.manifest.document_ref])?.get(0);
     let mut residuals=plan.residuals.clone();
+    if pending_parser_sentences>0 {
+        residuals.push(format!(
+            "original_numeric_parser_sentence_bootstrap_pending:{}",
+            pending_parser_sentences
+        ));
+    }
     if remaining>0 {
         residuals.push("numeric_sentence_work_remains_bounded_and_reopenable".into());
     }
@@ -321,12 +390,22 @@ pub fn run_native_numeric_exact_source_slice(
         original_source_sha256:plan.original_source_sha256,
         original_source_revision_ref:source_revision_ref.into(),
         original_parser_run_ref:original_parser_run_ref.into(),
-        numeric_run_ref:run_ref,numeric_source_token_count:persisted.numeric_tokens,
-        numeric_source_sentence_count:persisted.numeric_sentences,
-        numeric_source_entity_count:persisted.numeric_entities,
-        source_full_document_coverage_paid:plan.full_document_coverage_paid,
+        numeric_run_ref:run_ref,
+        numeric_source_token_count:bootstrap_db.query_one(
+            "SELECT count(*)::bigint FROM execution.semantic_parser_token
+             WHERE run_ref=$1 AND document_ref=$2 AND representation_version=2",
+            &[&plan.numeric_run_ref,&plan.source_document_ref]
+        )?.get::<_,i64>(0) as usize,
+        numeric_source_sentence_count:current.len(),
+        numeric_source_entity_count:bootstrap_db.query_one(
+            "SELECT count(*)::bigint FROM execution.semantic_parser_entity_span
+             WHERE run_ref=$1 AND document_ref=$2 AND representation_version=2",
+            &[&plan.numeric_run_ref,&plan.source_document_ref]
+        )?.get::<_,i64>(0) as usize,
+        source_full_document_coverage_paid:plan.full_document_coverage_paid
+            &&pending_parser_sentences==0,
         sentence_jobs_completed:completed,sentence_jobs_remaining:remaining as usize,
-        bounded_replay_supported:true,all_original_typed_demands_covered:false,
+        bounded_replay_supported:false,all_original_typed_demands_covered:false,
         unique_document_identity_paid:false,level_three_identity_substitution_paid:false,
         external_qid_paid:false,historical_truth_paid:false,residuals,
     })
