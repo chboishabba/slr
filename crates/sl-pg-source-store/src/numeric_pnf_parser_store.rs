@@ -708,19 +708,32 @@ pub fn persist_original_numeric_parser_plan(
         if count!=n as i64{return Err(NumericParserStoreError::ExistingConflict);}
         // Check every original numeric token digest and exact head coordinate.
         let mismatches:i64=tx.query_one(
-            "SELECT count(*)::bigint
-             FROM execution.semantic_parser_token AS t
-             WHERE t.run_ref=$1 AND t.document_ref=$2
-               AND t.sentence_ref=$3 AND t.representation_version=2
-               AND (t.head_token_id IS NULL OR
-                    t.head_start_char IS DISTINCT FROM
-                      (SELECT head.start_char FROM execution.semantic_parser_token AS head
-                       WHERE head.token_id=t.head_token_id) OR
-                    t.head_end_char IS DISTINCT FROM
-                      (SELECT head.end_char FROM execution.semantic_parser_token AS head
-                       WHERE head.token_id=t.head_token_id))",
+            "WITH expected AS (
+               SELECT * FROM unnest($4::text[],$5::bytea[],
+                  $6::bigint[],$7::bigint[],$8::bigint[],$9::bigint[])
+               AS expected(token_ref,token_digest,head_token_id,
+                           start_char,end_char,ordinal))
+             SELECT count(*)::bigint
+             FROM expected
+             LEFT JOIN execution.semantic_parser_token AS t
+               ON t.token_ref=expected.token_ref
+             LEFT JOIN execution.semantic_parser_token AS head
+               ON head.token_id=t.head_token_id
+             WHERE t.token_id IS NULL OR t.run_ref IS DISTINCT FROM $1
+               OR t.document_ref IS DISTINCT FROM $2
+               OR t.sentence_ref IS DISTINCT FROM $3
+               OR t.representation_version IS DISTINCT FROM 2
+               OR t.token_digest IS DISTINCT FROM expected.token_digest
+               OR t.start_char IS DISTINCT FROM expected.start_char
+               OR t.end_char IS DISTINCT FROM expected.end_char
+               OR t.local_token_ordinal IS DISTINCT FROM expected.ordinal
+               OR t.head_token_id IS DISTINCT FROM expected.head_token_id
+               OR head.sentence_id IS DISTINCT FROM t.sentence_id
+               OR head.start_char IS DISTINCT FROM t.head_start_char
+               OR head.end_char IS DISTINCT FROM t.head_end_char",
             &[&plan.numeric_run_ref,&plan.source_document_ref,
-              &sentence.sentence_ref])?.get(0);
+              &sentence.sentence_ref,&refs,&digests,&head_ids,
+              &starts,&ends,&ords])?.get(0);
         if mismatches>0{return Err(NumericParserStoreError::ExistingConflict);}
         // Entity observations are candidates and must remain NER source
         // spans; one setwise statement per bounded sentence, not N SQL calls.
