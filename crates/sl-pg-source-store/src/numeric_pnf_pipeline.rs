@@ -64,6 +64,8 @@ pub struct NumericPipelineReceipt {
     pub source_full_document_coverage_paid:bool,
     pub sentence_jobs_completed:usize,
     pub sentence_jobs_remaining:usize,
+    pub frontier_jobs_completed:usize,
+    pub frontier_jobs_remaining:Option<i64>,
     pub bounded_replay_supported:bool,
     pub all_original_typed_demands_covered:bool,
     pub unique_document_identity_paid:bool,
@@ -258,6 +260,78 @@ fn numeric_sentence_tokens(
     Ok(tokens)
 }
 
+
+// Use the original migration-145 owner, not a parallel Rust interpretation of
+// its typed frontier. Each step is atomic: deleting the dirty marker and
+// rebuilding its interface either both commit or both roll back. The source
+// parser and all sentence work must be complete before this stage is entered.
+fn reduce_original_frontier_slice(
+    db:&mut Client, run_ref:&str, document_ref:&str, budget:usize,
+)->Result<(usize,i64),NumericPipelineError>{
+    let started=std::time::Instant::now();
+    let mut completed=0usize;
+    // Seed missing or stale receipts once, using the original recovery rule.
+    {
+        let mut tx=db.transaction()?;
+        tx.batch_execute("SET LOCAL statement_timeout='90000ms'; SET LOCAL lock_timeout='5000ms'")?;
+        tx.execute(
+            "INSERT INTO execution.semantic_pnf_frontier_dirty
+                (interface_id,reason_interface_id,dirty_reason)
+             SELECT i.interface_id,NULL,
+                    CASE WHEN receipt.interface_id IS NULL THEN 'missing_reduction_receipt'
+                         ELSE 'stale_graph_revision' END
+             FROM execution.semantic_pnf_interface i
+             JOIN execution.semantic_pnf_region r ON r.region_id=i.region_id
+             LEFT JOIN execution.semantic_pnf_frontier_reduction_receipt receipt
+               ON receipt.interface_id=i.interface_id
+             WHERE r.run_ref=$1 AND r.document_ref=$2
+               AND r.region_kind NOT IN (1,2,4,9) AND i.closure_state IN (2,3)
+               AND (receipt.interface_id IS NULL OR
+                    receipt.graph_revision IS DISTINCT FROM i.graph_revision)
+             ON CONFLICT (interface_id) DO NOTHING",
+            &[&run_ref,&document_ref])?;
+        tx.commit()?;
+    }
+    while completed<budget {
+        let remaining=90_000u128.saturating_sub(started.elapsed().as_millis());
+        if remaining<100 {break;}
+        let mut tx=db.transaction()?;
+        tx.batch_execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE; SET LOCAL lock_timeout='5000ms'")?;
+        tx.query_one("SELECT set_config('statement_timeout',$1,true)",
+            &[&format!("{}ms",remaining)])?;
+        // Serialize native reductions for this exact run/document. Do not
+        // SKIP LOCKED a child and incorrectly reduce a parent ahead of it.
+        tx.query_one(
+            "SELECT pg_advisory_xact_lock(hashtext($1),hashtext($2))",
+            &[&run_ref,&document_ref])?;
+        let row=tx.query_opt(
+            "SELECT dirty.interface_id
+             FROM execution.semantic_pnf_frontier_dirty dirty
+             JOIN execution.semantic_pnf_interface i ON i.interface_id=dirty.interface_id
+             JOIN execution.semantic_pnf_region r ON r.region_id=i.region_id
+             WHERE r.run_ref=$1 AND r.document_ref=$2
+               AND r.region_kind NOT IN (1,2,4,9) AND i.closure_state IN (2,3)
+             ORDER BY r.region_kind,(r.end_char-r.start_char),r.sequence_no,dirty.interface_id
+             LIMIT 1 FOR UPDATE OF dirty",
+            &[&run_ref,&document_ref])?;
+        let Some(row)=row else {tx.commit()?;break;};
+        let id:i64=row.get(0);
+        if tx.execute("DELETE FROM execution.semantic_pnf_frontier_dirty WHERE interface_id=$1",
+            &[&id])?!=1 {return Err(NumericPipelineError::ForeignRun);}
+        tx.query_one("SELECT * FROM execution.rebuild_numeric_pnf_parent_frontier($1)",&[&id])?;
+        tx.commit()?;
+        completed+=1;
+    }
+    let pending:i64=db.query_one(
+        "SELECT count(*)::bigint FROM execution.semantic_pnf_frontier_dirty dirty
+         JOIN execution.semantic_pnf_interface i ON i.interface_id=dirty.interface_id
+         JOIN execution.semantic_pnf_region r ON r.region_id=i.region_id
+         WHERE r.run_ref=$1 AND r.document_ref=$2
+           AND r.region_kind NOT IN (1,2,4,9)",
+        &[&run_ref,&document_ref])?.get(0);
+    Ok((completed,pending))
+}
+
 pub fn run_native_numeric_exact_source_slice(
     slr:&DatabaseConfig,
     numeric_database_url:&str,
@@ -369,7 +443,16 @@ pub fn run_native_numeric_exact_source_slice(
          WHERE run_ref=$1 AND document_ref=$2 AND operation_id=1
            AND state_id<>3",
         &[&run_ref,&original.manifest.document_ref])?.get(0);
+    let (frontier_completed,frontier_remaining)=if pending_parser_sentences==0
+        &&remaining==0&&plan.full_document_coverage_paid {
+        let (done,pending)=reduce_original_frontier_slice(
+            &mut db,&run_ref,&original.manifest.document_ref,max_sentences)?;
+        (done,Some(pending))
+    }else{(0,None)};
     let mut residuals=plan.residuals.clone();
+    if frontier_remaining!=Some(0){
+        residuals.push("original_parent_frontier_reduction_pending".into());
+    }
     if pending_parser_sentences>0 {
         residuals.push(format!(
             "original_numeric_parser_sentence_bootstrap_pending:{}",
@@ -405,6 +488,7 @@ pub fn run_native_numeric_exact_source_slice(
         source_full_document_coverage_paid:plan.full_document_coverage_paid
             &&pending_parser_sentences==0,
         sentence_jobs_completed:completed,sentence_jobs_remaining:remaining as usize,
+        frontier_jobs_completed:frontier_completed,frontier_jobs_remaining:frontier_remaining,
         bounded_replay_supported:false,all_original_typed_demands_covered:false,
         unique_document_identity_paid:false,level_three_identity_substitution_paid:false,
         external_qid_paid:false,historical_truth_paid:false,residuals,
