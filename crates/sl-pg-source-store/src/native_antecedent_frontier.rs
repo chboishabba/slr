@@ -76,6 +76,10 @@ pub struct NativeAntecedentFrontier {
     pub focus_start_char: u64,
     pub focus_end_char: u64,
     pub focus_surface: String,
+    /// Reopened from the original parser token, not guessed by the policy.
+    pub focus_parser_pos: String,
+    pub focus_parser_morph_json: Option<String>,
+    pub focus_parser_dependency_ref: String,
     pub nominated_source_anchor_ref: String,
     pub nominated_source_anchor_start_char: u64,
     pub nominated_source_anchor_end_char: u64,
@@ -278,6 +282,7 @@ pub fn native_antecedent_frontier(
     let mut sentences=inspect.before.clone();
     sentences.push(inspect.focus_statement.clone());
     let mut focus_count=0usize;
+    let mut focus_parser_token: Option<ParserTokenRecord>=None;
     let mut has_named=false;
     let mut seen=BTreeSet::new();
     for sentence in &sentences {
@@ -285,11 +290,14 @@ pub fn native_antecedent_frontier(
             config,parser_run_ref,&inspect.source_revision_ref,sentence
         )?;
         if sentence.statement_ref==focus.statement_ref {
-            focus_count+=parser.tokens().iter().filter(|t| {
+            for t in parser.tokens().iter().filter(|t| {
                 t.start_char as u64==focus.start_char
                     && t.end_char as u64==focus.end_char
                     && t.surface==focus.surface && t.pos=="PRON"
-            }).count();
+            }) {
+                focus_count+=1;
+                focus_parser_token=Some(t.clone());
+            }
         }
         for t in parser.tokens() {
             if let Some(n)=token_nomination(
@@ -321,6 +329,9 @@ pub fn native_antecedent_frontier(
         }
     }
     if focus_count!=1 {return Err(NativeAntecedentFrontierError::MissingFocusToken);}
+    let original_focus=focus_parser_token.ok_or(
+        NativeAntecedentFrontierError::MissingFocusToken
+    )?;
     if !has_named {return Err(NativeAntecedentFrontierError::MissingNamedSourceAnchor);}
     nominations.sort_by(|a,b| {
         (a.original_start_char,a.original_end_char,a.observation_kind,&a.nomination_ref)
@@ -342,6 +353,9 @@ pub fn native_antecedent_frontier(
         focus_mention_ref:focus.mention_ref,
         focus_start_char:focus.start_char,focus_end_char:focus.end_char,
         focus_surface:focus.surface,
+        focus_parser_pos:original_focus.pos,
+        focus_parser_morph_json:original_focus.morph_json,
+        focus_parser_dependency_ref:original_focus.dependency_ref,
         nominated_source_anchor_ref:inspect.candidate_antecedent.statement_ref,
         nominated_source_anchor_start_char:inspect.candidate_antecedent.start_char,
         nominated_source_anchor_end_char:inspect.candidate_antecedent.end_char,
