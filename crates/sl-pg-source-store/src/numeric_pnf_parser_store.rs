@@ -193,6 +193,109 @@ fn sym(
     symbols.get(&key).copied().ok_or(NumericParserStoreError::ExistingConflict)
 }
 
+fn morph_pairs(
+    raw:&Option<String>,
+    symbols:&BTreeMap<(i16,String),i64>,
+)->Result<Vec<(i64,i64)>,NumericParserStoreError>{
+    let Some(raw)=raw else{return Ok(Vec::new());};
+    let parsed:Value=serde_json::from_str(raw)
+        .map_err(|_|NumericParserStoreError::MalformedMorphology)?;
+    let map=parsed.as_object().ok_or(NumericParserStoreError::MalformedMorphology)?;
+    let mut pairs=BTreeSet::new();
+    for (feature,value) in map{
+        let feature_id=sym(symbols,6,feature)?;
+        match value{
+            Value::String(x)=>{pairs.insert((feature_id,sym(symbols,7,x)?));},
+            Value::Array(xs)=>for x in xs{
+                let val=x.as_str().ok_or(NumericParserStoreError::MalformedMorphology)?;
+                pairs.insert((feature_id,sym(symbols,7,val)?));
+            },
+            _=>return Err(NumericParserStoreError::MalformedMorphology),
+        }
+    }
+    Ok(pairs.into_iter().collect())
+}
+fn morph_digest(pairs:&[(i64,i64)])->Vec<u8>{
+    // Original numeric_digest(6, tuple(feature,value,feature,value,...))
+    let mut values=Vec::new();
+    for &(feature,value) in pairs{values.push(crate::NumericDigestValue::Int(feature as i128));
+        values.push(crate::NumericDigestValue::Int(value as i128));}
+    crate::strict_numeric_digest(vec![
+        crate::NumericDigestValue::Int(6),
+        crate::NumericDigestValue::Seq(values),
+    ]).to_vec()
+}
+/// One set-wise morph-set family and one member family, no per-token INSERT.
+fn intern_morphology(
+    tx:&mut Transaction<'_>,
+    plan:&NativeNumericParserPlan,
+    symbols:&BTreeMap<(i16,String),i64>,
+)->Result<BTreeMap<(String,i32),Option<i64>>,NumericParserStoreError>{
+    let mut sets=BTreeMap::<Vec<(i64,i64)>,Vec<u8>>::new();
+    let mut by_token=BTreeMap::<(String,i32),Vec<(i64,i64)>>::new();
+    for sentence in &plan.sentences{
+        for t in &sentence.tokens{
+            let pairs=morph_pairs(&t.morph_json,symbols)?;
+            if !pairs.is_empty(){
+                sets.entry(pairs.clone()).or_insert_with(||morph_digest(&pairs));
+            }
+            by_token.insert((sentence.sentence_ref.clone(),
+                t.original_token_ordinal),pairs);
+        }
+    }
+    if sets.len()>i16::MAX as usize{return Err(NumericParserStoreError::ResourceLimit);}
+    if sets.is_empty(){
+        return Ok(by_token.into_keys().map(|k|(k,None)).collect());
+    }
+    let digests=sets.values().cloned().collect::<Vec<_>>();
+    let counts=sets.keys().map(|k|k.len() as i16).collect::<Vec<_>>();
+    tx.execute(
+        "INSERT INTO execution.semantic_morph_set(morph_digest,member_count)
+         SELECT * FROM unnest($1::bytea[],$2::smallint[])
+         ON CONFLICT(morph_digest) DO NOTHING",&[&digests,&counts])?;
+    let mut member_digest=Vec::<Vec<u8>>::new();
+    let mut member_ord=Vec::<i16>::new();
+    let mut member_feature=Vec::<i64>::new();
+    let mut member_value=Vec::<i64>::new();
+    for (pairs,digest) in &sets{
+        for (ordinal,(feature,value)) in pairs.iter().enumerate(){
+            member_digest.push(digest.clone());member_ord.push(ordinal as i16);
+            member_feature.push(*feature);member_value.push(*value);
+        }
+    }
+    tx.execute(
+        "WITH input AS (
+           SELECT * FROM unnest($1::bytea[],$2::smallint[],
+                                  $3::bigint[],$4::bigint[])
+             AS x(digest,ordinal,feature_id,value_id))
+         INSERT INTO execution.semantic_morph_set_member(
+           morph_set_id,ordinal,feature_symbol_id,value_symbol_id)
+         SELECT m.morph_set_id,x.ordinal,x.feature_id,x.value_id
+         FROM input AS x
+         JOIN execution.semantic_morph_set AS m ON m.morph_digest=x.digest
+         ON CONFLICT DO NOTHING",
+        &[&member_digest,&member_ord,&member_feature,&member_value])?;
+    let rows=tx.query(
+        "SELECT morph_digest,morph_set_id
+         FROM execution.semantic_morph_set
+         WHERE morph_digest=ANY($1::bytea[])",
+        &[&digests])?;
+    let mut ids=BTreeMap::new();
+    for row in rows{
+        ids.insert(row.get::<_,Vec<u8>>(0),row.get::<_,i64>(1));
+    }
+    if ids.len()!=sets.len(){return Err(NumericParserStoreError::ExistingConflict);}
+    let mut result=BTreeMap::new();
+    for (key,pairs) in by_token{
+        let value=if pairs.is_empty(){None}else{
+            let digest=sets.get(&pairs).ok_or(NumericParserStoreError::ExistingConflict)?;
+            Some(*ids.get(digest).ok_or(NumericParserStoreError::ExistingConflict)?)
+        };
+        result.insert(key,value);
+    }
+    Ok(result)
+}
+
 /// Register numeric v2 parser observations without broad Python reparsing.
 /// Preconditions require an exact, source-validated plan (never a Q207 label).
 /// For a partial SLR parser-run scope, coverage remains OPEN by construction.
@@ -313,6 +416,7 @@ pub fn persist_original_numeric_parser_plan(
         return Err(NumericParserStoreError::ExistingConflict);
     }
     let symbols=intern_all(&mut tx,&normalized)?;
+    let morph_ids=intern_morphology(&mut tx,plan,&symbols)?;
 
     for (sequence,sentence) in by_scope.iter().enumerate(){
         let st=sentence.start_char as usize;
@@ -370,6 +474,9 @@ pub fn persist_original_numeric_parser_plan(
             .collect::<Vec<_>>();
         let head_ends=sentence.tokens.iter().map(|t|t.head_end_char)
             .collect::<Vec<_>>();
+        let morph=sentence.tokens.iter().map(|t|
+            morph_ids.get(&(sentence.sentence_ref.clone(),t.original_token_ordinal))
+                .cloned().flatten()).collect::<Vec<_>>();
         let lemma_origin=sentence.tokens.iter().map(|t|t.lemma_origin_id)
             .collect::<Vec<_>>();
         let tag_origin=sentence.tokens.iter().map(|t|t.tag_origin_id)
@@ -381,26 +488,26 @@ pub fn persist_original_numeric_parser_plan(
                   local_token_ordinal,start_char,end_char,
                   head_start_char,head_end_char,token_digest,
                   orth_symbol_id,lemma_symbol_id,pos_symbol_id,
-                  tag_symbol_id,dependency_symbol_id,
+                  tag_symbol_id,dependency_symbol_id,morph_set_id,
                   lemma_origin_id,pos_origin_id,tag_origin_id,
                   dependency_origin_id,representation_version)
                  SELECT t.token_ref,$1,$2,$3,$4,t.ordinal,t.start_char,
                    t.end_char,t.head_start,t.head_end,t.digest,
-                   t.orth,t.lemma,t.pos,t.tag,t.dep,
+                   t.orth,t.lemma,t.pos,t.tag,t.dep,t.morph_id,
                    t.lemma_origin,1,t.tag_origin,1,2
                  FROM unnest($5::text[],$6::integer[],$7::bigint[],
                    $8::bigint[],$9::bigint[],$10::bigint[],
                    $11::bytea[],$12::bigint[],$13::bigint[],
                    $14::bigint[],$15::bigint[],$16::bigint[],
-                   $17::smallint[],$18::smallint[])
+                   $17::bigint[],$18::smallint[],$19::smallint[])
                  AS t(token_ref,ordinal,start_char,end_char,
                    head_start,head_end,digest,orth,lemma,pos,tag,dep,
-                   lemma_origin,tag_origin)
+                   morph_id,lemma_origin,tag_origin)
                  ON CONFLICT(token_ref) DO NOTHING",
                 &[&plan.numeric_run_ref,&plan.source_document_ref,
                   &partition_ref,&sentence.sentence_ref,&refs,&ords,&starts,
                   &ends,&head_starts,&head_ends,&digests,&orth,&lemma,
-                  &pos,&tag,&dep,&lemma_origin,&tag_origin])?;
+                  &pos,&tag,&dep,&morph,&lemma_origin,&tag_origin])?;
         }
         let count:i64=tx.query_one(
             "SELECT count(*)::bigint FROM execution.semantic_parser_token
