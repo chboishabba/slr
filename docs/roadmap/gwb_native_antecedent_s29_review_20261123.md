@@ -1,6 +1,43 @@
 # C4.11: source-native antecedent review on original SLR S29
 
 
+## 24 November — native NER acceptance and candidate-only transport
+
+Operator reports 46/46 Rust tests passing, native compile successful, 64 NER
+occurrence objects and 117 exact token supports inserted. Bush-supported
+numeric objects increased 0 -> 2; original he demand 22165 remains unresolved.
+No H9 candidate, governed unique witness, QID, Level-3 or historical truth.
+Schema fixes pushed to SLR PR #78 at `924357ac25ddebc68b80292fa31e38e9a9d5ecb2`
+(confirmed remote head before this cut). The after-NER audit is reported at
+`.dashi/gwb-relation/m2-source-consumer/native-numeric-identity-audit-after-ner.json`;
+it was not accessible at DASHI PR #112's checked head, so the numerical results
+above are operator-reported, not independently retrieved. Earlier exact-source
+audit remains committed.
+
+Next source-written cut: SLR `eb394987`, `cb0a5c65`, `6040c7ce` expose
+bounded candidate-only transport through the existing native CLI. Verify the
+exact original consumer receipt, source digest, focus coordinates and singleton
+open anaphor demand. Enumerate existing source-backed preceding sentence
+objects and append missing typed keys to m086 observation/evidence/execution
+relations (zero signed H3 membership, deferred execution). Do not write legacy
+capped planner rows, select an actor, refute alternatives, close coverage, or
+admit identity. A transport remainder of zero is only completeness relative to
+the current materialized prior-object slice, not the original typed model.
+The transport limit is 64 newly represented keys per transaction, not a
+physical scan or elapsed-time guarantee. H9 semantic target provenance is
+unchanged. No surname matching or cross-occurrence quotient.
+
+Lean `94f04fd3` formalizes possibility extension preserving manifest,
+open-world, refutations, admitted witnesses and Level-3, retaining both keys.
+New Rust and Lean changes are source-written and untested. Still required:
+general non-NER occurrence coverage, original typed morphology/quotation/
+accessibility correspondence, complete coverage witness, proof-relevant
+occurrence-to-entity quotient, governed admission and Level-3 replay/retraction.
+No Python restart, no intermediate operator handoff; F0-F5 remain unpaid
+as whole-port gates despite the successful native NER slice.
+
+
+
 ## 24 November 19:48 AEST — real native Rust execution; missing actor producer
 
 Operator pushed SLR `7c62831` and DASHI `1da1edeb4`.
