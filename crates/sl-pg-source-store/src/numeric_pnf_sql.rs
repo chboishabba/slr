@@ -141,6 +141,21 @@ pub fn publish_original_numeric_sentence(
     let revision:i64=w.get::<_,i64>(6)+1;
     let start:i64=w.get(8);
     let end:i64=w.get(9);
+    // Demand projection is owned by an exact parser sentence link. Closing
+    // a region with no original numeric parser sentence would falsely appear
+    // to pay the anaphor producer while migration 180 emits nothing.
+    let parser_sentences:i64=tx.query_one(
+        "SELECT count(DISTINCT sentence.sentence_id)::bigint
+         FROM execution.semantic_pnf_sentence_region AS link
+         JOIN execution.semantic_parser_sentence AS sentence
+           ON sentence.sentence_id=link.sentence_id
+         WHERE link.region_id=$1
+           AND sentence.run_ref=$2 AND sentence.document_ref=$3
+           AND sentence.representation_version=2
+           AND sentence.start_char=$4 AND sentence.end_char=$5",
+        &[&lease.region_id,&manifest.parser_run_ref,
+          &manifest.document_ref,&start,&end])?.get(0);
+    if parser_sentences!=1{return Err(NumericSqlError::MissingToken);}
     let mut referenced=BTreeSet::<i64>::new();
     for obj in &closure.objects{referenced.insert(obj.source_token_id);}
     for f in &closure.factors{
@@ -158,6 +173,17 @@ pub fn publish_original_numeric_sentence(
            AND start_char >= $4 AND end_char <= $5",
         &[&ids,&manifest.parser_run_ref,&manifest.document_ref,&start,&end])?.get(0);
     if valid!=ids.len() as i64{return Err(NumericSqlError::MissingToken);}
+    let sentence_token_count:i64=tx.query_one(
+        "SELECT count(*)::bigint FROM execution.semantic_parser_token
+         WHERE run_ref=$1 AND document_ref=$2
+           AND representation_version=2
+           AND start_char >= $3 AND end_char <= $4",
+        &[&manifest.parser_run_ref,&manifest.document_ref,&start,&end])?.get(0);
+    if sentence_token_count<0 ||closure.measure.encoded_byte_count !=
+        sentence_token_count as usize *80
+          +closure.factors.len()*32+closure.demands.len()*32{
+        return Err(NumericSqlError::MissingPublication);
+    }
 
     // Exactly five bounded stage families, no per-object query loop.
     tx.batch_execute(r#"
@@ -465,6 +491,34 @@ pub fn publish_original_numeric_sentence(
            AND lease_token=$2 AND lease_epoch=$3",
         &[&lease.work_id,&lease.lease_token,&lease.lease_epoch])?;
     if done!=1{return Err(NumericSqlError::LostLease);}
+    // Existing migration-180 relation-valued projector owns the pronoun
+    // occurrence / object / unresolved anaphor demand. Verify its effect
+    // inside this SAME transaction; do not fabricate a Rust identity.
+    let expected_pronouns:i64=tx.query_one(
+        "SELECT count(*)::bigint
+         FROM execution.semantic_parser_token AS token
+         JOIN execution.semantic_pnf_anaphor_projection_constant AS const
+           ON const.singleton
+          AND token.pos_symbol_id=const.pronoun_pos_symbol_id
+         WHERE token.run_ref=$1 AND token.document_ref=$2
+           AND token.representation_version=2
+           AND token.start_char >= $3 AND token.end_char <= $4",
+        &[&manifest.parser_run_ref,&manifest.document_ref,&start,&end])?.get(0);
+    let produced_pronouns:i64=tx.query_one(
+        "SELECT count(DISTINCT mention.head_token_id)::bigint
+         FROM execution.semantic_pnf_mention AS mention
+         WHERE mention.region_id=$1 AND mention.mention_kind=4
+           AND EXISTS (
+             SELECT 1 FROM execution.semantic_pnf_object_token_support AS support
+             JOIN execution.semantic_pnf_object AS object
+               ON object.object_id=support.object_id
+             WHERE support.token_id=mention.head_token_id
+               AND object.region_id=mention.region_id
+           )",
+        &[&lease.region_id])?.get(0);
+    if produced_pronouns<expected_pronouns{
+        return Err(NumericSqlError::MissingPublication);
+    }
     tx.commit()?;
     Ok(NumericPublishedSentence{
         region_id:lease.region_id,graph_revision:revision,interface_id,
