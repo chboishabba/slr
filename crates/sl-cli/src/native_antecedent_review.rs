@@ -6,6 +6,40 @@ use sensiblaw_pg_source_store::{
 };
 use std::fs;
 
+fn source_local_answer(
+    review_item_ref: &str,
+    parser_run_ref: Option<&str>,
+) -> Result<sensiblaw_pg_source_store::NativeSourceLocalAnswer, String> {
+    let config=load_database_config(None).map_err(|e|e.to_string())?;
+    let run=match parser_run_ref {
+        Some(run) if !run.trim().is_empty() => run.to_owned(),
+        Some(_) => return Err("empty original parser run".into()),
+        None => {
+            let runs=sensiblaw_pg_source_store::native_antecedent_parser_runs(
+                &config,review_item_ref,
+            ).map_err(|e|e.to_string())?;
+            let full=runs.iter().filter(|x|x.structurally_eligible_for_frontier)
+                .collect::<Vec<_>>();
+            if full.len()!=1 {
+                return Err(format!(
+                    "source-local consumer requires exactly one complete original parser run; found {}",
+                    full.len()
+                ));
+            }
+            full[0].parser_run_ref.clone()
+        }
+    };
+    let review=sensiblaw_pg_source_store::inspect_native_antecedent_review(
+        &config,review_item_ref,
+    ).map_err(|e|e.to_string())?;
+    let frontier=sensiblaw_pg_source_store::native_antecedent_frontier(
+        &config,review_item_ref,&run,
+    ).map_err(|e|e.to_string())?;
+    sensiblaw_pg_source_store::compile_native_source_local_answer(
+        &review,&frontier,
+    ).map_err(|e|e.to_string())
+}
+
 pub fn run(args: &[String]) -> Result<(), String> {
     match args {
         [subcommand, candidate_path] if subcommand == "prepare" => {
@@ -108,6 +142,43 @@ pub fn run(args: &[String]) -> Result<(), String> {
                 .map_err(|e|e.to_string())?);
             Ok(())
         }
+        [subcommand, review_item_ref] if subcommand == "answer" => {
+            let answer=source_local_answer(review_item_ref,None)?;
+            println!("{}",serde_json::to_string_pretty(&answer)
+                .map_err(|e|e.to_string())?);
+            Ok(())
+        }
+        [subcommand, review_item_ref, parser_run_ref] if subcommand == "answer" => {
+            let answer=source_local_answer(review_item_ref,Some(parser_run_ref))?;
+            println!("{}",serde_json::to_string_pretty(&answer)
+                .map_err(|e|e.to_string())?);
+            Ok(())
+        }
+        [subcommand, review_item_ref, prior_path] if subcommand == "replay" => {
+            let raw=fs::read_to_string(prior_path).map_err(|e|e.to_string())?;
+            let prior:serde_json::Value=serde_json::from_str(&raw)
+                .map_err(|e|e.to_string())?;
+            let answer=source_local_answer(review_item_ref,None)?;
+            let comparison=sensiblaw_pg_source_store::evaluate_native_source_local_replay(
+                &prior,answer
+            );
+            println!("{}",serde_json::to_string_pretty(&comparison)
+                .map_err(|e|e.to_string())?);
+            Ok(())
+        }
+        [subcommand, review_item_ref, prior_path, parser_run_ref]
+            if subcommand == "replay" => {
+            let raw=fs::read_to_string(prior_path).map_err(|e|e.to_string())?;
+            let prior:serde_json::Value=serde_json::from_str(&raw)
+                .map_err(|e|e.to_string())?;
+            let answer=source_local_answer(review_item_ref,Some(parser_run_ref))?;
+            let comparison=sensiblaw_pg_source_store::evaluate_native_source_local_replay(
+                &prior,answer
+            );
+            println!("{}",serde_json::to_string_pretty(&comparison)
+                .map_err(|e|e.to_string())?);
+            Ok(())
+        }
         [subcommand, review_item_ref] if subcommand == "inspect" => {
             let config=load_database_config(None).map_err(|e|e.to_string())?;
             let packet=sensiblaw_pg_source_store::inspect_native_antecedent_review(
@@ -120,7 +191,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
         }
         _ => Err(
             "usage: sensiblaw native-antecedent-review \
-             <prepare ORIGINAL_C410_RECEIPT.json | inspect REVIEW_ITEM_REF | runs REVIEW_ITEM_REF | frontier REVIEW_ITEM_REF [PARSER_RUN_REF] | derive REVIEW_ITEM_REF [PARSER_RUN_REF]>"
+             <prepare ORIGINAL_C410_RECEIPT.json | inspect REVIEW_ITEM_REF | runs REVIEW_ITEM_REF | frontier REVIEW_ITEM_REF [PARSER_RUN_REF] | derive REVIEW_ITEM_REF [PARSER_RUN_REF] | answer REVIEW_ITEM_REF [PARSER_RUN_REF] | replay REVIEW_ITEM_REF ANSWER.json [PARSER_RUN_REF]>"
              .into(),
         ),
     }
@@ -137,5 +208,7 @@ mod tests {
         assert!(run(&["frontier".into(),"only-one-argument".into()]).is_err());
         assert!(run(&["runs".into(),"bad".into(),"extra".into()]).is_err());
         assert!(run(&["derive".into(),"bad".into(),"extra".into(),"again".into()]).is_err());
+        assert!(run(&["answer".into(),"bad".into(),"one".into(),"two".into()]).is_err());
+        assert!(run(&["replay".into(),"bad".into(),"one".into(),"two".into(),"three".into()]).is_err());
     }
 }
