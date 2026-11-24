@@ -67,6 +67,7 @@ pub struct NativeNumericParserEntityPlan {
 }
 #[derive(Debug,Clone,PartialEq,Eq,Serialize,Deserialize)]
 pub struct NativeNumericParserSentencePlan {
+    pub source_sentence_index:usize,
     pub original_compilation_key:String,
     pub original_region_ref:String,
     pub sentence_ref:String,
@@ -130,7 +131,7 @@ pub fn plan_original_native_numeric_parser(
         return Err(NumericParserPlanError::MissingSentences);
     }
     let mut sentences=Vec::with_capacity(source.parser_regions.len());
-    for region in &source.parser_regions {
+    for (source_sentence_index,region) in source.parser_regions.iter().enumerate() {
         let sentence_digest=strict_numeric_digest(vec![
             bytes(numeric_run_ref),bytes(&source.manifest.document_ref),
             int(region.start_char),int(region.end_char),int(2),
@@ -196,6 +197,7 @@ pub fn plan_original_native_numeric_parser(
         }
         entities.sort_by_key(|e|(e.start_char,e.end_char,e.original_entity_ordinal));
         sentences.push(NativeNumericParserSentencePlan{
+            source_sentence_index,
             original_compilation_key:region.compilation_key.clone(),
             original_region_ref:region.region_ref.clone(),
             sentence_ref,sentence_digest,start_char:region.start_char,
