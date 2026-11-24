@@ -44,6 +44,7 @@ mod numeric_pnf_operator;
 mod numeric_pnf_source_bridge;
 mod numeric_pnf_owner;
 mod numeric_pnf_sql;
+mod numeric_pnf_parser_plan;
 mod statement_pnf_spine;
 mod generic_source_compiler;
 mod source_candidate_persistence;
@@ -245,6 +246,11 @@ pub use reviewed_pnf::{
     materialize_reviewed_pnf_revision, validate_reviewed_pnf_revision,
     ReviewedPnfMaterializationError, ReviewedPnfMaterializationReceipt, ReviewedPnfRevision,
     ReviewedPnfValidationError,
+};
+pub use numeric_pnf_parser_plan::{
+    plan_original_native_numeric_parser, NativeNumericParserTokenPlan,
+    NativeNumericParserSentencePlan, NativeNumericParserPlan,
+    NumericParserPlanError,
 };
 pub use numeric_pnf_sql::{
     publish_original_numeric_sentence, NumericMdlWeights,
