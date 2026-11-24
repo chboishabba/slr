@@ -358,11 +358,14 @@ fn materialize_numeric_entity_occurrences(
         "CREATE TEMP TABLE native_numeric_entity_occurrence
          ON COMMIT DROP AS
          WITH span AS MATERIALIZED (
-           SELECT e.entity_id,e.sentence_id,e.start_char,e.end_char,r.region_id,
+           SELECT e.entity_id,ps.sentence_id,e.start_char,e.end_char,r.region_id,
                   digest(convert_to('slr:numeric-ner-occurrence:v1','UTF8')
                          || int8send(r.region_id) || int8send(e.entity_id),'sha256') AS object_digest
            FROM execution.semantic_parser_entity_span e
-           JOIN execution.semantic_pnf_sentence_region l ON l.sentence_id=e.sentence_id
+           JOIN execution.semantic_parser_sentence ps
+             ON ps.sentence_ref=e.sentence_ref AND ps.run_ref=e.run_ref
+            AND ps.document_ref=e.document_ref AND ps.representation_version=2
+           JOIN execution.semantic_pnf_sentence_region l ON l.sentence_id=ps.sentence_id
            JOIN execution.semantic_pnf_region r ON r.region_id=l.region_id
            WHERE e.run_ref=$1 AND e.document_ref=$2 AND e.representation_version=2
              AND r.run_ref=$1 AND r.document_ref=$2 AND r.region_kind=1
@@ -413,7 +416,7 @@ fn materialize_numeric_entity_occurrences(
           (object_digest,region_id,object_kind_symbol_id,head_symbol_id,
            scope_region_id,promotion_level,information_gain,representation_cost,
            ambiguity_cost,promotion_score,active)
-         SELECT DISTINCT object_digest,region_id,$1,head_symbol_id,
+         SELECT DISTINCT object_digest,region_id,$1::bigint,head_symbol_id,
                 region_id,0,0,1,1,0,TRUE FROM native_numeric_entity_occurrence
          ON CONFLICT(object_digest) DO NOTHING",&[&kind])?;
     let support=tx.execute(
@@ -421,7 +424,7 @@ fn materialize_numeric_entity_occurrences(
          SELECT o.object_id,s.token_id,s.ordinal
          FROM native_numeric_entity_occurrence s
          JOIN execution.semantic_pnf_object o ON o.object_digest=s.object_digest
-          AND o.region_id=s.region_id AND o.object_kind_symbol_id=$1
+          AND o.region_id=s.region_id AND o.object_kind_symbol_id=$1::bigint
           AND o.head_symbol_id=s.head_symbol_id
          ON CONFLICT DO NOTHING",&[&kind])?;
     let valid:bool=tx.query_one(
@@ -431,7 +434,7 @@ fn materialize_numeric_entity_occurrences(
              SELECT 1 FROM execution.semantic_pnf_object o
              JOIN execution.semantic_pnf_object_token_support os ON os.object_id=o.object_id
              WHERE o.object_digest=s.object_digest AND o.region_id=s.region_id
-               AND o.object_kind_symbol_id=$1 AND o.head_symbol_id=s.head_symbol_id
+               AND o.object_kind_symbol_id=$1::bigint AND o.head_symbol_id=s.head_symbol_id
                AND os.token_id=s.token_id AND os.ordinal=s.ordinal))",
         &[&kind])?.get(0);
     if !valid{return Err(NumericPipelineError::ForeignRun);}
