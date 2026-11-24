@@ -64,6 +64,8 @@ pub struct NumericPipelineReceipt {
     pub source_full_document_coverage_paid:bool,
     pub sentence_jobs_completed:usize,
     pub sentence_jobs_remaining:usize,
+    pub entity_occurrence_objects_inserted:i64,
+    pub entity_occurrence_token_supports_inserted:i64,
     pub frontier_jobs_completed:usize,
     pub frontier_jobs_remaining:Option<i64>,
     pub bounded_replay_supported:bool,
@@ -332,6 +334,111 @@ fn reduce_original_frontier_slice(
     Ok((completed,pending))
 }
 
+
+// Explicit source-occurrence carrier, NOT the retired migration-045 broad
+// procedural promotion trigger. Source-backed NER spans are distinct local
+// observations even when their spelling repeats. Do not export them into the
+// legacy uniqueness planner until the typed coverage/admission guard exists.
+// Existing numeric factor objects and original pronoun demands remain intact.
+// This extension has its own digest domain and is not strict-legacy parity.
+fn materialize_numeric_entity_occurrences(
+    db:&mut Client, run_ref:&str, document_ref:&str, budget:usize,
+)->Result<(i64,i64),NumericPipelineError>{
+    let mut tx=db.transaction()?;
+    tx.batch_execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+        SET LOCAL statement_timeout='90000ms'; SET LOCAL lock_timeout='5000ms'")?;
+    tx.query_one("SELECT pg_advisory_xact_lock(hashtext($1),hashtext($2))",
+        &[&run_ref,&document_ref])?;
+    let kind:i64=tx.query_one(
+        "SELECT execution.ensure_semantic_symbol(14::smallint,'mention.entity')",
+        &[])?.get(0);
+    // A unique dependency head of the exact span is required. All contained
+    // source tokens remain supported; crossing/ambiguous spans remain unpaid.
+    tx.execute(
+        "CREATE TEMP TABLE native_numeric_entity_occurrence
+         ON COMMIT DROP AS
+         WITH span AS MATERIALIZED (
+           SELECT e.entity_id,e.sentence_id,e.start_char,e.end_char,r.region_id,
+                  digest(convert_to('slr:numeric-ner-occurrence:v1','UTF8')
+                         || int8send(r.region_id) || int8send(e.entity_id),'sha256') AS object_digest
+           FROM execution.semantic_parser_entity_span e
+           JOIN execution.semantic_pnf_sentence_region l ON l.sentence_id=e.sentence_id
+           JOIN execution.semantic_pnf_region r ON r.region_id=l.region_id
+           WHERE e.run_ref=$1 AND e.document_ref=$2 AND e.representation_version=2
+             AND r.run_ref=$1 AND r.document_ref=$2 AND r.region_kind=1
+             AND r.closure_state IN (2,3)
+         ), supported AS MATERIALIZED (
+           SELECT s.*,t.token_id,t.lemma_symbol_id,t.head_token_id,
+                  t.start_char AS token_start,t.end_char AS token_end
+           FROM span s JOIN execution.semantic_parser_token t
+             ON t.sentence_id=s.sentence_id AND t.run_ref=$1 AND t.document_ref=$2
+             AND t.representation_version=2 AND t.start_char>=s.start_char
+             AND t.end_char<=s.end_char
+         ), head AS (
+           SELECT s.entity_id,s.region_id,min(s.lemma_symbol_id) AS head_symbol_id
+           FROM supported s
+           WHERE s.head_token_id IS NOT NULL AND s.lemma_symbol_id IS NOT NULL
+             AND (s.head_token_id=s.token_id OR NOT EXISTS (
+                 SELECT 1 FROM supported h WHERE h.entity_id=s.entity_id
+                    AND h.region_id=s.region_id AND h.token_id=s.head_token_id))
+           GROUP BY s.entity_id,s.region_id HAVING count(*)=1
+         ), eligible AS (
+           SELECT s.entity_id,s.region_id,s.object_digest,h.head_symbol_id
+           FROM span s JOIN head h USING(entity_id,region_id)
+           JOIN supported t USING(entity_id,region_id)
+           GROUP BY s.entity_id,s.region_id,s.object_digest,h.head_symbol_id,s.start_char,s.end_char
+           HAVING min(t.token_start)=s.start_char AND max(t.token_end)=s.end_char
+              AND count(*)<=32768 AND bool_and(t.head_token_id IS NOT NULL)
+         ), missing AS (
+           SELECT e.* FROM eligible e
+           WHERE NOT EXISTS (SELECT 1 FROM execution.semantic_pnf_object o
+                             WHERE o.object_digest=e.object_digest)
+              OR EXISTS (
+                 SELECT 1 FROM supported t
+                 WHERE t.entity_id=e.entity_id AND t.region_id=e.region_id
+                   AND NOT EXISTS (
+                     SELECT 1 FROM execution.semantic_pnf_object o
+                     JOIN execution.semantic_pnf_object_token_support os ON os.object_id=o.object_id
+                     WHERE o.object_digest=e.object_digest AND os.token_id=t.token_id))
+           ORDER BY e.region_id,e.entity_id LIMIT $3
+         )
+         SELECT m.*,t.token_id,
+                (row_number() OVER(PARTITION BY m.region_id,m.entity_id
+                    ORDER BY t.token_start,t.token_id)-1)::smallint AS ordinal
+         FROM missing m JOIN supported t USING(entity_id,region_id)",
+        &[&run_ref,&document_ref,&(budget as i64)])?;
+    // No identity witness, demand closure, external alignment or promotion.
+    let objects=tx.execute(
+        "INSERT INTO execution.semantic_pnf_object
+          (object_digest,region_id,object_kind_symbol_id,head_symbol_id,
+           scope_region_id,promotion_level,information_gain,representation_cost,
+           ambiguity_cost,promotion_score,active)
+         SELECT DISTINCT object_digest,region_id,$1,head_symbol_id,
+                region_id,0,0,1,1,0,TRUE FROM native_numeric_entity_occurrence
+         ON CONFLICT(object_digest) DO NOTHING",&[&kind])?;
+    let support=tx.execute(
+        "INSERT INTO execution.semantic_pnf_object_token_support(object_id,token_id,ordinal)
+         SELECT o.object_id,s.token_id,s.ordinal
+         FROM native_numeric_entity_occurrence s
+         JOIN execution.semantic_pnf_object o ON o.object_digest=s.object_digest
+          AND o.region_id=s.region_id AND o.object_kind_symbol_id=$1
+          AND o.head_symbol_id=s.head_symbol_id
+         ON CONFLICT DO NOTHING",&[&kind])?;
+    let valid:bool=tx.query_one(
+        "SELECT NOT EXISTS (
+           SELECT 1 FROM native_numeric_entity_occurrence s
+           WHERE NOT EXISTS (
+             SELECT 1 FROM execution.semantic_pnf_object o
+             JOIN execution.semantic_pnf_object_token_support os ON os.object_id=o.object_id
+             WHERE o.object_digest=s.object_digest AND o.region_id=s.region_id
+               AND o.object_kind_symbol_id=$1 AND o.head_symbol_id=s.head_symbol_id
+               AND os.token_id=s.token_id AND os.ordinal=s.ordinal))",
+        &[&kind])?.get(0);
+    if !valid{return Err(NumericPipelineError::ForeignRun);}
+    tx.commit()?;
+    Ok((objects as i64,support as i64))
+}
+
 pub fn run_native_numeric_exact_source_slice(
     slr:&DatabaseConfig,
     numeric_database_url:&str,
@@ -443,6 +550,8 @@ pub fn run_native_numeric_exact_source_slice(
          WHERE run_ref=$1 AND document_ref=$2 AND operation_id=1
            AND state_id<>3",
         &[&run_ref,&original.manifest.document_ref])?.get(0);
+    let (entity_objects,entity_supports)=materialize_numeric_entity_occurrences(
+        &mut db,&run_ref,&original.manifest.document_ref,max_sentences)?;
     let (frontier_completed,frontier_remaining)=if pending_parser_sentences==0
         &&remaining==0&&plan.full_document_coverage_paid {
         let (done,pending)=reduce_original_frontier_slice(
@@ -450,6 +559,7 @@ pub fn run_native_numeric_exact_source_slice(
         (done,Some(pending))
     }else{(0,None)};
     let mut residuals=plan.residuals.clone();
+    residuals.push("native_entity_occurrences_are_unexported_candidate_anchors_not_complete_typed_binding".into());
     if frontier_remaining!=Some(0){
         residuals.push("original_parent_frontier_reduction_pending".into());
     }
@@ -488,6 +598,8 @@ pub fn run_native_numeric_exact_source_slice(
         source_full_document_coverage_paid:plan.full_document_coverage_paid
             &&pending_parser_sentences==0,
         sentence_jobs_completed:completed,sentence_jobs_remaining:remaining as usize,
+        entity_occurrence_objects_inserted:entity_objects,
+        entity_occurrence_token_supports_inserted:entity_supports,
         frontier_jobs_completed:frontier_completed,frontier_jobs_remaining:frontier_remaining,
         bounded_replay_supported:false,all_original_typed_demands_covered:false,
         unique_document_identity_paid:false,level_three_identity_substitution_paid:false,
