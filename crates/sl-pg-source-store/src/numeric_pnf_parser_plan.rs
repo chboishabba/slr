@@ -13,6 +13,7 @@ use crate::{OriginalNativeNumericEvidence,NumericDigestValue,
     strict_numeric_digest};
 use serde::{Deserialize,Serialize};
 use std::collections::BTreeMap;
+use sha2::{Digest,Sha256};
 use thiserror::Error;
 
 #[derive(Debug,Error)]
@@ -93,12 +94,23 @@ pub struct NativeNumericParserPlan {
     pub expected_total_sentence_regions:usize,
     pub expected_total_token_count:usize,
     pub expected_total_entity_count:usize,
+    pub expected_sentence_refs_sha256:String,
     pub full_document_coverage_paid:bool,
     pub semantic_identity_paid:bool,
     pub level_three_paid:bool,
     pub residuals:Vec<String>,
 }
 
+pub(crate) fn digest_numeric_sentence_refs(refs:&[String])->String{
+    let mut ordered=refs.to_vec();
+    ordered.sort();
+    let mut hash=Sha256::new();
+    for item in &ordered{
+        hash.update((item.len() as u64).to_be_bytes());
+        hash.update(item.as_bytes());
+    }
+    format!("{:x}",hash.finalize())
+}
 fn int(n:i64)->NumericDigestValue{NumericDigestValue::Int(n as i128)}
 fn bytes(s:&str)->NumericDigestValue{NumericDigestValue::Bytes(s.as_bytes().to_vec())}
 fn prefixed_ref(prefix:&str,digest:&[u8;32])->String {
@@ -210,6 +222,9 @@ pub fn plan_original_native_numeric_parser(
         expected_total_sentence_regions:sentences.len(),
         expected_total_token_count:sentences.iter().map(|s|s.tokens.len()).sum(),
         expected_total_entity_count:sentences.iter().map(|s|s.entities.len()).sum(),
+        expected_sentence_refs_sha256:digest_numeric_sentence_refs(
+            &sentences.iter().map(|s|s.sentence_ref.clone()).collect::<Vec<_>>()
+        ),
         sentences,full_document_coverage_paid:source.full_document_coverage_paid,
         semantic_identity_paid:false,level_three_paid:false,residuals,
     })
