@@ -38,6 +38,7 @@ mod review_workstation_store;
 mod native_antecedent_review;
 mod native_antecedent_frontier;
 mod native_antecedent_named_topic;
+mod native_source_local_consumer;
 mod statement_pnf_spine;
 mod generic_source_compiler;
 mod source_candidate_persistence;
@@ -239,6 +240,10 @@ pub use reviewed_pnf::{
     materialize_reviewed_pnf_revision, validate_reviewed_pnf_revision,
     ReviewedPnfMaterializationError, ReviewedPnfMaterializationReceipt, ReviewedPnfRevision,
     ReviewedPnfValidationError,
+};
+pub use native_source_local_consumer::{
+    compile_native_source_local_answer, evaluate_native_source_local_replay,
+    NativeSourceLocalAnswer, NativeSourceAnswerReplay,
 };
 pub use native_antecedent_named_topic::{
     derive_native_named_topic, NamedTopicMention, NativeNamedTopicInference,
