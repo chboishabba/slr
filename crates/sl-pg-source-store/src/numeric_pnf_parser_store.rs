@@ -783,3 +783,46 @@ pub fn persist_original_numeric_parser_plan(
         identity_paid:false,level_three_paid:false,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn original_authored_paragraph_boundaries_are_not_flattened() {
+        assert_eq!(
+            authored_numeric_paragraphs(" a \n \n b\n\nc "),
+            vec![(1,2),(7,8),(10,11)]
+        );
+        assert_eq!(authored_numeric_paragraphs("hello"),vec![(0,5)]);
+        assert_eq!(authored_numeric_paragraphs(" \n\n "),vec![(0,4)]);
+        assert!(authored_numeric_paragraphs("").is_empty());
+    }
+
+    #[test]
+    fn lexical_normalization_is_explicit_and_never_fuzzy() {
+        assert_eq!(normalize(2,"MUST").unwrap(),"must");
+        assert_eq!(normalize(3,"verb").unwrap(),"VERB");
+        assert_eq!(normalize(8,"person").unwrap(),"PERSON");
+        assert_eq!(normalize(1,"Naïve").unwrap(),"Naïve");
+        assert!(matches!(normalize(2,"Straße"),
+            Err(NumericParserStoreError::UnsupportedUnicodeCasefold)));
+    }
+
+    #[test]
+    fn morphology_digest_matches_independent_strict_binary_reference() {
+        let pairs=vec![(101,202),(103,204)];
+        let digest=morph_digest(&pairs);
+        assert_eq!(digest.iter().map(|b|format!("{b:02x}")).collect::<String>(),
+            "160cb06ab2477f94272b61f0b3ae14419c74dc33d675a7dd19f727b04cbfb74b");
+    }
+
+    #[test]
+    fn numeric_source_ref_is_run_bound_not_label_bound() {
+        let x=sha_ref("slr-native-numeric-source-v1",
+            &["numeric-run:1","document:sha256:book","digest","parser:1"]);
+        let y=sha_ref("slr-native-numeric-source-v1",
+            &["numeric-run:2","document:sha256:book","digest","parser:1"]);
+        assert_ne!(x,y);
+    }
+}
