@@ -35,6 +35,8 @@ pub enum NumericOperatorError {
     ConflictingToken(i64),
     #[error("invalid numeric source token or region")]
     InvalidSpan,
+    #[error("invalid numeric sentence region")]
+    InvalidRegion,
     #[error("numeric PNF sentence closure digest/support/measure mismatch")]
     InconsistentClosure,
 }
