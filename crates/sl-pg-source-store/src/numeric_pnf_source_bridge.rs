@@ -43,12 +43,23 @@ pub struct OriginalNumericRawToken{
 }
 
 #[derive(Debug,Clone,PartialEq,Eq,Serialize)]
+pub struct OriginalNumericRawEntity{
+    pub original_entity_ordinal:i32,
+    pub start_char:i64,
+    pub end_char:i64,
+    pub surface:String,
+    pub label_ref:String,
+    pub candidate_only:bool,
+}
+
+#[derive(Debug,Clone,PartialEq,Eq,Serialize)]
 pub struct OriginalNumericSentenceFibre{
     pub compilation_key:String,
     pub region_ref:String,
     pub start_char:i64,
     pub end_char:i64,
     pub tokens:Vec<OriginalNumericRawToken>,
+    pub entities:Vec<OriginalNumericRawEntity>,
     pub full_numeric_tag_capability_available:bool,
 }
 
@@ -209,9 +220,33 @@ pub fn load_exact_native_numeric_evidence(
                 }
             }
         }
+        let entity_rows=db.query(
+            "SELECT entity_ordinal,start_char,end_char,surface,label_ref
+             FROM ingest.parser_entity
+             WHERE compilation_key=$1 ORDER BY entity_ordinal",
+            &[&compilation_key])?;
+        let mut entities=Vec::with_capacity(entity_rows.len());
+        let mut ordinal_seen=BTreeSet::new();
+        for row in entity_rows{
+            let ordinal:i32=row.get(0);
+            let ent_start:i64=row.get(1);
+            let ent_end:i64=row.get(2);
+            let surface:String=row.get(3);
+            let label_ref:String=row.get(4);
+            if ordinal<0||!ordinal_seen.insert(ordinal)
+                ||ent_start<start||ent_end>end
+                ||original_span(text,&bounds,ent_start,ent_end)?!=surface
+                ||label_ref.is_empty(){
+                return Err(NativeNumericSourceError::ParserToken);
+            }
+            entities.push(OriginalNumericRawEntity{
+                original_entity_ordinal:ordinal,start_char:ent_start,
+                end_char:ent_end,surface,label_ref,candidate_only:true,
+            });
+        }
         fibres.push(OriginalNumericSentenceFibre{
             compilation_key,region_ref,start_char:start,end_char:end,
-            tokens,full_numeric_tag_capability_available:false,
+            tokens,entities,full_numeric_tag_capability_available:false,
         });
     }
     if last_end!=len{full_document=false;}
