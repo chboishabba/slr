@@ -5,6 +5,24 @@
 
 ### Native Rust numeric-PNF port decision — formal first
 
+
+**First code stage committed, NOT a completed port:** SLR source-store now
+exports `numeric_pnf_native.rs`, a non-admitting canonical Rust
+factor reducer and open-world candidate fibre. It carries original
+source SHA and Unicode manifest validation, ITIR typed-canonical hash
+goldens, strict missing-dependency residuals, first-compatible
+grouping and physical work counters. This does not yet populate
+original numeric objects/H9 demands or original SQL Level-3.
+No Lean/Cargo acceptance or original strict-reference parity has
+been executed in this environment.
+
+**No operator run requests until BOTH the formalization and the
+integrated Rust numeric-PNF producer/persistence implementation are
+complete and independently checked.** The historical local-gate
+instructions remain internal and must not be presented as the next
+user action.
+
+
 **Numeric producer result since initial P0-B:** the audit's 8/8
 contract tests passed, and a read-only complete 48/48-partition
 numeric run was found to be **a different source**. Its original
