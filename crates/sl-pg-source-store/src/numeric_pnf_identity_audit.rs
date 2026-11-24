@@ -949,7 +949,7 @@ fn observe_original_cross_resource_needs(
 fn materialize_prior_nominal_heads(
     tx:&mut postgres::Transaction<'_>,run_ref:&str,document_ref:&str,
     focus_start:i64,budget:usize,
-)->Result<(i64,i64),NativeNumericAuditError>{
+)->Result<(i64,i64,i64),NativeNumericAuditError>{
     let noun:i64=tx.query_one("SELECT execution.ensure_semantic_symbol(14::smallint,'mention.noun')",&[])?.get(0);
     let proper:i64=tx.query_one("SELECT execution.ensure_semantic_symbol(14::smallint,'mention.proper_noun')",&[])?.get(0);
     tx.execute(
@@ -1001,7 +1001,27 @@ fn materialize_prior_nominal_heads(
                AND o.object_kind_symbol_id=d.kind AND o.head_symbol_id=d.lemma_symbol_id
                AND o.active AND s.token_id=d.token_id AND s.ordinal=0))",&[])?.get(0);
     if !valid{return Err(NativeNumericAuditError::ForeignSource);}
-    Ok((objects as i64,supports as i64))
+    let remaining:i64=tx.query_one(
+        "SELECT count(DISTINCT t.token_id)::bigint
+         FROM execution.semantic_parser_token t
+         JOIN execution.semantic_symbol pos ON pos.symbol_id=t.pos_symbol_id
+         JOIN execution.semantic_pnf_sentence_region l ON l.sentence_id=t.sentence_id
+         JOIN execution.semantic_pnf_region r ON r.region_id=l.region_id
+         WHERE t.run_ref=$1 AND t.document_ref=$2 AND t.representation_version=2
+           AND r.run_ref=$1 AND r.document_ref=$2 AND r.region_kind=1
+           AND r.closure_state IN (2,3) AND t.end_char<=$3
+           AND pos.symbol_text IN ('NOUN','PROPN') AND t.lemma_symbol_id IS NOT NULL
+           AND NOT EXISTS (
+             SELECT 1 FROM execution.semantic_pnf_object_token_support os
+             JOIN execution.semantic_pnf_object o ON o.object_id=os.object_id
+             WHERE os.token_id=t.token_id AND o.region_id=r.region_id AND o.active)
+           AND NOT EXISTS (
+             SELECT 1 FROM execution.semantic_parser_entity_span e
+             WHERE e.run_ref=t.run_ref AND e.document_ref=t.document_ref
+               AND e.sentence_ref=t.sentence_ref AND e.representation_version=2
+               AND e.start_char<=t.start_char AND e.end_char>=t.end_char)",
+        &[&run_ref,&document_ref,&focus_start])?.get(0);
+    Ok((objects as i64,supports as i64,remaining))
 }
 
 // Reuse m110's actual typed factor/role and temporal producer on an exact
@@ -1052,6 +1072,7 @@ pub struct NativeNumericCandidateTransportReceipt {
     pub complete_typed_coverage_paid:bool,
     pub nominal_head_objects_inserted:i64,
     pub nominal_head_token_supports_inserted:i64,
+    pub nominal_heads_remaining:i64,
     pub original_h6_evidence_inserted:i64,
     pub morphology_observations_inserted:usize,
     pub candidates_without_morphology_observation:i64,
@@ -1107,7 +1128,7 @@ pub fn transport_original_numeric_candidates_for_source_answer(
     let demand:i64=rows[0].get(0);
     let source:i64=rows[0].get(1);
     let focus_token:i64=rows[0].get(2);
-    let (nominal_head_objects_inserted,nominal_head_token_supports_inserted)=
+    let (nominal_head_objects_inserted,nominal_head_token_supports_inserted,nominal_heads_remaining)=
         materialize_prior_nominal_heads(&mut tx,numeric_run_ref,&answer.source_document_ref,
             answer.original_focus_span[0] as i64,budget)?;
     // Materialize the exact existing occurrence relation. Recency is the only
@@ -1199,7 +1220,7 @@ pub fn transport_original_numeric_candidates_for_source_answer(
         inserted_candidate_ids:ids,remaining_untransported_count:remaining,
         represented_candidate_count:count,outside_model_possible:open,
         complete_typed_coverage_paid:false,
-        nominal_head_objects_inserted,nominal_head_token_supports_inserted,original_h6_evidence_inserted,
+        nominal_head_objects_inserted,nominal_head_token_supports_inserted,nominal_heads_remaining,original_h6_evidence_inserted,
         morphology_observations_inserted,candidates_without_morphology_observation,
         original_horizon_observations,original_document_identity_observations,
         original_parser_identity_producer,document_identity_fibre,original_cross_resource_needs,
