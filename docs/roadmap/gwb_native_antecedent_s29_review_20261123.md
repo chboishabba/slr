@@ -1,6 +1,56 @@
 # C4.11: source-native antecedent review on original SLR S29
 
 
+## 24 November — native frontier / typed-survivor / inverse execution cut
+
+SLR PR #78 source-written commits (not compiled or DB accepted):
+- `c65f45bb`: after exact-source parser and sentence work complete, the native
+  pipeline drains the original migration-145 dirty frontier using one transaction
+  per canonical interface, original ordering, bounded owner count and SQL timeouts.
+  No alternative Rust frontier semantics are introduced. A failed transaction
+  retains its dirty marker. The recovery seed still scans document interfaces;
+  this is NOT a measured no-op or 90-second end-to-end guarantee. The separate
+  Rust proposal-owner reducer's concrete correspondence remains unpaid.
+- `bc58fe6e`: compare the actual selected object with the only surviving
+  candidate over all represented target kinds; require same-candidate evidence
+  for refutation, reject multiple focus demands and conflicting unique rows.
+  SQL coverage metadata is not an independently authenticated coverage proof.
+- `cdad5988`, `35172c5a`, `ac583ee3`: original accepted document-derived
+  witness retraction is wired to the native CLI. A real serializable SQL
+  transaction calls migration-073 retraction, deletes stale supported Level-3
+  dependencies of that exact witness, refreshes migration-086 support, and checks
+  immutable Level-1 and unaffected logical Level-3 snapshots. The rollback probe
+  never commits. The original SQL refresh is document-scoped, so physical
+  selective retraction/complexity is still unproved. No new witness is admitted.
+- `1db45d5b`: read original producer H9 target occurrence and quality-gated
+  entity views, exact current witness/constraint and persisted Level-3 provenance.
+  Observed SQL facts are kept separate from acceptance flags.
+
+Lean PR #112 `7faa9ef0`, `1131881d`: formal source models now bind the
+selected numeric object to the unique typed survivor, prove a second live typed
+key defeats uniqueness, model atomic dirty-owner rollback and selective witness
+withdrawal, and charge canonical dirty-owner reduction cost. These proofs are
+source-written, not kernel-checked; SQL/Rust correspondence remains unpaid.
+
+**Critical outstanding source-owner obligation:** migration 135 defines H9
+target occurrence as a producer-licensed semantic target inside the demand's
+source region. An antecedent in a different sentence is NOT automatically that
+occurrence. Preserve trigger/evidence/target distinction. Migration 180 provides
+generic anaphor source demand, not a covered actor universe or original unique
+identity witness. Do not mark coverage closed from a nonempty string, a capped
+planner, repeated surname, H9 label or the existing scoped P0-B answer.
+
+P0-A/B remain accepted. P0-C/D remain OPEN: actual complete typed binding and
+owner-issued coverage, selected identity admission, full strict parser/object/
+factor parity, full Unicode normalization, original H9 producer semantics,
+actual compile/Lean/PG acceptance, crash/resume and physical work measurements.
+No source-written change licenses external QID, historical truth or the stopped
+Python compatibility path. No operator handoff until the complete implementation
+and formalization are ready. F0–F5 remain unpaid; the retraction path is not
+accepted merely because a CLI command exists.
+
+
+
 ### Controlling P0 status — 24 November 2026
 
 ### Native P0-C/D source-to-numeric Rust integration — actual frontier
