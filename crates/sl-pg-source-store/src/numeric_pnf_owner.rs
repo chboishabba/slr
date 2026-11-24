@@ -58,6 +58,8 @@ pub struct NumericOwnerRuntime {
     owners:BTreeMap<NumericOwnerKey,BTreeSet<String>>,
     observations:BTreeSet<String>,
     dependencies:BTreeSet<String>,
+    external_dependencies:BTreeSet<String>,
+    factor_producers:BTreeMap<String,BTreeSet<NumericOwnerKey>>,
     observation_reverse:BTreeMap<String,BTreeSet<NumericOwnerKey>>,
     dependency_reverse:BTreeMap<String,BTreeSet<NumericOwnerKey>>,
     dirty:BTreeSet<NumericOwnerKey>,
@@ -73,10 +75,32 @@ impl NumericOwnerRuntime {
         Ok(Self{
             manifest,proposals:BTreeMap::new(),
             owners:BTreeMap::new(),observations:BTreeSet::new(),
-            dependencies:BTreeSet::new(),observation_reverse:BTreeMap::new(),
+            dependencies:BTreeSet::new(),external_dependencies:BTreeSet::new(),
+            factor_producers:BTreeMap::new(),observation_reverse:BTreeMap::new(),
             dependency_reverse:BTreeMap::new(),dirty:BTreeSet::new(),
             reduced:BTreeMap::new(),epoch:0,
         })
+    }
+
+    /// Conservative reverse-graph invalidation. Even a still-present old
+    /// factor must not allow a downstream consumer to appear current while
+    /// its producer is dirty. Propagation is only over indexed edges.
+    fn mark_dirty_reachable(&mut self,start:Vec<NumericOwnerKey>){
+        let mut pending=start;
+        let mut reached=BTreeSet::new();
+        while let Some(owner)=pending.pop(){
+            if !reached.insert(owner.clone()){continue;}
+            self.dirty.insert(owner.clone());
+            if let Some(old)=self.reduced.get(&owner){
+                for factor in &old.factors{
+                    if let Some(id)=factor.get("factor_ref").and_then(Value::as_str){
+                        if let Some(owners)=self.dependency_reverse.get(id){
+                            pending.extend(owners.iter().cloned());
+                        }
+                    }
+                }
+            }
+        }
     }
 
     pub fn manifest(&self)->&NativeManifest{&self.manifest}
@@ -114,7 +138,7 @@ impl NumericOwnerRuntime {
         }
         self.proposals.insert(ref_id.clone(),p);
         self.owners.entry(owner.clone()).or_default().insert(ref_id);
-        self.dirty.insert(owner);
+        self.mark_dirty_reachable(vec![owner]);
         self.epoch+=1;
         Ok(())
     }
@@ -170,7 +194,7 @@ impl NumericOwnerRuntime {
                 }
             }
         }
-        self.dirty.insert(owner);
+        self.mark_dirty_reachable(vec![owner]);
         self.epoch+=1;
         Ok(true)
     }
@@ -179,20 +203,27 @@ impl NumericOwnerRuntime {
         let changed=if yes{self.observations.insert(id.into())}
                     else{self.observations.remove(id)};
         if changed{
-            if let Some(owners)=self.observation_reverse.get(id){
-                self.dirty.extend(owners.iter().cloned());
-            }
+            let owners=self.observation_reverse.get(id)
+                .cloned().unwrap_or_default().into_iter().collect();
+            self.mark_dirty_reachable(owners);
             self.epoch+=1;
         }
     }
 
+    /// External factor availability and locally produced factors are
+    /// independent origins. Removing one producer must not remove a factor
+    /// still supported by another original producer.
     pub fn set_dependency_available(&mut self,id:&str,yes:bool){
-        let changed=if yes{self.dependencies.insert(id.into())}
+        if yes{self.external_dependencies.insert(id.into());}
+        else{self.external_dependencies.remove(id);}
+        let available=self.external_dependencies.contains(id)
+            ||self.factor_producers.get(id).is_some_and(|owners|!owners.is_empty());
+        let changed=if available{self.dependencies.insert(id.into())}
                     else{self.dependencies.remove(id)};
         if changed{
-            if let Some(owners)=self.dependency_reverse.get(id){
-                self.dirty.extend(owners.iter().cloned());
-            }
+            let owners=self.dependency_reverse.get(id)
+                .cloned().unwrap_or_default().into_iter().collect();
+            self.mark_dirty_reachable(owners);
             self.epoch+=1;
         }
     }
@@ -241,11 +272,29 @@ impl NumericOwnerRuntime {
             let new_factors=next.factors.iter()
                 .filter_map(|v|v.get("factor_ref").and_then(Value::as_str))
                 .map(str::to_owned).collect::<BTreeSet<_>>();
-            for changed in old_factors.symmetric_difference(&new_factors){
-                if let Some(affected)=self.dependency_reverse.get(changed) {
-                    self.dirty.extend(affected.iter().cloned());
+            let mut affected=Vec::new();
+            for id in old_factors.difference(&new_factors){
+                if let Some(owners)=self.factor_producers.get_mut(id){
+                    owners.remove(&owner);
+                    if owners.is_empty(){self.factor_producers.remove(id);}
                 }
             }
+            for id in new_factors.difference(&old_factors){
+                self.factor_producers.entry(id.clone()).or_default()
+                    .insert(owner.clone());
+            }
+            for id in old_factors.symmetric_difference(&new_factors){
+                let live=self.external_dependencies.contains(id)
+                    ||self.factor_producers.contains_key(id);
+                let changed=if live{self.dependencies.insert(id.clone())}
+                    else{self.dependencies.remove(id)};
+                if changed{
+                    if let Some(owners)=self.dependency_reverse.get(id) {
+                        affected.extend(owners.iter().cloned());
+                    }
+                }
+            }
+            self.mark_dirty_reachable(affected);
         }
         let digest=self.current_state_ref()?;
         Ok(NumericOwnerWorkReceipt{
