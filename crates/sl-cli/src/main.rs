@@ -11,6 +11,7 @@ mod waltons_live;
 mod pnf_candidate;
 mod pnf_db_checked;
 mod native_antecedent_review;
+mod numeric_pnf_native_cli;
 mod timeline_candidates;
 
 use std::env;
@@ -31,6 +32,9 @@ USAGE:
   sensiblaw native-antecedent-review derive REVIEW_ITEM_REF [PARSER_RUN_REF]
   sensiblaw native-antecedent-review answer REVIEW_ITEM_REF [PARSER_RUN_REF]
   sensiblaw native-antecedent-review replay REVIEW_ITEM_REF ANSWER.json [PARSER_RUN_REF]
+  sensiblaw numeric-pnf-native inspect ORIGINAL_SOURCE_REV ORIGINAL_SLR_PARSER_RUN
+  sensiblaw numeric-pnf-native plan ORIGINAL_SOURCE_REV ORIGINAL_SLR_PARSER_RUN
+  sensiblaw numeric-pnf-native compile ORIGINAL_SOURCE_REV ORIGINAL_SLR_PARSER_RUN MAX_SENTENCES --commit
   sensiblaw timeline-candidates EVENT_REF
   sensiblaw legal-follow case acquire --citation '[YYYY] COURT N' [options]
   sensiblaw legal-follow cullen pnf --operator-opt-in [--output-dir PATH] [--spacy-model MODEL]
@@ -199,6 +203,9 @@ fn run() -> Result<(), String> {
         }
         [command, rest @ ..] if command == "native-antecedent-review" => {
             native_antecedent_review::run(rest)
+        }
+        [command, rest @ ..] if command == "numeric-pnf-native" => {
+            numeric_pnf_native_cli::run(rest)
         }
         [command, rest @ ..] if command == "timeline-candidates" => {
             timeline_candidates::run(rest)
