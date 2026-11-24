@@ -4,9 +4,10 @@
 //! checked before the first persistent insert, and failure rolls back.
 //! Original authority: numeric_sentence_admission.py and its SQL migrations.
 
-use crate::{NativeManifest,NativeSentenceClosure,
+use crate::{NativeManifest,NativeSentenceClosure,CandidateFibre,
     validate_native_numeric_sentence_closure,NumericOperatorError,
     NumericDigestValue,strict_numeric_digest};
+use crate::numeric_pnf_native::VerifiedSqlCandidateRefutation;
 use postgres::{Client,NoTls};
 use sha2::{Digest,Sha256};
 use std::collections::BTreeSet;
@@ -28,6 +29,8 @@ pub enum NumericSqlError{
     TooLarge,
     #[error("numeric publication row identity could not be reconstructed")]
     MissingPublication,
+    #[error("original numeric candidate evidence/coverage is invalid")]
+    InvalidCandidateEvidence,
 }
 
 #[derive(Debug,Clone)]
@@ -549,4 +552,133 @@ pub fn publish_original_numeric_sentence(
         demand_count:demand_ids.len(),
         original_semantic_identity_paid:false,original_level_three_paid:false,
     })
+}
+
+
+/// Read-only, original-DB-authorized candidate fibre. Neither this loader nor
+/// CandidateFibre may insert a witness, close H9, or infer an external QID.
+/// Original migration 086 is the sole semantic admissibility owner.
+pub fn read_original_numeric_candidate_fibre(
+    database_url:&str,
+    numeric_run_ref:&str,
+    document_ref:&str,
+    demand_id:i64,
+    target_kind:i16,
+)->Result<CandidateFibre,NumericSqlError>{
+    if numeric_run_ref.is_empty()||document_ref.is_empty()
+        ||demand_id<=0||target_kind<=0{
+        return Err(NumericSqlError::InvalidCandidateEvidence);
+    }
+    let mut db=Client::connect(database_url,NoTls)?;
+    let mut tx=db.transaction()?;
+    tx.batch_execute("SET TRANSACTION READ ONLY; SET LOCAL statement_timeout='90000ms'")?;
+    let demand=tx.query(
+        "SELECT demand.demand_id,demand.expected_target_kind
+         FROM execution.semantic_pnf_demand AS demand
+         JOIN execution.semantic_pnf_region AS region
+           ON region.region_id=demand.source_region_id
+         WHERE demand.demand_id=$1
+           AND region.run_ref=$2 AND region.document_ref=$3",
+        &[&demand_id,&numeric_run_ref,&document_ref])?;
+    if demand.len()!=1{return Err(NumericSqlError::InvalidCandidateEvidence);}
+    let expected_kind:i16=demand[0].get(1);
+    if expected_kind!=target_kind{
+        return Err(NumericSqlError::InvalidCandidateEvidence);
+    }
+    let mut fibre=CandidateFibre::fresh_for_original_demand(
+        demand_id as u64,target_kind
+    );
+    let candidates=tx.query(
+        "SELECT demand_id,target_kind,target_id,
+                represented_possible,active,execution_residual,
+                refuted,admissible,admissibility_evidence_id
+         FROM execution.semantic_pnf_candidate_state_v1
+         WHERE demand_id=$1 AND target_kind=$2
+         ORDER BY target_id",
+        &[&demand_id,&target_kind])?;
+    for row in candidates{
+        let source_id:i64=row.get(2);
+        if row.get::<_,i64>(0)!=demand_id
+            ||row.get::<_,i16>(1)!=target_kind||source_id<=0
+            ||!row.get::<_,bool>(3) {
+            return Err(NumericSqlError::InvalidCandidateEvidence);
+        }
+        let candidate=source_id as u64;
+        fibre.represent(candidate);
+        let active:bool=row.get(4);
+        let execution_residual:bool=row.get(5);
+        let refuted:bool=row.get(6);
+        let admissible:bool=row.get(7);
+        let evidence_id:Option<i64>=row.get(8);
+        if execution_residual||!active{
+            fibre.budget_prune(candidate);
+        }
+        if refuted{
+            if admissible{return Err(NumericSqlError::InvalidCandidateEvidence);}
+            let id=evidence_id.ok_or(NumericSqlError::InvalidCandidateEvidence)?;
+            if id<=0{return Err(NumericSqlError::InvalidCandidateEvidence);}
+            let verified=tx.query(
+                "SELECT evidence.evidence_id,evidence.evidence_ref
+                 FROM execution.semantic_pnf_candidate_latest_admissibility AS last
+                 JOIN execution.semantic_pnf_candidate_evidence AS evidence
+                   ON evidence.evidence_id=last.evidence_id
+                  AND evidence.demand_id=last.demand_id
+                  AND evidence.target_kind=last.target_kind
+                  AND evidence.target_id=last.target_id
+                 WHERE last.demand_id=$1 AND last.target_kind=$2
+                   AND last.target_id=$3 AND last.event_kind=1
+                   AND last.evidence_id=$4",
+                &[&demand_id,&target_kind,&source_id,&id])?;
+            if verified.len()!=1 {
+                return Err(NumericSqlError::InvalidCandidateEvidence);
+            }
+            let proof=VerifiedSqlCandidateRefutation{
+                demand_id:demand_id as u64,
+                candidate_id:candidate,
+                evidence_id:id as u64,
+                evidence_ref:verified[0].get(1),
+            };
+            fibre.refute_with_original_sql_evidence(&proof)
+                .map_err(|_|NumericSqlError::InvalidCandidateEvidence)?;
+        }else if !admissible{
+            return Err(NumericSqlError::InvalidCandidateEvidence);
+        }
+    }
+    let horizons=tx.query(
+        "SELECT target_id,signed_residual
+         FROM execution.semantic_pnf_candidate_evidence_horizon_v1
+         WHERE demand_id=$1 AND target_kind=$2 AND horizon=9",
+        &[&demand_id,&target_kind])?;
+    for row in horizons{
+        let id:i64=row.get(0);
+        let signed:i64=row.get(1);
+        if id<=0{return Err(NumericSqlError::InvalidCandidateEvidence);}
+        fibre.record_original_signed_residual(id as u64,signed)
+            .map_err(|_|NumericSqlError::InvalidCandidateEvidence)?;
+    }
+    let world=tx.query(
+        "SELECT outside_model_possible,coverage_witness_ref,
+                represented_residual_count,resource_limited
+         FROM execution.semantic_pnf_demand_open_world_state
+         WHERE demand_id=$1",
+        &[&demand_id])?;
+    if world.len()!=1{return Err(NumericSqlError::InvalidCandidateEvidence);}
+    let outside:bool=world[0].get(0);
+    let coverage:Option<String>=world[0].get(1);
+    let residual:i64=world[0].get(2);
+    let limited:bool=world[0].get(3);
+    if residual<0{return Err(NumericSqlError::InvalidCandidateEvidence);}
+    if !outside{
+        if let Some(ref evidence)=coverage{
+            if !limited && residual==0{
+                fibre.close_with_original_sql_coverage(
+                    demand_id as u64,evidence,false,0
+                ).map_err(|_|NumericSqlError::InvalidCandidateEvidence)?;
+            }
+        }else{
+            return Err(NumericSqlError::InvalidCandidateEvidence);
+        }
+    }
+    tx.commit()?;
+    Ok(fibre)
 }
