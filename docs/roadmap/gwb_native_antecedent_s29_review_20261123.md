@@ -5,6 +5,18 @@
 
 ### Native Rust numeric-PNF port decision — formal first
 
+**Numeric producer result since initial P0-B:** the audit's 8/8
+contract tests passed, and a read-only complete 48/48-partition
+numeric run was found to be **a different source**. Its original
+he/Bush object was missing; the exact 7ff2ec8f… source exists in
+SLR with complete native parser runs but has no corresponding
+numeric-PNF run or document. A speculative context/offset
+crosswalk to the unrelated 1.39 MB corpus failed. The later
+broad Python compilation was stopped without a numeric object,
+typed unique identity, or Level-3 admission. Next prove
+manifestation identity before building native numeric PNF.
+
+
 The P0-B source-bound he→Bush policy interpretation and source
 consumer remain accepted. The long SensibLaw Python numeric
 tranche was stopped. Its invocation was the **historical**
@@ -55,14 +67,12 @@ source replay, `GWB_SOURCE_LOCAL_CONSUMER_KERNEL_OK`,
 17/17 contract tests and 18/18 live adversarial controls;
 `GWB_SOURCE_LOCAL_CONSUMER_DELTA_OK`.
 
-**Operator made crucial local corrections not yet pushed:**
-the previous published delta runner called nonexistent SLR
-`answer/replay` CLI commands, and the Lean Boolean proof
-needed repair. DO NOT treat the old remote runner/Lean as the
-verified versions, nor overwrite their unpushed corrections.
-This P0-B result is locally accepted, not independently
-audited from committed artifacts. It pays a policy-scoped
-source answer and a read-only CURRENT replay, **not** an
+**Operator corrections and acceptance are now pushed** to
+DASHI PR #112 commit `385b32fbd`: the original runner's
+nonexistent SLR `answer/replay` calls were corrected, as was
+the Lean Boolean proof, and the successful consumer logs and
+tests were committed. This pays a policy-scoped source
+answer and a read-only CURRENT replay, **not** an
 admitted original numeric identity or a Level-3 DB mutation.
 
 The next single P0-C/D maximum cut is WELD-01–05 in the
@@ -97,7 +107,8 @@ are **historical source-replay receipts**, not the next work queue.
 the native source-local `he→Bush` interpretation with two
 supporting original sentences, Lean check and 14/14 adversarial
 controls. S29 `Pending` is not a blocker for linguistic inference.
-The local current run's artifacts have not been committed/pushed.
+The later P0-B run results, script fixes and logs were pushed in
+DASHI commit `385b32fbd`.
 This pays a *bounded source-relative interpretation*, not an
 original numeric PNF `resolved_unique` actor or a QID.
 
