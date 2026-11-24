@@ -43,6 +43,7 @@ mod numeric_pnf_native;
 mod numeric_pnf_operator;
 mod numeric_pnf_source_bridge;
 mod numeric_pnf_owner;
+mod numeric_pnf_sql;
 mod statement_pnf_spine;
 mod generic_source_compiler;
 mod source_candidate_persistence;
@@ -245,6 +246,10 @@ pub use reviewed_pnf::{
     ReviewedPnfMaterializationError, ReviewedPnfMaterializationReceipt, ReviewedPnfRevision,
     ReviewedPnfValidationError,
 };
+pub use numeric_pnf_sql::{
+    publish_original_numeric_sentence, NumericMdlWeights,
+    NumericPublishedSentence, NumericSentenceLease, NumericSqlError,
+};
 pub use numeric_pnf_owner::{
     NumericOwnerKey, NumericOwnerRuntime,
     NumericOwnerWorkReceipt, NumericWorkBudget,
@@ -256,6 +261,7 @@ pub use numeric_pnf_source_bridge::{
 };
 pub use numeric_pnf_operator::{
     compose_numeric_sentence_native, strict_numeric_digest,
+    validate_native_numeric_sentence_closure,
     NativeDemand, NativeFactor, NativeObject, NativeSentenceClosure,
     NativeSentenceMeasure, NativeSlot, NumericDigestValue,
     NumericOperatorError, NumericOperatorLexicon, NumericToken,
