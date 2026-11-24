@@ -53,6 +53,9 @@ pub struct NumericDemandWorldStatus{
     pub resource_limited:bool,
     pub represented_residual_count:i64,
     pub frontier_unique_object_count:i64,
+    pub selected_live_object_id:Option<i64>,
+    pub live_candidate_count:i64,
+    pub invalid_refutation_count:i64,
     pub represented_candidate_count:i64,
     pub active_candidate_count:i64,
     pub refuted_candidate_count:i64,
@@ -205,25 +208,77 @@ pub fn audit_original_numeric_identity_for_source_answer(
                     count(*) FILTER (WHERE active)::bigint,
                     count(*) FILTER (WHERE refuted)::bigint
              FROM execution.semantic_pnf_candidate_state_v1
-             WHERE demand_id=$1 AND target_kind=1",
+             WHERE demand_id=$1",
             &[demand_id])?;
         let represented:i64=counts.get(0);
         let active:i64=counts.get(1);
         let refuted:i64=counts.get(2);
+        // All represented target kinds count. A deferred target is still
+        // possible, and a refutation is valid only with same-candidate evidence.
+        let live=tx.query(
+            "SELECT state.target_kind,state.target_id
+             FROM execution.semantic_pnf_candidate_state_v1 state
+             WHERE state.demand_id=$1 AND NOT state.refuted
+             ORDER BY state.target_kind,state.target_id",
+            &[demand_id])?;
+        let invalid_refutation:i64=tx.query_one(
+            "SELECT count(*)::bigint
+             FROM execution.semantic_pnf_candidate_state_v1 state
+             LEFT JOIN execution.semantic_pnf_candidate_evidence evidence
+               ON evidence.evidence_id=state.admissibility_evidence_id
+              AND evidence.demand_id=state.demand_id
+              AND evidence.target_kind=state.target_kind
+              AND evidence.target_id=state.target_id
+             WHERE state.demand_id=$1 AND state.refuted
+               AND evidence.evidence_id IS NULL",
+            &[demand_id])?.get(0);
+        let live_object=if live.len()==1&&live[0].get::<_,i16>(0)==1{
+            Some(live[0].get::<_,i64>(1))
+        }else{None};
+        // Do not compare independent counts. Require the SAME object in
+        // every unique proof row, within the same immutable source.
+        let selected_live_object=if let Some(target)=live_object{
+            let matched:bool=tx.query_one(
+                "SELECT EXISTS (
+                    SELECT 1 FROM execution.semantic_pnf_frontier_resolution resolution
+                    JOIN execution.semantic_pnf_object object
+                      ON object.object_id=resolution.selected_target_id
+                    JOIN execution.semantic_pnf_region region ON region.region_id=object.region_id
+                    WHERE resolution.demand_id=$1 AND resolution.outcome_state=2
+                      AND resolution.selected_target_kind=1 AND resolution.candidate_count=1
+                      AND resolution.selected_target_id=$2 AND region.run_ref=$3
+                      AND region.document_ref=$4
+                 ) AND NOT EXISTS (
+                    SELECT 1 FROM execution.semantic_pnf_frontier_resolution resolution
+                    WHERE resolution.demand_id=$1 AND resolution.outcome_state=2
+                      AND (resolution.selected_target_kind IS DISTINCT FROM 1
+                        OR resolution.selected_target_id IS DISTINCT FROM $2
+                        OR resolution.candidate_count IS DISTINCT FROM 1)
+                 )",
+                &[demand_id,&target,&numeric_run_ref,&answer.source_document_ref])?.get(0);
+            if matched&&target!=source_id{Some(target)}else{None}
+        }else{None};
         world.push(NumericDemandWorldStatus{
             demand_id:*demand_id,source_object_id:source_id,
             outside_model_possible:outside,coverage_witness_ref:coverage.clone(),
             resource_limited:limited,represented_residual_count:residual,
             frontier_unique_object_count:unique_count,
+            selected_live_object_id:selected_live_object,
+            live_candidate_count:live.len() as i64,
+            invalid_refutation_count:invalid_refutation,
             represented_candidate_count:represented,
             active_candidate_count:active,refuted_candidate_count:refuted,
         });
         if !outside&&coverage.as_deref().is_some_and(|s|!s.is_empty())
             &&!limited&&residual==0&&unique_count==1
-            &&represented-refuted==1 {
+            &&represented-refuted==1&&invalid_refutation==0
+            &&selected_live_object.is_some() {
             actual_unique=true;
         }
     }
+    // Multiple demands for the same token are an unresolved source-object
+    // ambiguity; an existential success cannot close the endpoint.
+    actual_unique=actual_unique&&ids.len()==1&&world.len()==1;
     // An original frontier/coverage claim is not the same as an accepted
     // identity witness and source-object-supported Level-3 derivation.
     // Keep these unpaid until the exact document-derived witness and
