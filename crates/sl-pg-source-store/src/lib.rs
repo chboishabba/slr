@@ -40,6 +40,7 @@ mod native_antecedent_frontier;
 mod native_antecedent_named_topic;
 mod native_source_local_consumer;
 mod numeric_pnf_native;
+mod numeric_pnf_operator;
 mod statement_pnf_spine;
 mod generic_source_compiler;
 mod source_candidate_persistence;
@@ -241,6 +242,12 @@ pub use reviewed_pnf::{
     materialize_reviewed_pnf_revision, validate_reviewed_pnf_revision,
     ReviewedPnfMaterializationError, ReviewedPnfMaterializationReceipt, ReviewedPnfRevision,
     ReviewedPnfValidationError,
+};
+pub use numeric_pnf_operator::{
+    compose_numeric_sentence_native, strict_numeric_digest,
+    NativeDemand, NativeFactor, NativeObject, NativeSentenceClosure,
+    NativeSentenceMeasure, NativeSlot, NumericDigestValue,
+    NumericOperatorError, NumericOperatorLexicon, NumericToken,
 };
 pub use numeric_pnf_native::{
     reduce_canonical, typed_canonical_sha256, CandidateFibre, DependencyMode,
