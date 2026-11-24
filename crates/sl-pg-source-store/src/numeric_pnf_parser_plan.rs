@@ -52,6 +52,19 @@ pub struct NativeNumericParserTokenPlan {
 }
 
 #[derive(Debug,Clone,PartialEq,Eq,Serialize,Deserialize)]
+pub struct NativeNumericParserEntityPlan {
+    pub original_compilation_key:String,
+    pub original_entity_ordinal:i32,
+    pub entity_ref:String,
+    pub entity_digest:[u8;32],
+    pub start_char:i64,
+    pub end_char:i64,
+    pub surface:String,
+    pub label_ref:String,
+    pub source_candidate_only:bool,
+    pub creates_semantic_authority:bool,
+}
+#[derive(Debug,Clone,PartialEq,Eq,Serialize,Deserialize)]
 pub struct NativeNumericParserSentencePlan {
     pub original_compilation_key:String,
     pub original_region_ref:String,
@@ -60,6 +73,7 @@ pub struct NativeNumericParserSentencePlan {
     pub start_char:i64,
     pub end_char:i64,
     pub tokens:Vec<NativeNumericParserTokenPlan>,
+    pub entities:Vec<NativeNumericParserEntityPlan>,
 }
 
 #[derive(Debug,Clone,PartialEq,Eq,Serialize,Deserialize)]
@@ -146,11 +160,28 @@ pub fn plan_original_native_numeric_parser(
                 creates_semantic_authority:false,
             });
         }
+        let mut entities=Vec::with_capacity(region.entities.len());
+        for entity in &region.entities{
+            let digest=strict_numeric_digest(vec![
+                bytes(numeric_run_ref),bytes(&source.manifest.document_ref),
+                int(entity.start_char),int(entity.end_char),int(8),
+            ]);
+            entities.push(NativeNumericParserEntityPlan{
+                original_compilation_key:region.compilation_key.clone(),
+                original_entity_ordinal:entity.original_entity_ordinal,
+                entity_ref:prefixed_ref("parser-entity:",&digest),
+                entity_digest:digest,start_char:entity.start_char,
+                end_char:entity.end_char,surface:entity.surface.clone(),
+                label_ref:entity.label_ref.clone(),
+                source_candidate_only:true,creates_semantic_authority:false,
+            });
+        }
+        entities.sort_by_key(|e|(e.start_char,e.end_char,e.original_entity_ordinal));
         sentences.push(NativeNumericParserSentencePlan{
             original_compilation_key:region.compilation_key.clone(),
             original_region_ref:region.region_ref.clone(),
             sentence_ref,sentence_digest,start_char:region.start_char,
-            end_char:region.end_char,tokens:token_rows,
+            end_char:region.end_char,tokens:token_rows,entities,
         });
     }
     let mut residuals=source.residuals.clone();
@@ -197,7 +228,7 @@ mod tests {
                     lemma:"he".into(),pos:"PRON".into(),morph_json:None,
                     head_ordinal:Some(0),dependency_ref:"ROOT".into(),
                     original_tag_unavailable:true,semantic_admission_paid:false,
-                }],full_numeric_tag_capability_available:false,
+                }],entities:vec![],full_numeric_tag_capability_available:false,
             }],original_region_count:1,original_token_count:1,
             full_document_coverage_paid:true,residuals:vec![],
             typed_identity_paid:false,external_qid_paid:false,
