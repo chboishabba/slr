@@ -148,6 +148,28 @@ impl NumericOwnerRuntime {
             keys.remove(ref_id);
             if keys.is_empty(){self.owners.remove(&owner);}
         }
+        // One owner may have several proposals mentioning the same input.
+        // Rebuild the reverse membership from the remaining proposals;
+        // removing a single proposal must NOT forget another live consumer.
+        if let Some(refs)=self.owners.get(&owner) {
+            for ref_id in refs {
+                let kept=self.proposals.get(ref_id).unwrap();
+                for (field,observation) in [
+                    ("input_observation_refs",true),
+                    ("dependency_factor_refs",false),
+                ] {
+                    if let Some(ids)=kept.get(field).and_then(Value::as_array) {
+                        for id in ids {
+                            if let Some(id)=id.as_str() {
+                                let table=if observation {&mut self.observation_reverse}
+                                    else {&mut self.dependency_reverse};
+                                table.entry(id.into()).or_default().insert(owner.clone());
+                            }
+                        }
+                    }
+                }
+            }
+        }
         self.dirty.insert(owner);
         self.epoch+=1;
         Ok(true)
@@ -356,6 +378,24 @@ mod tests{
             max_owners:10,max_proposals_scanned:10}).unwrap();
         assert_eq!(after.owners_reduced,1);
         assert_eq!(after.proposals_scanned,1);
+    }
+
+    #[test]
+    fn removal_preserves_remaining_same_owner_reverse_edges(){
+        let mut runtime=NumericOwnerRuntime::new(manifest(),b"abc").unwrap();
+        let a=make_proposal("c","Bush","shared");
+        let b=make_proposal("c","Reagan","shared");
+        let id=a["proposal_ref"].as_str().unwrap().to_owned();
+        runtime.ingest_proposal(a).unwrap();
+        runtime.ingest_proposal(b).unwrap();
+        runtime.set_observation_available("shared",true);
+        runtime.rebuild_dirty(NumericWorkBudget{
+            max_owners:10,max_proposals_scanned:10}).unwrap();
+        runtime.withdraw_proposal(&id).unwrap();
+        runtime.rebuild_dirty(NumericWorkBudget{
+            max_owners:10,max_proposals_scanned:10}).unwrap();
+        runtime.set_observation_available("shared",false);
+        assert_eq!(runtime.pending_owner_count(),1);
     }
 
     #[test]
