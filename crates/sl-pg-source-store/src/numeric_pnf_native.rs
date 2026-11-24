@@ -572,7 +572,7 @@ pub struct CandidateFibre {
     refuted_by_evidence: BTreeMap<u64, String>,
     outside_model_possible: bool,
     coverage_witness_ref: Option<String>,
-    signed_residuals: BTreeMap<u64, i64>,
+    signed_residuals: BTreeMap<(u64, i16), i64>,
 }
 
 impl CandidateFibre {
@@ -648,16 +648,17 @@ impl CandidateFibre {
     }
 
     pub(crate) fn record_original_signed_residual(
-        &mut self,id:u64,residual:i64
+        &mut self,id:u64,horizon:i16,residual:i64
     ) -> Result<(),NumericPnfError>{
-        if !self.represented.contains(&id){
-            return Err(NumericPnfError::InvalidField("original_signed_residual_target"));
+        if !self.represented.contains(&id)
+            || ![3i16,6i16,9i16].contains(&horizon){
+            return Err(NumericPnfError::InvalidField("original_signed_residual_horizon"));
         }
-        self.signed_residuals.insert(id,residual);
+        self.signed_residuals.insert((id,horizon),residual);
         Ok(())
     }
-    pub fn signed_residual(&self,id:u64)->Option<i64>{
-        self.signed_residuals.get(&id).copied()
+    pub fn signed_residual(&self,id:u64,horizon:i16)->Option<i64>{
+        self.signed_residuals.get(&(id,horizon)).copied()
     }
 
     pub fn unique_admissible(&self) -> Option<u64> {
