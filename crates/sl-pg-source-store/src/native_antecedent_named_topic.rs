@@ -413,6 +413,25 @@ mod tests {
         assert_eq!(d.status,"AMBIGUOUS_NAMED_ACTORS");
         assert!(d.source_local_answer.is_none());
     }
+    #[test] fn a_nearer_nonperson_name_never_outvotes_repeated_person_topic() {
+        let (mut r,mut f)=fixture();
+        r.before[1].literal="Place".into();
+        let mut n=f.nominations[0].clone();
+        n.nomination_ref="nearer:place".into();
+        n.parser_observation_ref="reg:20:token:3".into();
+        n.original_statement_ref="stmt:20".into();
+        n.original_region_ref="reg:20".into();
+        n.original_start_char=5;
+        n.original_end_char=10;
+        n.surface="Place".into();
+        n.observation_kind="parser_token";
+        n.parser_pos_or_label="PROPN".into();
+        f.nominations.push(n);
+        f.parser_nomination_count=f.nominations.len();
+        let d=derive_native_named_topic(&r,&f).unwrap();
+        assert_eq!(d.source_local_answer.as_deref(),Some("Bush"));
+        assert_eq!(d.distinct_named_person_groups,1);
+    }
     #[test] fn quote_boundary_blocks_automatic_topic_continuity() {
         let (mut r,f)=fixture();
         r.before[1].literal="\"text".into();
