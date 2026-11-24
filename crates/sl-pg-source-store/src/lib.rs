@@ -39,6 +39,7 @@ mod native_antecedent_review;
 mod native_antecedent_frontier;
 mod native_antecedent_named_topic;
 mod native_source_local_consumer;
+mod numeric_pnf_native;
 mod statement_pnf_spine;
 mod generic_source_compiler;
 mod source_candidate_persistence;
@@ -240,6 +241,10 @@ pub use reviewed_pnf::{
     materialize_reviewed_pnf_revision, validate_reviewed_pnf_revision,
     ReviewedPnfMaterializationError, ReviewedPnfMaterializationReceipt, ReviewedPnfRevision,
     ReviewedPnfValidationError,
+};
+pub use numeric_pnf_native::{
+    reduce_canonical, typed_canonical_sha256, CandidateFibre, DependencyMode,
+    NativeManifest, NativeReduction, NativeWorkCounter, NumericPnfError,
 };
 pub use native_source_local_consumer::{
     compile_native_source_local_answer, evaluate_native_source_local_replay,
