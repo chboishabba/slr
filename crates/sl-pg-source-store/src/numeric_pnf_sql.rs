@@ -645,15 +645,18 @@ pub fn read_original_numeric_candidate_fibre(
         }
     }
     let horizons=tx.query(
-        "SELECT target_id,signed_residual
+        "SELECT target_id,horizon,signed_residual
          FROM execution.semantic_pnf_candidate_evidence_horizon_v1
-         WHERE demand_id=$1 AND target_kind=$2 AND horizon=9",
+         WHERE demand_id=$1 AND target_kind=$2
+           AND horizon IN (3,6,9)
+         ORDER BY target_id,horizon",
         &[&demand_id,&target_kind])?;
     for row in horizons{
         let id:i64=row.get(0);
-        let signed:i64=row.get(1);
+        let horizon:i16=row.get(1);
+        let signed:i64=row.get(2);
         if id<=0{return Err(NumericSqlError::InvalidCandidateEvidence);}
-        fibre.record_original_signed_residual(id as u64,signed)
+        fibre.record_original_signed_residual(id as u64,horizon,signed)
             .map_err(|_|NumericSqlError::InvalidCandidateEvidence)?;
     }
     let world=tx.query(
