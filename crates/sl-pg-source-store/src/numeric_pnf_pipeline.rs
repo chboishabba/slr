@@ -294,7 +294,7 @@ pub fn run_native_numeric_exact_source_slice(
         let closure:NativeSentenceClosure=
             compose_numeric_sentence_native(lease.region_id,&tokens,&lex)?;
         publish_original_numeric_sentence(
-            numeric_database_url,&original.manifest,
+            numeric_database_url,&original.manifest,&run_ref,
             &canonical,&lease,&closure,&mdl
         )?;
         completed+=1;
