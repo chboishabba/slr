@@ -67,6 +67,47 @@ pub fn run(args: &[String]) -> Result<(), String> {
                 .map_err(|e|e.to_string())?);
             Ok(())
         }
+        [subcommand, review_item_ref] if subcommand == "derive" => {
+            let config=load_database_config(None).map_err(|e|e.to_string())?;
+            let runs=sensiblaw_pg_source_store::native_antecedent_parser_runs(
+                &config,review_item_ref,
+            ).map_err(|e|e.to_string())?;
+            let complete=runs.iter().filter(|r|
+                r.structurally_eligible_for_frontier).collect::<Vec<_>>();
+            if complete.len()!=1 {
+                return Err(format!(
+                    "native source requires exactly one complete original parser run, got {} (inspect 'runs', or provide explicit PARSER_RUN_REF)",
+                    complete.len()
+                ));
+            }
+            let review=sensiblaw_pg_source_store::inspect_native_antecedent_review(
+                &config,review_item_ref,
+            ).map_err(|e|e.to_string())?;
+            let frontier=sensiblaw_pg_source_store::native_antecedent_frontier(
+                &config,review_item_ref,&complete[0].parser_run_ref,
+            ).map_err(|e|e.to_string())?;
+            let answer=sensiblaw_pg_source_store::derive_native_named_topic(
+                &review,&frontier,
+            ).map_err(|e|e.to_string())?;
+            println!("{}",serde_json::to_string_pretty(&answer)
+                .map_err(|e|e.to_string())?);
+            Ok(())
+        }
+        [subcommand, review_item_ref, parser_run_ref] if subcommand == "derive" => {
+            let config=load_database_config(None).map_err(|e|e.to_string())?;
+            let review=sensiblaw_pg_source_store::inspect_native_antecedent_review(
+                &config,review_item_ref,
+            ).map_err(|e|e.to_string())?;
+            let frontier=sensiblaw_pg_source_store::native_antecedent_frontier(
+                &config,review_item_ref,parser_run_ref,
+            ).map_err(|e|e.to_string())?;
+            let answer=sensiblaw_pg_source_store::derive_native_named_topic(
+                &review,&frontier,
+            ).map_err(|e|e.to_string())?;
+            println!("{}",serde_json::to_string_pretty(&answer)
+                .map_err(|e|e.to_string())?);
+            Ok(())
+        }
         [subcommand, review_item_ref] if subcommand == "inspect" => {
             let config=load_database_config(None).map_err(|e|e.to_string())?;
             let packet=sensiblaw_pg_source_store::inspect_native_antecedent_review(
@@ -79,7 +120,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
         }
         _ => Err(
             "usage: sensiblaw native-antecedent-review \
-             <prepare ORIGINAL_C410_RECEIPT.json | inspect REVIEW_ITEM_REF | runs REVIEW_ITEM_REF | frontier REVIEW_ITEM_REF [PARSER_RUN_REF]>"
+             <prepare ORIGINAL_C410_RECEIPT.json | inspect REVIEW_ITEM_REF | runs REVIEW_ITEM_REF | frontier REVIEW_ITEM_REF [PARSER_RUN_REF] | derive REVIEW_ITEM_REF [PARSER_RUN_REF]>"
              .into(),
         ),
     }
@@ -95,5 +136,6 @@ mod tests {
         assert!(run(&["inspect".into(),"".into(),"extra".into()]).is_err());
         assert!(run(&["frontier".into(),"only-one-argument".into()]).is_err());
         assert!(run(&["runs".into(),"bad".into(),"extra".into()]).is_err());
+        assert!(run(&["derive".into(),"bad".into(),"extra".into(),"again".into()]).is_err());
     }
 }
