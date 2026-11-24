@@ -1,6 +1,41 @@
 # C4.11: source-native antecedent review on original SLR S29
 
 
+## Native binding execution handoff — 24 November
+
+SLR `9bdd6e94` + `7b658b22` extend the existing explicit `bind` CLI:
+bounded prior NOUN/PROPN single-token occurrence projection (not the full
+nominal span lattice), original m110 typed H6 discourse/temporal evidence
+producer on a dedicated demand-local consumer queue, original H3/H6/H9
+observations, original parser identity producer rollback probe, existing
+admitted class fibres and active cross-resource needs. The numeric source
+and original consumer receipt are checked; no Python compiler, no new schema
+or registry calls. Nominal head, transport, morphology and H6 counts are
+reported; partial coverage/identity remains unpaid. H6 work is not a claim
+of H3 completion. H6 may be zero if no original factor-role signature exists.
+
+Operator explicitly requested implementation followed by a workstation run.
+Use the existing configured DB URLs and exact original receipt coordinates:
+```sh
+git fetch origin feat/source-bound-parser-evidence-reopen
+git switch feat/source-bound-parser-evidence-reopen
+git merge --ff-only origin/feat/source-bound-parser-evidence-reopen
+cargo test -p sensiblaw-pg-source-store --lib numeric_pnf
+cargo test -p sensiblaw-cli numeric_pnf_native
+cargo run -p sensiblaw-cli -- numeric-pnf-native bind \
+  review-item:native-antecedent-candidate:sha256:25e927f12a0092fbed143669f6a0621fa004636d728074d576275b361da8f7d1 \
+  parser-run:sha256:56ea4c0a05c3beb97f05dfe447570c7d753f15d8b8bf76cb86145ca41f8f2d63 \
+  64 --commit
+```
+Re-run the same bounded command if nominal_heads_remaining or
+remaining_untransported_count is nonzero; do not restart broad Python.
+A zero count for these slices is not typed global coverage.
+Original identity admission and class-aware Level-3 remain outstanding;
+this is an integrated candidate/evidence run, not completion of P0-C/D.
+New source is not yet compiled or database-tested by the assistant.
+
+
+
 ## 24 November — restore the existing cross-resource identity/uncertainty spine
 
 **Corrective supersession:** occurrence-to-entity resolution and uncertainty
