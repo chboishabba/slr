@@ -380,7 +380,12 @@ pub fn persist_original_numeric_parser_plan(
     let mut by_scope=plan.sentences.iter().collect::<Vec<_>>();
     by_scope.sort_by_key(|s|(s.start_char,s.end_char));
     let mut last_end=0i64;
+    let mut original_ordinals=BTreeSet::new();
     for sentence in &by_scope{
+        if sentence.source_sentence_index>=plan.expected_total_sentence_regions
+            ||!original_ordinals.insert(sentence.source_sentence_index){
+            return Err(NumericParserStoreError::InvalidSentence);
+        }
         let st=usize::try_from(sentence.start_char)
             .map_err(|_|NumericParserStoreError::InvalidSentence)?;
         let en=usize::try_from(sentence.end_char)
@@ -559,7 +564,8 @@ pub fn persist_original_numeric_parser_plan(
     }
 
 
-    for (sequence,sentence) in by_scope.iter().enumerate(){
+    for sentence in &by_scope{
+        let sequence=sentence.source_sentence_index;
         let st=sentence.start_char as usize;
         let en=sentence.end_char as usize;
         let partition_ref=format!("slr-native-numeric-partition:sha256:{}",
