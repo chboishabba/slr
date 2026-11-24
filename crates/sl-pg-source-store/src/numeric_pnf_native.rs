@@ -90,6 +90,8 @@ pub enum NumericPnfError {
     ConflictingProposal,
     #[error("unknown/unchecked semantic reduction mode")]
     InvalidMode,
+    #[error("canonical owner would exceed bounded semantic comparison budget")]
+    SemanticWorkBudget,
 }
 
 fn prefixed_len(buf: &mut Vec<u8>, n: usize) {
@@ -483,6 +485,12 @@ pub fn reduce_canonical(
         for p in proposals {
             let mut target = None;
             for (index, occupied) in occupied_roles.iter().enumerate() {
+                // A highly conflicting single signature is capable of
+                // quadratic work even after bucket indexing. Abort the
+                // COMPLETE owner without admitting a partial group.
+                if work.candidate_group_comparisons>=4_000_000{
+                    return Err(NumericPnfError::SemanticWorkBudget);
+                }
                 work.candidate_group_comparisons += 1;
                 if compatible(occupied, &p.roles) {
                     target = Some(index);
