@@ -139,7 +139,7 @@ pub fn publish_original_numeric_sentence(
     if w.get::<_,i16>(0)!=2
         ||w.get::<_,String>(1)!=lease.lease_token
         ||w.get::<_,i64>(2)!=lease.lease_epoch
-        ||w.get::<_,String>(3)!=manifest.parser_run_ref
+        ||w.get::<_,String>(3)!=numeric_run_ref
         ||w.get::<_,String>(4)!=manifest.document_ref
         ||w.get::<_,i16>(7)!=1{
         return Err(NumericSqlError::LostLease);
@@ -437,7 +437,7 @@ pub fn publish_original_numeric_sentence(
         "INSERT INTO execution.semantic_pnf_interface_export
          (interface_id,export_kind,target_kind,target_id,key_symbol_id,
           rank,promotion_score)
-         SELECT $1,1,1,o.object_id,s.head,s.ordinal,s.score
+         SELECT $1::bigint,1,1,o.object_id,s.head,s.ordinal,s.score
          FROM tmp_native_num_obj AS s
          JOIN execution.semantic_pnf_object AS o ON o.object_digest=s.digest
          WHERE s.promoted ON CONFLICT DO NOTHING",
@@ -446,7 +446,7 @@ pub fn publish_original_numeric_sentence(
         "INSERT INTO execution.semantic_pnf_interface_export
          (interface_id,export_kind,target_kind,target_id,key_symbol_id,
           rank,promotion_score)
-         SELECT $1,2,2,f.factor_id,s.typ,s.ordinal,0
+         SELECT $1::bigint,2,2,f.factor_id,s.typ,s.ordinal,0
          FROM tmp_native_num_factor AS s
          JOIN execution.semantic_pnf_factor AS f ON f.factor_digest=s.digest
          ON CONFLICT DO NOTHING",&[&interface_id])?;
@@ -454,31 +454,31 @@ pub fn publish_original_numeric_sentence(
         "INSERT INTO execution.semantic_pnf_interface_export
          (interface_id,export_kind,target_kind,target_id,key_symbol_id,
           residual_type_symbol_id,rank,promotion_score)
-         SELECT $1,5,3,d.demand_id,s.lexical,s.residual,s.ordinal,0
+         SELECT $1::bigint,5,3,d.demand_id,s.lexical,s.residual,s.ordinal,0
          FROM tmp_native_num_demand AS s
          JOIN execution.semantic_pnf_demand AS d ON d.demand_digest=s.digest
          ON CONFLICT DO NOTHING",&[&interface_id])?;
     tx.execute(
         "INSERT INTO execution.semantic_pnf_interface_lookup
          (interface_id,key_kind,key_a,key_b,target_kind,target_id,rank)
-         SELECT $1,3,s.head,0,1,o.object_id,s.ordinal
+         SELECT $1::bigint,3,s.head,0,1,o.object_id,s.ordinal
          FROM tmp_native_num_obj AS s
          JOIN execution.semantic_pnf_object AS o ON o.object_digest=s.digest
          WHERE s.promoted
          UNION ALL
-         SELECT $1,1,s.typ,0,2,f.factor_id,s.ordinal
+         SELECT $1::bigint,1,s.typ,0,2,f.factor_id,s.ordinal
          FROM tmp_native_num_factor AS s
          JOIN execution.semantic_pnf_factor AS f ON f.factor_digest=s.digest
          UNION ALL
-         SELECT $1,3,s.predicate,0,2,f.factor_id,s.ordinal
+         SELECT $1::bigint,3,s.predicate,0,2,f.factor_id,s.ordinal
          FROM tmp_native_num_factor AS s
          JOIN execution.semantic_pnf_factor AS f ON f.factor_digest=s.digest
          UNION ALL
-         SELECT $1,5,s.residual,COALESCE(s.factor_typ,0),3,d.demand_id,s.ordinal
+         SELECT $1::bigint,5,s.residual,COALESCE(s.factor_typ,0),3,d.demand_id,s.ordinal
          FROM tmp_native_num_demand AS s
          JOIN execution.semantic_pnf_demand AS d ON d.demand_digest=s.digest
          UNION ALL
-         SELECT $1,3,s.lexical,s.residual,3,d.demand_id,s.ordinal
+         SELECT $1::bigint,3,s.lexical,s.residual,3,d.demand_id,s.ordinal
          FROM tmp_native_num_demand AS s
          JOIN execution.semantic_pnf_demand AS d ON d.demand_digest=s.digest
          WHERE s.lexical IS NOT NULL

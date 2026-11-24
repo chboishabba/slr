@@ -4,8 +4,8 @@
 //! numeric tokens, dependency heads, and entity spans. Original schema
 //! authority is retained; no PNF identity witness or Level-3 row is inserted.
 //! This producer does not re-run spaCy. Only original source-backed observations
-//! and explicit POS->TAG fallback are admitted. Full Unicode casefold is not
-//! guessed: unhandled normalized letters fail closed.
+//! and explicit POS->TAG fallback are admitted. Unicode casefold uses the
+//! full non-Turkic casefold table rather than an ASCII approximation.
 
 use crate::{NativeNumericParserPlan,NativeManifest,
     NativeNumericParserSentencePlan};
@@ -18,6 +18,7 @@ use std::fs::{self,File,OpenOptions};
 use std::io::Write;
 use std::path::{Path,PathBuf};
 use thiserror::Error;
+use unicode_casefold::UnicodeCaseFold;
 use unicode_normalization::UnicodeNormalization;
 
 #[derive(Debug,Error)]
@@ -30,8 +31,6 @@ pub enum NumericParserStoreError {
     Artifact(#[from] std::io::Error),
     #[error("source parser coordinates, heads or overlapping sentence scope invalid")]
     InvalidSentence,
-    #[error("strict Python casefold not representable; refusing approximate symbol")]
-    UnsupportedUnicodeCasefold,
     #[error("malformed original morphology evidence")]
     MalformedMorphology,
     #[error("original numeric source run conflicts with existing immutable rows")]
@@ -61,12 +60,8 @@ fn normalize(kind:i16,text:&str)->Result<String,NumericParserStoreError>{
     if nfc.is_empty(){return Err(NumericParserStoreError::ForeignSource);}
     let canonical=match kind{
         // Original Python normalize_symbol: these kinds use casefold.
-        2|5|11|12|13|14|15|16|17|18|19=>{
-            if nfc.chars().any(|c|!c.is_ascii()&&c.is_alphabetic()){
-                return Err(NumericParserStoreError::UnsupportedUnicodeCasefold);
-            }
-            nfc.to_ascii_lowercase()
-        }
+        2|5|11|12|13|14|15|16|17|18|19=>
+            nfc.chars().case_fold().collect::<String>(),
         // POS/TAG/NER/morph feature uses Python upper().
         3|4|8|6=>nfc.to_uppercase(),
         _=>nfc,
@@ -632,7 +627,8 @@ pub fn persist_original_numeric_parser_plan(
                 .ok_or(NumericParserStoreError::InvalidSentence))
             .collect::<Result<Vec<_>,_>>()?;
         let refs=sentence.tokens.iter().map(|t|t.token_ref.clone()).collect::<Vec<_>>();
-        let ords=sentence.tokens.iter().map(|t|t.original_token_ordinal).collect::<Vec<_>>();
+        let ords=sentence.tokens.iter().map(|t|t.original_token_ordinal as i64)
+            .collect::<Vec<i64>>();
         let starts=sentence.tokens.iter().map(|t|t.start_char).collect::<Vec<_>>();
         let ends=sentence.tokens.iter().map(|t|t.end_char).collect::<Vec<_>>();
         let digests=sentence.tokens.iter().map(|t|t.token_digest.to_vec()).collect::<Vec<_>>();
@@ -680,7 +676,7 @@ pub fn persist_original_numeric_parser_plan(
                    t.head_start,t.head_end,t.head_token_id,t.digest,
                    t.orth,t.lemma,t.pos,t.tag,t.dep,t.morph_id,
                    t.lemma_origin,1,t.tag_origin,1,2
-                 FROM unnest($6::bigint[],$7::text[],$8::integer[],
+                 FROM unnest($6::bigint[],$7::text[],$8::bigint[],
                    $9::bigint[],$10::bigint[],$11::bigint[],
                    $12::bigint[],$13::bigint[],$14::bytea[],
                    $15::bigint[],$16::bigint[],$17::bigint[],
@@ -693,7 +689,7 @@ pub fn persist_original_numeric_parser_plan(
                  ON CONFLICT(token_ref) DO NOTHING",
                 &[&plan.numeric_run_ref,&plan.source_document_ref,
                   &partition_ref,&sentence.sentence_ref,&sentence_id,
-                  &token_ids,&refs,&ords,&starts,&ends,&head_starts,
+                  &token_ids,&refs,&&ords[..],&starts,&ends,&head_starts,
                   &head_ends,&head_ids,&digests,&orth,&lemma,&pos,&tag,
                   &dep,&morph,&lemma_origin,&tag_origin])?;
         }
@@ -741,8 +737,8 @@ pub fn persist_original_numeric_parser_plan(
             .collect::<Vec<_>>();
         let eends=sentence.entities.iter().map(|e|e.end_char)
             .collect::<Vec<_>>();
-        let edigests=sentence.entities.iter().map(|e|e.entity_digest.to_vec())
-            .collect::<Vec<_>>();
+        let edigests=sentence.entities.iter().map(|e|e.entity_digest.as_slice())
+            .collect::<Vec<&[u8]>>();
         let ekinds=sentence.entities.iter().map(|e|sym(&symbols,8,&e.label_ref))
             .collect::<Result<Vec<_>,_>>()?;
         if !erefs.is_empty(){
@@ -894,8 +890,8 @@ mod tests {
         assert_eq!(normalize(3,"verb").unwrap(),"VERB");
         assert_eq!(normalize(8,"person").unwrap(),"PERSON");
         assert_eq!(normalize(1,"Naïve").unwrap(),"Naïve");
-        assert!(matches!(normalize(2,"Straße"),
-            Err(NumericParserStoreError::UnsupportedUnicodeCasefold)));
+        assert_eq!(normalize(2,"Straße").unwrap(),"strasse");
+        assert_eq!(normalize(2,"ﬁ").unwrap(),"fi");
     }
 
     #[test]
