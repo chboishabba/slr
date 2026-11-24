@@ -3,6 +3,49 @@
 
 ### Controlling P0 status — 24 November 2026
 
+### Native P0-C/D source-to-numeric Rust integration — actual frontier
+
+The native port in this SLR PR now includes and exports
+`numeric_pnf_native.rs`, `numeric_pnf_owner.rs`,
+`numeric_pnf_source_bridge.rs`,
+`numeric_pnf_parser_plan.rs`,
+`numeric_pnf_parser_store.rs`,
+`numeric_pnf_operator.rs`, `numeric_pnf_sql.rs`,
+`numeric_pnf_pipeline.rs`, and
+`numeric_pnf_identity_audit.rs`, plus a
+`numeric-pnf-native` CLI. These provide exact SLR
+source SHA/revision and parser/NER evidence, numeric v2
+sentence/token/entity projection, 64-sentence/12k-token
+resumable staged original numeric PG import, original
+authored paragraph/sentence work trigger, three original
+strict numeric operator families, lease-fenced atomic
+factor/demand/interface publication, migration-180
+PRON→object→unresolved anaphor demand integrity, migration
+086 evidence-specific candidate refutation and cumulative
+3/6/9 signed residuals. It does NOT substitute
+an S29 human action or nearest-name guessing for
+document-derived numeric identity.
+
+**Original SQL owner decision**: migration 157 intentionally
+retired legacy noun/PROPN/NER procedural mention projection;
+migration 180 retains pronoun-specific exact typed demand.
+Original NER→H9 and provider-bearing evidence remains
+migrations 130–135 and 123–124; source-local Bush does NOT
+alone prove an admitted numeric actor. P0-C/D read-only audit
+must demonstrate actual original typed candidate coverage,
+admission, Level-3 witness dependence and retraction.
+
+**Acceptance state: NOT DONE.** These newly written Rust
+files and Lean models have not been compiled/kernel-checked
+or run against original numeric PostgreSQL, strict Python
+reference, Unicode casefold adversaries or crash/replay.
+No numeric PNF or H9 identity receipt is paid. Preserve
+P0-A/P0-B accepted artifacts separately, and do not ask
+the user to execute any intermediate script: full formal
+and integrated Rust completion is a prerequisite for
+operator handoff. The stopped legacy Python tranche
+stays stopped.
+
 ### Native Rust numeric-PNF port decision — formal first
 
 
