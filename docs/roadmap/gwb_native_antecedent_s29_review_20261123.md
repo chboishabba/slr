@@ -3,6 +3,46 @@
 
 ### Controlling P0 status — 24 November 2026
 
+### Latest P0-B operator PASS — supersedes historical Pending labels
+
+The **local** original-source consumer delta
+`dashi_lean4/.dashi/gwb-relation/m2-source-consumer/run-TnDZB8qZ/`
+passed, operator-reported: source-local `Bush`, CURRENT exact
+source replay, `GWB_SOURCE_LOCAL_CONSUMER_KERNEL_OK`,
+17/17 contract tests and 18/18 live adversarial controls;
+`GWB_SOURCE_LOCAL_CONSUMER_DELTA_OK`.
+
+**Operator made crucial local corrections not yet pushed:**
+the previous published delta runner called nonexistent SLR
+`answer/replay` CLI commands, and the Lean Boolean proof
+needed repair. DO NOT treat the old remote runner/Lean as the
+verified versions, nor overwrite their unpushed corrections.
+This P0-B result is locally accepted, not independently
+audited from committed artifacts. It pays a policy-scoped
+source answer and a read-only CURRENT replay, **not** an
+admitted original numeric identity or a Level-3 DB mutation.
+
+The next single P0-C/D maximum cut is WELD-01–05 in the
+original SensibLaw numeric-PNF owner, using original
+migrations 051,069,070,074,077,083,086,089,123–124.
+The DASHI lean branch now contains a separate **read-only
+original-owner maximum-cut auditor**
+`tools/gwb_numeric_pnf_maxcut_audit.py` and negative tests.
+It reads exact parser token→object support, H9 occurrence
+bearing, typed demand, open-world candidate state and coverage,
+admitted document-authority witness, projection and actual
+Level-3 argument provenance in one pass. Numeric source
+manifestation parity and transactional retraction are NOT
+automatically paid by this diagnostic.
+
+The intended result is either a genuine supported original
+`resolved_unique` + admitted witness + retractable factor
+chain, or an exact missing original source/PNF producer
+identified as the real blocker. No more C4.xx source inspectors
+or nearest-name matching.
+
+
+
 The canonical programme endpoint, exact remaining lemmas
 **WELD-01 through WELD-07**, producer/consumer ownership and
 acceptance now live in
