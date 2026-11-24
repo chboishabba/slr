@@ -509,8 +509,14 @@ pub fn publish_original_numeric_sentence(
            AND token.start_char >= $3 AND token.end_char <= $4",
         &[&numeric_run_ref,&manifest.document_ref,&start,&end])?.get(0);
     let produced_pronouns:i64=tx.query_one(
-        "SELECT count(DISTINCT mention.head_token_id)::bigint
-         FROM execution.semantic_pnf_mention AS mention
+        "SELECT count(DISTINCT token.token_id)::bigint
+         FROM execution.semantic_parser_token AS token
+         JOIN execution.semantic_pnf_anaphor_projection_constant AS constant
+           ON constant.singleton
+          AND token.pos_symbol_id=constant.pronoun_pos_symbol_id
+         JOIN execution.semantic_pnf_mention AS mention
+           ON mention.head_token_id=token.token_id
+          AND mention.mention_kind=4
          JOIN execution.semantic_pnf_object AS object
            ON object.object_id=mention.object_id
           AND object.region_id=mention.region_id
@@ -521,16 +527,18 @@ pub fn publish_original_numeric_sentence(
            ON demand.source_object_id=object.object_id
           AND demand.source_region_id=mention.region_id
           AND demand.expected_target_kind=1
-         JOIN execution.semantic_pnf_anaphor_projection_constant AS constant
-           ON constant.singleton
-          AND demand.residual_type_symbol_id=
+         AND demand.residual_type_symbol_id=
               constant.anaphor_residual_type_symbol_id
          JOIN execution.semantic_pnf_interface AS interface
            ON interface.region_id=mention.region_id
           AND interface.interface_id=demand.source_interface_id
-         WHERE mention.region_id=$1 AND mention.mention_kind=4",
-        &[&lease.region_id])?.get(0);
-    if produced_pronouns<expected_pronouns{
+         WHERE mention.region_id=$1
+           AND token.run_ref=$2 AND token.document_ref=$3
+           AND token.representation_version=2
+           AND token.start_char >= $4 AND token.end_char <= $5",
+        &[&lease.region_id,&numeric_run_ref,&manifest.document_ref,
+          &start,&end])?.get(0);
+    if produced_pronouns!=expected_pronouns{
         return Err(NumericSqlError::MissingPublication);
     }
     tx.commit()?;
