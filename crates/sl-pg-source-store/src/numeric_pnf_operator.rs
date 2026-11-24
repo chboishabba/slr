@@ -431,6 +431,72 @@ pub fn validate_native_numeric_sentence_closure(
 mod tests{
     use super::*;
     fn hex(bytes:&[u8])->String{bytes.iter().map(|x|format!("{x:02x}")).collect()}
+    fn lex()->NumericOperatorLexicon{
+        fn ids(names:&[&str])->BTreeMap<String,i64>{
+            names.iter().enumerate().map(|(i,s)|(s.to_string(),i as i64+1)).collect()
+        }
+        NumericOperatorLexicon{
+            lemma_ids:ids(&["must","shall","may","not","never","if","when","provided",
+              "providing","unless","except","excluding","commence","begin","repeal",
+              "amend","cease","do","Bush"]),
+            dependency_ids:ids(&["aux","auxpass","nsubj","nsubjpass","csubj",
+              "obj","dobj","pobj","attr","oprd","mark","prep","advmod","ROOT"]),
+            pos_ids:ids(&["VERB","AUX","PRON","PROPN"]),
+            factor_type_ids:ids(&["semantic.normative_relation","semantic.legal_condition",
+              "semantic.legal_exception","semantic.legal_transition"]),
+            predicate_ids:ids(&["normative.obligation","normative.permission_candidate",
+              "normative.prohibition","legal.activation_condition_candidate",
+              "legal.exception_candidate","legal.commencement",
+              "legal.commencement_candidate","legal.repeal","legal.amendment",
+              "legal.cessation"]),
+            role_ids:ids(&["conduct","bearer","object","condition","exception","host",
+              "transition","legal_object"]),
+            residual_ids:ids(&["jurisdiction_unresolved","legal_time_unresolved",
+              "normative_scope_unresolved","modal_sense_unresolved",
+              "norm_bearer_unresolved","exception_attachment_unresolved",
+              "exception_burden_unresolved","condition_attachment_unresolved",
+              "legal_object_identity_unresolved","effective_time_unresolved"]),
+            object_kind_ids:ids(&["parser.role_participant"]),
+        }
+    }
+    fn token(id:i64,lemma:i64,pos:i64,dep:i64,head:i64)->NumericToken{
+        NumericToken{token_id:id,orth_id:lemma,lemma_id:lemma,pos_id:pos,
+            tag_id:1,dependency_id:dep,head_token_id:head,morph_set_id:None,
+            start_char:id*2,end_char:id*2+2}
+    }
+    #[test]
+    fn strict_modal_closure_has_original_residual_demands(){
+        let l=lex();
+        let tokens=vec![
+            token(1,l.symbol("lemma","do").unwrap(),
+                l.symbol("pos","VERB").unwrap(),l.symbol("dep","ROOT").unwrap(),1),
+            token(2,l.symbol("lemma","shall").unwrap(),
+                l.symbol("pos","AUX").unwrap(),l.symbol("dep","aux").unwrap(),1),
+            token(3,l.symbol("lemma","Bush").unwrap(),
+                l.symbol("pos","PROPN").unwrap(),l.symbol("dep","nsubj").unwrap(),1),
+        ];
+        let c=compose_numeric_sentence_native(11,&tokens,&l).unwrap();
+        assert_eq!(c.objects.len(),2);
+        assert_eq!(c.factors.len(),1);
+        assert_eq!(c.demands.len(),3);
+        assert_eq!(c.measure.edge_count,2);
+        validate_native_numeric_sentence_closure(11,&c).unwrap();
+        let mut forgery=c.clone();
+        forgery.objects[0].object_digest=[0u8;32];
+        assert!(validate_native_numeric_sentence_closure(11,&forgery).is_err());
+        let mut forged_demand=c;
+        forged_demand.demands[0].lexical_symbol_id=Some(999);
+        assert!(validate_native_numeric_sentence_closure(11,&forged_demand).is_err());
+    }
+    #[test]
+    fn missing_parser_head_fails_closed_instead_of_becoming_root(){
+        let l=lex();
+        let bad=token(1,l.symbol("lemma","shall").unwrap(),
+            l.symbol("pos","AUX").unwrap(),l.symbol("dep","aux").unwrap(),99);
+        assert!(matches!(compose_numeric_sentence_native(11,&[bad],&l),
+            Err(NumericOperatorError::MissingHead(1))));
+    }
+
     #[test]
     fn strict_python_numeric_digest_goldens(){
         assert_eq!(hex(&strict_numeric_digest(vec![num(1),num(2),num(3)])),
