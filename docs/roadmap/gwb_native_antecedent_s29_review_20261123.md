@@ -1,6 +1,43 @@
 # C4.11: source-native antecedent review on original SLR S29
 
 
+## 24 November 19:48 AEST — real native Rust execution; missing actor producer
+
+Operator pushed SLR `7c62831` and DASHI `1da1edeb4`.
+Committed evidence: [native numeric identity audit](https://github.com/chboishabba/dashi_lean4/blob/1da1edeb460a4a5b0c0e5588e1dcfa1fcc3af023/.dashi/gwb-relation/m2-source-consumer/native-numeric-identity-audit.json).
+Exact source SHA 7ff2ec8ffe6243871ad682e7d7060fe3b84025fb15dbe229154d7aa7f6a72b30;
+64 native sentence jobs completed (operator report); two PERSON supports in two
+original statements; focus he object 72766; original demand 22165.
+Zero Bush-supported objects, zero represented candidates, zero H9 target
+occurrences, outside-model true; no unique target, witness or Level-3.
+P0-C native execution has advanced; F0–F5 and WELD-01–05 not fully accepted.
+The broad Python compiler remains stopped.
+
+Root cause: the strict three-family legal composer creates role-participant
+objects only for its applicable factors, while m157 deliberately retired
+m045 general noun/PROPN/NER promotion. m180 only produces pronoun occurrences
+and unresolved demands. Do not resurrect the retired broad trigger or infer
+identity from repeated spelling.
+
+SLR `ef1a2cd4` adds an explicit bounded NER-occurrence projection on the
+existing exact-source native path. For each closed sentence, an exact span with
+a unique dependency head receives a distinct occurrence object with complete
+contained token support under a separate versioned digest. It can repair an
+already-closed sentence without re-running the parser or broad Python compiler.
+These are unexported candidate anchors, not admitted identities; the extension
+is not strict-reference parity. It has NOT been compiled or database-tested.
+The bounded write count is not a proof of bounded scanning or runtime.
+
+Next endpoint cut: source-backed general typed referent enumeration (including
+non-NER actors), quotation/morphology/recency and represented residuals,
+candidate-only frontier transport with explicit cap/coverage (no legacy early
+unique planner row treated as deductive proof), actual original document-derived
+admission and witnessed Level-3. H9 producer semantic target occurrence remains
+separate from a cross-sentence antecedent. Preserve zero mode, signed evidence
+and indexed provenance. No additional intermediate workstation handoff.
+
+
+
 ## 24 November — native frontier / typed-survivor / inverse execution cut
 
 SLR PR #78 source-written commits (not compiled or DB accepted):
