@@ -47,6 +47,7 @@ mod numeric_pnf_sql;
 mod numeric_pnf_parser_plan;
 mod numeric_pnf_parser_store;
 mod numeric_pnf_pipeline;
+mod numeric_pnf_identity_audit;
 mod statement_pnf_spine;
 mod generic_source_compiler;
 mod source_candidate_persistence;
@@ -253,6 +254,11 @@ pub use numeric_pnf_parser_store::{
     persist_original_numeric_parser_plan,
     NumericParserStoreError, NumericParserStoreReceipt,
 };
+pub use numeric_pnf_identity_audit::{
+    audit_original_numeric_identity_for_source_answer,
+    NativeNumericAuditError, NativeNumericIdentityAudit,
+    NumericDemandWorldStatus,
+};
 pub use numeric_pnf_pipeline::{
     run_native_numeric_exact_source_slice, deterministic_numeric_run_ref,
     NumericPipelineError, NumericPipelineReceipt,
@@ -264,7 +270,8 @@ pub use numeric_pnf_parser_plan::{
     NumericParserPlanError,
 };
 pub use numeric_pnf_sql::{
-    publish_original_numeric_sentence, NumericMdlWeights,
+    publish_original_numeric_sentence, read_original_numeric_candidate_fibre,
+    NumericMdlWeights,
     NumericPublishedSentence, NumericSentenceLease, NumericSqlError,
 };
 pub use numeric_pnf_owner::{
