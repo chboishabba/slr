@@ -883,6 +883,63 @@ fn original_parser_identity_producer_probe(
     })
 }
 
+
+#[derive(Debug,Clone,Serialize)]
+pub struct OriginalCrossResourceNeedObservation{
+    pub need_id:i64,
+    pub demand_id:i64,
+    pub source_object_id:Option<i64>,
+    pub consumer_ref:String,
+    pub query_ref:String,
+    pub policy_ref:String,
+    pub need_kind:i16,
+    pub provider_id:i16,
+    pub axis_kind:Option<i16>,
+    pub provider_property_numeric_id:Option<i64>,
+    pub need_revision:i64,
+    pub active_request_ids:Vec<i64>,
+}
+fn observe_original_cross_resource_needs(
+    tx:&mut postgres::Transaction<'_>,demand:i64,run_ref:&str,document_ref:&str,
+)->Result<Vec<OriginalCrossResourceNeedObservation>,NativeNumericAuditError>{
+    // Reuse m096/m112/m113/m119. Do not construct provider queries from a
+    // pronoun or attach candidate evidence to the wrong demand. Related
+    // occurrence demands keep their own consumer/query/policy and provider.
+    Ok(tx.query(
+        "SELECT n.need_id,d.demand_id,d.source_object_id,
+                n.consumer_ref,n.query_ref,n.policy_ref,n.need_kind,n.provider_id,
+                n.axis_kind,n.provider_property_numeric_id,n.need_revision,
+                ARRAY(SELECT DISTINCT req.request_id
+                      FROM execution.semantic_pnf_external_request_active_member_v1 m
+                      JOIN execution.semantic_pnf_external_request req
+                        ON req.request_id=m.request_id
+                      WHERE m.demand_id=n.demand_id AND m.consumer_ref=n.consumer_ref
+                        AND m.query_ref=n.query_ref AND m.policy_ref=n.policy_ref
+                        AND m.need_kind=n.need_kind AND req.provider_id=n.provider_id
+                        AND ((req.request_kind=1 AND n.need_kind IN (1,2))
+                          OR (req.request_kind=2 AND n.need_kind=2
+                            AND req.axis_kind=n.axis_kind
+                            AND req.provider_property_numeric_id=n.provider_property_numeric_id)
+                          OR (req.request_kind=3 AND n.need_kind=3))
+                      ORDER BY req.request_id)
+         FROM execution.semantic_pnf_consumer_external_need n
+         JOIN execution.semantic_pnf_demand d ON d.demand_id=n.demand_id
+         JOIN execution.semantic_pnf_region r ON r.region_id=d.source_region_id
+         WHERE n.active AND r.run_ref=$2 AND r.document_ref=$3
+           AND (d.demand_id=$1 OR EXISTS(
+             SELECT 1 FROM execution.semantic_pnf_candidate_universe u
+             WHERE u.demand_id=$1 AND u.target_kind=1 AND u.target_id=d.source_object_id))
+         ORDER BY d.demand_id,n.need_id",
+        &[&demand,&run_ref,&document_ref])?
+        .iter().map(|r|OriginalCrossResourceNeedObservation{
+            need_id:r.get(0),demand_id:r.get(1),source_object_id:r.get(2),
+            consumer_ref:r.get(3),query_ref:r.get(4),policy_ref:r.get(5),
+            need_kind:r.get(6),provider_id:r.get(7),axis_kind:r.get(8),
+            provider_property_numeric_id:r.get(9),need_revision:r.get(10),
+            active_request_ids:r.get(11),
+        }).collect())
+}
+
 /// Candidate-only, exact-source consumer transport. This extends the represented
 /// fibre, not the capped legacy planner. It never selects, refutes, closes
 /// coverage, admits a witness, or substitutes a Level-3 argument.
@@ -905,6 +962,7 @@ pub struct NativeNumericCandidateTransportReceipt {
     pub original_document_identity_observations:Vec<NativeNumericDocumentIdentityObservation>,
     pub original_parser_identity_producer:OriginalParserIdentityProducerObservation,
     pub document_identity_fibre:NativeNumericIdentityFibreProjection,
+    pub original_cross_resource_needs:Vec<OriginalCrossResourceNeedObservation>,
 }
 pub fn transport_original_numeric_candidates_for_source_answer(
     numeric_url:&str,numeric_run_ref:&str,answer:&NativeSourceLocalAnswer,
@@ -1030,6 +1088,7 @@ pub fn transport_original_numeric_candidates_for_source_answer(
     let (original_horizon_observations,original_document_identity_observations)=
         observe_original_resolution_fibre(&mut tx,demand,numeric_run_ref,&answer.source_document_ref)?;
     let document_identity_fibre=project_original_identity_fibre(&original_horizon_observations,&original_document_identity_observations,open);
+    let original_cross_resource_needs=observe_original_cross_resource_needs(&mut tx,demand,numeric_run_ref,&answer.source_document_ref)?;
     let original_parser_identity_producer=original_parser_identity_producer_probe(
         &mut tx,numeric_run_ref,&answer.source_document_ref,demand)?;
     tx.commit()?;
@@ -1041,7 +1100,7 @@ pub fn transport_original_numeric_candidates_for_source_answer(
         complete_typed_coverage_paid:false,
         morphology_observations_inserted,candidates_without_morphology_observation,
         original_horizon_observations,original_document_identity_observations,
-        original_parser_identity_producer,document_identity_fibre,
+        original_parser_identity_producer,document_identity_fibre,original_cross_resource_needs,
     })
 }
 
