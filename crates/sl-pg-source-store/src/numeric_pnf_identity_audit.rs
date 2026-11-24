@@ -599,6 +599,176 @@ pub fn retract_original_numeric_identity_for_source_answer(
 }
 
 
+
+// Direct port of SensibLaw binding_candidate_sets.py:
+// binding-compatibility:pnf-kind-morphology:v0_3. Missing features retain
+// the candidate. Compare sets, never scalar similarity or spelling.
+const MORPH_FEATURES:[&str;3]=["Gender","Number","Person"];
+fn morphology_mismatches(reference:&[String],candidate:&[String])->Vec<&'static str>{
+    MORPH_FEATURES.into_iter().filter(|feature|{
+        let values=|rows:&[String]|{
+            rows.iter().filter_map(|row|{
+                let (name,value)=row.split_once('=')?;
+                if name.eq_ignore_ascii_case(feature){Some(value.to_owned())}else{None}
+            }).collect::<BTreeSet<_>>()
+        };
+        let a=values(reference);let b=values(candidate);
+        !a.is_empty()&&!b.is_empty()&&a.is_disjoint(&b)
+    }).collect()
+}
+#[derive(Debug,Clone,Serialize)]
+pub struct NativeNumericHorizonObservation{
+    pub target_kind:i16,
+    pub target_id:i64,
+    pub horizon:i16,
+    pub signed_residual:i64,
+    pub phase:i16,
+    pub evidence_count:i64,
+    pub active:bool,
+    pub execution_residual:bool,
+    pub refuted:bool,
+    pub strict_preference:bool,
+}
+#[derive(Debug,Clone,Serialize)]
+pub struct NativeNumericDocumentIdentityObservation{
+    pub object_id:i64,
+    pub admitted_entity_ids:Vec<i64>,
+    pub admitted_witness_ids:Vec<i64>,
+}
+// Read the original cumulative H3/H6/H9 fibre and proof-relevant document
+// projection. Do not conflate a preference with a unique admitted identity.
+fn observe_original_resolution_fibre(
+    tx:&mut postgres::Transaction<'_>,demand:i64,run_ref:&str,document_ref:&str,
+)->Result<(Vec<NativeNumericHorizonObservation>,Vec<NativeNumericDocumentIdentityObservation>),NativeNumericAuditError>{
+    let horizons=tx.query(
+        "SELECT h.target_kind,h.target_id,h.horizon,h.signed_residual,h.phase,
+                h.evidence_count,h.active,h.execution_residual,h.refuted,
+                COALESCE(p.strict_winner,FALSE)
+         FROM execution.semantic_pnf_candidate_horizon_state_v1 h
+         LEFT JOIN execution.semantic_pnf_progressive_preference_candidate_v1 p
+           ON p.demand_id=h.demand_id AND p.target_kind=h.target_kind
+          AND p.target_id=h.target_id AND p.horizon=h.horizon
+         WHERE h.demand_id=$1 ORDER BY h.target_kind,h.target_id,h.horizon",&[&demand])?
+        .iter().map(|r|NativeNumericHorizonObservation{
+            target_kind:r.get(0),target_id:r.get(1),horizon:r.get(2),
+            signed_residual:r.get(3),phase:r.get(4),evidence_count:r.get(5),
+            active:r.get(6),execution_residual:r.get(7),refuted:r.get(8),
+            strict_preference:r.get(9),
+        }).collect();
+    // Keep conflicting admitted entity IDs visible; the original projection
+    // intentionally omits conflicts, so absence of a projection is not a
+    // reason to silently identify a candidate with itself or another object.
+    let classes=tx.query(
+        "SELECT u.target_id,
+                COALESCE(array_agg(DISTINCT w.target_entity_id ORDER BY w.target_entity_id)
+                    FILTER (WHERE w.witness_id IS NOT NULL),'{}'::bigint[]),
+                COALESCE(array_agg(DISTINCT w.witness_id ORDER BY w.witness_id)
+                    FILTER (WHERE w.witness_id IS NOT NULL),'{}'::bigint[])
+         FROM execution.semantic_pnf_candidate_universe u
+         JOIN execution.semantic_pnf_object o ON o.object_id=u.target_id
+         JOIN execution.semantic_pnf_region r ON r.region_id=o.region_id
+         LEFT JOIN LATERAL (
+             SELECT w.witness_id,w.target_entity_id
+             FROM execution.semantic_pnf_identity_witness w
+             JOIN execution.semantic_pnf_identity_witness_admission a
+               ON a.witness_id=w.witness_id AND a.admission_state=2
+             JOIN execution.semantic_pnf_canonical_entity e
+               ON e.entity_id=w.target_entity_id AND e.authority_class=2
+             JOIN execution.semantic_pnf_object anchor ON anchor.object_id=e.anchor_object_id
+             JOIN execution.semantic_pnf_region ar ON ar.region_id=anchor.region_id
+             WHERE w.source_object_id=u.target_id AND w.authority_class=2
+               AND ar.run_ref=$2 AND ar.document_ref=$3
+         ) w ON TRUE
+         WHERE u.demand_id=$1 AND u.target_kind=1
+           AND r.run_ref=$2 AND r.document_ref=$3
+         GROUP BY u.target_id ORDER BY u.target_id",&[&demand,&run_ref,&document_ref])?
+        .iter().map(|r|NativeNumericDocumentIdentityObservation{
+            object_id:r.get(0),admitted_entity_ids:r.get(1),admitted_witness_ids:r.get(2),
+        }).collect();
+    Ok((horizons,classes))
+}
+
+// Native exact-head morphology assessment over the already represented fibre.
+// This is only one coordinate of the original binding compatibility contract;
+// absent/multiply anchored heads, discourse/quotation and other kinds remain
+// residual. Negative evidence is a mismatch observation, NOT a refutation.
+fn refine_original_numeric_morphology(
+    tx:&mut postgres::Transaction<'_>,demand:i64,focus_token:i64,
+    run_ref:&str,document_ref:&str,budget:usize,
+)->Result<(usize,i64),NativeNumericAuditError>{
+    let focus:Vec<String>=tx.query_one(
+        "SELECT COALESCE(array_agg(f.symbol_text||'='||v.symbol_text
+                           ORDER BY f.symbol_text,v.symbol_text)
+                         FILTER (WHERE f.symbol_id IS NOT NULL),'{}'::text[])
+         FROM execution.semantic_parser_token t
+         LEFT JOIN execution.semantic_morph_set_member m ON m.morph_set_id=t.morph_set_id
+         LEFT JOIN execution.semantic_symbol f ON f.symbol_id=m.feature_symbol_id
+         LEFT JOIN execution.semantic_symbol v ON v.symbol_id=m.value_symbol_id
+         WHERE t.token_id=$1 AND t.run_ref=$2 AND t.document_ref=$3
+           AND t.representation_version=2",&[&focus_token,&run_ref,&document_ref])?.get(0);
+    let rows=tx.query(
+        "WITH candidate AS MATERIALIZED (
+           SELECT u.target_id AS object_id,r.region_id,i.interface_id,
+                  min(t.token_id) AS token_id
+           FROM execution.semantic_pnf_candidate_universe u
+           JOIN execution.semantic_pnf_object o ON o.object_id=u.target_id
+           JOIN execution.semantic_pnf_region r ON r.region_id=o.region_id
+           JOIN execution.semantic_pnf_interface i ON i.region_id=r.region_id
+           JOIN execution.semantic_pnf_object_token_support s ON s.object_id=o.object_id
+           JOIN execution.semantic_parser_token t ON t.token_id=s.token_id
+             AND t.run_ref=r.run_ref AND t.document_ref=r.document_ref
+             AND t.representation_version=2 AND t.lemma_symbol_id=o.head_symbol_id
+           WHERE u.demand_id=$1 AND u.target_kind=1 AND r.run_ref=$2 AND r.document_ref=$3
+             AND o.active
+           GROUP BY u.target_id,r.region_id,i.interface_id
+           HAVING count(DISTINCT t.token_id)=1
+         ), pending AS (
+           SELECT c.* FROM candidate c
+           WHERE NOT EXISTS (
+             SELECT 1 FROM execution.semantic_pnf_candidate_evidence e
+             WHERE e.demand_id=$1 AND e.target_kind=1 AND e.target_id=c.object_id
+               AND e.evidence_ref='native-binding-morphology:v0_3:'||$4::bigint::text||':'||c.token_id::text)
+           ORDER BY c.object_id LIMIT $5
+         )
+         SELECT p.object_id,p.region_id,p.interface_id,p.token_id,
+                COALESCE(array_agg(f.symbol_text||'='||v.symbol_text
+                           ORDER BY f.symbol_text,v.symbol_text)
+                         FILTER (WHERE f.symbol_id IS NOT NULL),'{}'::text[])
+         FROM pending p
+         JOIN execution.semantic_parser_token t ON t.token_id=p.token_id
+         LEFT JOIN execution.semantic_morph_set_member m ON m.morph_set_id=t.morph_set_id
+         LEFT JOIN execution.semantic_symbol f ON f.symbol_id=m.feature_symbol_id
+         LEFT JOIN execution.semantic_symbol v ON v.symbol_id=m.value_symbol_id
+         GROUP BY p.object_id,p.region_id,p.interface_id,p.token_id
+         ORDER BY p.object_id",&[&demand,&run_ref,&document_ref,&focus_token,&(budget as i64)])?;
+    let mut inserted=0usize;
+    for row in rows{
+        let object:i64=row.get(0);let region:i64=row.get(1);
+        let interface:i64=row.get(2);let head:i64=row.get(3);
+        let features:Vec<String>=row.get(4);
+        let mismatch=morphology_mismatches(&focus,&features);
+        let residual:i64=if mismatch.is_empty(){0}else{-1};
+        let evidence_ref=format!("native-binding-morphology:v0_3:{focus_token}:{head}");
+        let evidence_kind=if mismatch.is_empty(){"morphology_no_observed_mismatch".to_owned()}
+            else{format!("morphology_mismatch:{}",mismatch.join(","))};
+        inserted+=tx.execute(
+            "INSERT INTO execution.semantic_pnf_candidate_evidence
+              (demand_id,target_kind,target_id,evidence_ref,evidence_family,horizon,
+               signed_residual,evidence_kind,provenance_ref,source_interface_id,source_region_id)
+             VALUES($1,1,$2,$3,1,3,$4,$5,
+               'binding-compatibility:pnf-kind-morphology:v0_3',$6,$7)
+             ON CONFLICT(demand_id,target_kind,target_id,evidence_ref) DO NOTHING",
+            &[&demand,&object,&evidence_ref,&residual,&evidence_kind,&interface,&region])? as usize;
+    }
+    let remaining:i64=tx.query_one(
+        "SELECT count(*)::bigint FROM execution.semantic_pnf_candidate_universe u
+         WHERE u.demand_id=$1 AND NOT EXISTS(
+           SELECT 1 FROM execution.semantic_pnf_candidate_evidence e
+           WHERE e.demand_id=u.demand_id AND e.target_kind=u.target_kind AND e.target_id=u.target_id
+             AND e.evidence_ref LIKE 'native-binding-morphology:v0_3:%')",&[&demand])?.get(0);
+    Ok((inserted,remaining))
+}
+
 /// Candidate-only, exact-source consumer transport. This extends the represented
 /// fibre, not the capped legacy planner. It never selects, refutes, closes
 /// coverage, admits a witness, or substitutes a Level-3 argument.
@@ -615,6 +785,10 @@ pub struct NativeNumericCandidateTransportReceipt {
     pub represented_candidate_count:i64,
     pub outside_model_possible:bool,
     pub complete_typed_coverage_paid:bool,
+    pub morphology_observations_inserted:usize,
+    pub candidates_without_morphology_observation:i64,
+    pub original_horizon_observations:Vec<NativeNumericHorizonObservation>,
+    pub original_document_identity_observations:Vec<NativeNumericDocumentIdentityObservation>,
 }
 pub fn transport_original_numeric_candidates_for_source_answer(
     numeric_url:&str,numeric_run_ref:&str,answer:&NativeSourceLocalAnswer,
@@ -631,7 +805,7 @@ pub fn transport_original_numeric_candidates_for_source_answer(
     tx.query_one("SELECT pg_advisory_xact_lock(hashtext($1),hashtext($2))",
         &[&numeric_run_ref,&answer.source_document_ref])?;
     let rows=tx.query(
-        "SELECT DISTINCT d.demand_id,d.source_object_id
+        "SELECT DISTINCT d.demand_id,d.source_object_id,t.token_id
          FROM execution.semantic_pnf_demand d
          JOIN execution.semantic_pnf_anaphor_projection_constant k
            ON k.singleton AND k.anaphor_residual_type_symbol_id=d.residual_type_symbol_id
@@ -661,6 +835,7 @@ pub fn transport_original_numeric_candidates_for_source_answer(
     if rows.len()!=1{return Err(NativeNumericAuditError::SourcePolicy);}
     let demand:i64=rows[0].get(0);
     let source:i64=rows[0].get(1);
+    let focus_token:i64=rows[0].get(2);
     // Materialize the exact existing occurrence relation. Recency is the only
     // exclusion here: morphology/quotation/type refinement is not proved yet.
     // Lack of a live occurrence object is not negative evidence.
@@ -697,13 +872,13 @@ pub fn transport_original_numeric_candidates_for_source_answer(
           (demand_id,target_kind,target_id,observation_kind,source_interface_id,
            ancestor_distance,index_rank,candidate_score)
          SELECT $1::bigint,1,object_id,1,interface_id,
-                $2::bigint-last_char,0,0
+                NULL,NULL,NULL
          FROM native_numeric_transport_delta ORDER BY object_id",
-        &[&demand,&(answer.original_focus_span[0] as i64)])?;
+        &[&demand])?;
     tx.execute(
         "INSERT INTO execution.semantic_pnf_candidate_execution_event
            (demand_id,target_kind,target_id,event_kind,reason_ref)
-         SELECT $1::bigint,1,object_id,4,'native-occurrence-transport-unrefined:v1'
+         SELECT $1::bigint,1,object_id,2,'native-occurrence-transport-unrefined:v1'
          FROM native_numeric_transport_delta",
         &[&demand])?;
     tx.execute(
@@ -734,6 +909,10 @@ pub fn transport_original_numeric_candidates_for_source_answer(
         "SELECT outside_model_possible FROM execution.semantic_pnf_demand_open_world_state
          WHERE demand_id=$1",&[&demand])?.get(0);
     if !open{return Err(NativeNumericAuditError::SourcePolicy);}
+    let (morphology_observations_inserted,candidates_without_morphology_observation)=
+        refine_original_numeric_morphology(&mut tx,demand,focus_token,numeric_run_ref,&answer.source_document_ref,budget)?;
+    let (original_horizon_observations,original_document_identity_observations)=
+        observe_original_resolution_fibre(&mut tx,demand,numeric_run_ref,&answer.source_document_ref)?;
     tx.commit()?;
     Ok(NativeNumericCandidateTransportReceipt{
         schema:"slr-native-candidate-only-transport-v1",
@@ -741,12 +920,21 @@ pub fn transport_original_numeric_candidates_for_source_answer(
         inserted_candidate_ids:ids,remaining_untransported_count:remaining,
         represented_candidate_count:count,outside_model_possible:open,
         complete_typed_coverage_paid:false,
+        morphology_observations_inserted,candidates_without_morphology_observation,
+        original_horizon_observations,original_document_identity_observations,
     })
 }
 
 #[cfg(test)]
 mod tests{
     use super::*;
+    #[test]
+    fn original_binding_morphology_retains_missing_and_overlapping_features(){
+        let f=vec!["Number=Sing".into(),"Gender=Masc".into(),"Person=3".into()];
+        assert!(morphology_mismatches(&f,&[]).is_empty());
+        assert!(morphology_mismatches(&f,&["NUMBER=Sing".into(),"NUMBER=Plur".into()]).is_empty());
+        assert_eq!(morphology_mismatches(&f,&["GENDER=Fem".into(),"Number=Plur".into()]),vec!["Gender","Number"]);
+    }
     #[test]
     fn unsupported_scope_refused_before_any_sql(){
         // Without an independently licensed original source-local receipt
