@@ -84,6 +84,7 @@ fn seq(xs:&[i64])->NumericDigestValue{
 pub fn publish_original_numeric_sentence(
     database_url:&str,
     manifest:&NativeManifest,
+    numeric_run_ref:&str,
     canonical_source_bytes:&[u8],
     lease:&NumericSentenceLease,
     closure:&NativeSentenceClosure,
@@ -91,6 +92,9 @@ pub fn publish_original_numeric_sentence(
 )->Result<NumericPublishedSentence,NumericSqlError>{
     manifest.verify_source_bytes(canonical_source_bytes)
         .map_err(|_|NumericSqlError::ForeignSource)?;
+    if numeric_run_ref.trim().is_empty()||numeric_run_ref==manifest.parser_run_ref{
+        return Err(NumericSqlError::ForeignSource);
+    }
     if !mdl.validate(){return Err(NumericSqlError::ForeignSource);}
     validate_native_numeric_sentence_closure(lease.region_id,closure)?;
     const MAX_ROWS:usize=2048;
@@ -105,7 +109,7 @@ pub fn publish_original_numeric_sentence(
         "SELECT content_sha256,byte_count,char_count,encoding_ref
          FROM execution.semantic_parser_source
          WHERE run_ref=$1 AND document_ref=$2",
-        &[&manifest.parser_run_ref,&manifest.document_ref])?;
+        &[&numeric_run_ref,&manifest.document_ref])?;
     if source.len()!=1{return Err(NumericSqlError::ForeignSource);}
     let digest:Vec<u8>=source[0].get(0);
     let byte_count:i64=source[0].get(1);
@@ -153,7 +157,7 @@ pub fn publish_original_numeric_sentence(
            AND sentence.run_ref=$2 AND sentence.document_ref=$3
            AND sentence.representation_version=2
            AND sentence.start_char=$4 AND sentence.end_char=$5",
-        &[&lease.region_id,&manifest.parser_run_ref,
+        &[&lease.region_id,&numeric_run_ref,
           &manifest.document_ref,&start,&end])?.get(0);
     if parser_sentences!=1{return Err(NumericSqlError::MissingToken);}
     let mut referenced=BTreeSet::<i64>::new();
@@ -171,14 +175,14 @@ pub fn publish_original_numeric_sentence(
            AND run_ref=$2 AND document_ref=$3
            AND representation_version=2
            AND start_char >= $4 AND end_char <= $5",
-        &[&ids,&manifest.parser_run_ref,&manifest.document_ref,&start,&end])?.get(0);
+        &[&ids,&numeric_run_ref,&manifest.document_ref,&start,&end])?.get(0);
     if valid!=ids.len() as i64{return Err(NumericSqlError::MissingToken);}
     let sentence_token_count:i64=tx.query_one(
         "SELECT count(*)::bigint FROM execution.semantic_parser_token
          WHERE run_ref=$1 AND document_ref=$2
            AND representation_version=2
            AND start_char >= $3 AND end_char <= $4",
-        &[&manifest.parser_run_ref,&manifest.document_ref,&start,&end])?.get(0);
+        &[&numeric_run_ref,&manifest.document_ref,&start,&end])?.get(0);
     if sentence_token_count<0 ||closure.measure.encoded_byte_count !=
         sentence_token_count as usize *80
           +closure.factors.len()*32+closure.demands.len()*32{
@@ -503,7 +507,7 @@ pub fn publish_original_numeric_sentence(
          WHERE token.run_ref=$1 AND token.document_ref=$2
            AND token.representation_version=2
            AND token.start_char >= $3 AND token.end_char <= $4",
-        &[&manifest.parser_run_ref,&manifest.document_ref,&start,&end])?.get(0);
+        &[&numeric_run_ref,&manifest.document_ref,&start,&end])?.get(0);
     let produced_pronouns:i64=tx.query_one(
         "SELECT count(DISTINCT mention.head_token_id)::bigint
          FROM execution.semantic_pnf_mention AS mention
