@@ -19,6 +19,12 @@ pub enum NativeNumericAuditError{
     SourcePolicy,
     #[error("numeric run is tied to a different canonical source manifestation")]
     ForeignSource,
+    #[error("selected original document-derived witness is not uniquely current")]
+    WitnessNotCurrent,
+    #[error("selected witness has no original persisted Level-3 dependency")]
+    NoWitnessedLevelThree,
+    #[error("original retraction failed preservation or current-projection checks; transaction rolled back")]
+    RetractionInvariant,
 }
 
 #[derive(Debug,Clone,Serialize)]
@@ -318,6 +324,182 @@ pub fn audit_original_numeric_identity_for_source_answer(
         external_q23505_paid:false,q207_paid:false,historical_truth_paid:false,
         original_level_one_source_preserved:true,
         incomplete_obligations:remaining,
+    })
+}
+
+
+/// Original SQL witness retraction transaction. No identity is minted here.
+/// The caller supplies the exact document-derived witness and immutable source
+/// receipt. A dry probe performs the real inverse inside a rolled-back
+/// transaction; an explicit commit persists it. This is a semantic check,
+/// not a claim that the legacy SQL refresh is physically delta-linear.
+#[derive(Debug,Clone,Serialize)]
+pub struct NativeNumericRetractionReceipt {
+    pub schema:&'static str,
+    pub witness_id:i64,
+    pub numeric_run_ref:String,
+    pub source_sha256:String,
+    pub original_admission_revision:i64,
+    pub retracted_admission_revision:i64,
+    pub affected_level_three_derivation_refs:Vec<String>,
+    pub immutable_level_one_preserved:bool,
+    pub unaffected_level_three_preserved:bool,
+    pub revoked_witness_absent_from_current_projection:bool,
+    pub revoked_witness_absent_from_current_derivations:bool,
+    pub committed:bool,
+}
+fn level_one_snapshot(
+    tx:&mut postgres::Transaction<'_>,run_id:i64,document_id:i64,
+)->Result<Vec<String>,postgres::Error>{
+    let rows=tx.query(
+        "SELECT jsonb_build_array(to_jsonb(f),
+                   COALESCE((SELECT jsonb_agg(to_jsonb(e) ORDER BY e.slot_ordinal)
+                             FROM execution.semantic_pnf_hyperedge e
+                             WHERE e.factor_id=f.factor_id),'[]'::jsonb))::text
+         FROM execution.semantic_pnf_factor f
+         JOIN execution.semantic_pnf_region r ON r.region_id=f.region_id
+         WHERE r.run_id=$1 AND r.document_id=$2
+         ORDER BY f.factor_id",
+        &[&run_id,&document_id])?;
+    Ok(rows.iter().map(|r|r.get::<_,String>(0)).collect())
+}
+fn level_three_snapshot(
+    tx:&mut postgres::Transaction<'_>,run_id:i64,document_id:i64,
+)->Result<std::collections::BTreeMap<String,String>,postgres::Error>{
+    let rows=tx.query(
+        "SELECT d.derivation_ref,
+            jsonb_build_array(to_jsonb(d)-'derivation_id'-'created_at',
+              COALESCE((SELECT jsonb_agg(to_jsonb(p)-'derivation_id' ORDER BY p.premise_ordinal)
+                        FROM execution.semantic_pnf_factor_derivation_premise p
+                        WHERE p.derivation_id=d.derivation_id),'[]'::jsonb),
+              COALESCE((SELECT jsonb_agg(to_jsonb(a)-'derivation_id' ORDER BY a.slot_ordinal)
+                        FROM execution.semantic_pnf_factor_derivation_argument a
+                        WHERE a.derivation_id=d.derivation_id),'[]'::jsonb),
+              COALESCE((SELECT jsonb_agg(to_jsonb(s)-'derivation_id' ORDER BY s.slot_ordinal)
+                        FROM execution.semantic_pnf_factor_derivation_support s
+                        WHERE s.derivation_id=d.derivation_id),'[]'::jsonb))::text
+         FROM execution.semantic_pnf_factor_derivation d
+         JOIN execution.semantic_pnf_interface i ON i.interface_id=d.scope_interface_id
+         JOIN execution.semantic_pnf_region r ON r.region_id=i.region_id
+         WHERE r.run_id=$1 AND r.document_id=$2 AND d.epistemic_level=3",
+        &[&run_id,&document_id])?;
+    Ok(rows.iter().map(|r|(r.get::<_,String>(0),r.get::<_,String>(1))).collect())
+}
+pub fn retract_original_numeric_identity_for_source_answer(
+    numeric_url:&str,numeric_run_ref:&str,answer:&NativeSourceLocalAnswer,
+    witness_id:i64,commit:bool,
+)->Result<NativeNumericRetractionReceipt,NativeNumericAuditError>{
+    original_receipt_policy(answer)?;
+    if witness_id<=0||numeric_run_ref.trim().is_empty(){
+        return Err(NativeNumericAuditError::ForeignSource);
+    }
+    let mut db=Client::connect(numeric_url,NoTls)?;
+    let mut tx=db.transaction()?;
+    tx.batch_execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+        SET LOCAL statement_timeout='90000ms'; SET LOCAL lock_timeout='5000ms'")?;
+    tx.query_one("SELECT pg_advisory_xact_lock(hashtext($1),hashtext($2))",
+        &[&numeric_run_ref,&answer.source_document_ref])?;
+    let rows=tx.query(
+        "SELECT r.run_id,r.document_id,a.revision,w.source_object_id
+         FROM execution.semantic_pnf_identity_witness w
+         JOIN execution.semantic_pnf_identity_witness_admission a
+           ON a.witness_id=w.witness_id
+         JOIN execution.semantic_pnf_demand demand ON demand.demand_id=w.demand_id
+           AND demand.source_object_id=w.source_object_id
+         JOIN execution.semantic_pnf_object o ON o.object_id=w.source_object_id
+         JOIN execution.semantic_pnf_region r ON r.region_id=o.region_id
+         JOIN execution.semantic_parser_source src
+           ON src.run_ref=r.run_ref AND src.document_ref=r.document_ref
+         JOIN execution.semantic_pnf_object_token_support os ON os.object_id=o.object_id
+         JOIN execution.semantic_parser_token t ON t.token_id=os.token_id
+           AND t.run_ref=r.run_ref AND t.document_ref=r.document_ref
+         JOIN execution.semantic_pnf_canonical_entity entity ON entity.entity_id=w.target_entity_id
+         WHERE w.witness_id=$1 AND r.run_ref=$2 AND r.document_ref=$3
+           AND encode(src.content_sha256,'hex')=$4
+           AND t.start_char=$5 AND t.end_char=$6 AND t.representation_version=2
+           AND w.authority_class=2 AND entity.authority_class=2
+           AND w.witness_kind=5 AND w.candidate_count=1 AND a.admission_state=2
+         FOR UPDATE OF a",
+        &[&witness_id,&numeric_run_ref,&answer.source_document_ref,
+          &answer.source_content_sha256,&(answer.original_focus_span[0] as i64),
+          &(answer.original_focus_span[1] as i64)])?;
+    if rows.len()!=1 {return Err(NativeNumericAuditError::WitnessNotCurrent);}
+    let run_id:i64=rows[0].get(0);
+    let document_id:i64=rows[0].get(1);
+    let old_revision:i64=rows[0].get(2);
+    let source_object:i64=rows[0].get(3);
+    let current:bool=tx.query_one(
+        "SELECT EXISTS (SELECT 1 FROM execution.semantic_pnf_identity_projection
+         WHERE source_object_id=$1 AND authority_class=2 AND $2=ANY(witness_ids))",
+        &[&source_object,&witness_id])?.get(0);
+    if !current{return Err(NativeNumericAuditError::WitnessNotCurrent);}
+    let level_one=level_one_snapshot(&mut tx,run_id,document_id)?;
+    let prior=level_three_snapshot(&mut tx,run_id,document_id)?;
+    let affected:Vec<String>=tx.query(
+        "SELECT DISTINCT d.derivation_ref
+         FROM execution.semantic_pnf_factor_derivation d
+         JOIN execution.semantic_pnf_interface i ON i.interface_id=d.scope_interface_id
+         JOIN execution.semantic_pnf_region r ON r.region_id=i.region_id
+         WHERE r.run_id=$1 AND r.document_id=$2 AND d.epistemic_level=3
+           AND (EXISTS (SELECT 1 FROM execution.semantic_pnf_factor_derivation_argument a
+                        WHERE a.derivation_id=d.derivation_id AND $3=ANY(a.identity_witness_ids))
+             OR EXISTS (SELECT 1 FROM execution.semantic_pnf_factor_derivation_support s
+                        WHERE s.derivation_id=d.derivation_id AND $3=ANY(s.identity_witness_ids)))
+         ORDER BY d.derivation_ref",
+        &[&run_id,&document_id,&witness_id])?.iter().map(|r|r.get(0)).collect();
+    if affected.is_empty(){return Err(NativeNumericAuditError::NoWitnessedLevelThree);}
+    // Migration 073 owns admission revision, direct substitutions and
+    // composition refresh. Migration 086's supported substitutions need
+    // explicit stale-dependent cleanup before their original refresh.
+    let changed:bool=tx.query_one(
+        "SELECT execution.retract_numeric_pnf_identity_witness($1)",&[&witness_id])?.get(0);
+    if !changed{return Err(NativeNumericAuditError::WitnessNotCurrent);}
+    tx.execute(
+        "DELETE FROM execution.semantic_pnf_factor_derivation d
+         USING execution.semantic_pnf_interface i,execution.semantic_pnf_region r
+         WHERE d.scope_interface_id=i.interface_id AND i.region_id=r.region_id
+           AND r.run_id=$1 AND r.document_id=$2
+           AND d.rule_ref='identity-supported-substitution:v1'
+           AND (EXISTS (SELECT 1 FROM execution.semantic_pnf_factor_derivation_argument a
+                        WHERE a.derivation_id=d.derivation_id AND $3=ANY(a.identity_witness_ids))
+             OR EXISTS (SELECT 1 FROM execution.semantic_pnf_factor_derivation_support s
+                        WHERE s.derivation_id=d.derivation_id AND $3=ANY(s.identity_witness_ids)))",
+        &[&run_id,&document_id,&witness_id])?;
+    tx.query_one("SELECT execution.refresh_numeric_pnf_supported_identity_substitution_derivations($1,$2)",
+        &[&run_id,&document_id])?;
+    let revision:i64=tx.query_one(
+        "SELECT a.revision FROM execution.semantic_pnf_identity_witness_admission a
+         JOIN execution.semantic_pnf_identity_witness w ON w.witness_id=a.witness_id
+         WHERE a.witness_id=$1 AND a.admission_state=3",
+        &[&witness_id])?.get(0);
+    let no_projection:bool=tx.query_one(
+        "SELECT NOT EXISTS (SELECT 1 FROM execution.semantic_pnf_identity_projection
+         WHERE source_object_id=$1 AND $2=ANY(witness_ids))",
+        &[&source_object,&witness_id])?.get(0);
+    let no_derived:bool=tx.query_one(
+        "SELECT NOT EXISTS (
+            SELECT 1 FROM execution.semantic_pnf_factor_derivation_argument
+             WHERE $1=ANY(identity_witness_ids)
+            UNION ALL
+            SELECT 1 FROM execution.semantic_pnf_factor_derivation_support
+             WHERE $1=ANY(identity_witness_ids))",
+        &[&witness_id])?.get(0);
+    let immutable=level_one==level_one_snapshot(&mut tx,run_id,document_id)?;
+    let after=level_three_snapshot(&mut tx,run_id,document_id)?;
+    let unaffected=prior.iter().all(|(key,value)|
+        affected.contains(key)||after.get(key)==Some(value));
+    if revision!=old_revision+1||!no_projection||!no_derived||!immutable||!unaffected{
+        return Err(NativeNumericAuditError::RetractionInvariant);
+    }
+    if commit {tx.commit()?;}else{tx.rollback()?;}
+    Ok(NativeNumericRetractionReceipt{
+        schema:"slr-original-numeric-pnf-retraction-v1",witness_id,
+        numeric_run_ref:numeric_run_ref.into(),source_sha256:answer.source_content_sha256.clone(),
+        original_admission_revision:old_revision,retracted_admission_revision:revision,
+        affected_level_three_derivation_refs:affected,immutable_level_one_preserved:immutable,
+        unaffected_level_three_preserved:unaffected,
+        revoked_witness_absent_from_current_projection:no_projection,
+        revoked_witness_absent_from_current_derivations:no_derived,committed:commit,
     })
 }
 
