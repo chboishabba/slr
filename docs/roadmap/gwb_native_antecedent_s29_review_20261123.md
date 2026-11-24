@@ -6,24 +6,24 @@
 The canonical programme endpoint, exact remaining lemmas
 **WELD-01 through WELD-07**, producer/consumer ownership and
 acceptance now live in
-\`dashi_lean4/docs/gwb_p0_endpoint_roadmap_20261124.md\`
+`dashi_lean4/docs/gwb_p0_endpoint_roadmap_20261124.md`
 on DASHI Lean PR #112. All C4.09–C4.12 and early M1/M3 plans below
 are **historical source-replay receipts**, not the next work queue.
 
-**Latest real run, operator-reported:** \`run-q5AjcB6o\` passed
-the native source-local \`he→Bush\` interpretation with two
+**Latest real run, operator-reported:** `run-q5AjcB6o` passed
+the native source-local `he→Bush` interpretation with two
 supporting original sentences, Lean check and 14/14 adversarial
-controls. S29 \`Pending\` is not a blocker for linguistic inference.
+controls. S29 `Pending` is not a blocker for linguistic inference.
 The local current run's artifacts have not been committed/pushed.
 This pays a *bounded source-relative interpretation*, not an
-original numeric PNF \`resolved_unique\` actor or a QID.
+original numeric PNF `resolved_unique` actor or a QID.
 
 **P0-B now source-written, local check PENDING**:
-\`crates/sl-pg-source-store/src/native_source_local_consumer.rs\`
+`crates/sl-pg-source-store/src/native_source_local_consumer.rs`
 produces an actual original-source revision/mention/antecedent/
 parser/policy-bound consumer certificate. Original SLR CLI has
-\`native-antecedent-review answer REVIEW_ITEM_REF [PARSER_RUN_REF]\`
-and \`replay REVIEW_ITEM_REF ANSWER.json [PARSER_RUN_REF]\`.
+`native-antecedent-review answer REVIEW_ITEM_REF [PARSER_RUN_REF]`
+and `replay REVIEW_ITEM_REF ANSWER.json [PARSER_RUN_REF]`.
 Replay is **read only** and distinguishes exact current from
 invalidated interpretation, retaining immutable original Level-1
 data. It does NOT perform SQL Level-3 retraction. DASHI's delta
@@ -33,16 +33,22 @@ Python/Lean checks are staged, not yet locally run.
 
 **P0-C/D actual hard endpoint** is the original SensibLaw typed
 demand and numeric proof owner: exact source↔PNF object coordinates,
-\`resolved_unique\`, \`candidate_count=1\`, accepted
-\`document_derived\` identity witness with constraint provenance,
-\`semantic_pnf_identity_projection\`, derived Level-3 factor,
+`resolved_unique`, `candidate_count=1`, accepted
+`document_derived` identity witness with constraint provenance,
+`semantic_pnf_identity_projection`, derived Level-3 factor,
 and transactionally reversible
-\`execution.retract_numeric_pnf_identity_witness\`.
-The original SLR \`DeterministicReviewedPolicy\` is available
+`execution.retract_numeric_pnf_identity_witness`.
+The original SLR `DeterministicReviewedPolicy` is available
 as one authority route but does not let a lexical-only
 named-topic inference bypass the numeric PNF proof. Reuse
-SensibLaw migrations 072–080 and their admission/retraction
-integrity tests, not an SLR-specific identity boolean.
+SensibLaw migrations 072–080 and newer original migration 086
+(open-world candidate universe, signed evidence, consumer-indexed
+relevance and identity-factor alignment audit), plus H9 migrations
+123–124 (entity bearing/labels from supported occurrences).
+Execution-pruned candidates are not semantic refutations and
+one named person is not an open-world coverage witness.
+Reuse original admission/retraction constraints, not a new
+SLR-specific identity boolean.
 Independent JMD GHWB/Q23505 and distinct Wikipedia Q207 remain
 separate P1-E evidence lanes.
 
