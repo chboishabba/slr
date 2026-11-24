@@ -102,7 +102,11 @@ pub fn run(args:&[String])->Result<(),String>{
             print_json(&summary)
         }
         [subcommand,source_revision,parser_run,budget,flag]
+        | [subcommand,source_revision,parser_run,budget,flag,_]
             if subcommand=="compile" && flag=="--commit" => {
+            if matches!(args,[_,_,_,_,_,arg] if arg!="--allow-partial-source") {
+                return Err("unexpected numeric source compile option".into());
+            }
             let max_sentences=budget.parse::<usize>()
                 .map_err(|_|"sentence budget must be a positive integer".to_owned())?;
             if !(1..=64).contains(&max_sentences){
@@ -117,8 +121,14 @@ pub fn run(args:&[String])->Result<(),String>{
                 .map(PathBuf::from)
                 .map_err(|_|"SLR_NATIVE_NUMERIC_SOURCE_ROOT required for durable source artifacts")?;
             let (evidence,summary)=exact_plan(source_revision,parser_run)?;
-            if !evidence.full_document_coverage_paid{
-                return Err("numeric source compilation requires complete original parser coverage; unresolved boundary repairs remain".into());
+            // A source-native parser run may cover an exact **bounded set**
+            // of sentence regions without the whole document. Allow only an
+            // explicit scoped compile; preserve open-world residuals and
+            // prohibit any identity admission from that partial coverage.
+            let partial_requested=matches!(args,
+                [_,_,_,_,_,arg] if arg=="--allow-partial-source");
+            if !evidence.full_document_coverage_paid && !partial_requested {
+                return Err("original parser only covers a source slice; explicit --allow-partial-source required and global identity closure remains unpaid".into());
             }
             if summary.numeric_run_ref.is_empty()||summary.source_token_count==0{
                 return Err("original source numeric plan is incomplete".into());
@@ -134,7 +144,7 @@ pub fn run(args:&[String])->Result<(),String>{
             print_json(&receipt)
         }
         _=>Err(
-            "numeric-pnf-native usage: inspect SOURCE_REV PARSER_RUN | plan SOURCE_REV PARSER_RUN | compile SOURCE_REV PARSER_RUN MAX_SENTENCES --commit (SENSIBLAW_DATABASE_URL and SLR_NATIVE_NUMERIC_SOURCE_ROOT required)".into()
+            "numeric-pnf-native usage: inspect SOURCE_REV PARSER_RUN | plan SOURCE_REV PARSER_RUN | compile SOURCE_REV PARSER_RUN MAX_SENTENCES --commit [--allow-partial-source] (SENSIBLAW_DATABASE_URL and SLR_NATIVE_NUMERIC_SOURCE_ROOT required)".into()
         )
     }
 }
