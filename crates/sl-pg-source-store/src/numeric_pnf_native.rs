@@ -265,6 +265,19 @@ impl Proposal {
     }
 }
 
+/// Strictly validate a producer proposal and expose its *four-component*
+/// grouping coordinate. The incremental owner must never infer an owner from
+/// a lexical name, abbreviated signature or unverified proposal reference.
+pub fn checked_numeric_proposal_owner(
+    manifest: &NativeManifest,
+    proposal: &Value,
+) -> Result<(String, String, String, String), NumericPnfError> {
+    manifest.validate()?;
+    let p = Proposal::checked(proposal.clone(), manifest)?;
+    Ok((p.bucket.coordinate, p.bucket.fibre,
+        p.bucket.factor_type, p.bucket.signature))
+}
+
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum DependencyMode {
     /// Even an empty known set means no declared inputs are available.
