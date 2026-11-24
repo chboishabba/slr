@@ -9,6 +9,7 @@
 
 use crate::{NativeNumericParserPlan,NativeManifest,
     NativeNumericParserSentencePlan};
+use crate::numeric_pnf_parser_plan::digest_numeric_sentence_refs;
 use postgres::{Client,NoTls,Transaction};
 use serde_json::Value;
 use sha2::{Digest,Sha256};
@@ -355,10 +356,20 @@ pub fn persist_original_numeric_parser_plan(
         ||plan.semantic_identity_paid||plan.level_three_paid{
         return Err(NumericParserStoreError::ForeignSource);
     }
-    const MAX_SENTENCES:usize=4096;
-    const MAX_TOKENS:usize=100_000;
+    // Every call is one restartable bounded source slice. The permanent
+    // sentence/work trigger remains indexed by exact source+numeric run,
+    // not by a program-loop cursor.
+    const MAX_SENTENCES:usize=64;
+    const MAX_TOKENS:usize=12_000;
     let count=plan.sentences.iter().map(|s|s.tokens.len()).sum::<usize>();
-    if plan.sentences.len()>MAX_SENTENCES||count>MAX_TOKENS{
+    if plan.sentences.len()>MAX_SENTENCES||count>MAX_TOKENS
+        ||plan.expected_total_sentence_regions<plan.sentences.len()
+        ||plan.expected_total_token_count<count
+        ||plan.expected_total_entity_count<
+            plan.sentences.iter().map(|s|s.entities.len()).sum::<usize>()
+        ||plan.expected_sentence_refs_sha256.len()!=64{
+        return Err(NumericParserStoreError::ResourceLimit);
+    }
         return Err(NumericParserStoreError::ResourceLimit);
     }
     let text=std::str::from_utf8(canonical_bytes)
@@ -757,19 +768,37 @@ pub fn persist_original_numeric_parser_plan(
         &[&plan.numeric_run_ref,&plan.source_document_ref])?.get(0);
     if missing_receipts>0{return Err(NumericParserStoreError::ExistingConflict);}
 
-    let total=plan.sentences.len() as i64;
+    let current=tx.query(
+        "SELECT sentence_ref
+         FROM execution.semantic_parser_sentence
+         WHERE run_ref=$1 AND document_ref=$2 AND representation_version=2
+         ORDER BY sentence_ref",
+        &[&plan.numeric_run_ref,&plan.source_document_ref])?;
+    let refs=current.iter().map(|r|r.get::<_,String>(0)).collect::<Vec<_>>();
+    let complete=plan.full_document_coverage_paid
+        &&refs.len()==plan.expected_total_sentence_regions
+        &&digest_numeric_sentence_refs(&refs)==plan.expected_sentence_refs_sha256;
+    // A matching cardinality with a nonmatching source registration is
+    // evidence of a foreign sentence: fail instead of claiming coverage.
+    if refs.len()>plan.expected_total_sentence_regions
+        ||(refs.len()==plan.expected_total_sentence_regions
+            &&digest_numeric_sentence_refs(&refs)!=plan.expected_sentence_refs_sha256) {
+        return Err(NumericParserStoreError::ExistingConflict);
+    }
+    let registered=refs.len() as i64;
+    let expected=plan.expected_total_sentence_regions as i64;
     tx.execute(
         "INSERT INTO execution.semantic_parser_document_coverage
          (run_ref,document_ref,total_partitions,completed_partitions,
           open_boundary_obligations,tokenization,sentence_segmentation,
           part_of_speech,morphology,dependencies,named_entities,state)
-         VALUES($1,$2,$3,$3,0,TRUE,TRUE,TRUE,FALSE,TRUE,TRUE,$4)
+         VALUES($1,$2,$3,$4,0,TRUE,TRUE,TRUE,FALSE,TRUE,TRUE,$5)
          ON CONFLICT(run_ref,document_ref) DO UPDATE SET
            total_partitions=EXCLUDED.total_partitions,
            completed_partitions=EXCLUDED.completed_partitions,
            state=EXCLUDED.state",
-        &[&plan.numeric_run_ref,&plan.source_document_ref,&total,
-          &if plan.full_document_coverage_paid{"complete"}else{"open"}])?;
+        &[&plan.numeric_run_ref,&plan.source_document_ref,&expected,
+          &registered,&if complete{"complete"}else{"open"}])?;
     tx.commit()?;
     Ok(NumericParserStoreReceipt{
         source_sha256:plan.original_source_sha256.clone(),
@@ -779,7 +808,7 @@ pub fn persist_original_numeric_parser_plan(
         original_source_revision_ref:plan.source_revision_ref.clone(),
         numeric_sentences:plan.sentences.len(),
         numeric_tokens:total_numeric_tokens,numeric_entities:total_numeric_entities,
-        coverage_complete:plan.full_document_coverage_paid,
+        coverage_complete:complete,
         identity_paid:false,level_three_paid:false,
     })
 }
