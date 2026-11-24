@@ -482,6 +482,22 @@ mod tests{
         assert_eq!(c.factors.len(),1);
         assert_eq!(c.demands.len(),3);
         assert_eq!(c.measure.edge_count,2);
+        // Independently derived from the ORIGINAL Python numeric_digest
+        // byte specification (not from this Rust hashing function).
+        assert_eq!(hex(&c.factors[0].factor_digest),
+            "05ab37b06706d8cd7077e90b1a05e8eb6b14c579714fc32e8b1fa2c61b8ec117");
+        let demand_hashes=c.demands.iter()
+            .map(|d|hex(&d.demand_digest)).collect::<Vec<_>>();
+        assert_eq!(demand_hashes,vec![
+            "52ad6d15e5971fb5db022b80d9503c2443185c5891918be3c84735175af1f758",
+            "5e0fe9454d3337c985c52ef543dca4f9f6965eabbda2584ae83e0e0ab3d8aa23",
+            "f9d5b9107ade770e7a41e1b38caeca1d99bee001652e686bfa97cc7f3ccc781a",
+        ]);
+        assert_eq!(c.objects.iter().map(|o|hex(&o.object_digest))
+            .collect::<Vec<_>>(),vec![
+            "1f82f0dbd4c23cca61ee7df6c70994b9f9f3cc03154fc4ebad6e3c9e13aab24a",
+            "e4b2d59a911789315fe92c0f5a6cc8b5cef1a7734db794711e10da4651212209",
+        ]);
         validate_native_numeric_sentence_closure(11,&c).unwrap();
         let mut forgery=c.clone();
         forgery.objects[0].object_digest=[0u8;32];
