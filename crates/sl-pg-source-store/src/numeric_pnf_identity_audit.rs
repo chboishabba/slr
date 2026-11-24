@@ -940,6 +940,100 @@ fn observe_original_cross_resource_needs(
         }).collect())
 }
 
+
+// Port the existing nominal-head licensing boundary (NOUN/PROPN) from
+// SensibLaw entity_resolution.py and retired m045, without restoring the
+// broad trigger or inventing an identity. NER-supported tokens and existing
+// exact head objects already have occurrence carriers. This is a lexical
+// head slice, not the full nominal phrase/mention-identity factor lattice.
+fn materialize_prior_nominal_heads(
+    tx:&mut postgres::Transaction<'_>,run_ref:&str,document_ref:&str,
+    focus_start:i64,budget:usize,
+)->Result<(i64,i64),NativeNumericAuditError>{
+    let noun:i64=tx.query_one("SELECT execution.ensure_semantic_symbol(14::smallint,'mention.noun')",&[])?.get(0);
+    let proper:i64=tx.query_one("SELECT execution.ensure_semantic_symbol(14::smallint,'mention.proper_noun')",&[])?.get(0);
+    tx.execute(
+        "CREATE TEMP TABLE native_numeric_nominal_delta ON COMMIT DROP AS
+         SELECT t.token_id,t.lemma_symbol_id,r.region_id,
+                CASE WHEN pos.symbol_text='PROPN' THEN $5::bigint ELSE $4::bigint END AS kind,
+                digest(convert_to('slr:numeric-nominal-head:v1','UTF8')
+                     ||int8send(r.region_id)||int8send(t.token_id),'sha256') AS object_digest
+         FROM execution.semantic_parser_token t
+         JOIN execution.semantic_symbol pos ON pos.symbol_id=t.pos_symbol_id
+         JOIN execution.semantic_pnf_sentence_region l ON l.sentence_id=t.sentence_id
+         JOIN execution.semantic_pnf_region r ON r.region_id=l.region_id
+         WHERE t.run_ref=$1 AND t.document_ref=$2 AND t.representation_version=2
+           AND r.run_ref=$1 AND r.document_ref=$2 AND r.region_kind=1
+           AND r.closure_state IN (2,3) AND t.end_char<=$3
+           AND pos.symbol_text IN ('NOUN','PROPN') AND t.lemma_symbol_id IS NOT NULL
+           AND NOT EXISTS (
+             SELECT 1 FROM execution.semantic_pnf_object_token_support os
+             JOIN execution.semantic_pnf_object o ON o.object_id=os.object_id
+             WHERE os.token_id=t.token_id AND o.region_id=r.region_id AND o.active)
+           AND NOT EXISTS (
+             SELECT 1 FROM execution.semantic_parser_entity_span e
+             WHERE e.run_ref=t.run_ref AND e.document_ref=t.document_ref
+               AND e.sentence_ref=t.sentence_ref AND e.representation_version=2
+               AND e.start_char<=t.start_char AND e.end_char>=t.end_char)
+         ORDER BY t.end_char DESC,t.token_id LIMIT $6",
+        &[&run_ref,&document_ref,&focus_start,&noun,&proper,&(budget as i64)])?;
+    let objects=tx.execute(
+        "INSERT INTO execution.semantic_pnf_object
+           (object_digest,region_id,object_kind_symbol_id,head_symbol_id,
+            scope_region_id,promotion_level,information_gain,representation_cost,
+            ambiguity_cost,promotion_score,active)
+         SELECT object_digest,region_id,kind,lemma_symbol_id,region_id,0,0,1,1,0,TRUE
+         FROM native_numeric_nominal_delta
+         ON CONFLICT(object_digest) DO NOTHING",&[])?;
+    let supports=tx.execute(
+        "INSERT INTO execution.semantic_pnf_object_token_support(object_id,token_id,ordinal)
+         SELECT o.object_id,d.token_id,0
+         FROM native_numeric_nominal_delta d JOIN execution.semantic_pnf_object o
+           ON o.object_digest=d.object_digest AND o.region_id=d.region_id
+          AND o.object_kind_symbol_id=d.kind AND o.head_symbol_id=d.lemma_symbol_id AND o.active
+         ON CONFLICT DO NOTHING",&[])?;
+    let valid:bool=tx.query_one(
+        "SELECT NOT EXISTS (
+           SELECT 1 FROM native_numeric_nominal_delta d WHERE NOT EXISTS(
+             SELECT 1 FROM execution.semantic_pnf_object o
+             JOIN execution.semantic_pnf_object_token_support s ON s.object_id=o.object_id
+             WHERE o.object_digest=d.object_digest AND o.region_id=d.region_id
+               AND o.object_kind_symbol_id=d.kind AND o.head_symbol_id=d.lemma_symbol_id
+               AND o.active AND s.token_id=d.token_id AND s.ordinal=0))",&[])?.get(0);
+    if !valid{return Err(NativeNumericAuditError::ForeignSource);}
+    Ok((objects as i64,supports as i64))
+}
+
+// Reuse m110's actual typed factor/role and temporal producer on an exact
+// demand-local consumer queue. Do not advance or certify H3 completion:
+// a partial source can still gather useful H6 evidence without closing H3.
+fn run_original_h6_producer(
+    tx:&mut postgres::Transaction<'_>,demand:i64,run_ref:&str,document_ref:&str,
+)->Result<i64,NativeNumericAuditError>{
+    let row=tx.query_one(
+        "SELECT r.run_id,r.document_id
+         FROM execution.semantic_pnf_demand d JOIN execution.semantic_pnf_region r
+         ON r.region_id=d.source_region_id
+         WHERE d.demand_id=$1 AND r.run_ref=$2 AND r.document_ref=$3",
+        &[&demand,&run_ref,&document_ref])?;
+    let run_id:i64=row.get(0);let document_id:i64=row.get(1);
+    let consumer="slr-native-numeric-pnf";
+    let query=format!("numeric-demand:{demand}");
+    let policy="candidate-only-h6:v1";
+    tx.execute(
+        "INSERT INTO execution.semantic_pnf_consumer_horizon_work_queue
+           (demand_id,consumer_ref,query_ref,policy_ref,horizon,work_state)
+         VALUES($1,$2,$3,$4,6,1)
+         ON CONFLICT(demand_id,consumer_ref,query_ref,policy_ref,horizon)
+         DO UPDATE SET work_state=1,completed_at=NULL",
+        &[&demand,&consumer,&query,&policy])?;
+    let inserted:i64=tx.query_one(
+        "SELECT execution.refresh_numeric_pnf_h6_discourse_temporal_evidence_for_consumer(
+           $1,$2,$3,$4,$5,FALSE)",
+        &[&run_id,&document_id,&consumer,&query,&policy])?.get(0);
+    Ok(inserted)
+}
+
 /// Candidate-only, exact-source consumer transport. This extends the represented
 /// fibre, not the capped legacy planner. It never selects, refutes, closes
 /// coverage, admits a witness, or substitutes a Level-3 argument.
@@ -956,6 +1050,9 @@ pub struct NativeNumericCandidateTransportReceipt {
     pub represented_candidate_count:i64,
     pub outside_model_possible:bool,
     pub complete_typed_coverage_paid:bool,
+    pub nominal_head_objects_inserted:i64,
+    pub nominal_head_token_supports_inserted:i64,
+    pub original_h6_evidence_inserted:i64,
     pub morphology_observations_inserted:usize,
     pub candidates_without_morphology_observation:i64,
     pub original_horizon_observations:Vec<NativeNumericHorizonObservation>,
@@ -1010,6 +1107,9 @@ pub fn transport_original_numeric_candidates_for_source_answer(
     let demand:i64=rows[0].get(0);
     let source:i64=rows[0].get(1);
     let focus_token:i64=rows[0].get(2);
+    let (nominal_head_objects_inserted,nominal_head_token_supports_inserted)=
+        materialize_prior_nominal_heads(&mut tx,numeric_run_ref,&answer.source_document_ref,
+            answer.original_focus_span[0] as i64,budget)?;
     // Materialize the exact existing occurrence relation. Recency is the only
     // exclusion here: morphology/quotation/type refinement is not proved yet.
     // Lack of a live occurrence object is not negative evidence.
@@ -1085,6 +1185,7 @@ pub fn transport_original_numeric_candidates_for_source_answer(
     if !open{return Err(NativeNumericAuditError::SourcePolicy);}
     let (morphology_observations_inserted,candidates_without_morphology_observation)=
         refine_original_numeric_morphology(&mut tx,demand,focus_token,numeric_run_ref,&answer.source_document_ref,budget)?;
+    let original_h6_evidence_inserted=run_original_h6_producer(&mut tx,demand,numeric_run_ref,&answer.source_document_ref)?;
     let (original_horizon_observations,original_document_identity_observations)=
         observe_original_resolution_fibre(&mut tx,demand,numeric_run_ref,&answer.source_document_ref)?;
     let document_identity_fibre=project_original_identity_fibre(&original_horizon_observations,&original_document_identity_observations,open);
@@ -1098,6 +1199,7 @@ pub fn transport_original_numeric_candidates_for_source_answer(
         inserted_candidate_ids:ids,remaining_untransported_count:remaining,
         represented_candidate_count:count,outside_model_possible:open,
         complete_typed_coverage_paid:false,
+        nominal_head_objects_inserted,nominal_head_token_supports_inserted,original_h6_evidence_inserted,
         morphology_observations_inserted,candidates_without_morphology_observation,
         original_horizon_observations,original_document_identity_observations,
         original_parser_identity_producer,document_identity_fibre,original_cross_resource_needs,
