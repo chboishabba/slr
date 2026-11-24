@@ -3,6 +3,49 @@
 
 ### Controlling P0 status — 24 November 2026
 
+### Native Rust numeric-PNF port decision — formal first
+
+The P0-B source-bound he→Bush policy interpretation and source
+consumer remain accepted. The long SensibLaw Python numeric
+tranche was stopped. Its invocation was the **historical**
+run_complete_tranche.py, which defaults to compatibility-replay
+unless --strict-exact is passed. The original strict numeric
+PostgreSQL production wrapper is
+run_complete_tranche_production.py. Do not port legacy
+document-wide Python typing/persistence loops as Rust semantics.
+
+**Controlling formal design and Lean implementation**:
+DASHI #112
+docs/numeric_pnf_native_rust_formal_port_20261124.md and
+DASHI/output-final_aristotle/RequestProject/Slr/
+NumericPnfRustPortContract.lean.
+Standalone gate:
+bash scripts/check_numeric_pnf_rust_formal_contract.sh
+in dashi_lean4. Source-written, local kernel test pending;
+no native numeric-PNF engine has been launched or accepted.
+
+Source compilation must preserve original canonical SHA-256,
+Unicode coordinates, revision and real parser head/error
+semantics. The previously accepted small book payload 7ff2ec8f…
+must not be equated to the much larger stopped GWB article/tranche.
+The strict numeric reference, not the compatibility replay, is
+the parity oracle. Preserve canonical owner order/first-compatible
+bucket grouping, global dependency validity, provenance/residuals,
+open-world F/P/Q/R/O, 64-cap incompleteness, typed H9 occurrence,
+original SQL document-derived witness/admission and Level-3
+retraction. No faster name-based identity guess.
+
+Physical acceptance targets actual visited units per source
+delta, reverse dependency edge and dirty-owner canonical
+reduction, not just CPU utilization or output rows. A
+delta-linear same-owner reduction is **not** proved by an
+independent-owner commutation theorem. Use bounded 90-second
+checkpoint/replay. No bulk full-source PNF re-run until
+Lean semantics, strict reference parity, source manifest
+and adversarial negative controls pass.
+
+
+
 ### Latest P0-B operator PASS — supersedes historical Pending labels
 
 The **local** original-source consumer delta
