@@ -10,6 +10,9 @@ use sensiblaw_pg_source_store::{
     load_database_config, load_exact_native_numeric_evidence,
     plan_original_native_numeric_parser, deterministic_numeric_run_ref,
     run_native_numeric_exact_source_slice, OriginalNativeNumericEvidence,
+    inspect_native_antecedent_review, native_antecedent_frontier,
+    compile_native_source_local_answer,
+    audit_original_numeric_identity_for_source_answer,
 };
 use serde::Serialize;
 use std::{env,path::PathBuf};
@@ -101,6 +104,34 @@ pub fn run(args:&[String])->Result<(),String>{
             let (_,summary)=exact_plan(source_revision,parser_run)?;
             print_json(&summary)
         }
+        [subcommand,review_item_ref,original_parser_run]
+            if subcommand=="audit" => {
+            let config=load_database_config(None).map_err(|e|e.to_string())?;
+            let inspection=inspect_native_antecedent_review(
+                &config,review_item_ref
+            ).map_err(|e|e.to_string())?;
+            let frontier=native_antecedent_frontier(
+                &config,review_item_ref,original_parser_run
+            ).map_err(|e|e.to_string())?;
+            let answer=compile_native_source_local_answer(
+                &inspection,&frontier
+            ).map_err(|e|e.to_string())?;
+            let evidence=load_exact_native_numeric_evidence(
+                &config,&answer.source_revision_ref,original_parser_run,
+                "slr-strict-numeric-pnf-v1"
+            ).map_err(|e|e.to_string())?;
+            if evidence.manifest.canonical_content_sha256!=
+                answer.source_content_sha256{
+                return Err("source consumer and numeric compiler use different canonical bytes".into());
+            }
+            let numeric_url=env::var("SENSIBLAW_DATABASE_URL")
+                .map_err(|_|"numeric audit requires SENSIBLAW_DATABASE_URL")?;
+            let numeric_run=deterministic_numeric_run_ref(&evidence.manifest);
+            let audit=audit_original_numeric_identity_for_source_answer(
+                &numeric_url,&numeric_run,&answer
+            ).map_err(|e|e.to_string())?;
+            print_json(&audit)
+        }
         [subcommand,source_revision,parser_run,budget,flag]
         | [subcommand,source_revision,parser_run,budget,flag,_]
             if subcommand=="compile" && flag=="--commit" => {
@@ -144,7 +175,7 @@ pub fn run(args:&[String])->Result<(),String>{
             print_json(&receipt)
         }
         _=>Err(
-            "numeric-pnf-native usage: inspect SOURCE_REV PARSER_RUN | plan SOURCE_REV PARSER_RUN | compile SOURCE_REV PARSER_RUN MAX_SENTENCES --commit [--allow-partial-source] (SENSIBLAW_DATABASE_URL and SLR_NATIVE_NUMERIC_SOURCE_ROOT required)".into()
+            "numeric-pnf-native usage: inspect SOURCE_REV PARSER_RUN | plan SOURCE_REV PARSER_RUN | audit S29_REVIEW_ITEM_REF PARSER_RUN | compile SOURCE_REV PARSER_RUN MAX_SENTENCES --commit [--allow-partial-source] (numeric DB URL required for audit/compile, durable source root for compile)".into()
         )
     }
 }
