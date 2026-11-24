@@ -9,7 +9,7 @@ use crate::NativeSourceLocalAnswer;
 use postgres::{Client,NoTls};
 use serde::Serialize;
 use thiserror::Error;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap,BTreeSet};
 
 #[derive(Debug,Error)]
 pub enum NativeNumericAuditError{
@@ -635,6 +635,50 @@ pub struct NativeNumericDocumentIdentityObservation{
     pub admitted_entity_ids:Vec<i64>,
     pub admitted_witness_ids:Vec<i64>,
 }
+
+/// Consumer projection of the existing proof-relevant identity fibre (m069).
+/// Preserve the inverse occurrence fibre; do not manufacture singleton entity
+/// IDs for unresolved objects. Only original admitted classes can be grouped.
+#[derive(Debug,Clone,Serialize)]
+pub struct NativeNumericIdentityFibreProjection{
+    pub admitted_classes:BTreeMap<i64,Vec<i64>>,
+    pub unresolved_keys:Vec<(i16,i64)>,
+    pub conflicting_objects:Vec<i64>,
+    pub refuted_keys:Vec<(i16,i64)>,
+    pub outside_model_possible:bool,
+}
+fn project_original_identity_fibre(
+    horizons:&[NativeNumericHorizonObservation],
+    classes:&[NativeNumericDocumentIdentityObservation],
+    outside:bool,
+)->NativeNumericIdentityFibreProjection{
+    let by_object=classes.iter().map(|c|(c.object_id,c)).collect::<BTreeMap<_,_>>();
+    let mut projection=NativeNumericIdentityFibreProjection{
+        admitted_classes:BTreeMap::new(),unresolved_keys:Vec::new(),
+        conflicting_objects:Vec::new(),refuted_keys:Vec::new(),
+        outside_model_possible:outside,
+    };
+    for h in horizons.iter().filter(|h|h.horizon==3){
+        let key=(h.target_kind,h.target_id);
+        if h.refuted{projection.refuted_keys.push(key);continue;}
+        if h.target_kind==1{
+            if let Some(c)=by_object.get(&h.target_id){
+                if let [entity]=c.admitted_entity_ids.as_slice(){
+                    if !c.admitted_witness_ids.is_empty(){
+                        projection.admitted_classes.entry(*entity).or_default().push(h.target_id);
+                        continue;
+                    }
+                }
+                if c.admitted_entity_ids.len()>1{
+                    projection.conflicting_objects.push(h.target_id);
+                }
+            }
+        }
+        projection.unresolved_keys.push(key);
+    }
+    projection
+}
+
 // Read the original cumulative H3/H6/H9 fibre and proof-relevant document
 // projection. Do not conflate a preference with a unique admitted identity.
 fn observe_original_resolution_fibre(
@@ -860,6 +904,7 @@ pub struct NativeNumericCandidateTransportReceipt {
     pub original_horizon_observations:Vec<NativeNumericHorizonObservation>,
     pub original_document_identity_observations:Vec<NativeNumericDocumentIdentityObservation>,
     pub original_parser_identity_producer:OriginalParserIdentityProducerObservation,
+    pub document_identity_fibre:NativeNumericIdentityFibreProjection,
 }
 pub fn transport_original_numeric_candidates_for_source_answer(
     numeric_url:&str,numeric_run_ref:&str,answer:&NativeSourceLocalAnswer,
@@ -984,6 +1029,7 @@ pub fn transport_original_numeric_candidates_for_source_answer(
         refine_original_numeric_morphology(&mut tx,demand,focus_token,numeric_run_ref,&answer.source_document_ref,budget)?;
     let (original_horizon_observations,original_document_identity_observations)=
         observe_original_resolution_fibre(&mut tx,demand,numeric_run_ref,&answer.source_document_ref)?;
+    let document_identity_fibre=project_original_identity_fibre(&original_horizon_observations,&original_document_identity_observations,open);
     let original_parser_identity_producer=original_parser_identity_producer_probe(
         &mut tx,numeric_run_ref,&answer.source_document_ref,demand)?;
     tx.commit()?;
@@ -995,7 +1041,7 @@ pub fn transport_original_numeric_candidates_for_source_answer(
         complete_typed_coverage_paid:false,
         morphology_observations_inserted,candidates_without_morphology_observation,
         original_horizon_observations,original_document_identity_observations,
-        original_parser_identity_producer,
+        original_parser_identity_producer,document_identity_fibre,
     })
 }
 
@@ -1008,6 +1054,23 @@ mod tests{
         assert!(morphology_mismatches(&f,&[]).is_empty());
         assert!(morphology_mismatches(&f,&["NUMBER=Sing".into(),"NUMBER=Plur".into()]).is_empty());
         assert_eq!(morphology_mismatches(&f,&["GENDER=Fem".into(),"Number=Plur".into()]),vec!["Gender","Number"]);
+    }
+    #[test]
+    fn class_projection_preserves_inverse_fibre_and_conflicts(){
+        let h=|id| NativeNumericHorizonObservation{
+            target_kind:1,target_id:id,horizon:3,signed_residual:0,phase:0,
+            evidence_count:1,active:false,execution_residual:true,refuted:false,strict_preference:false,
+        };
+        let cls=|id,entities:Vec<i64>| NativeNumericDocumentIdentityObservation{
+            object_id:id,admitted_entity_ids:entities,admitted_witness_ids:vec![99],
+        };
+        let result=project_original_identity_fibre(
+            &[h(10),h(11),h(12),h(13)],
+            &[cls(10,vec![20]),cls(11,vec![20]),cls(13,vec![30,31])],true);
+        assert_eq!(result.admitted_classes.get(&20),Some(&vec![10,11]));
+        assert_eq!(result.unresolved_keys,vec![(1,12),(1,13)]);
+        assert_eq!(result.conflicting_objects,vec![13]);
+        assert!(result.outside_model_possible);
     }
     #[test]
     fn unsupported_scope_refused_before_any_sql(){
