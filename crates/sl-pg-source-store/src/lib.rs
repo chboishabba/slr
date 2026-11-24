@@ -41,6 +41,7 @@ mod native_antecedent_named_topic;
 mod native_source_local_consumer;
 mod numeric_pnf_native;
 mod numeric_pnf_operator;
+mod numeric_pnf_source_bridge;
 mod statement_pnf_spine;
 mod generic_source_compiler;
 mod source_candidate_persistence;
@@ -242,6 +243,11 @@ pub use reviewed_pnf::{
     materialize_reviewed_pnf_revision, validate_reviewed_pnf_revision,
     ReviewedPnfMaterializationError, ReviewedPnfMaterializationReceipt, ReviewedPnfRevision,
     ReviewedPnfValidationError,
+};
+pub use numeric_pnf_source_bridge::{
+    load_exact_native_numeric_evidence, NativeNumericSourceError,
+    OriginalNativeNumericEvidence, OriginalNumericSentenceFibre,
+    OriginalNumericRawToken,
 };
 pub use numeric_pnf_operator::{
     compose_numeric_sentence_native, strict_numeric_digest,
