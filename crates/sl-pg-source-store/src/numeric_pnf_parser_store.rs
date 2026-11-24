@@ -225,6 +225,8 @@ pub fn persist_original_numeric_parser_plan(
     let text=std::str::from_utf8(canonical_bytes)
         .map_err(|_|NumericParserStoreError::ForeignSource)?;
     let bounds=byte_boundaries(text);
+    let total_numeric_tokens=plan.sentences.iter().map(|s|s.tokens.len()).sum();
+    let total_numeric_entities=plan.sentences.iter().map(|s|s.entities.len()).sum();
     let mut by_scope=plan.sentences.iter().collect::<Vec<_>>();
     by_scope.sort_by_key(|s|(s.start_char,s.end_char));
     let mut last_end=0i64;
@@ -290,6 +292,14 @@ pub fn persist_original_numeric_parser_plan(
           &(canonical_bytes.len() as i64),
           &(source_manifest.source_codepoint_length as i64),
           &source_path.to_string_lossy().to_string()])?;
+    let run_check=tx.query_one(
+        "SELECT document_ref,kernel_contract
+         FROM execution.semantic_run WHERE run_ref=$1",
+        &[&plan.numeric_run_ref])?;
+    if run_check.get::<_,String>(0)!=plan.source_document_ref
+        ||run_check.get::<_,String>(1)!="slr-native-source-parser-reuse:v1"{
+        return Err(NumericParserStoreError::ExistingConflict);
+    }
     let source_check=tx.query(
         "SELECT run_ref,document_ref,content_sha256,byte_count,char_count
          FROM execution.semantic_parser_source WHERE source_ref=$1",
@@ -453,8 +463,7 @@ pub fn persist_original_numeric_parser_plan(
         original_parser_run_ref:plan.original_parser_run_ref.clone(),
         original_source_revision_ref:plan.source_revision_ref.clone(),
         numeric_sentences:plan.sentences.len(),
-        numeric_tokens:count,numeric_entities:plan.sentences.iter()
-            .map(|s|s.entities.len()).sum(),
+        numeric_tokens:total_numeric_tokens,numeric_entities:total_numeric_entities,
         coverage_complete:plan.full_document_coverage_paid,
         identity_paid:false,level_three_paid:false,
     })
