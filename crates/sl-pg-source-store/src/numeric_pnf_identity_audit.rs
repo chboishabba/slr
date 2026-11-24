@@ -42,6 +42,8 @@ pub struct NativeNumericIdentityAudit{
     pub native_anaphor_unresolved_demand_ids:Vec<i64>,
     pub numeric_demand_open_world:Vec<NumericDemandWorldStatus>,
     pub resolved_unique_target_from_original_sql:bool,
+    pub observed_accepted_document_witness_ids:Vec<i64>,
+    pub observed_witnessed_level_three_derivation_refs:Vec<String>,
     pub original_accepted_document_identity_paid:bool,
     pub original_level_three_substitution_paid:bool,
     pub external_q23505_paid:bool,
@@ -62,6 +64,8 @@ pub struct NumericDemandWorldStatus{
     pub selected_live_object_id:Option<i64>,
     pub live_candidate_count:i64,
     pub invalid_refutation_count:i64,
+    pub producer_h9_target_occurrence_count:i64,
+    pub quality_gated_h9_entity_occurrence_count:i64,
     pub represented_candidate_count:i64,
     pub active_candidate_count:i64,
     pub refuted_candidate_count:i64,
@@ -182,6 +186,8 @@ pub fn audit_original_numeric_identity_for_source_answer(
     }
     let mut world=Vec::new();
     let mut actual_unique=false;
+    let mut observed_witnesses=BTreeSet::<i64>::new();
+    let mut observed_derivations=BTreeSet::<String>::new();
     for demand_id in &ids{
         let rows=tx.query(
             "SELECT demand.source_object_id,ow.outside_model_possible,
@@ -264,6 +270,65 @@ pub fn audit_original_numeric_identity_for_source_answer(
                 &[demand_id,&target,&numeric_run_ref,&answer.source_document_ref])?.get(0);
             if matched&&target!=source_id{Some(target)}else{None}
         }else{None};
+
+        // H9 provenance is a separate source-region semantic target relation.
+        // An antecedent in a different sentence cannot be relabelled as an H9
+        // target occurrence merely because it is the selected actor.
+        let h9_target:i64=tx.query_one(
+            "SELECT count(*)::bigint FROM execution.semantic_pnf_demand_h9_target_support_v1
+             WHERE demand_id=$1",&[demand_id])?.get(0);
+        let h9_entities:i64=tx.query_one(
+            "SELECT count(*)::bigint FROM execution.semantic_pnf_demand_parser_entity_occurrence_v1
+             WHERE demand_id=$1",&[demand_id])?.get(0);
+        if let Some(target)=selected_live_object {
+            let rows=tx.query(
+                "SELECT DISTINCT w.witness_id
+                 FROM execution.semantic_pnf_identity_witness w
+                 JOIN execution.semantic_pnf_identity_witness_admission a
+                   ON a.witness_id=w.witness_id AND a.admission_state=2
+                 JOIN execution.semantic_pnf_canonical_entity entity
+                   ON entity.entity_id=w.target_entity_id AND entity.authority_class=2
+                 JOIN execution.semantic_pnf_identity_projection p
+                   ON p.source_object_id=w.source_object_id AND p.authority_class=2
+                  AND p.target_entity_id=entity.entity_id AND w.witness_id=ANY(p.witness_ids)
+                 JOIN execution.semantic_pnf_frontier_resolution resolution
+                   ON resolution.demand_id=w.demand_id AND resolution.interface_id=w.resolution_interface_id
+                 WHERE w.demand_id=$1 AND w.source_object_id=$2
+                   AND entity.anchor_object_id=$3 AND w.authority_class=2 AND w.witness_kind=5
+                   AND w.candidate_count=1 AND resolution.outcome_state=2
+                   AND resolution.candidate_count=1 AND resolution.selected_target_kind=1
+                   AND resolution.selected_target_id=$3
+                   AND NOT EXISTS (
+                       SELECT 1 FROM execution.semantic_pnf_demand_constraint dc
+                       WHERE dc.demand_id=w.demand_id AND dc.required
+                         AND NOT EXISTS (
+                           SELECT 1 FROM execution.semantic_pnf_identity_witness_constraint wc
+                           WHERE wc.witness_id=w.witness_id AND wc.constraint_ordinal=dc.ordinal
+                             AND wc.key_kind=dc.key_kind AND wc.key_a=dc.key_a AND wc.key_b=dc.key_b
+                             AND wc.polarity=dc.polarity AND wc.satisfied))",
+                &[demand_id,&source_id,&target])?;
+            for row in rows {
+                let witness:i64=row.get(0);
+                observed_witnesses.insert(witness);
+                for d in tx.query(
+                    "SELECT DISTINCT derivation.derivation_ref
+                     FROM execution.semantic_pnf_factor_derivation derivation
+                     JOIN execution.semantic_pnf_factor_derivation_premise premise
+                       ON premise.derivation_id=derivation.derivation_id
+                     JOIN execution.semantic_pnf_factor factor ON factor.factor_id=premise.factor_id
+                     JOIN execution.semantic_pnf_region region ON region.region_id=factor.region_id
+                     WHERE region.run_ref=$2 AND region.document_ref=$3
+                       AND derivation.epistemic_level=3 AND derivation.derivation_state=2
+                       AND derivation.authority_class=2
+                       AND EXISTS (
+                         SELECT 1 FROM execution.semantic_pnf_factor_derivation_argument a
+                         WHERE a.derivation_id=derivation.derivation_id
+                           AND a.identity_entity_id IS NOT NULL AND $1=ANY(a.identity_witness_ids))",
+                    &[&witness,&numeric_run_ref,&answer.source_document_ref])? {
+                    observed_derivations.insert(d.get::<_,String>(0));
+                }
+            }
+        }
         world.push(NumericDemandWorldStatus{
             demand_id:*demand_id,source_object_id:source_id,
             outside_model_possible:outside,coverage_witness_ref:coverage.clone(),
@@ -272,6 +337,8 @@ pub fn audit_original_numeric_identity_for_source_answer(
             selected_live_object_id:selected_live_object,
             live_candidate_count:live.len() as i64,
             invalid_refutation_count:invalid_refutation,
+            producer_h9_target_occurrence_count:h9_target,
+            quality_gated_h9_entity_occurrence_count:h9_entities,
             represented_candidate_count:represented,
             active_candidate_count:active,refuted_candidate_count:refuted,
         });
@@ -319,6 +386,8 @@ pub fn audit_original_numeric_identity_for_source_answer(
         native_anaphor_unresolved_demand_ids:ids,
         numeric_demand_open_world:world,
         resolved_unique_target_from_original_sql:actual_unique,
+        observed_accepted_document_witness_ids:observed_witnesses.into_iter().collect(),
+        observed_witnessed_level_three_derivation_refs:observed_derivations.into_iter().collect(),
         original_accepted_document_identity_paid:false,
         original_level_three_substitution_paid:false,
         external_q23505_paid:false,q207_paid:false,historical_truth_paid:false,
