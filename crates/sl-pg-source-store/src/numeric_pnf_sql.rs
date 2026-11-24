@@ -4,9 +4,9 @@
 //! checked before the first persistent insert, and failure rolls back.
 //! Original authority: numeric_sentence_admission.py and its SQL migrations.
 
-use crate::{NativeManifest,NativeSentenceClosure,NativeNumericPublishConfig,
-    validate_native_numeric_sentence_closure,NumericOperatorError,NumericDigestValue,
-    strict_numeric_digest};
+use crate::{NativeManifest,NativeSentenceClosure,
+    validate_native_numeric_sentence_closure,NumericOperatorError,
+    NumericDigestValue,strict_numeric_digest};
 use postgres::{Client,NoTls};
 use sha2::{Digest,Sha256};
 use std::collections::BTreeSet;
