@@ -418,6 +418,31 @@ pub fn persist_original_numeric_parser_plan(
     let symbols=intern_all(&mut tx,&normalized)?;
     let morph_ids=intern_morphology(&mut tx,plan,&symbols)?;
 
+    // Create exactly one original numeric document owner BEFORE sentence
+    // INSERT. The original SQL trigger owns sentence regions, links and
+    // leased work items; do not reproduce that trigger in Rust.
+    let document_digest=crate::strict_numeric_digest(vec![
+        crate::NumericDigestValue::Bytes(plan.numeric_run_ref.as_bytes().to_vec()),
+        crate::NumericDigestValue::Bytes(plan.source_document_ref.as_bytes().to_vec()),
+        crate::NumericDigestValue::Int(10),
+        crate::NumericDigestValue::Int(0),
+        crate::NumericDigestValue::Int(source_manifest.source_codepoint_length as i128),
+    ]);
+    let document_region=tx.query_one(
+        "INSERT INTO execution.semantic_pnf_region
+         (region_digest,run_ref,document_ref,region_kind,
+          start_char,end_char,sequence_no,closure_state,authored_boundary)
+         VALUES($1,$2,$3,10,0,$4,0,1,TRUE)
+         ON CONFLICT(run_ref,document_ref,region_kind,start_char,end_char)
+         DO UPDATE SET authored_boundary=TRUE
+         RETURNING region_id",
+        &[&document_digest.to_vec(),&plan.numeric_run_ref,
+          &plan.source_document_ref,
+          &(source_manifest.source_codepoint_length as i64)])?;
+    let document_region_id:i64=document_region.get(0);
+    if document_region_id<=0{return Err(NumericParserStoreError::ExistingConflict);}
+
+
     for (sequence,sentence) in by_scope.iter().enumerate(){
         let st=sentence.start_char as usize;
         let en=sentence.end_char as usize;
@@ -532,21 +557,33 @@ pub fn persist_original_numeric_parser_plan(
             &[&plan.numeric_run_ref,&plan.source_document_ref,
               &sentence.sentence_ref])?.get(0);
         if mismatches>0{return Err(NumericParserStoreError::ExistingConflict);}
-        // Original entity span uses the same v2 numeric digest and source label,
-        // but no semantic actor authority is created.
-        for entity in &sentence.entities{
-            let kind=sym(&symbols,8,&entity.label_ref)?;
+        // Entity observations are candidates and must remain NER source
+        // spans; one setwise statement per bounded sentence, not N SQL calls.
+        let erefs=sentence.entities.iter().map(|e|e.entity_ref.clone())
+            .collect::<Vec<_>>();
+        let estarts=sentence.entities.iter().map(|e|e.start_char)
+            .collect::<Vec<_>>();
+        let eends=sentence.entities.iter().map(|e|e.end_char)
+            .collect::<Vec<_>>();
+        let edigests=sentence.entities.iter().map(|e|e.entity_digest.to_vec())
+            .collect::<Vec<_>>();
+        let ekinds=sentence.entities.iter().map(|e|sym(&symbols,8,&e.label_ref))
+            .collect::<Result<Vec<_>,_>>()?;
+        if !erefs.is_empty(){
             tx.execute(
                 "INSERT INTO execution.semantic_parser_entity_span
                  (entity_ref,run_ref,document_ref,partition_ref,sentence_ref,
                   start_char,end_char,entity_digest,entity_type_symbol_id,
                   representation_version)
-                 VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,2)
+                 SELECT e.entity_ref,$1,$2,$3,$4,e.start_char,e.end_char,
+                        e.entity_digest,e.entity_type,2
+                 FROM unnest($5::text[],$6::bigint[],$7::bigint[],
+                             $8::bytea[],$9::bigint[])
+                   AS e(entity_ref,start_char,end_char,entity_digest,entity_type)
                  ON CONFLICT(entity_ref) DO NOTHING",
-                &[&entity.entity_ref,&plan.numeric_run_ref,
-                  &plan.source_document_ref,&partition_ref,
-                  &sentence.sentence_ref,&entity.start_char,
-                  &entity.end_char,&entity.entity_digest.to_vec(),&kind])?;
+                &[&plan.numeric_run_ref,&plan.source_document_ref,
+                  &partition_ref,&sentence.sentence_ref,
+                  &erefs,&estarts,&eends,&edigests,&ekinds])?;
         }
     }
     let total=plan.sentences.len() as i64;
