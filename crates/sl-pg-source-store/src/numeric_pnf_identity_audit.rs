@@ -38,6 +38,7 @@ pub struct NativeNumericIdentityAudit{
     pub original_focus_token_count:usize,
     pub original_named_person_support_count:usize,
     pub original_named_person_support_unique_statements:usize,
+    pub original_bush_supported_numeric_object_count:usize,
     pub exact_numeric_focus_mention_found:bool,
     pub native_anaphor_unresolved_demand_ids:Vec<i64>,
     pub numeric_demand_open_world:Vec<NumericDemandWorldStatus>,
@@ -137,6 +138,7 @@ pub fn audit_original_numeric_identity_for_source_answer(
           &(answer.original_focus_span[0] as i64),
           &(answer.original_focus_span[1] as i64)])?;
     let mut observed=0usize;
+    let mut person_token_ids=BTreeSet::<i64>::new();
     let mut statements=BTreeSet::new();
     for support in &answer.original_person_support{
         let rows=tx.query(
@@ -159,10 +161,26 @@ pub fn audit_original_numeric_identity_for_source_answer(
               &(support.start_char as i64),&(support.end_char as i64),
               &support.name])?;
         if rows.len()==1{
+            let token_id:i64=rows[0].get(0);
+            if token_id<=0{return Err(NativeNumericAuditError::ForeignSource);}
             observed+=1;
+            person_token_ids.insert(token_id);
             statements.insert(support.statement_ref.clone());
         }
     }
+    let observed_person_tokens=person_token_ids.into_iter().collect::<Vec<_>>();
+    let supported_bush_objects=tx.query(
+        "SELECT DISTINCT object.object_id
+         FROM execution.semantic_pnf_object_token_support AS support
+         JOIN execution.semantic_pnf_object AS object
+           ON object.object_id=support.object_id
+         JOIN execution.semantic_pnf_region AS region
+           ON region.region_id=object.region_id
+         WHERE support.token_id=ANY($1::bigint[])
+           AND region.run_ref=$2 AND region.document_ref=$3",
+        &[&observed_person_tokens,&numeric_run_ref,&answer.source_document_ref])?
+        .into_iter().map(|r|r.get::<_,i64>(0))
+        .collect::<BTreeSet<_>>();
     let mention_paid=focus.len()==1;
     let mut ids=Vec::new();
     if mention_paid{
@@ -268,7 +286,9 @@ pub fn audit_original_numeric_identity_for_source_answer(
                         OR resolution.candidate_count IS DISTINCT FROM 1)
                  )",
                 &[demand_id,&target,&numeric_run_ref,&answer.source_document_ref])?.get(0);
-            if matched&&target!=source_id{Some(target)}else{None}
+            if matched&&target!=source_id&&supported_bush_objects.contains(&target){
+                Some(target)
+            }else{None}
         }else{None};
 
         // H9 provenance is a separate source-region semantic target relation.
@@ -366,6 +386,9 @@ pub fn audit_original_numeric_identity_for_source_answer(
     if ids.is_empty(){
         remaining.push("MIGRATION_180_ANAPHOR_TYPED_DEMAND_MISSING".into());
     }
+    if supported_bush_objects.is_empty(){
+        remaining.push("EXACT_BUSH_OBJECT_ANCHOR_MISSING".into());
+    }
     if !actual_unique{
         remaining.push("ORIGINAL_TYPED_UNIQUE_AND_OPEN_WORLD_COVERAGE_UNPAID".into());
     }
@@ -382,6 +405,7 @@ pub fn audit_original_numeric_identity_for_source_answer(
         original_focus_token_count:focus.len(),
         original_named_person_support_count:observed,
         original_named_person_support_unique_statements:statements.len(),
+        original_bush_supported_numeric_object_count:supported_bush_objects.len(),
         exact_numeric_focus_mention_found:mention_paid&&!ids.is_empty(),
         native_anaphor_unresolved_demand_ids:ids,
         numeric_demand_open_world:world,
