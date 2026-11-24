@@ -2,6 +2,63 @@
 
 ## Controlling SLR P0 programme reset — 23 November 2026
 
+### 24 November 2026 correction — do not conflate S29 and linguistic inference
+
+Original SLR `sl-semantic-admission` already supports
+`ResolutionAuthority::DeterministicReviewedPolicy` as well as
+`HumanReview`. Our earlier P0 handoff mistakenly treated an
+S29 `Accepted` human command as mandatory for ANY local
+identity interpretation. S29 `Pending` is a workflow fact,
+not a proof of ambiguity or a reason to suppress a
+deterministic discourse inference.
+
+The original C4.10 Bush source span was selected explicitly
+and its geometry checked. **No nearest-name coreference
+resolver ran.** Original SensibLaw typed binder orders
+candidate sets by distance before the 64-member truncation,
+which is a completeness hazard but never semantic admission.
+Our M1 parser frontier retained all observed candidates and
+did not use proximity to choose Bush.
+
+**New SLR native P0 owner:** `native_antecedent_named_topic.rs`
+and `sensiblaw native-antecedent-review derive REVIEW_ITEM_REF
+[PARSER_RUN_REF]`. The versioned
+`slr:policy:source-local-repeated-person-topic:v1`
+reopens the original five-region parser and source, checks
+exact original focus PRON/morphology, groups PERSON NER
+annotations by source literal and requires the same uniquely
+named actor in at least two distinct preceding original
+sentences and no competing named PERSON/quote boundary.
+The real earlier source `run-PELWk2Yh` has two original
+PERSON `Bush` spans, sentences 19 and 22, zero other
+pre-focus PERSONs, and no double-quote boundary. Thus this
+policy **can derive a positive source-local Bush reading**
+without any human S29 action. A second named human, missing
+repeat evidence, quote/morph conflict, foreign source or
+S29 terminal rejection fails closed.
+
+The output distinguishes `source_local_inference_derived`
+from `governed_source_local_admission_paid`, universal
+consumer completeness, JMD Q23505/Q207 and claim truth.
+DASHI #112 supplies a separate runtime ledger and Lean
+source-local policy checker, with real-source adversarial
+controls. This is **new code not yet operator-run**; the
+preceding user-reported `run-fmUVYwIY` passed its old
+boundary acceptance and does not pay this new inference.
+Do not claim its new checks already passed.
+
+Next P0: run the integrated policy inference; if the
+source-local result is positive, review/activate the
+versioned deterministic policy under the ORIGINAL semantic
+admission authority (without a spurious S29 human review),
+make a reversible consumer resolution and separately check
+the book actor/Q23505 JMD link and one real property.
+If typed competitors remain ambiguous, preserve that
+uncertainty. This is one substantial semantic/consumer
+programme, not another source-inspection wrapper.
+
+
+
 
 ### Exact formal proof obligation now written (DASHI #112)
 
