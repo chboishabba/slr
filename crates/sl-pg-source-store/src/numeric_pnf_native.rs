@@ -647,6 +647,19 @@ impl CandidateFibre {
         Ok(())
     }
 
+    pub(crate) fn record_original_signed_residual(
+        &mut self,id:u64,residual:i64
+    ) -> Result<(),NumericPnfError>{
+        if !self.represented.contains(&id){
+            return Err(NumericPnfError::InvalidField("original_signed_residual_target"));
+        }
+        self.signed_residuals.insert(id,residual);
+        Ok(())
+    }
+    pub fn signed_residual(&self,id:u64)->Option<i64>{
+        self.signed_residuals.get(&id).copied()
+    }
+
     pub fn unique_admissible(&self) -> Option<u64> {
         if self.outside_model_possible ||
             self.coverage_witness_ref.as_deref().unwrap_or("").is_empty() {
