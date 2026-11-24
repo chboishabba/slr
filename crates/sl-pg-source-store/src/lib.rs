@@ -257,7 +257,8 @@ pub use numeric_pnf_parser_store::{
 pub use numeric_pnf_identity_audit::{
     audit_original_numeric_identity_for_source_answer,
     NativeNumericAuditError, NativeNumericIdentityAudit,
-    NumericDemandWorldStatus,
+    NumericDemandWorldStatus, NativeNumericRetractionReceipt,
+    retract_original_numeric_identity_for_source_answer,
 };
 pub use numeric_pnf_pipeline::{
     run_native_numeric_exact_source_slice, deterministic_numeric_run_ref,
