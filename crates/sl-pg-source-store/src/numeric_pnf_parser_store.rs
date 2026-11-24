@@ -370,8 +370,6 @@ pub fn persist_original_numeric_parser_plan(
         ||plan.expected_sentence_refs_sha256.len()!=64{
         return Err(NumericParserStoreError::ResourceLimit);
     }
-        return Err(NumericParserStoreError::ResourceLimit);
-    }
     let text=std::str::from_utf8(canonical_bytes)
         .map_err(|_|NumericParserStoreError::ForeignSource)?;
     let bounds=byte_boundaries(text);
