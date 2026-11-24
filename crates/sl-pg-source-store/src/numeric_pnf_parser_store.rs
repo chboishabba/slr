@@ -694,25 +694,37 @@ pub fn persist_original_numeric_parser_plan(
     // One set-wise original numeric parser receipt family. Metadata comes
     // from the actual SLR parser run, not a newly claimed spaCy execution.
     tx.execute(
-        "WITH per_partition AS (
-           SELECT partition.partition_ref,partition.run_ref,
-                  partition.document_ref,partition.parser_contract_ref,
-                  COUNT(DISTINCT sentence.sentence_id)::bigint AS sentence_count,
-                  COUNT(DISTINCT token.token_id)::bigint AS token_count,
-                  COUNT(DISTINCT entity.entity_id)::bigint AS entity_count
-           FROM execution.semantic_parser_partition AS partition
-           JOIN execution.semantic_parser_sentence AS sentence
-             ON sentence.partition_ref=partition.partition_ref
-            AND sentence.representation_version=2
-           LEFT JOIN execution.semantic_parser_token AS token
-             ON token.partition_ref=partition.partition_ref
-            AND token.representation_version=2
-           LEFT JOIN execution.semantic_parser_entity_span AS entity
-             ON entity.partition_ref=partition.partition_ref
-            AND entity.representation_version=2
-           WHERE partition.run_ref=$1 AND partition.document_ref=$2
-           GROUP BY partition.partition_ref,partition.run_ref,
-                    partition.document_ref,partition.parser_contract_ref)
+        "WITH partitions AS MATERIALIZED (
+           SELECT partition_ref,run_ref,document_ref,parser_contract_ref
+           FROM execution.semantic_parser_partition
+           WHERE run_ref=$1 AND document_ref=$2
+         ), sentences AS (
+           SELECT sentence.partition_ref,count(*)::bigint AS sentence_count
+           FROM execution.semantic_parser_sentence AS sentence
+           JOIN partitions AS p USING(partition_ref)
+           WHERE sentence.representation_version=2
+           GROUP BY sentence.partition_ref
+         ), tokens AS (
+           SELECT token.partition_ref,count(*)::bigint AS token_count
+           FROM execution.semantic_parser_token AS token
+           JOIN partitions AS p USING(partition_ref)
+           WHERE token.representation_version=2
+           GROUP BY token.partition_ref
+         ), entities AS (
+           SELECT entity.partition_ref,count(*)::bigint AS entity_count
+           FROM execution.semantic_parser_entity_span AS entity
+           JOIN partitions AS p USING(partition_ref)
+           WHERE entity.representation_version=2
+           GROUP BY entity.partition_ref
+         ), per_partition AS (
+           SELECT p.*,COALESCE(sentences.sentence_count,0) AS sentence_count,
+                  COALESCE(tokens.token_count,0) AS token_count,
+                  COALESCE(entities.entity_count,0) AS entity_count
+           FROM partitions AS p
+           LEFT JOIN sentences USING(partition_ref)
+           LEFT JOIN tokens USING(partition_ref)
+           LEFT JOIN entities USING(partition_ref)
+         )
          INSERT INTO execution.semantic_parser_partition_receipt
            (receipt_ref,partition_ref,run_ref,document_ref,
             parser_contract_ref,model_name,model_version,
