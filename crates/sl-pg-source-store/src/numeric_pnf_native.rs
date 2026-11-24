@@ -610,9 +610,14 @@ mod tests {
     #[test]
     fn typed_canonical_strings_have_stable_input_envelope() {
         let digest = typed_canonical_sha256(&json!({"a": 1, "b": ["x", true]})).unwrap();
-        assert_eq!(digest.len(), 64);
+        // Golden bytes from the original ITIR typed-canonical v1 encoding,
+        // not a second hash of the Rust implementation.
+        assert_eq!(digest, "d30666b9f8b947091dc4de5ecbc31380d8e699f9bb86df3a3ee82d202f2f6b12");
         assert_eq!(digest, typed_canonical_sha256(
             &json!({"b": ["x", true], "a": 1})).unwrap());
+        assert_eq!(typed_canonical_sha256(&json!({
+            "signed": [-1, 0, 1], "float": 0.125, "null": null
+        })).unwrap(), "2231f668db25c1da34e16113012496a587fac4ec5c9d2540234a637d386e8797");
     }
 
     #[test]
