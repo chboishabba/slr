@@ -13,6 +13,7 @@ use sensiblaw_pg_source_store::{
     inspect_native_antecedent_review, native_antecedent_frontier,
     compile_native_source_local_answer,
     audit_original_numeric_identity_for_source_answer,
+    retract_original_numeric_identity_for_source_answer,
 };
 use serde::Serialize;
 use std::{env,path::PathBuf};
@@ -105,7 +106,18 @@ pub fn run(args:&[String])->Result<(),String>{
             print_json(&summary)
         }
         [subcommand,review_item_ref,original_parser_run]
-            if subcommand=="audit" => {
+        | [subcommand,review_item_ref,original_parser_run,_,_]
+            if (subcommand=="audit" && args.len()==3)
+                || (subcommand=="retract" && args.len()==5) => {
+            let retraction=if subcommand=="retract" {
+                let id=args[3].parse::<i64>().map_err(|_|"invalid witness ID")?;
+                let commit=match args[4].as_str(){
+                    "--commit"=>true,"--rollback-probe"=>false,
+                    _=>return Err("retraction requires --commit or --rollback-probe".into()),
+                };
+                if id<=0{return Err("invalid witness ID".into());}
+                Some((id,commit))
+            }else{None};
             let config=load_database_config(None).map_err(|e|e.to_string())?;
             let inspection=inspect_native_antecedent_review(
                 &config,review_item_ref
@@ -127,6 +139,12 @@ pub fn run(args:&[String])->Result<(),String>{
             let numeric_url=env::var("SENSIBLAW_DATABASE_URL")
                 .map_err(|_|"numeric audit requires SENSIBLAW_DATABASE_URL")?;
             let numeric_run=deterministic_numeric_run_ref(&evidence.manifest);
+            if let Some((witness_id,commit))=retraction {
+                let receipt=retract_original_numeric_identity_for_source_answer(
+                    &numeric_url,&numeric_run,&answer,witness_id,commit
+                ).map_err(|e|e.to_string())?;
+                return print_json(&receipt);
+            }
             let audit=audit_original_numeric_identity_for_source_answer(
                 &numeric_url,&numeric_run,&answer
             ).map_err(|e|e.to_string())?;
@@ -175,7 +193,7 @@ pub fn run(args:&[String])->Result<(),String>{
             print_json(&receipt)
         }
         _=>Err(
-            "numeric-pnf-native usage: inspect SOURCE_REV PARSER_RUN | plan SOURCE_REV PARSER_RUN | audit S29_REVIEW_ITEM_REF PARSER_RUN | compile SOURCE_REV PARSER_RUN MAX_SENTENCES --commit [--allow-partial-source] (numeric DB URL required for audit/compile, durable source root for compile)".into()
+            "numeric-pnf-native usage: inspect SOURCE_REV PARSER_RUN | plan SOURCE_REV PARSER_RUN | audit S29_REVIEW_ITEM_REF PARSER_RUN | retract S29_REVIEW_ITEM_REF PARSER_RUN WITNESS_ID --rollback-probe|--commit | compile SOURCE_REV PARSER_RUN MAX_SENTENCES --commit [--allow-partial-source] (numeric DB URL required for audit/compile, durable source root for compile)".into()
         )
     }
 }
@@ -186,6 +204,8 @@ mod tests {
     #[test]
     fn incomplete_or_wrong_commit_command_never_runs() {
         assert!(run(&["compile".into()]).is_err());
+        assert!(run(&["retract".into(),"a".into(),"b".into(),"1".into(),"--dry-run".into()]).is_err());
+        assert!(run(&["retract".into(),"a".into(),"b".into(),"0".into(),"--commit".into()]).is_err());
         assert!(run(&["compile".into(),"a".into(),"b".into(),
             "65".into(),"--commit".into()]).is_err());
         assert!(run(&["compile".into(),"a".into(),"b".into(),
