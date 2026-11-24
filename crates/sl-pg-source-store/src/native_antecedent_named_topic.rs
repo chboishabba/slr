@@ -192,11 +192,6 @@ pub fn derive_native_named_topic(
         || review.identity_admission_paid || review.external_qid_paid
         || review.claim_truth_paid
     {return Err(NativeNamedTopicError::ForeignSource);}
-    if !["he","she"].contains(&frontier.focus_surface.as_str())
-        || frontier.focus_parser_pos!="PRON" {
-        // An unsupported form is an unresolved interpretation, not a
-        // platform error or a spurious named-topic resolution.
-    }
     let mut groups:BTreeMap<String,Vec<NamedTopicMention>>=BTreeMap::new();
     let mut distinct_mentions=BTreeSet::new();
     for n in frontier.nominations.iter().filter(|n|
