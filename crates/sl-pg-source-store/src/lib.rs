@@ -42,6 +42,7 @@ mod native_source_local_consumer;
 mod numeric_pnf_native;
 mod numeric_pnf_operator;
 mod numeric_pnf_source_bridge;
+mod numeric_pnf_owner;
 mod statement_pnf_spine;
 mod generic_source_compiler;
 mod source_candidate_persistence;
@@ -244,6 +245,10 @@ pub use reviewed_pnf::{
     ReviewedPnfMaterializationError, ReviewedPnfMaterializationReceipt, ReviewedPnfRevision,
     ReviewedPnfValidationError,
 };
+pub use numeric_pnf_owner::{
+    NumericOwnerKey, NumericOwnerRuntime,
+    NumericOwnerWorkReceipt, NumericWorkBudget,
+};
 pub use numeric_pnf_source_bridge::{
     load_exact_native_numeric_evidence, NativeNumericSourceError,
     OriginalNativeNumericEvidence, OriginalNumericSentenceFibre,
@@ -256,7 +261,8 @@ pub use numeric_pnf_operator::{
     NumericOperatorError, NumericOperatorLexicon, NumericToken,
 };
 pub use numeric_pnf_native::{
-    reduce_canonical, typed_canonical_sha256, CandidateFibre, DependencyMode,
+    checked_numeric_proposal_owner, reduce_canonical, typed_canonical_sha256,
+    CandidateFibre, DependencyMode,
     NativeManifest, NativeReduction, NativeWorkCounter, NumericPnfError,
 };
 pub use native_source_local_consumer::{
