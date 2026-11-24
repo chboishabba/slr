@@ -511,14 +511,24 @@ pub fn publish_original_numeric_sentence(
     let produced_pronouns:i64=tx.query_one(
         "SELECT count(DISTINCT mention.head_token_id)::bigint
          FROM execution.semantic_pnf_mention AS mention
-         WHERE mention.region_id=$1 AND mention.mention_kind=4
-           AND EXISTS (
-             SELECT 1 FROM execution.semantic_pnf_object_token_support AS support
-             JOIN execution.semantic_pnf_object AS object
-               ON object.object_id=support.object_id
-             WHERE support.token_id=mention.head_token_id
-               AND object.region_id=mention.region_id
-           )",
+         JOIN execution.semantic_pnf_object AS object
+           ON object.object_id=mention.object_id
+          AND object.region_id=mention.region_id
+         JOIN execution.semantic_pnf_object_token_support AS support
+           ON support.object_id=object.object_id
+          AND support.token_id=mention.head_token_id
+         JOIN execution.semantic_pnf_demand AS demand
+           ON demand.source_object_id=object.object_id
+          AND demand.source_region_id=mention.region_id
+          AND demand.expected_target_kind=1
+         JOIN execution.semantic_pnf_anaphor_projection_constant AS constant
+           ON constant.singleton
+          AND demand.residual_type_symbol_id=
+              constant.anaphor_residual_type_symbol_id
+         JOIN execution.semantic_pnf_interface AS interface
+           ON interface.region_id=mention.region_id
+          AND interface.interface_id=demand.source_interface_id
+         WHERE mention.region_id=$1 AND mention.mention_kind=4",
         &[&lease.region_id])?.get(0);
     if produced_pronouns<expected_pronouns{
         return Err(NumericSqlError::MissingPublication);
