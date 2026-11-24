@@ -68,6 +68,9 @@ pub struct OriginalNativeNumericEvidence{
     pub schema:&'static str,
     pub manifest:NativeManifest,
     pub original_source_ref:String,
+    pub source_parser_family:String,
+    pub source_parser_version:String,
+    pub source_model_ref:String,
     pub parser_regions:Vec<OriginalNumericSentenceFibre>,
     pub original_region_count:usize,
     pub original_token_count:usize,
@@ -143,7 +146,7 @@ pub fn load_exact_native_numeric_evidence(
     let run=db.query(
         "SELECT source_revision_ref,status,candidate_only,
                 creates_semantic_authority,applicability_promoted,
-                claim_truth_promoted
+                claim_truth_promoted,parser_family,parser_version,model_ref
          FROM ingest.parser_run WHERE parser_run_ref=$1",
         &[&parser_run_ref])?;
     if run.len()!=1{return Err(NativeNumericSourceError::ParserRun);}
@@ -260,7 +263,11 @@ pub fn load_exact_native_numeric_evidence(
     }
     Ok(OriginalNativeNumericEvidence{
         schema:"slr-exact-source-native-numeric-evidence-v1",
-        manifest,original_source_ref,original_region_count:fibres.len(),
+        manifest,original_source_ref,
+        source_parser_family:r.get(6),
+        source_parser_version:r.get(7),
+        source_model_ref:r.get(8),
+        original_region_count:fibres.len(),
         original_token_count,parser_regions:fibres,
         full_document_coverage_paid:full_document,
         residuals,typed_identity_paid:false,external_qid_paid:false,
