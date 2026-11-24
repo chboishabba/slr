@@ -602,6 +602,37 @@ pub fn persist_original_numeric_parser_plan(
         // original migration-150 setwise dependency-head transition-table
         // trigger and prevent per-token UPDATE explosion.
         let n=sentence.tokens.len();
+        // Original m175 producer-complete fast path: allocate numeric IDs
+        // before INSERT and include exact head_token_id in the first
+        // statement. Avoid migration-150's extra UPDATE of every token.
+        // m152's deferred row checks can only be skipped after we perform
+        // the independent full-sentence setwise postcondition below.
+        let sentence_id:i64=tx.query_one(
+            "SELECT sentence_id
+             FROM execution.semantic_parser_sentence
+             WHERE sentence_ref=$1 AND run_ref=$2 AND document_ref=$3
+               AND representation_version=2",
+            &[&sentence.sentence_ref,&plan.numeric_run_ref,
+              &plan.source_document_ref])?.get(0);
+        if sentence_id<=0{return Err(NumericParserStoreError::ExistingConflict);}
+        let token_ids=if n>0 {
+            tx.query(
+                "SELECT nextval(pg_get_serial_sequence(
+                    'execution.semantic_parser_token','token_id'))::bigint
+                 FROM generate_series(1,$1::integer)",
+                &[&(n as i32)])?.into_iter().map(|r|r.get::<_,i64>(0))
+                .collect::<Vec<_>>()
+        }else{Vec::new()};
+        let mut planned_ids=BTreeMap::<String,i64>::new();
+        for (token,id) in sentence.tokens.iter().zip(&token_ids) {
+            if *id<=0||planned_ids.insert(token.token_ref.clone(),*id).is_some(){
+                return Err(NumericParserStoreError::ExistingConflict);
+            }
+        }
+        let head_ids=sentence.tokens.iter().map(|t|
+            planned_ids.get(&t.head_token_ref).copied()
+                .ok_or(NumericParserStoreError::InvalidSentence))
+            .collect::<Result<Vec<_>,_>>()?;
         let refs=sentence.tokens.iter().map(|t|t.token_ref.clone()).collect::<Vec<_>>();
         let ords=sentence.tokens.iter().map(|t|t.original_token_ordinal).collect::<Vec<_>>();
         let starts=sentence.tokens.iter().map(|t|t.start_char).collect::<Vec<_>>();
@@ -629,32 +660,44 @@ pub fn persist_original_numeric_parser_plan(
         let tag_origin=sentence.tokens.iter().map(|t|t.tag_origin_id)
             .collect::<Vec<_>>();
         if n>0{
+            // Both flags are transaction-local execution capabilities, not
+            // semantic authority. Original m175/m152 are bypassed ONLY
+            // because the Rust source-plan checks unique same-sentence
+            // heads and the original SQL full-fibre check below is mandatory.
+            tx.batch_execute(
+                "SET LOCAL sensiblaw.producer_complete_numeric_heads='on';
+                 SET LOCAL sensiblaw.setwise_numeric_head_integrity='on'")?;
             tx.execute(
                 "INSERT INTO execution.semantic_parser_token
-                 (token_ref,run_ref,document_ref,partition_ref,sentence_ref,
-                  local_token_ordinal,start_char,end_char,
-                  head_start_char,head_end_char,token_digest,
-                  orth_symbol_id,lemma_symbol_id,pos_symbol_id,
-                  tag_symbol_id,dependency_symbol_id,morph_set_id,
+                 (token_id,token_ref,run_ref,document_ref,partition_ref,
+                  sentence_ref,sentence_id,local_token_ordinal,
+                  start_char,end_char,head_start_char,head_end_char,
+                  head_token_id,token_digest,orth_symbol_id,
+                  lemma_symbol_id,pos_symbol_id,tag_symbol_id,
+                  dependency_symbol_id,morph_set_id,
                   lemma_origin_id,pos_origin_id,tag_origin_id,
                   dependency_origin_id,representation_version)
-                 SELECT t.token_ref,$1,$2,$3,$4,t.ordinal,t.start_char,
-                   t.end_char,t.head_start,t.head_end,t.digest,
+                 SELECT t.token_id,t.token_ref,$1,$2,$3,$4,$5,
+                   t.ordinal,t.start_char,t.end_char,
+                   t.head_start,t.head_end,t.head_token_id,t.digest,
                    t.orth,t.lemma,t.pos,t.tag,t.dep,t.morph_id,
                    t.lemma_origin,1,t.tag_origin,1,2
-                 FROM unnest($5::text[],$6::integer[],$7::bigint[],
-                   $8::bigint[],$9::bigint[],$10::bigint[],
-                   $11::bytea[],$12::bigint[],$13::bigint[],
-                   $14::bigint[],$15::bigint[],$16::bigint[],
-                   $17::bigint[],$18::smallint[],$19::smallint[])
-                 AS t(token_ref,ordinal,start_char,end_char,
-                   head_start,head_end,digest,orth,lemma,pos,tag,dep,
-                   morph_id,lemma_origin,tag_origin)
+                 FROM unnest($6::bigint[],$7::text[],$8::integer[],
+                   $9::bigint[],$10::bigint[],$11::bigint[],
+                   $12::bigint[],$13::bigint[],$14::bytea[],
+                   $15::bigint[],$16::bigint[],$17::bigint[],
+                   $18::bigint[],$19::bigint[],$20::bigint[],
+                   $21::smallint[],$22::smallint[])
+                 AS t(token_id,token_ref,ordinal,start_char,end_char,
+                   head_start,head_end,head_token_id,digest,
+                   orth,lemma,pos,tag,dep,morph_id,
+                   lemma_origin,tag_origin)
                  ON CONFLICT(token_ref) DO NOTHING",
                 &[&plan.numeric_run_ref,&plan.source_document_ref,
-                  &partition_ref,&sentence.sentence_ref,&refs,&ords,&starts,
-                  &ends,&head_starts,&head_ends,&digests,&orth,&lemma,
-                  &pos,&tag,&dep,&morph,&lemma_origin,&tag_origin])?;
+                  &partition_ref,&sentence.sentence_ref,&sentence_id,
+                  &token_ids,&refs,&ords,&starts,&ends,&head_starts,
+                  &head_ends,&head_ids,&digests,&orth,&lemma,&pos,&tag,
+                  &dep,&morph,&lemma_origin,&tag_origin])?;
         }
         let count:i64=tx.query_one(
             "SELECT count(*)::bigint FROM execution.semantic_parser_token
