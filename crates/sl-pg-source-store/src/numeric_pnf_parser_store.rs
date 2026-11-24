@@ -383,7 +383,12 @@ pub fn persist_original_numeric_parser_plan(
                 'slr-native-source-parser-reuse:v1',1)
          ON CONFLICT(run_ref) DO NOTHING",
         &[&plan.numeric_run_ref,&plan.source_document_ref])?;
-    let source_ref=format!("parser-source:{}",plan.original_source_sha256);
+    let source_ref=format!(
+        "parser-source:sha256:{}",
+        sha_ref("slr-native-numeric-source-v1",
+           &[&plan.numeric_run_ref,&plan.source_document_ref,
+             &plan.original_source_sha256,&plan.original_parser_run_ref])
+    );
     tx.execute(
         "INSERT INTO execution.semantic_parser_source
          (source_ref,run_ref,document_ref,content_sha256,byte_count,
