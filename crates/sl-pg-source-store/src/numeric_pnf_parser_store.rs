@@ -691,6 +691,60 @@ pub fn persist_original_numeric_parser_plan(
                   &erefs,&estarts,&eends,&edigests,&ekinds])?;
         }
     }
+    // One set-wise original numeric parser receipt family. Metadata comes
+    // from the actual SLR parser run, not a newly claimed spaCy execution.
+    tx.execute(
+        "WITH per_partition AS (
+           SELECT partition.partition_ref,partition.run_ref,
+                  partition.document_ref,partition.parser_contract_ref,
+                  COUNT(DISTINCT sentence.sentence_id)::bigint AS sentence_count,
+                  COUNT(DISTINCT token.token_id)::bigint AS token_count,
+                  COUNT(DISTINCT entity.entity_id)::bigint AS entity_count
+           FROM execution.semantic_parser_partition AS partition
+           JOIN execution.semantic_parser_sentence AS sentence
+             ON sentence.partition_ref=partition.partition_ref
+            AND sentence.representation_version=2
+           LEFT JOIN execution.semantic_parser_token AS token
+             ON token.partition_ref=partition.partition_ref
+            AND token.representation_version=2
+           LEFT JOIN execution.semantic_parser_entity_span AS entity
+             ON entity.partition_ref=partition.partition_ref
+            AND entity.representation_version=2
+           WHERE partition.run_ref=$1 AND partition.document_ref=$2
+           GROUP BY partition.partition_ref,partition.run_ref,
+                    partition.document_ref,partition.parser_contract_ref)
+         INSERT INTO execution.semantic_parser_partition_receipt
+           (receipt_ref,partition_ref,run_ref,document_ref,
+            parser_contract_ref,model_name,model_version,
+            tokenization,sentence_segmentation,part_of_speech,
+            morphology,dependencies,named_entities,
+            sentence_count,token_count,entity_count,
+            boundary_obligation_count,elapsed_ns,worker_pid,
+            backend_pid,receipt_sha256)
+         SELECT
+           'slr-native-numeric-receipt:sha256:' ||
+             encode(digest(convert_to(p.partition_ref || ':' || $3,'UTF8'),
+                           'sha256'),'hex'),
+           p.partition_ref,p.run_ref,p.document_ref,p.parser_contract_ref,
+           $4,$5,TRUE,TRUE,TRUE,FALSE,TRUE,TRUE,
+           p.sentence_count,p.token_count,p.entity_count,
+           0,0,pg_backend_pid()::bigint,pg_backend_pid(),
+           digest(convert_to(p.partition_ref || ':' || $3,'UTF8'),'sha256')
+         FROM per_partition AS p
+         ON CONFLICT(partition_ref) DO NOTHING",
+        &[&plan.numeric_run_ref,&plan.source_document_ref,
+          &plan.original_parser_run_ref,&plan.source_model_ref,
+          &plan.source_parser_version])?;
+    let missing_receipts:i64=tx.query_one(
+        "SELECT count(*)::bigint
+         FROM execution.semantic_parser_partition AS partition
+         WHERE partition.run_ref=$1 AND partition.document_ref=$2
+           AND NOT EXISTS (
+             SELECT 1 FROM execution.semantic_parser_partition_receipt AS receipt
+             WHERE receipt.partition_ref=partition.partition_ref)",
+        &[&plan.numeric_run_ref,&plan.source_document_ref])?.get(0);
+    if missing_receipts>0{return Err(NumericParserStoreError::ExistingConflict);}
+
     let total=plan.sentences.len() as i64;
     tx.execute(
         "INSERT INTO execution.semantic_parser_document_coverage
