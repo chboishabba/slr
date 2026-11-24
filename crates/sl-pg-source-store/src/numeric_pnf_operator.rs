@@ -35,6 +35,8 @@ pub enum NumericOperatorError {
     ConflictingToken(i64),
     #[error("invalid numeric source token or region")]
     InvalidSpan,
+    #[error("numeric PNF sentence closure digest/support/measure mismatch")]
+    InconsistentClosure,
 }
 impl NumericOperatorLexicon {
     pub fn symbol(&self,kind:&'static str,label:&str)->Result<i64,NumericOperatorError> {
@@ -339,6 +341,90 @@ pub fn compose_numeric_sentence_native(
         objects:object_rows,factors:factor_map.into_values().collect(),
         demands:demand_map.into_values().collect(),measure,
     })
+}
+
+/// Fail-closed semantic integrity fence before *any* original SQL write.
+pub fn validate_native_numeric_sentence_closure(
+    region:i64, closure:&NativeSentenceClosure,
+)->Result<(),NumericOperatorError>{
+    if region<=0{return Err(NumericOperatorError::InvalidRegion);}
+    let mut token_objects=BTreeSet::new();
+    let mut object_digests=BTreeSet::new();
+    for obj in &closure.objects{
+        if obj.source_token_id<=0
+            ||obj.object_kind_symbol_id<=0||obj.head_symbol_id<=0
+            ||obj.object_digest!=strict_numeric_digest(vec![
+                num(region),num(obj.source_token_id),num(obj.object_kind_symbol_id)
+            ])
+            ||obj.information_gain!=2.0
+            ||obj.representation_cost!=1.0
+            ||obj.ambiguity_cost!=0.5
+            ||obj.factor_participation!=1
+            ||!token_objects.insert(obj.source_token_id)
+            ||!object_digests.insert(obj.object_digest){
+            return Err(NumericOperatorError::InconsistentClosure);
+        }
+    }
+    let mut factor_digests=BTreeSet::new();
+    let mut factors_by_digest=BTreeMap::new();
+    for f in &closure.factors{
+        let slots=f.slots.iter().map(|s|NumericDigestValue::Seq(vec![
+            num(s.role_symbol_id),num(s.source_token_id),
+            num(i64::from(s.resolution_state)),NumericDigestValue::Bool(s.required)
+        ])).collect::<Vec<_>>();
+        let mut sorted=f.slots.clone();
+        sorted.sort_by_key(|s|(s.role_symbol_id,s.source_token_id));
+        if sorted!=f.slots
+            ||f.support_token_ids.iter().any(|id|*id<=0)
+            ||f.slots.iter().any(|s|!token_objects.contains(&s.source_token_id)
+                  ||s.role_symbol_id<=0||s.resolution_state!=2||!s.required)
+            ||f.support_token_ids.windows(2).any(|w|w[0]>=w[1])
+            ||f.residual_symbol_ids.windows(2).any(|w|w[0]>=w[1])
+            ||f.residual_symbol_ids.iter().any(|id|*id<=0)
+            ||f.support_score!=1.0
+            ||f.factor_digest!=strict_numeric_digest(vec![
+                num(region),num(f.factor_type_symbol_id),
+                num(f.predicate_symbol_id),num(i64::from(f.modal_state)),
+                num(i64::from(f.temporal_state)),
+                NumericDigestValue::Seq(slots),nums(&f.support_token_ids),
+                nums(&f.residual_symbol_ids)
+            ])
+            ||!factor_digests.insert(f.factor_digest){
+            return Err(NumericOperatorError::InconsistentClosure);
+        }
+        factors_by_digest.insert(f.factor_digest,f);
+    }
+    let mut demand_digests=BTreeSet::new();
+    for d in &closure.demands{
+        if d.expected_target_kind!=2||d.recency_class!=3||d.max_candidates!=16
+            ||d.expected_object_kind_symbol_id.is_some()
+            ||d.role_symbol_id.is_some(){
+            return Err(NumericOperatorError::InconsistentClosure);
+        }
+        let matched=factors_by_digest.iter().any(|(factor_digest,f)|
+            d.expected_factor_type_symbol_id==Some(f.factor_type_symbol_id)
+            &&f.residual_symbol_ids.contains(&d.residual_type_symbol_id)
+            &&d.lexical_symbol_id.is_some_and(|lemma|
+                d.demand_digest==strict_numeric_digest(vec![
+                    num(region),NumericDigestValue::Bytes(factor_digest.to_vec()),
+                    num(d.residual_type_symbol_id),num(lemma)
+                ])));
+        if !matched||!demand_digests.insert(d.demand_digest){
+            return Err(NumericOperatorError::InconsistentClosure);
+        }
+    }
+    let m=&closure.measure;
+    if m.node_count!=closure.objects.len()+closure.factors.len()
+        ||m.edge_count!=closure.factors.iter().map(|f|f.slots.len()).sum::<usize>()
+        ||m.unresolved_count!=closure.demands.len()
+        ||m.boundary_demand_weight!=closure.demands.len() as f64
+        ||m.rule_count!=3||m.closure_rounds!=1
+        ||m.promoted_object_count!=closure.objects.len()
+        ||m.interface_cardinality!=
+            closure.objects.len()+closure.factors.len()+closure.demands.len(){
+        return Err(NumericOperatorError::InconsistentClosure);
+    }
+    Ok(())
 }
 
 #[cfg(test)]
