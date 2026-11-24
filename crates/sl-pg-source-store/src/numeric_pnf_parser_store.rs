@@ -85,6 +85,42 @@ fn byte_boundaries(text:&str)->Vec<usize>{
     b.push(text.len());
     b
 }
+/// Port of original SensibLaw authored_paragraphs: one linear Unicode
+/// codepoint scan over immutable source, preserving blank-line boundaries.
+/// Paragraphs remain authoritative original source coordinates, not semantic
+/// co-presence or identity evidence.
+pub fn authored_numeric_paragraphs(text:&str)->Vec<(usize,usize)>{
+    let chars=text.chars().collect::<Vec<_>>();
+    if chars.is_empty(){return Vec::new();}
+    let mut out=Vec::new();
+    let mut current=0usize;
+    let mut i=0usize;
+    while i<chars.len(){
+        if chars[i]=='\n'{
+            let mut j=i+1;
+            while j<chars.len()&&(chars[j]==' '||chars[j]=='\t'){j+=1;}
+            if j<chars.len()&&chars[j]=='\n'{
+                let mut left=current;
+                while left<i&&chars[left].is_whitespace(){left+=1;}
+                let mut right=i;
+                while right>left&&chars[right-1].is_whitespace(){right-=1;}
+                if left<right{out.push((left,right));}
+                let mut k=j+1;
+                while k<chars.len()&&chars[k]=='\n'{k+=1;}
+                current=k;i=k;continue;
+            }
+        }
+        i+=1;
+    }
+    let mut left=current;
+    while left<chars.len()&&chars[left].is_whitespace(){left+=1;}
+    let mut right=chars.len();
+    while right>left&&chars[right-1].is_whitespace(){right-=1;}
+    if left<right{out.push((left,right));}
+    if out.is_empty(){out.push((0,chars.len()));}
+    out
+}
+
 fn source_file(root:&Path,sha:&str,bytes:&[u8])->Result<PathBuf,NumericParserStoreError>{
     let dir=root.join("original-numeric-sources").join(&sha[..2]);
     fs::create_dir_all(&dir)?;
@@ -446,6 +482,70 @@ pub fn persist_original_numeric_parser_plan(
           &(source_manifest.source_codepoint_length as i64)])?;
     let document_region_id:i64=document_region.get(0);
     if document_region_id<=0{return Err(NumericParserStoreError::ExistingConflict);}
+
+    let paragraphs=authored_numeric_paragraphs(text);
+    if paragraphs.is_empty(){return Err(NumericParserStoreError::ForeignSource);}
+    // One original paragraph insertion statement: no paragraph-level query loop.
+    let p_start=paragraphs.iter().map(|p|p.0 as i64).collect::<Vec<_>>();
+    let p_end=paragraphs.iter().map(|p|p.1 as i64).collect::<Vec<_>>();
+    let p_ord=(0..paragraphs.len()).map(|x|x as i64).collect::<Vec<_>>();
+    let p_digest=paragraphs.iter().map(|&(start,end)|
+        crate::strict_numeric_digest(vec![
+            crate::NumericDigestValue::Bytes(plan.numeric_run_ref.as_bytes().to_vec()),
+            crate::NumericDigestValue::Bytes(plan.source_document_ref.as_bytes().to_vec()),
+            crate::NumericDigestValue::Int(3),
+            crate::NumericDigestValue::Int(start as i128),
+            crate::NumericDigestValue::Int(end as i128),
+        ]).to_vec()).collect::<Vec<_>>();
+    tx.execute(
+        "INSERT INTO execution.semantic_pnf_region
+         (region_digest,run_ref,document_ref,region_kind,
+          start_char,end_char,sequence_no,parent_region_id,
+          closure_state,authored_boundary)
+         SELECT p.digest,$1,$2,3,p.start_char,p.end_char,
+                p.ordinal,$3,1,TRUE
+         FROM unnest($4::bytea[],$5::bigint[],$6::bigint[],
+                     $7::bigint[])
+           AS p(digest,start_char,end_char,ordinal)
+         ON CONFLICT(run_ref,document_ref,region_kind,start_char,end_char)
+         DO UPDATE SET parent_region_id=COALESCE(
+             execution.semantic_pnf_region.parent_region_id,
+             EXCLUDED.parent_region_id),
+           authored_boundary=TRUE",
+        &[&plan.numeric_run_ref,&plan.source_document_ref,
+          &document_region_id,&p_digest,&p_start,&p_end,&p_ord])?;
+    tx.execute(
+        "INSERT INTO execution.semantic_pnf_region_edge
+         (source_region_id,target_region_id,edge_kind,ordinal)
+         SELECT region.region_id,$1,1,region.sequence_no
+         FROM execution.semantic_pnf_region AS region
+         WHERE region.run_ref=$2 AND region.document_ref=$3
+           AND region.region_kind=3 AND region.parent_region_id=$1
+         ON CONFLICT DO NOTHING",
+        &[&document_region_id,&plan.numeric_run_ref,&plan.source_document_ref])?;
+    tx.execute(
+        "WITH p AS (
+           SELECT region_id,sequence_no,
+                  LEAD(region_id) OVER (ORDER BY sequence_no) AS following
+           FROM execution.semantic_pnf_region
+           WHERE run_ref=$1 AND document_ref=$2
+             AND region_kind=3 AND parent_region_id=$3)
+         INSERT INTO execution.semantic_pnf_region_edge
+           (source_region_id,target_region_id,edge_kind,ordinal)
+         SELECT p.region_id,p.following,2,p.sequence_no
+         FROM p WHERE p.following IS NOT NULL
+         ON CONFLICT DO NOTHING",
+        &[&plan.numeric_run_ref,&plan.source_document_ref,&document_region_id])?;
+    // In the original authoring semantics, a sentence spanning two
+    // paragraphs requires a separately resolved boundary repair.
+    for sentence in &by_scope {
+        let overlaps=paragraphs.iter().any(|&(a,b)|{
+            let start=sentence.start_char as usize;
+            let end=sentence.end_char as usize;
+            start>=a && start<b && end>b
+        });
+        if overlaps{return Err(NumericParserStoreError::InvalidSentence);}
+    }
 
 
     for (sequence,sentence) in by_scope.iter().enumerate(){
