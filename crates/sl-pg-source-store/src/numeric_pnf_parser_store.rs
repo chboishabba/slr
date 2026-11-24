@@ -141,7 +141,7 @@ fn symbols(plan:&NativeNumericParserPlan)
     Ok(symbols)
 }
 
-fn intern_all(
+pub(crate) fn intern_all(
     tx:&mut Transaction<'_>,needed:&BTreeSet<(i16,String)>,
 )->Result<BTreeMap<(i16,String),i64>,NumericParserStoreError>{
     let kinds=needed.iter().map(|x|x.0).collect::<Vec<_>>();
