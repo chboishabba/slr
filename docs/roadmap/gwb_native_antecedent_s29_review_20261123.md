@@ -1,6 +1,79 @@
 # C4.11: source-native antecedent review on original SLR S29
 
 
+## 24 November — restore the existing cross-resource identity/uncertainty spine
+
+**Corrective supersession:** occurrence-to-entity resolution and uncertainty
+are not newly discovered gaps or invitations to design a second resolver.
+The missing work is native Rust / original persisted producer correspondence.
+Use existing owners and their authority boundaries:
+
+| Owner | Reusable contract |
+| --- | --- |
+| [SensibLaw PNF-driven entity resolution spine, 17 July](https://github.com/chboishabba/SensibLaw/blob/f9c4670ef04b40e8153caa7dd00fa1eba7013ef4/docs/planning/pnf_driven_entity_resolution_spine_20260717.md) | span lattice, local coreference, factorized alternatives, registry-neutral broker, typed meets, closure/coverage pressure, abstention |
+| [entity_resolution.py](https://github.com/chboishabba/SensibLaw/blob/f9c4670ef04b40e8153caa7dd00fa1eba7013ef4/src/policy/entity_resolution.py), [resolution_evidence.py](https://github.com/chboishabba/SensibLaw/blob/f9c4670ef04b40e8153caa7dd00fa1eba7013ef4/src/policy/resolution_evidence.py) | existing mentions, candidate clusters, local and external evidence snapshots, assessment-only type/form and event meet, no promotion |
+| [binding_candidate_sets.py](https://github.com/chboishabba/SensibLaw/blob/f9c4670ef04b40e8153caa7dd00fa1eba7013ef4/src/pnf/binding_candidate_sets.py) | original entity/eventuality/proposition typing, structural accessibility and quotation, Number/Gender/Person set comparison, missing feature retains candidate, post-structural execution cap |
+| [SensibLaw #474](https://github.com/chboishabba/SensibLaw/pull/474), m086–089 | persistent F/P/Q/R/O fibre, H3/H6/H9 cumulative signed residual/zero, preference distinct from deduction |
+| m069/072/074/077–080/083/085/090 | current proof-relevant identity fibre, parser apposition/proper-name/explicit alias evidence and admission provenance, scoped retraction |
+| [SensibLaw #441](https://github.com/chboishabba/SensibLaw/pull/441), [#477](https://github.com/chboishabba/SensibLaw/pull/477), [#479](https://github.com/chboishabba/SensibLaw/pull/479) | bounded external acquisition, consumer-observed world axes, structural H9 licensing; no lexical-symbol-to-Wikidata shortcut |
+| [SLR #6](https://github.com/chboishabba/slr/pull/6), sl-semantic-status | independent referent/identity/antecedent/occurrence/truth/evidence status axes |
+| [SLR #22](https://github.com/chboishabba/slr/pull/22), [#24](https://github.com/chboishabba/slr/pull/24) | existing OALC/Wikidata/Wikipedia adapters; reviewed representation/identity classes, non-novel alias and lineage receipts |
+| [SLR #27](https://github.com/chboishabba/slr/pull/27), [#28](https://github.com/chboishabba/slr/pull/28) | snapshot-first external type closure, recurrent residual/acquisition/review/payment machine |
+| [SLR #65](https://github.com/chboishabba/slr/pull/65) | existing DA51 formal evidence payment, exact demand/source/statement/result coordinates, independent kernel, no transport-as-identity |
+| SLR current branch `crates/sl-pg-source-store/src/gwb_ambiguity_state.rs`, `non_novel_identity_alias.rs`, `crates/sl-proof-search-loop/src/world_identity.rs`, `world_identity_guard.rs`, `world_expansion_adapters.rs` | existing persistent candidate-only residuals, reviewed cross-resource identity classes, coherence and pinned producer adapters (not document-derived semantic authority) |
+
+Native continuation on existing `numeric_pnf_identity_audit.rs`, no new database
+schema or network service:
+- SLR `8f8d95a3`: source-ported original Number/Gender/Person mismatch rule;
+  unique supported head, missing/disjoint feature distinction, negative
+  observed mismatch vs neutral no-observed-mismatch on H3, never semantic
+  refutation. Corrected previous transport: no fabricated ancestor distance,
+  no fabricated planner rank, and execution deferral rather than resource-limit
+  claim. Observe original H3/H6/H9 signed states and preferences directly.
+- SLR `274a4599`: execute existing m090 parser identity producer in nested
+  rollback probe and return related candidate rows (apposition, proper-name,
+  explicit alias as supplied by the original producer) and existing name
+  overflow count. No admission and no retained candidate row changes;
+  sequences may advance, and overflow is a diagnostic not proof. This is not a
+  full native port of the producer nor a physical work bound.
+- SLR `d98c7f8d`: consume existing admitted document identity witnesses scoped
+  to the exact run/document anchor; project live original object keys into
+  existing classes only when exactly one class is admitted. Keep inverse
+  occurrence members, conflicting classes, unresolved typed keys, refuted keys
+  and outside-world residual. No fabricated singleton classes.
+- SLR `eafb707a`: observe original active cross-resource needs and associated
+  active request IDs from m096/m112/m113; related occurrence demands keep their
+  own consumer/query/policy/provider and axis. This is not a provider invocation
+  or a new H9 target. Request membership is observational; no claim of exact
+  revision-level freshness/payment.
+- DASHI `73ec3aee`: partial witnessed class map and covered class-selection
+  theorem specification; missing/conflicting class defeats selection; two
+  distinct occurrence IDs can share a class. This does not pay the legacy
+  unique-object demand API or assert a live Bush equivalence.
+
+Class-level uniqueness (all live occurrence keys map via admitted evidence to
+one entity class, coverage verified) is distinct from object-level uniqueness
+(one live occurrence key) and external identity alignment. Never use a QID,
+shared spelling, cache hit, graph type, preferred rank, or DA51 address as
+source-local identity authority. Source-relative linguistic answer is separate
+from governed numeric identity and historical truth. Q207 and Q23505 need
+independent pinned evidence. Retain signed H3/H6/H9, zero, provenance,
+time/revision/consumer indices and outside-model alternatives.
+
+Next endpoint work: complete original typed non-NER licensing and structural
+binding/accessibility projection; use existing original parser/coreference
+evidence with exact scope, then the original identity admission/withdrawal
+owner and class-aware demand/Level-3 substitution weld (legacy unique-object
+API must not be silently bypassed). Cross-resource evidence can refine the
+candidate fibre under the existing consumer contracts and review policy; wire
+existing SLR ambiguity/payment and provider adapters when actual typed demands
+are licensed. Do not duplicate these systems or require external QID to close
+a document-local consumer. The new code has not been Rust/Lean compiled or
+database-tested here. No Python restart, no intermediate workstation handoff.
+P0-C/D and whole-port F0-F5 remain open.
+
+
+
 ## 24 November — native NER acceptance and candidate-only transport
 
 Operator reports 46/46 Rust tests passing, native compile successful, 64 NER
