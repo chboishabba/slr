@@ -598,6 +598,152 @@ pub fn retract_original_numeric_identity_for_source_answer(
     })
 }
 
+
+/// Candidate-only, exact-source consumer transport. This extends the represented
+/// fibre, not the capped legacy planner. It never selects, refutes, closes
+/// coverage, admits a witness, or substitutes a Level-3 argument.
+/// Existing occurrence objects from every preceding sentence participate; the
+/// two supported PERSON occurrences are not collapsed or preferentially selected.
+#[derive(Debug,Clone,Serialize)]
+pub struct NativeNumericCandidateTransportReceipt {
+    pub schema:&'static str,
+    pub numeric_run_ref:String,
+    pub demand_id:i64,
+    pub source_object_id:i64,
+    pub inserted_candidate_ids:Vec<i64>,
+    pub remaining_untransported_count:i64,
+    pub represented_candidate_count:i64,
+    pub outside_model_possible:bool,
+    pub complete_typed_coverage_paid:bool,
+}
+pub fn transport_original_numeric_candidates_for_source_answer(
+    numeric_url:&str,numeric_run_ref:&str,answer:&NativeSourceLocalAnswer,
+    budget:usize,
+)->Result<NativeNumericCandidateTransportReceipt,NativeNumericAuditError>{
+    original_receipt_policy(answer)?;
+    if budget==0||budget>64||numeric_run_ref.trim().is_empty(){
+        return Err(NativeNumericAuditError::SourcePolicy);
+    }
+    let mut db=Client::connect(numeric_url,NoTls)?;
+    let mut tx=db.transaction()?;
+    tx.batch_execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+        SET LOCAL statement_timeout='90000ms'; SET LOCAL lock_timeout='5000ms'")?;
+    tx.query_one("SELECT pg_advisory_xact_lock(hashtext($1),hashtext($2))",
+        &[&numeric_run_ref,&answer.source_document_ref])?;
+    let rows=tx.query(
+        "SELECT DISTINCT d.demand_id,d.source_object_id
+         FROM execution.semantic_pnf_demand d
+         JOIN execution.semantic_pnf_anaphor_projection_constant k
+           ON k.singleton AND k.anaphor_residual_type_symbol_id=d.residual_type_symbol_id
+         JOIN execution.semantic_pnf_region r ON r.region_id=d.source_region_id
+         JOIN execution.semantic_parser_source src
+           ON src.run_ref=r.run_ref AND src.document_ref=r.document_ref
+         JOIN execution.semantic_pnf_object_token_support os ON os.object_id=d.source_object_id
+         JOIN execution.semantic_parser_token t ON t.token_id=os.token_id
+           AND t.run_ref=r.run_ref AND t.document_ref=r.document_ref
+           AND t.representation_version=2
+         JOIN execution.semantic_symbol pos ON pos.symbol_id=t.pos_symbol_id
+         JOIN execution.semantic_symbol orth ON orth.symbol_id=t.orth_symbol_id
+         JOIN execution.semantic_pnf_demand_open_world_state ow ON ow.demand_id=d.demand_id
+         WHERE r.run_ref=$1 AND r.document_ref=$2
+           AND encode(src.content_sha256,'hex')=$3
+           AND t.start_char=$4 AND t.end_char=$5
+           AND pos.symbol_text='PRON' AND orth.symbol_text='he'
+           AND d.expected_target_kind=1 AND d.recency_class=3
+           AND d.state IN (1,3) AND ow.outside_model_possible
+           AND NOT EXISTS (
+             SELECT 1 FROM execution.semantic_pnf_identity_witness w
+             JOIN execution.semantic_pnf_identity_witness_admission a
+               ON a.witness_id=w.witness_id AND a.admission_state=2
+             WHERE w.demand_id=d.demand_id)",
+        &[&numeric_run_ref,&answer.source_document_ref,&answer.source_content_sha256,
+          &(answer.original_focus_span[0] as i64),&(answer.original_focus_span[1] as i64)])?;
+    if rows.len()!=1{return Err(NativeNumericAuditError::SourcePolicy);}
+    let demand:i64=rows[0].get(0);
+    let source:i64=rows[0].get(1);
+    // Materialize the exact existing occurrence relation. Recency is the only
+    // exclusion here: morphology/quotation/type refinement is not proved yet.
+    // Lack of a live occurrence object is not negative evidence.
+    tx.execute(
+        "CREATE TEMP TABLE native_numeric_transport_possible ON COMMIT DROP AS
+         SELECT o.object_id,r.region_id,i.interface_id,
+                min(t.start_char)::bigint AS first_char,
+                max(t.end_char)::bigint AS last_char
+         FROM execution.semantic_pnf_object o
+         JOIN execution.semantic_pnf_region r ON r.region_id=o.region_id
+         JOIN execution.semantic_pnf_interface i ON i.region_id=r.region_id
+         JOIN execution.semantic_pnf_object_token_support os ON os.object_id=o.object_id
+         JOIN execution.semantic_parser_token t ON t.token_id=os.token_id
+         WHERE r.run_ref=$1 AND r.document_ref=$2 AND r.region_kind=1
+           AND r.closure_state IN (2,3) AND o.active AND o.object_id<>$3
+         GROUP BY o.object_id,r.region_id,i.interface_id
+         HAVING bool_and(t.run_ref=$1 AND t.document_ref=$2
+                       AND t.representation_version=2)
+            AND max(t.end_char)<=$4",
+        &[&numeric_run_ref,&answer.source_document_ref,&source,
+          &(answer.original_focus_span[0] as i64)])?;
+    tx.execute(
+        "CREATE TEMP TABLE native_numeric_transport_delta ON COMMIT DROP AS
+         SELECT p.* FROM native_numeric_transport_possible p
+         WHERE NOT EXISTS (
+           SELECT 1 FROM execution.semantic_pnf_candidate_universe u
+           WHERE u.demand_id=$1 AND u.target_kind=1 AND u.target_id=p.object_id)
+         ORDER BY p.last_char DESC,p.object_id LIMIT $2",
+        &[&demand,&(budget as i64)])?;
+    // Use the original append-only carrier (m086), not demand_candidate:
+    // the latter drives m062's unsafe early unique resolution on capped rows.
+    tx.execute(
+        "INSERT INTO execution.semantic_pnf_demand_candidate_observation
+          (demand_id,target_kind,target_id,observation_kind,source_interface_id,
+           ancestor_distance,index_rank,candidate_score)
+         SELECT $1::bigint,1,object_id,1,interface_id,
+                $2::bigint-last_char,0,0
+         FROM native_numeric_transport_delta ORDER BY object_id",
+        &[&demand,&(answer.original_focus_span[0] as i64)])?;
+    tx.execute(
+        "INSERT INTO execution.semantic_pnf_candidate_execution_event
+           (demand_id,target_kind,target_id,event_kind,reason_ref)
+         SELECT $1::bigint,1,object_id,4,'native-occurrence-transport-unrefined:v1'
+         FROM native_numeric_transport_delta",
+        &[&demand])?;
+    tx.execute(
+        "INSERT INTO execution.semantic_pnf_candidate_evidence
+           (demand_id,target_kind,target_id,evidence_ref,evidence_family,horizon,
+            signed_residual,evidence_kind,provenance_ref,source_interface_id,source_region_id)
+         SELECT $1::bigint,1,object_id,
+                'native-occurrence-transport:v1:'||object_id::text,
+                1,3,0,'candidate_generation','native-occurrence-transport:v1',
+                interface_id,region_id
+         FROM native_numeric_transport_delta
+         ON CONFLICT(demand_id,target_kind,target_id,evidence_ref) DO NOTHING",
+        &[&demand])?;
+    let ids=tx.query("SELECT object_id FROM native_numeric_transport_delta ORDER BY object_id",&[])?
+        .iter().map(|r|r.get::<_,i64>(0)).collect::<Vec<_>>();
+    let remaining:i64=tx.query_one(
+        "SELECT count(*)::bigint FROM native_numeric_transport_possible p
+         WHERE NOT EXISTS (
+           SELECT 1 FROM execution.semantic_pnf_candidate_universe u
+           WHERE u.demand_id=$1 AND u.target_kind=1 AND u.target_id=p.object_id)",
+        &[&demand])?.get(0);
+    let count:i64=tx.query_one(
+        "SELECT count(*)::bigint FROM execution.semantic_pnf_candidate_universe
+         WHERE demand_id=$1",&[&demand])?.get(0);
+    // Keep original unknown outside-model and existing residual accounting.
+    // A zero transport remainder closes only this materialized object slice.
+    let open:bool=tx.query_one(
+        "SELECT outside_model_possible FROM execution.semantic_pnf_demand_open_world_state
+         WHERE demand_id=$1",&[&demand])?.get(0);
+    if !open{return Err(NativeNumericAuditError::SourcePolicy);}
+    tx.commit()?;
+    Ok(NativeNumericCandidateTransportReceipt{
+        schema:"slr-native-candidate-only-transport-v1",
+        numeric_run_ref:numeric_run_ref.into(),demand_id:demand,source_object_id:source,
+        inserted_candidate_ids:ids,remaining_untransported_count:remaining,
+        represented_candidate_count:count,outside_model_possible:open,
+        complete_typed_coverage_paid:false,
+    })
+}
+
 #[cfg(test)]
 mod tests{
     use super::*;
