@@ -286,7 +286,7 @@ pub struct NativeWorkCounter {
     pub residuals_emitted: usize,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct NativeReduction {
     pub schema_version: &'static str,
     pub reduction_contract: &'static str,
@@ -329,7 +329,7 @@ fn missing_input_residual(
 
 fn compatible(occupied: &BTreeMap<String, String>,
               incoming: &BTreeMap<String, String>) -> bool {
-    incoming.iter().all(|(k, v)| occupied.get(k).is_none_or(|old| old == v))
+    incoming.iter().all(|(k, v)| occupied.get(k).map_or(true, |old| old == v))
 }
 
 fn factor(document: &str, key: &Bucket, group: &[Proposal])
@@ -588,7 +588,7 @@ impl CandidateFibre {
             return None;
         }
         let mut live = self.represented.iter()
-            .filter(|id| !self.refuted_by_evidence.contains_key(id));
+            .filter(|id| !self.refuted_by_evidence.contains_key(*id));
         let first = *live.next()?;
         if live.next().is_some() {
             return None;
