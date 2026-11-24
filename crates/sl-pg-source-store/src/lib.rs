@@ -45,6 +45,8 @@ mod numeric_pnf_source_bridge;
 mod numeric_pnf_owner;
 mod numeric_pnf_sql;
 mod numeric_pnf_parser_plan;
+mod numeric_pnf_parser_store;
+mod numeric_pnf_pipeline;
 mod statement_pnf_spine;
 mod generic_source_compiler;
 mod source_candidate_persistence;
@@ -247,8 +249,17 @@ pub use reviewed_pnf::{
     ReviewedPnfMaterializationError, ReviewedPnfMaterializationReceipt, ReviewedPnfRevision,
     ReviewedPnfValidationError,
 };
+pub use numeric_pnf_parser_store::{
+    persist_original_numeric_parser_plan,
+    NumericParserStoreError, NumericParserStoreReceipt,
+};
+pub use numeric_pnf_pipeline::{
+    run_native_numeric_exact_source_slice, deterministic_numeric_run_ref,
+    NumericPipelineError, NumericPipelineReceipt,
+};
 pub use numeric_pnf_parser_plan::{
     plan_original_native_numeric_parser, NativeNumericParserTokenPlan,
+    NativeNumericParserEntityPlan,
     NativeNumericParserSentencePlan, NativeNumericParserPlan,
     NumericParserPlanError,
 };
@@ -263,7 +274,7 @@ pub use numeric_pnf_owner::{
 pub use numeric_pnf_source_bridge::{
     load_exact_native_numeric_evidence, NativeNumericSourceError,
     OriginalNativeNumericEvidence, OriginalNumericSentenceFibre,
-    OriginalNumericRawToken,
+    OriginalNumericRawToken, OriginalNumericRawEntity,
 };
 pub use numeric_pnf_operator::{
     compose_numeric_sentence_native, strict_numeric_digest,
