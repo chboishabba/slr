@@ -551,25 +551,47 @@ pub fn reduce_canonical(
 
 /// Read-only execution-fibre state. Resource limits may move active candidates
 /// to deferred, but cannot create semantic refutations or close the world.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct VerifiedSqlCandidateRefutation {
+    pub demand_id: u64,
+    pub candidate_id: u64,
+    pub evidence_id: u64,
+    pub evidence_ref: String,
+}
+
+/// The semantic fields are deliberately PRIVATE: no public JSON or string
+/// constructor can fabricate a closed world or refuted candidate. Original
+/// SQL evidence must be checked before constructing semantic changes.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct CandidateFibre {
-    pub represented: BTreeSet<u64>,
-    pub active: BTreeSet<u64>,
-    pub deferred: BTreeSet<u64>,
-    pub refuted_by_evidence: BTreeMap<u64, String>,
-    pub outside_model_possible: bool,
-    pub coverage_witness_ref: Option<String>,
-    pub signed_residuals: BTreeMap<u64, i64>,
+    demand_id: u64,
+    target_kind: i16,
+    represented: BTreeSet<u64>,
+    active: BTreeSet<u64>,
+    deferred: BTreeSet<u64>,
+    refuted_by_evidence: BTreeMap<u64, String>,
+    outside_model_possible: bool,
+    coverage_witness_ref: Option<String>,
+    signed_residuals: BTreeMap<u64, i64>,
 }
 
 impl CandidateFibre {
-    pub fn fresh() -> Self {
+    pub fn fresh_for_original_demand(demand_id: u64, target_kind: i16) -> Self {
         Self {
+            demand_id, target_kind,
             represented: BTreeSet::new(), active: BTreeSet::new(),
             deferred: BTreeSet::new(), refuted_by_evidence: BTreeMap::new(),
             outside_model_possible: true, coverage_witness_ref: None,
             signed_residuals: BTreeMap::new(),
         }
+    }
+    pub fn fresh() -> Self { Self::fresh_for_original_demand(0,0) }
+    pub fn represented_count(&self) -> usize { self.represented.len() }
+    pub fn deferred_count(&self) -> usize { self.deferred.len() }
+    pub fn refuted_count(&self) -> usize { self.refuted_by_evidence.len() }
+    pub fn open_world(&self) -> bool { self.outside_model_possible }
+    pub fn original_demand(&self) -> (u64,i16) {
+        (self.demand_id,self.target_kind)
     }
 
     pub fn represent(&mut self, id: u64) {
@@ -592,14 +614,36 @@ impl CandidateFibre {
         }
     }
 
-    pub fn refute(&mut self, id: u64, evidence_ref: &str)
-        -> Result<(), NumericPnfError> {
-        if evidence_ref.is_empty() || !self.represented.contains(&id) {
-            return Err(NumericPnfError::InvalidField("candidate_evidence_ref"));
+    pub(crate) fn refute_with_original_sql_evidence(
+        &mut self,receipt: &VerifiedSqlCandidateRefutation
+    ) -> Result<(), NumericPnfError> {
+        if receipt.demand_id!=self.demand_id
+            ||receipt.candidate_id==0||receipt.evidence_id==0
+            ||receipt.evidence_ref.is_empty()
+            ||!self.represented.contains(&receipt.candidate_id) {
+            return Err(NumericPnfError::InvalidField("original_sql_candidate_evidence"));
         }
-        self.refuted_by_evidence.insert(id, evidence_ref.to_owned());
-        self.active.remove(&id);
-        self.deferred.remove(&id);
+        self.refuted_by_evidence.insert(receipt.candidate_id,
+            receipt.evidence_ref.clone());
+        self.active.remove(&receipt.candidate_id);
+        self.deferred.remove(&receipt.candidate_id);
+        Ok(())
+    }
+
+    /// ONLY original SQL open-world coverage may close the semantic fibre.
+    /// A cap, normalized score, S29 queue state or candidate-count estimate
+    /// cannot call this through the public API.
+    pub(crate) fn close_with_original_sql_coverage(
+        &mut self, demand_id:u64,coverage_ref:&str,
+        resource_limited:bool,represented_residual_count:u64
+    ) -> Result<(),NumericPnfError> {
+        if demand_id==0||demand_id!=self.demand_id
+            ||coverage_ref.is_empty()||resource_limited
+            ||represented_residual_count!=0 {
+            return Err(NumericPnfError::InvalidField("original_sql_open_world_coverage"));
+        }
+        self.outside_model_possible=false;
+        self.coverage_witness_ref=Some(coverage_ref.to_owned());
         Ok(())
     }
 
@@ -675,12 +719,20 @@ mod tests {
         let mut f = CandidateFibre::fresh();
         f.represent(1);
         f.represent(2);
-        assert!(f.refute(2, "").is_err());
+        assert!(f.refute_with_original_sql_evidence(
+            &VerifiedSqlCandidateRefutation {
+                demand_id:0,candidate_id:2,evidence_id:0,evidence_ref:"".into()
+            }).is_err());
         assert_eq!(f.refuted_by_evidence.len(), 0);
-        f.refute(2, "evidence:original").unwrap();
+        // In this fixture use a simulated original SQL demand; the public
+        // runtime cannot construct the refutation credential itself.
+        f.demand_id=17;
+        f.refute_with_original_sql_evidence(&VerifiedSqlCandidateRefutation {
+            demand_id:17,candidate_id:2,evidence_id:51,
+            evidence_ref:"original-sql-evidence:51".into()
+        }).unwrap();
         assert_eq!(f.unique_admissible(), None);
-        f.outside_model_possible = false;
-        f.coverage_witness_ref = Some("coverage:original".into());
+        f.close_with_original_sql_coverage(17,"coverage:original",false,0).unwrap();
         assert_eq!(f.unique_admissible(), Some(1));
         assert!(!f.eligible_for_identity_admission());
     }
@@ -691,8 +743,9 @@ mod tests {
         f.represent(1);
         f.represent(2);
         f.budget_prune(2);
-        f.outside_model_possible = false;
-        f.coverage_witness_ref = Some("coverage:claimed".into());
+        // A forged arbitrary coverage string has no public semantic effect.
+        assert!(f.close_with_original_sql_coverage(
+            17,"coverage:claimed",false,0).is_err());
         assert_eq!(f.unique_admissible(), None);
     }
 
