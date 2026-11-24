@@ -164,6 +164,39 @@ pub fn load_exact_native_numeric_evidence(
          ORDER BY region_start_char,region_end_char,compilation_key",
         &[&parser_run_ref])?;
     if jobs.is_empty(){return Err(NativeNumericSourceError::JobScope);}
+    // One indexed source-run fetch per observation family, NOT 2N remote
+    // round trips for N source/parser regions. The original per-region
+    // source/coordinate checks below are unchanged.
+    let all_token_rows=db.query(
+        "SELECT token.token_ordinal,token.start_char,token.end_char,
+                token.surface,token.lemma,token.pos,token.morph_json,
+                token.head_ordinal,token.dependency_ref,
+                token.compilation_key
+         FROM ingest.parser_token AS token
+         JOIN ingest.parser_job AS job
+           ON job.compilation_key=token.compilation_key
+         WHERE job.parser_run_ref=$1
+         ORDER BY token.compilation_key,token.token_ordinal",
+        &[&parser_run_ref])?;
+    let mut token_rows_by_job=BTreeMap::<String,Vec<postgres::Row>>::new();
+    for row in all_token_rows{
+        let key:String=row.get(9);
+        token_rows_by_job.entry(key).or_default().push(row);
+    }
+    let all_entity_rows=db.query(
+        "SELECT entity.entity_ordinal,entity.start_char,entity.end_char,
+                entity.surface,entity.label_ref,entity.compilation_key
+         FROM ingest.parser_entity AS entity
+         JOIN ingest.parser_job AS job
+           ON job.compilation_key=entity.compilation_key
+         WHERE job.parser_run_ref=$1
+         ORDER BY entity.compilation_key,entity.entity_ordinal",
+        &[&parser_run_ref])?;
+    let mut entity_rows_by_job=BTreeMap::<String,Vec<postgres::Row>>::new();
+    for row in all_entity_rows{
+        let key:String=row.get(5);
+        entity_rows_by_job.entry(key).or_default().push(row);
+    }
     let mut fibres=Vec::with_capacity(jobs.len());
     let mut last_end=0i64;
     let mut full_document=true;
@@ -182,12 +215,8 @@ pub fn load_exact_native_numeric_evidence(
         }
         if start!=last_end{full_document=false;}
         last_end=end;
-        let rows=db.query(
-            "SELECT token_ordinal,start_char,end_char,surface,lemma,pos,
-                    morph_json,head_ordinal,dependency_ref
-             FROM ingest.parser_token WHERE compilation_key=$1
-             ORDER BY token_ordinal",
-            &[&compilation_key])?;
+        let rows=token_rows_by_job.remove(&compilation_key)
+            .unwrap_or_default();
         let mut ordinals=BTreeSet::new();
         let mut tokens=Vec::with_capacity(rows.len());
         let mut prev_ord=None;
@@ -223,11 +252,8 @@ pub fn load_exact_native_numeric_evidence(
                 }
             }
         }
-        let entity_rows=db.query(
-            "SELECT entity_ordinal,start_char,end_char,surface,label_ref
-             FROM ingest.parser_entity
-             WHERE compilation_key=$1 ORDER BY entity_ordinal",
-            &[&compilation_key])?;
+        let entity_rows=entity_rows_by_job.remove(&compilation_key)
+            .unwrap_or_default();
         let mut entities=Vec::with_capacity(entity_rows.len());
         let mut ordinal_seen=BTreeSet::new();
         for row in entity_rows{
@@ -253,6 +279,9 @@ pub fn load_exact_native_numeric_evidence(
         });
     }
     if last_end!=len{full_document=false;}
+    if !token_rows_by_job.is_empty()||!entity_rows_by_job.is_empty(){
+        return Err(NativeNumericSourceError::JobScope);
+    }
     let original_token_count=fibres.iter().map(|f|f.tokens.len()).sum();
     let mut residuals=vec![
         "original_SLR_parser_does_not_persist_numeric_TAG_symbol_capability".into(),
