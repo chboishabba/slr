@@ -147,7 +147,9 @@ pub fn audit_original_numeric_identity_for_source_answer(
              JOIN execution.semantic_symbol AS orth
                ON orth.symbol_id=token.orth_symbol_id
              JOIN execution.semantic_parser_entity_span AS entity
-               ON entity.sentence_id=token.sentence_id
+               ON entity.run_ref=token.run_ref
+              AND entity.document_ref=token.document_ref
+              AND entity.sentence_ref=token.sentence_ref
               AND entity.start_char<=token.start_char
               AND entity.end_char>=token.end_char
               AND entity.representation_version=2
