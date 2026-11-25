@@ -5548,6 +5548,21 @@ mod tests{
             original_relation_digest(&serde_json::json!({"a":null,"x":1})).unwrap());
     }
     #[test]
+    fn original_atom_and_role_factor_typed_reference_vectors(){
+        let atom=original_relation_atom_payload("a3","He",10,12,"he","PRON","nsubj",
+            Some(r#"{"Number":"Sing","Person":["3"]}"#)).unwrap();
+        assert_eq!(atom["morph"]["Number"],serde_json::json!(["Sing"]));
+        let span=original_atom_span_ref("doc:test",&atom).unwrap();
+        assert_eq!(span,"semantic-atom:ca502008c2cffdd92e249667acbb117b8e93ebeafa5cf73c5a020de214d43972");
+        let binding=serde_json::json!({"role":"subject","atom_id":"a3","atom_ref":span,"value":null});
+        let role=original_binding_factor_ref("doc:test","e1","subject",&binding,false).unwrap();
+        assert_eq!(role,"factor:3bc79ed3125c03ff1755d24a26b4932861738d73be5c2674416d0001948810d7");
+        assert_ne!(role,original_binding_factor_ref("doc:test","e1","subject",&binding,true).unwrap());
+        let empty=original_relation_atom_payload("a1","Went",0,4,"","VERB","ROOT",Some("{}")).unwrap();
+        assert_eq!(empty["lemma"],"Went");assert_eq!(empty["dependency"],"ROOT");
+        assert!(empty.get("morph").is_none());
+    }
+    #[test]
     fn original_action_metadata_preserves_missing_and_explicit_morphology(){
         let missing=original_relation_action_metadata(None,"went","root").unwrap();
         assert_eq!(missing["voice"],"unknown");
