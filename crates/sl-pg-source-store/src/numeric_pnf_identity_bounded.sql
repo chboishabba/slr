@@ -1,31 +1,17 @@
--- SLR production-owner specialization of original SensibLaw m090:
--- f9c4670ef04b40e8153caa7dd00fa1eba7013ef4, blob f5f0dc9e43f50dec52c604614d3492f2cb216bbd.
--- Original m085 bounded family/overflow carrier, preserving m090's actual
--- same-target-span exclusion, head selection, hot symbols and direct lanes.
--- TEMPORARY function + indexed scratch carriers. Invoked only in the native
--- rollback parity probe until original direct/reference admission parity passes.
--- No alternative identity authority, no coverage or world promotion.
-CREATE OR REPLACE FUNCTION pg_temp.slr_refresh_numeric_pnf_parser_identity_evidence_bounded(
-    selected_run_id BIGINT,
-    selected_document_id BIGINT
-)
-RETURNS BIGINT
-LANGUAGE plpgsql
-AS $$
+-- Write from the already staged exact source support. The standalone mode
+-- implements the original m085/Agda source permission without changing the
+-- m090 reference mode or re-reading the document.
+CREATE OR REPLACE FUNCTION pg_temp.slr_write_numeric_pnf_parser_identity_bounded(
+    selected_run_id BIGINT,selected_document_id BIGINT,standalone_only BOOLEAN
+) RETURNS BIGINT LANGUAGE plpgsql AS $$
 DECLARE
-    selected_run_ref TEXT;
-    selected_document_ref TEXT;
     affected_count BIGINT := 0;
     max_name_targets CONSTANT INTEGER := 16;
 BEGIN
-    SELECT run_ref INTO selected_run_ref
-      FROM execution.semantic_pnf_run_identity WHERE run_id=selected_run_id;
-    SELECT document_ref INTO selected_document_ref
-      FROM execution.semantic_pnf_document_identity WHERE document_id=selected_document_id;
-    IF selected_run_ref IS NULL OR selected_document_ref IS NULL THEN
-        RAISE EXCEPTION 'unknown numeric run/document %, %', selected_run_id, selected_document_id;
-    END IF;
-
+    IF standalone_only IS NULL THEN RAISE EXCEPTION 'missing standalone permission mode'; END IF;
+    IF NOT EXISTS(SELECT 1 FROM pg_temp.slr_identity_stage_scope s
+        WHERE s.run_id=selected_run_id AND s.document_id=selected_document_id)
+    THEN RAISE EXCEPTION 'foreign identity support stage'; END IF;
     UPDATE execution.semantic_pnf_identity_evidence_candidate
        SET evidence_state=4
      WHERE run_id=selected_run_id AND document_id=selected_document_id
@@ -33,107 +19,6 @@ BEGIN
 
     DELETE FROM execution.semantic_pnf_proper_name_evidence_overflow
      WHERE run_id=selected_run_id AND document_id=selected_document_id;
-
-    -- Index the original observation fibres once. Keep the exact m090
-    -- selection rules, including its original document anchor owner.
-    CREATE TEMP TABLE slr_identity_constant ON COMMIT DROP AS
-        SELECT max(symbol_id) FILTER (WHERE constant_id=1) AS propn_id,
-               max(symbol_id) FILTER (WHERE constant_id=3) AS appos_id,
-               max(symbol_id) FILTER (WHERE constant_id=4) AS person_id
-          FROM execution.semantic_pnf_hot_symbol_constant;
-    CREATE TEMP TABLE slr_identity_token ON COMMIT DROP AS
-        SELECT token_id,sentence_id,sentence_ref,start_char,end_char,
-               orth_symbol_id,lemma_symbol_id,pos_symbol_id,dependency_symbol_id,head_token_id
-          FROM execution.semantic_parser_token
-         WHERE run_ref=selected_run_ref AND document_ref=selected_document_ref
-           AND representation_version=2;
-    CREATE UNIQUE INDEX ON slr_identity_token(token_id);
-    CREATE INDEX ON slr_identity_token(sentence_ref,start_char,end_char,token_id);
-    CREATE INDEX ON slr_identity_token(lemma_symbol_id,pos_symbol_id);
-    CREATE TEMP TABLE slr_identity_sentence ON COMMIT DROP AS
-        SELECT sentence_id,sentence_ref FROM execution.semantic_parser_sentence
-         WHERE run_ref=selected_run_ref AND document_ref=selected_document_ref;
-    CREATE UNIQUE INDEX ON slr_identity_sentence(sentence_ref);
-    CREATE TEMP TABLE slr_identity_person ON COMMIT DROP AS
-        SELECT entity_id,sentence_ref,start_char,end_char
-          FROM execution.semantic_parser_entity_span CROSS JOIN slr_identity_constant AS constant
-         WHERE run_ref=selected_run_ref AND document_ref=selected_document_ref
-           AND entity_type_symbol_id=person_id;
-    CREATE UNIQUE INDEX ON slr_identity_person(entity_id);
-    CREATE INDEX ON slr_identity_person(sentence_ref,start_char,end_char);
-    CREATE TEMP TABLE slr_identity_anchor ON COMMIT DROP AS
-        SELECT * FROM execution.numeric_pnf_document_parser_object_anchor(
-            selected_run_id,selected_document_id);
-    CREATE UNIQUE INDEX ON slr_identity_anchor(token_id);
-    ANALYZE slr_identity_token;
-    ANALYZE slr_identity_person;
-    ANALYZE slr_identity_anchor;
-    CREATE TEMP TABLE slr_identity_family ON COMMIT DROP AS
-        SELECT entity.entity_id AS parser_entity_id,entity.sentence_ref,
-               entity.start_char,entity.end_char,head.token_id AS head_token_id,
-               head.lemma_symbol_id AS family_lemma_symbol_id,
-               anchor.object_id AS anchor_object_id
-          FROM slr_identity_person AS entity
-          CROSS JOIN slr_identity_constant AS constant
-          JOIN LATERAL (
-              SELECT token.token_id,token.lemma_symbol_id,token.end_char
-                FROM slr_identity_token AS token
-               WHERE token.sentence_ref=entity.sentence_ref
-                 AND token.start_char>=entity.start_char
-                 AND token.end_char<=entity.end_char
-                 AND token.pos_symbol_id=constant.propn_id
-               ORDER BY token.end_char DESC,token.token_id DESC LIMIT 1
-          ) AS head ON TRUE
-          JOIN slr_identity_anchor AS anchor ON anchor.token_id=head.token_id
-         WHERE (SELECT count(*) FROM slr_identity_token AS member
-                 WHERE member.sentence_ref=entity.sentence_ref
-                   AND member.start_char>=entity.start_char
-                   AND member.end_char<=entity.end_char) >= 2;
-    CREATE UNIQUE INDEX ON slr_identity_family(parser_entity_id);
-    CREATE INDEX ON slr_identity_family(family_lemma_symbol_id,parser_entity_id,anchor_object_id,head_token_id);
-    CREATE INDEX ON slr_identity_family(family_lemma_symbol_id,sentence_ref,start_char,end_char);
-    CREATE INDEX ON slr_identity_family(family_lemma_symbol_id,anchor_object_id);
-    ANALYZE slr_identity_family;
-
-    -- Exact indexed family dependency carrier. Include zero-member families,
-    -- unanchored mentions, and embedded PERSON tokens: these are negative/
-    -- unresolved dependencies, not absent work. Numeric IDs are local lookup
-    -- coordinates, not independent semantic identity.
-    CREATE TEMP TABLE slr_identity_mention_scope ON COMMIT DROP AS
-    WITH family_cardinality AS MATERIALIZED (
-        SELECT family_lemma_symbol_id,count(*)::BIGINT AS full_count
-          FROM slr_identity_family GROUP BY family_lemma_symbol_id
-    ), family_anchor_cardinality AS MATERIALIZED (
-        SELECT family_lemma_symbol_id,anchor_object_id,count(*)::BIGINT AS anchor_count
-          FROM slr_identity_family GROUP BY family_lemma_symbol_id,anchor_object_id
-    )
-    SELECT mention.token_id,mention.sentence_ref,mention.start_char,mention.end_char,
-           mention.lemma_symbol_id,mention_anchor.object_id AS source_object_id,
-           sentence.sentence_id,COALESCE(cardinality.full_count,0)::BIGINT AS full_count,
-           EXISTS (SELECT 1 FROM slr_identity_person p
-             WHERE p.sentence_ref=mention.sentence_ref AND p.start_char<=mention.start_char
-               AND p.end_char>=mention.end_char) AS embedded_in_person,
-           CASE WHEN mention_anchor.object_id IS NULL THEN NULL
-             ELSE COALESCE(cardinality.full_count,0) - COALESCE(ac.anchor_count,0) -
-                 (SELECT count(*) FROM slr_identity_family excluded
-                   WHERE excluded.family_lemma_symbol_id=mention.lemma_symbol_id
-                     AND excluded.sentence_ref=mention.sentence_ref
-                     AND excluded.start_char<=mention.start_char
-                     AND excluded.end_char>=mention.end_char
-                     AND excluded.anchor_object_id<>mention_anchor.object_id)
-           END AS eligible_count
-      FROM slr_identity_token mention
-      CROSS JOIN slr_identity_constant AS constant
-      JOIN slr_identity_sentence sentence ON sentence.sentence_ref=mention.sentence_ref
-      LEFT JOIN slr_identity_anchor mention_anchor ON mention_anchor.token_id=mention.token_id
-      LEFT JOIN family_cardinality cardinality ON cardinality.family_lemma_symbol_id=mention.lemma_symbol_id
-      LEFT JOIN family_anchor_cardinality ac ON ac.family_lemma_symbol_id=mention.lemma_symbol_id
-           AND ac.anchor_object_id=mention_anchor.object_id
-     WHERE mention.pos_symbol_id=constant.propn_id;
-    CREATE UNIQUE INDEX ON slr_identity_mention_scope(token_id);
-    CREATE INDEX ON slr_identity_mention_scope(lemma_symbol_id,token_id);
-    CREATE INDEX ON slr_identity_mention_scope(sentence_id,token_id);
-    ANALYZE slr_identity_mention_scope;
 
     WITH appos AS (
         SELECT source_token.token_id AS parser_source_token_id,
@@ -182,6 +67,7 @@ BEGIN
         -- independently be checked for embedded_in_person before activation.
         SELECT * FROM slr_identity_mention_scope
          WHERE source_object_id IS NOT NULL AND full_count>0
+           AND (NOT standalone_only OR NOT embedded_in_person)
     ), proper_name_evidence AS (
         SELECT mention.source_object_id,person.anchor_object_id AS target_object_id,
                3::SMALLINT AS witness_kind,mention.token_id AS source_token_id,
@@ -290,5 +176,140 @@ BEGIN
     SELECT (SELECT count(*) FROM evidence_write)+
            (SELECT 0*count(*) FROM overflow_write) INTO affected_count;
     RETURN affected_count;
+END;
+$$;
+
+-- SLR production-owner specialization of original SensibLaw m090:
+-- f9c4670ef04b40e8153caa7dd00fa1eba7013ef4, blob f5f0dc9e43f50dec52c604614d3492f2cb216bbd.
+-- Original m085 bounded family/overflow carrier, preserving m090's actual
+-- same-target-span exclusion, head selection, hot symbols and direct lanes.
+-- TEMPORARY function + indexed scratch carriers. Invoked only in the native
+-- rollback parity probe until original direct/reference admission parity passes.
+-- No alternative identity authority, no coverage or world promotion.
+CREATE OR REPLACE FUNCTION pg_temp.slr_refresh_numeric_pnf_parser_identity_evidence_bounded(
+    selected_run_id BIGINT,
+    selected_document_id BIGINT,
+    standalone_only BOOLEAN DEFAULT FALSE
+)
+RETURNS BIGINT
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    selected_run_ref TEXT;
+    selected_document_ref TEXT;
+BEGIN
+    SELECT run_ref INTO selected_run_ref
+      FROM execution.semantic_pnf_run_identity WHERE run_id=selected_run_id;
+    SELECT document_ref INTO selected_document_ref
+      FROM execution.semantic_pnf_document_identity WHERE document_id=selected_document_id;
+    IF selected_run_ref IS NULL OR selected_document_ref IS NULL THEN
+        RAISE EXCEPTION 'unknown numeric run/document %, %', selected_run_id, selected_document_id;
+    END IF;
+
+    CREATE TEMP TABLE slr_identity_stage_scope ON COMMIT DROP AS
+        SELECT selected_run_id AS run_id,selected_document_id AS document_id;
+    -- Index the original observation fibres once. Keep the exact m090
+    -- selection rules, including its original document anchor owner.
+    CREATE TEMP TABLE slr_identity_constant ON COMMIT DROP AS
+        SELECT max(symbol_id) FILTER (WHERE constant_id=1) AS propn_id,
+               max(symbol_id) FILTER (WHERE constant_id=3) AS appos_id,
+               max(symbol_id) FILTER (WHERE constant_id=4) AS person_id
+          FROM execution.semantic_pnf_hot_symbol_constant;
+    CREATE TEMP TABLE slr_identity_token ON COMMIT DROP AS
+        SELECT token_id,sentence_id,sentence_ref,start_char,end_char,
+               orth_symbol_id,lemma_symbol_id,pos_symbol_id,dependency_symbol_id,head_token_id
+          FROM execution.semantic_parser_token
+         WHERE run_ref=selected_run_ref AND document_ref=selected_document_ref
+           AND representation_version=2;
+    CREATE UNIQUE INDEX ON slr_identity_token(token_id);
+    CREATE INDEX ON slr_identity_token(sentence_ref,start_char,end_char,token_id);
+    CREATE INDEX ON slr_identity_token(lemma_symbol_id,pos_symbol_id);
+    CREATE TEMP TABLE slr_identity_sentence ON COMMIT DROP AS
+        SELECT sentence_id,sentence_ref FROM execution.semantic_parser_sentence
+         WHERE run_ref=selected_run_ref AND document_ref=selected_document_ref;
+    CREATE UNIQUE INDEX ON slr_identity_sentence(sentence_ref);
+    CREATE TEMP TABLE slr_identity_person ON COMMIT DROP AS
+        SELECT entity_id,sentence_ref,start_char,end_char
+          FROM execution.semantic_parser_entity_span CROSS JOIN slr_identity_constant AS constant
+         WHERE run_ref=selected_run_ref AND document_ref=selected_document_ref
+           AND entity_type_symbol_id=person_id;
+    CREATE UNIQUE INDEX ON slr_identity_person(entity_id);
+    CREATE INDEX ON slr_identity_person(sentence_ref,start_char,end_char);
+    CREATE TEMP TABLE slr_identity_anchor ON COMMIT DROP AS
+        SELECT * FROM execution.numeric_pnf_document_parser_object_anchor(
+            selected_run_id,selected_document_id);
+    CREATE UNIQUE INDEX ON slr_identity_anchor(token_id);
+    ANALYZE slr_identity_token;
+    ANALYZE slr_identity_person;
+    ANALYZE slr_identity_anchor;
+    CREATE TEMP TABLE slr_identity_family ON COMMIT DROP AS
+        SELECT entity.entity_id AS parser_entity_id,entity.sentence_ref,
+               entity.start_char,entity.end_char,head.token_id AS head_token_id,
+               head.lemma_symbol_id AS family_lemma_symbol_id,
+               anchor.object_id AS anchor_object_id
+          FROM slr_identity_person AS entity
+          CROSS JOIN slr_identity_constant AS constant
+          JOIN LATERAL (
+              SELECT token.token_id,token.lemma_symbol_id,token.end_char
+                FROM slr_identity_token AS token
+               WHERE token.sentence_ref=entity.sentence_ref
+                 AND token.start_char>=entity.start_char
+                 AND token.end_char<=entity.end_char
+                 AND token.pos_symbol_id=constant.propn_id
+               ORDER BY token.end_char DESC,token.token_id DESC LIMIT 1
+          ) AS head ON TRUE
+          JOIN slr_identity_anchor AS anchor ON anchor.token_id=head.token_id
+         WHERE (SELECT count(*) FROM slr_identity_token AS member
+                 WHERE member.sentence_ref=entity.sentence_ref
+                   AND member.start_char>=entity.start_char
+                   AND member.end_char<=entity.end_char) >= 2;
+    CREATE UNIQUE INDEX ON slr_identity_family(parser_entity_id);
+    CREATE INDEX ON slr_identity_family(family_lemma_symbol_id,parser_entity_id,anchor_object_id,head_token_id);
+    CREATE INDEX ON slr_identity_family(family_lemma_symbol_id,sentence_ref,start_char,end_char);
+    CREATE INDEX ON slr_identity_family(family_lemma_symbol_id,anchor_object_id);
+    ANALYZE slr_identity_family;
+
+    -- Exact indexed family dependency carrier. Include zero-member families,
+    -- unanchored mentions, and embedded PERSON tokens: these are negative/
+    -- unresolved dependencies, not absent work. Numeric IDs are local lookup
+    -- coordinates, not independent semantic identity.
+    CREATE TEMP TABLE slr_identity_mention_scope ON COMMIT DROP AS
+    WITH family_cardinality AS MATERIALIZED (
+        SELECT family_lemma_symbol_id,count(*)::BIGINT AS full_count
+          FROM slr_identity_family GROUP BY family_lemma_symbol_id
+    ), family_anchor_cardinality AS MATERIALIZED (
+        SELECT family_lemma_symbol_id,anchor_object_id,count(*)::BIGINT AS anchor_count
+          FROM slr_identity_family GROUP BY family_lemma_symbol_id,anchor_object_id
+    )
+    SELECT mention.token_id,mention.sentence_ref,mention.start_char,mention.end_char,
+           mention.lemma_symbol_id,mention_anchor.object_id AS source_object_id,
+           sentence.sentence_id,COALESCE(cardinality.full_count,0)::BIGINT AS full_count,
+           EXISTS (SELECT 1 FROM slr_identity_person p
+             WHERE p.sentence_ref=mention.sentence_ref AND p.start_char<=mention.start_char
+               AND p.end_char>=mention.end_char) AS embedded_in_person,
+           CASE WHEN mention_anchor.object_id IS NULL THEN NULL
+             ELSE COALESCE(cardinality.full_count,0) - COALESCE(ac.anchor_count,0) -
+                 (SELECT count(*) FROM slr_identity_family excluded
+                   WHERE excluded.family_lemma_symbol_id=mention.lemma_symbol_id
+                     AND excluded.sentence_ref=mention.sentence_ref
+                     AND excluded.start_char<=mention.start_char
+                     AND excluded.end_char>=mention.end_char
+                     AND excluded.anchor_object_id<>mention_anchor.object_id)
+           END AS eligible_count
+      FROM slr_identity_token mention
+      CROSS JOIN slr_identity_constant AS constant
+      JOIN slr_identity_sentence sentence ON sentence.sentence_ref=mention.sentence_ref
+      LEFT JOIN slr_identity_anchor mention_anchor ON mention_anchor.token_id=mention.token_id
+      LEFT JOIN family_cardinality cardinality ON cardinality.family_lemma_symbol_id=mention.lemma_symbol_id
+      LEFT JOIN family_anchor_cardinality ac ON ac.family_lemma_symbol_id=mention.lemma_symbol_id
+           AND ac.anchor_object_id=mention_anchor.object_id
+     WHERE mention.pos_symbol_id=constant.propn_id;
+    CREATE UNIQUE INDEX ON slr_identity_mention_scope(token_id);
+    CREATE INDEX ON slr_identity_mention_scope(lemma_symbol_id,token_id);
+    CREATE INDEX ON slr_identity_mention_scope(sentence_id,token_id);
+    ANALYZE slr_identity_mention_scope;
+
+    RETURN pg_temp.slr_write_numeric_pnf_parser_identity_bounded(
+        selected_run_id,selected_document_id,standalone_only);
 END;
 $$;
