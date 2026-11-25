@@ -1246,12 +1246,387 @@ fn observe_native_binding_structure(
     })
 }
 
+
+// Source port of entity_resolution.py lexical/name-shaped mention licensing,
+// corpus_compilation.py semantic.mention_identity and binding_candidate_sets.py
+// v0_3. This projection uses original parser-token intervals, NOT a claim
+// of canonical tokenizer or full semantic graph parity. A name run and its
+// lexical components are distinct occurrence fibres, never automatic aliases.
+#[derive(Debug,Clone)]
+struct NativeMentionToken {
+    id:i64, region:i64, sentence:i64, start:i64, end:i64,
+    orth:String, pos:String, lemma:i64, head:Option<i64>,
+    morph:Vec<String>,
+}
+#[derive(Debug,Clone,Default)]
+struct BindingAnchor {
+    start:i64, sentence:Option<i64>, paragraph:Option<usize>,
+    quotation:Option<usize>, clause:Option<String>,
+    reporting:Option<String>, coordination:Option<String>,
+}
+fn same_known<T:PartialEq>(a:&Option<T>,b:&Option<T>)->bool{
+    a.as_ref().zip(b.as_ref()).is_some_and(|(x,y)|x==y)
+}
+fn original_accessibility_path(reference:&BindingAnchor,candidate:&BindingAnchor)->&'static str{
+    if candidate.start>=reference.start{return "not_preceding_reference";}
+    if reference.quotation.zip(candidate.quotation).is_some_and(|(a,b)|a!=b){
+        return if reference.reporting.is_some()||candidate.reporting.is_some(){
+            "reporting_content_boundary"
+        }else{"quotation_boundary_crossed"};
+    }
+    if same_known(&reference.clause,&candidate.clause){return "same_clause";}
+    if same_known(&reference.reporting,&candidate.reporting){return "governing_clause";}
+    if same_known(&reference.coordination,&candidate.coordination){return "preceding_coordinated_clause";}
+    if same_known(&reference.sentence,&candidate.sentence){return "same_sentence";}
+    if same_known(&reference.paragraph,&candidate.paragraph){return "preceding_discourse_unit";}
+    if reference.paragraph.zip(candidate.paragraph).is_some_and(|(a,b)|b<a){
+        return "preceding_paragraph";
+    }
+    "preceding_document_unit"
+}
+fn original_binding_type(factor_type:&str,pos:&str,reference_type:&str)->bool{
+    match reference_type{
+        "entity_reference"=>factor_type=="semantic.mention_identity"&&matches!(pos,"NOUN"|"PROPN"),
+        "eventuality_reference"=>factor_type=="semantic.eventuality",
+        "proposition_reference"=>matches!(factor_type,"semantic.embedded_proposition"|"semantic.proposition"),
+        _=>false,
+    }
+}
+fn original_path_allowed(path:&str,reference_type:&str)->bool{
+    match path{
+        "not_preceding_reference"|"quotation_boundary_crossed"=>false,
+        "reporting_content_boundary"=>matches!(reference_type,"eventuality_reference"|"proposition_reference"),
+        _=>matches!(reference_type,"entity_reference"|"eventuality_reference"|"proposition_reference"),
+    }
+}
+fn original_lexical_license(s:&str)->bool{
+    s.chars().any(char::is_alphanumeric)&&!matches!(s.trim().to_lowercase().as_str(),
+        "a"|"an"|"and"|"as"|"at"|"by"|"for"|"from"|"in"|"into"|"of"|"on"|"or"|"the"|"to"|"with")
+}
+#[derive(Debug,Clone,Serialize)]
+pub struct NativeMentionSpanBinding{
+    pub start_char:i64,pub end_char:i64,pub token_ids:Vec<i64>,
+    pub original_mention_ref:String,pub factor_type:&'static str,
+    pub license_kinds:Vec<&'static str>,pub anchor_pos:String,
+    pub exact_object_ids:Vec<i64>,pub unique_dependency_head:Option<i64>,
+    pub accessibility_path:&'static str,pub morphology_mismatches:Vec<&'static str>,
+    pub projected_compatible:bool,pub within_original_execution_cap:bool,
+    pub persisted_candidate_evidence:usize,
+}
+#[derive(Debug,Clone,Serialize)]
+pub struct NativeMentionBindingCampaign{
+    pub original_policy_ref:&'static str,
+    pub canonical_source_verified:bool,
+    pub prefix_uncovered_nonwhitespace:usize,
+    pub parser_token_count:usize,
+    pub projected_nominal_span_count:usize,
+    pub newly_materialized_span_objects:usize,
+    pub spans_without_exact_objects:usize,
+    pub compatible_before_cap:usize,
+    pub compatible_deferred_by_cap:usize,
+    pub represented_spans:Vec<NativeMentionSpanBinding>,
+    pub canonical_tokenizer_parity_paid:bool,
+    pub full_factor_graph_parity_paid:bool,
+    pub typed_coverage_paid:bool,
+}
+fn exact_mention_support_index(
+    tx:&mut postgres::Transaction<'_>,run_ref:&str,doc:&str,
+)->Result<BTreeMap<(i64,Vec<i64>),Vec<i64>>,NativeNumericAuditError>{
+    let rows=tx.query(
+        "SELECT o.region_id,o.object_id,array_agg(DISTINCT t.token_id ORDER BY t.token_id)
+         FROM execution.semantic_pnf_object o
+         JOIN execution.semantic_pnf_region r ON r.region_id=o.region_id
+         JOIN execution.semantic_pnf_object_token_support s ON s.object_id=o.object_id
+         JOIN execution.semantic_parser_token t ON t.token_id=s.token_id
+         WHERE r.run_ref=$1 AND r.document_ref=$2 AND o.active
+         GROUP BY o.region_id,o.object_id
+         HAVING bool_and(t.run_ref=$1 AND t.document_ref=$2 AND t.representation_version=2)
+         ORDER BY o.region_id,o.object_id",&[&run_ref,&doc])?;
+    let mut out=BTreeMap::<(i64,Vec<i64>),Vec<i64>>::new();
+    for r in rows{out.entry((r.get(0),r.get(2))).or_default().push(r.get(1));}
+    Ok(out)
+}
+fn nominal_span_indices(tokens:&[NativeMentionToken])->BTreeMap<(usize,usize),Vec<&'static str>>{
+    let mut spans=BTreeMap::<(usize,usize),Vec<&'static str>>::new();
+    for (i,t) in tokens.iter().enumerate(){
+        if original_binding_type("semantic.mention_identity",&t.pos,"entity_reference")
+            &&original_lexical_license(&t.orth){
+            spans.entry((i,i+1)).or_default().push("lexical_token");
+        }
+    }
+    let mut i=0;
+    while i<tokens.len(){
+        if tokens[i].pos!="PROPN"{i+=1;continue;}
+        let mut j=i+1;
+        while j<tokens.len()&&tokens[j].pos=="PROPN"
+            &&tokens[j].sentence==tokens[i].sentence&&tokens[j].region==tokens[i].region{j+=1;}
+        spans.entry((i,j)).or_default().push("named_entity_shape");
+        i=j;
+    }
+    spans
+}
+fn original_mention_binding_campaign(
+    tx:&mut postgres::Transaction<'_>,run_ref:&str,doc:&str,sha:&str,focus_token:i64,
+    budget:usize,
+)->Result<NativeMentionBindingCampaign,NativeNumericAuditError>{
+    let source=tx.query_one(
+        "SELECT locator FROM execution.semantic_parser_source
+         WHERE run_ref=$1 AND document_ref=$2 AND encode(content_sha256,'hex')=$3",
+         &[&run_ref,&doc,&sha])?;
+    let locator:String=source.get(0);
+    let bytes=std::fs::read(locator).map_err(|_|NativeNumericAuditError::ForeignSource)?;
+    if hex(&Sha256::digest(&bytes))!=sha{return Err(NativeNumericAuditError::ForeignSource);}
+    let text=String::from_utf8(bytes).map_err(|_|NativeNumericAuditError::ForeignSource)?;
+    let chars=text.chars().collect::<Vec<_>>();
+    let focus=tx.query_one(
+        "SELECT t.start_char,t.sentence_id,
+          ARRAY(SELECT f.symbol_text||'='||v.symbol_text
+                FROM execution.semantic_morph_set_member m
+                JOIN execution.semantic_symbol f ON f.symbol_id=m.feature_symbol_id
+                JOIN execution.semantic_symbol v ON v.symbol_id=m.value_symbol_id
+                WHERE m.morph_set_id=t.morph_set_id ORDER BY f.symbol_text,v.symbol_text)
+         FROM execution.semantic_parser_token t WHERE t.token_id=$1
+         AND t.run_ref=$2 AND t.document_ref=$3 AND t.representation_version=2",
+        &[&focus_token,&run_ref,&doc])?;
+    let start:i64=focus.get(0);let sentence:i64=focus.get(1);
+    let morphology:Vec<String>=focus.get(2);
+    let focus_context=source_binding_context(&text,start).ok_or(NativeNumericAuditError::ForeignSource)?;
+    let anchor=BindingAnchor{start,sentence:Some(sentence),paragraph:Some(focus_context.0),
+        quotation:Some(focus_context.1),..Default::default()};
+    let rows=tx.query(
+        "SELECT t.token_id,r.region_id,t.sentence_id,t.start_char,t.end_char,
+                orth.symbol_text,pos.symbol_text,t.lemma_symbol_id,t.head_token_id,
+                ARRAY(SELECT f.symbol_text||'='||v.symbol_text
+                    FROM execution.semantic_morph_set_member m
+                    JOIN execution.semantic_symbol f ON f.symbol_id=m.feature_symbol_id
+                    JOIN execution.semantic_symbol v ON v.symbol_id=m.value_symbol_id
+                    WHERE m.morph_set_id=t.morph_set_id ORDER BY f.symbol_text,v.symbol_text)
+         FROM execution.semantic_parser_token t
+         JOIN execution.semantic_pnf_sentence_region l ON l.sentence_id=t.sentence_id
+         JOIN execution.semantic_pnf_region r ON r.region_id=l.region_id
+         JOIN execution.semantic_symbol orth ON orth.symbol_id=t.orth_symbol_id
+         JOIN execution.semantic_symbol pos ON pos.symbol_id=t.pos_symbol_id
+         WHERE t.run_ref=$1 AND t.document_ref=$2 AND t.representation_version=2
+           AND r.run_ref=$1 AND r.document_ref=$2 AND r.region_kind=1
+           AND r.closure_state IN (2,3) AND t.end_char<=$3
+         ORDER BY t.start_char,t.end_char,t.token_id",&[&run_ref,&doc,&start])?;
+    let mut tokens=Vec::new();let mut ids=BTreeSet::new();
+    let mut covered=vec![false;usize::try_from(start).map_err(|_|NativeNumericAuditError::ForeignSource)?];
+    for row in rows{
+        let t=NativeMentionToken{id:row.get(0),region:row.get(1),sentence:row.get(2),
+            start:row.get(3),end:row.get(4),orth:row.get(5),pos:row.get(6),
+            lemma:row.get(7),head:row.get(8),morph:row.get(9)};
+        let a=usize::try_from(t.start).map_err(|_|NativeNumericAuditError::ForeignSource)?;
+        let b=usize::try_from(t.end).map_err(|_|NativeNumericAuditError::ForeignSource)?;
+        if a>=b||b>covered.len()||b>chars.len()||!ids.insert(t.id)
+            ||covered[a..b].iter().any(|x|*x)
+            ||chars[a..b].iter().collect::<String>()!=t.orth{
+            return Err(NativeNumericAuditError::ForeignSource);
+        }
+        covered[a..b].fill(true);tokens.push(t);
+    }
+    let uncovered=chars.iter().take(covered.len()).zip(&covered)
+        .filter(|(ch,seen)|!**seen&&!ch.is_whitespace()).count();
+    let spans=nominal_span_indices(&tokens);
+    let mut support=exact_mention_support_index(tx,run_ref,doc)?;
+    let noun:i64=tx.query_one("SELECT execution.ensure_semantic_symbol(14::smallint,'mention.noun')",&[])?.get(0);
+    let proper:i64=tx.query_one("SELECT execution.ensure_semantic_symbol(14::smallint,'mention.proper_noun')",&[])?.get(0);
+    let mut created=0usize;let mut observations=Vec::new();
+    for ((a,b),licenses) in spans.into_iter().rev(){
+        let slice=&tokens[a..b];let first=&slice[0];let last=&slice[slice.len()-1];
+        let mut token_ids=slice.iter().map(|t|t.id).collect::<Vec<_>>();
+        token_ids.sort_unstable();
+        let head=slice.iter().filter(|t|t.head.is_some_and(|h|h==t.id||!token_ids.contains(&h)))
+            .collect::<Vec<_>>();
+        let head=if let [h]=head.as_slice(){Some(*h)}else{None};
+        let key=(first.region,token_ids.clone());
+        let mut objects=support.get(&key).cloned().unwrap_or_default();
+        if objects.is_empty()&&created<budget{
+            if let Some(h)=head{
+                // Distinct source-span object; exact support set, no spelling quotient.
+                let mut d=Sha256::new();d.update(b"slr:numeric-mention-span:v1");
+                d.update(first.region.to_be_bytes());
+                for id in &token_ids{d.update(id.to_be_bytes());}
+                let digest=d.finalize().to_vec();
+                let kind=if first.pos=="PROPN"{proper}else{noun};
+                let row=tx.query_one(
+                    "INSERT INTO execution.semantic_pnf_object
+                     (object_digest,region_id,object_kind_symbol_id,head_symbol_id,scope_region_id,
+                      promotion_level,information_gain,representation_cost,ambiguity_cost,promotion_score,active)
+                     VALUES($1,$2,$3,$4,$2,0,0,1,1,0,TRUE)
+                     ON CONFLICT(object_digest) DO UPDATE SET object_digest=EXCLUDED.object_digest
+                     RETURNING object_id,region_id,object_kind_symbol_id,head_symbol_id,active",
+                     &[&digest,&first.region,&kind,&h.lemma])?;
+                if row.get::<_,i64>(1)!=first.region||row.get::<_,i64>(2)!=kind
+                    ||row.get::<_,i64>(3)!=h.lemma||!row.get::<_,bool>(4){
+                    return Err(NativeNumericAuditError::ForeignSource);
+                }
+                let id:i64=row.get(0);
+                for (ordinal,t) in slice.iter().enumerate(){
+                    tx.execute(
+                        "INSERT INTO execution.semantic_pnf_object_token_support(object_id,token_id,ordinal)
+                         VALUES($1,$2,$3) ON CONFLICT DO NOTHING",
+                        &[&id,&t.id,&(ordinal as i32)])?;
+                }
+                let actual:Vec<i64>=tx.query_one(
+                    "SELECT array_agg(DISTINCT token_id ORDER BY token_id)
+                     FROM execution.semantic_pnf_object_token_support WHERE object_id=$1",
+                    &[&id])?.get(0);
+                if actual!=token_ids{return Err(NativeNumericAuditError::ForeignSource);}
+                objects.push(id);support.insert(key,objects.clone());created+=1;
+            }
+        }
+        let ctx=source_binding_context(&text,first.start).ok_or(NativeNumericAuditError::ForeignSource)?;
+        // Mention factor metadata contains mention_ref, not a relation ref.
+        // The original reference factor's clause/reporting metadata has not
+        // been reconstructed, so this is a parser-coordinate fallback path.
+        let candidate=BindingAnchor{start:first.start,sentence:Some(first.sentence),
+            paragraph:Some(ctx.0),quotation:Some(ctx.1),..Default::default()};
+        let path=original_accessibility_path(&anchor,&candidate);
+        let mismatches=morphology_mismatches(&morphology,&first.morph);
+        let compatible=original_path_allowed(path,"entity_reference")&&mismatches.is_empty();
+        observations.push(NativeMentionSpanBinding{
+            start_char:first.start,end_char:last.end,token_ids,
+            original_mention_ref:format!("mention:{doc}:{}:{}",first.start,last.end),
+            factor_type:"semantic.mention_identity",license_kinds:licenses,anchor_pos:first.pos.clone(),
+            exact_object_ids:objects,unique_dependency_head:head.map(|h|h.id),
+            accessibility_path:path,morphology_mismatches:mismatches,
+            projected_compatible:compatible,within_original_execution_cap:false,
+            persisted_candidate_evidence:0,
+        });
+    }
+    observations.sort_by(|a,b|b.start_char.cmp(&a.start_char).then(a.original_mention_ref.cmp(&b.original_mention_ref)));
+    let mut compatible=0usize;
+    for row in &mut observations{if row.projected_compatible{
+        compatible+=1;row.within_original_execution_cap=compatible<=64;
+    }}
+    Ok(NativeMentionBindingCampaign{
+        original_policy_ref:"SensibLaw:f9c4670e:mention-licensing+binding-candidate-sets:v0_3",
+        canonical_source_verified:true,prefix_uncovered_nonwhitespace:uncovered,parser_token_count:tokens.len(),
+        projected_nominal_span_count:observations.len(),newly_materialized_span_objects:created,
+        spans_without_exact_objects:observations.iter().filter(|r|r.exact_object_ids.is_empty()).count(),
+        compatible_before_cap:compatible,compatible_deferred_by_cap:compatible.saturating_sub(64),
+        represented_spans:observations,canonical_tokenizer_parity_paid:false,
+        full_factor_graph_parity_paid:false,typed_coverage_paid:false,
+    })
+}
+// Record candidate-only source-derived assessments in original m086 evidence.
+// Never use cap exclusion or an incomplete graph to refute an occurrence.
+fn persist_original_mention_assessments(
+    tx:&mut postgres::Transaction<'_>,demand:i64,focus:i64,
+    campaign:&mut NativeMentionBindingCampaign,
+)->Result<(),NativeNumericAuditError>{
+    for span in &mut campaign.represented_spans{
+        for object in &span.exact_object_ids{
+            let evidence=format!("native-mention-binding:v1:{focus}:{}:{}:{object}",span.start_char,span.end_char);
+            let kind=format!("projected_mention_binding:{}:{}",span.accessibility_path,
+                if span.morphology_mismatches.is_empty(){"no_observed_mismatch"}else{"morphology_mismatch"});
+            // Morphology is already a separate signed evidence coordinate.
+            // Do not double-charge it or fabricate structural exclusion.
+            span.persisted_candidate_evidence+=tx.execute(
+                "INSERT INTO execution.semantic_pnf_candidate_evidence
+                  (demand_id,target_kind,target_id,evidence_ref,evidence_family,horizon,
+                   signed_residual,evidence_kind,provenance_ref,source_interface_id,source_region_id)
+                 SELECT $1,1,o.object_id,$3,1,3,0,$4,
+                   'binding-accessibility:document-structural:v0_3:projected-parser-mention',
+                   i.interface_id,o.region_id
+                 FROM execution.semantic_pnf_candidate_universe u
+                 JOIN execution.semantic_pnf_object o ON o.object_id=u.target_id
+                 JOIN execution.semantic_pnf_interface i ON i.region_id=o.region_id
+                 WHERE u.demand_id=$1 AND u.target_kind=1 AND u.target_id=$2
+                 ON CONFLICT(demand_id,target_kind,target_id,evidence_ref) DO NOTHING",
+                &[&demand,object,&evidence,&kind])? as usize;
+        }
+    }
+    Ok(())
+}
+
 // Class-level uniqueness is not occurrence uniqueness. This helper is only
 // a consumer gate; coverage must be independently paid by the original owner.
 fn covered_unique_class(p:&NativeNumericIdentityFibreProjection,coverage:bool)->Option<i64>{
     if !coverage||p.outside_model_possible||!p.unresolved_keys.is_empty()
         ||!p.conflicting_objects.is_empty()||p.admitted_classes.len()!=1{return None;}
     p.admitted_classes.iter().next().filter(|(_,xs)|!xs.is_empty()).map(|(id,_)|*id)
+}
+
+
+#[derive(Debug,Clone,Serialize)]
+pub struct NativeParserWitnessWithdrawalProbe{
+    pub witness_id:i64,
+    pub affected_level_three_refs:Vec<String>,
+    pub witness_history_preserved:bool,
+    pub projection_removed:bool,
+    pub dependent_rows_removed:bool,
+    pub immutable_level_one_preserved:bool,
+    pub unaffected_level_three_preserved:bool,
+    pub rollback_restored:bool,
+}
+fn probe_parser_witness_withdrawals(
+    tx:&mut postgres::Transaction<'_>,run:i64,doc:i64,
+    classes:&[NativeNumericDocumentIdentityObservation],
+)->Result<Vec<NativeParserWitnessWithdrawalProbe>,NativeNumericAuditError>{
+    let ids=classes.iter().flat_map(|c|c.admitted_witness_ids.iter().copied()).collect::<BTreeSet<_>>();
+    let level_one=level_one_snapshot(tx,run,doc)?;
+    let before=level_three_snapshot(tx,run,doc)?;
+    let mut receipts=Vec::new();
+    for id in ids.into_iter().take(64){
+        let eligible:bool=tx.query_one(
+            "SELECT EXISTS(SELECT 1 FROM execution.semantic_pnf_identity_evidence_witness p
+             JOIN execution.semantic_pnf_identity_witness_admission a ON a.witness_id=p.witness_id
+             JOIN execution.semantic_pnf_identity_evidence_candidate c ON c.candidate_id=p.candidate_id
+             WHERE p.witness_id=$1 AND a.admission_state=2 AND c.run_id=$2 AND c.document_id=$3)",
+            &[&id,&run,&doc])?.get(0);
+        if !eligible{continue;}
+        let affected:Vec<String>=tx.query(
+            "SELECT DISTINCT d.derivation_ref FROM execution.semantic_pnf_factor_derivation d
+             JOIN execution.semantic_pnf_interface i ON i.interface_id=d.scope_interface_id
+             JOIN execution.semantic_pnf_region r ON r.region_id=i.region_id
+             WHERE r.run_id=$2 AND r.document_id=$3 AND d.epistemic_level=3
+             AND (EXISTS(SELECT 1 FROM execution.semantic_pnf_factor_derivation_argument a
+                  WHERE a.derivation_id=d.derivation_id AND $1=ANY(a.identity_witness_ids))
+              OR EXISTS(SELECT 1 FROM execution.semantic_pnf_factor_derivation_support s
+                  WHERE s.derivation_id=d.derivation_id AND $1=ANY(s.identity_witness_ids)))
+             ORDER BY d.derivation_ref",&[&id,&run,&doc])?.iter().map(|r|r.get(0)).collect();
+        let mut inverse=tx.transaction()?;
+        let changed:bool=inverse.query_one("SELECT execution.retract_numeric_pnf_identity_witness($1)",&[&id])?.get(0);
+        // Original supported-substitution cleanup used by native retract.
+        inverse.execute(
+            "DELETE FROM execution.semantic_pnf_factor_derivation d
+             USING execution.semantic_pnf_interface i,execution.semantic_pnf_region r
+             WHERE d.scope_interface_id=i.interface_id AND i.region_id=r.region_id
+               AND r.run_id=$1 AND r.document_id=$2
+               AND d.rule_ref='identity-supported-substitution:v1'
+               AND (EXISTS(SELECT 1 FROM execution.semantic_pnf_factor_derivation_argument a
+                       WHERE a.derivation_id=d.derivation_id AND $3=ANY(a.identity_witness_ids))
+                 OR EXISTS(SELECT 1 FROM execution.semantic_pnf_factor_derivation_support s
+                       WHERE s.derivation_id=d.derivation_id AND $3=ANY(s.identity_witness_ids)))",
+            &[&run,&doc,&id])?;
+        inverse.query_one("SELECT execution.refresh_numeric_pnf_supported_identity_substitution_derivations($1,$2)",&[&run,&doc])?;
+        let history:bool=inverse.query_one(
+            "SELECT EXISTS(SELECT 1 FROM execution.semantic_pnf_identity_witness w
+             JOIN execution.semantic_pnf_identity_witness_admission a ON a.witness_id=w.witness_id
+             WHERE w.witness_id=$1 AND a.admission_state=3)",&[&id])?.get(0);
+        let removed:bool=inverse.query_one(
+            "SELECT NOT EXISTS(SELECT 1 FROM execution.semantic_pnf_identity_projection WHERE $1=ANY(witness_ids))",
+            &[&id])?.get(0);
+        let dependent:bool=inverse.query_one(
+            "SELECT NOT EXISTS(SELECT 1 FROM execution.semantic_pnf_factor_derivation_argument WHERE $1=ANY(identity_witness_ids)
+             UNION ALL SELECT 1 FROM execution.semantic_pnf_factor_derivation_support WHERE $1=ANY(identity_witness_ids))",
+            &[&id])?.get(0);
+        let immutable=level_one==level_one_snapshot(&mut inverse,run,doc)?;
+        let after=level_three_snapshot(&mut inverse,run,doc)?;
+        let unaffected=before.iter().all(|(key,value)|affected.contains(key)||after.get(key)==Some(value));
+        inverse.rollback()?;
+        let restored=before==level_three_snapshot(tx,run,doc)?
+            &&level_one==level_one_snapshot(tx,run,doc)?
+            &&tx.query_one("SELECT admission_state=2 FROM execution.semantic_pnf_identity_witness_admission WHERE witness_id=$1",&[&id])?.get::<_,bool>(0);
+        receipts.push(NativeParserWitnessWithdrawalProbe{
+            witness_id:id,affected_level_three_refs:affected,witness_history_preserved:changed&&history,
+            projection_removed:removed,dependent_rows_removed:dependent,immutable_level_one_preserved:immutable,
+            unaffected_level_three_preserved:unaffected,rollback_restored:restored,
+        });
+    }
+    Ok(receipts)
 }
 
 #[derive(Debug,Clone,Serialize)]
@@ -1263,6 +1638,11 @@ pub struct NativeGovernedIdentityProbe{
     pub covered_unique_entity_id:Option<i64>,
     pub level_three_refs_new_in_probe:Vec<String>,
     pub level_three_rows_after_refresh:i64,
+    pub direct_level_three_rows_after_refresh:i64,
+    pub factor_alignment_counts:BTreeMap<String,i64>,
+    pub source_factor_count:i64,
+    pub focus_factor_argument_count:i64,
+    pub witness_withdrawal_probes:Vec<NativeParserWitnessWithdrawalProbe>,
     pub immutable_level_one_preserved:bool,
     pub rollback_preserved_prior_level_three:bool,
     pub rollback_preserved_prior_candidate_classes:bool,
@@ -1296,11 +1676,30 @@ fn probe_original_governed_identity(
         "SELECT outside_model_possible FROM execution.semantic_pnf_demand_open_world_state WHERE demand_id=$1",
         &[&demand])?.get(0);
     let projection=project_original_identity_fibre(&horizons,&classes,outside);
+    let source_factor_count:i64=probe.query_one(
+        "SELECT count(*)::bigint FROM execution.semantic_pnf_factor f JOIN execution.semantic_pnf_region r
+         ON r.region_id=f.region_id WHERE r.run_id=$1 AND r.document_id=$2 AND f.active",&[&run,&document])?.get(0);
+    let focus_factor_argument_count:i64=probe.query_one(
+        "SELECT count(DISTINCT (e.factor_id,e.slot_ordinal))::bigint
+         FROM execution.semantic_pnf_demand d
+         JOIN execution.semantic_pnf_object_token_support s ON s.object_id=d.source_object_id
+         JOIN execution.semantic_pnf_object_token_support t ON t.token_id=s.token_id
+         JOIN execution.semantic_pnf_hyperedge e ON e.object_id=t.object_id
+         JOIN execution.semantic_pnf_factor f ON f.factor_id=e.factor_id AND f.active
+         JOIN execution.semantic_pnf_region r ON r.region_id=f.region_id
+         WHERE d.demand_id=$1 AND r.run_id=$2 AND r.document_id=$3",&[&demand,&run,&document])?.get(0);
+    let factor_alignment_counts=probe.query(
+        "SELECT alignment_class,projection_count FROM execution.semantic_pnf_identity_factor_alignment_summary_v1
+         WHERE run_id=$1 AND document_id=$2 ORDER BY alignment_class",&[&run,&document])?
+        .iter().map(|r|(r.get::<_,String>(0),r.get::<_,i64>(1))).collect();
+    let direct:i64=probe.query_one(
+        "SELECT execution.refresh_numeric_pnf_identity_substitution_derivations($1,$2)",&[&run,&document])?.get(0);
     let rows:i64=probe.query_one(
         "SELECT execution.refresh_numeric_pnf_supported_identity_substitution_derivations($1,$2)",
         &[&run,&document])?.get(0);
     let after=level_three_snapshot(&mut probe,run,document)?;
     let refs=after.keys().filter(|k|!prior.contains_key(*k)).cloned().collect();
+    let witness_withdrawal_probes=probe_parser_witness_withdrawals(&mut probe,run,document,&classes)?;
     let immutable=level_one==level_one_snapshot(&mut probe,run,document)?;
     probe.rollback()?;
     let rollback_level_three=prior==level_three_snapshot(tx,run,document)?;
@@ -1312,11 +1711,13 @@ fn probe_original_governed_identity(
     }
     Ok(NativeGovernedIdentityProbe{
         admission_owner:"execution.admit_numeric_pnf_parser_identity_evidence",
-        level_three_owner:"execution.refresh_numeric_pnf_supported_identity_substitution_derivations",
+        level_three_owner:"m070 direct + m086 supported substitution",
         admitted_source_witness_count:admitted,
         covered_unique_entity_id:covered_unique_class(&projection,false),
         candidate_class_projection:projection,level_three_refs_new_in_probe:refs,
-        level_three_rows_after_refresh:rows,immutable_level_one_preserved:immutable,
+        level_three_rows_after_refresh:rows,direct_level_three_rows_after_refresh:direct,
+        source_factor_count,focus_factor_argument_count,factor_alignment_counts,witness_withdrawal_probes,
+        immutable_level_one_preserved:immutable,
         rollback_preserved_prior_level_three:rollback_level_three,
         rollback_preserved_prior_candidate_classes:rollback_classes,
         persisted:false,focus_identity_paid:false,
@@ -1351,6 +1752,7 @@ pub struct NativeNumericCandidateTransportReceipt {
     pub document_identity_fibre:NativeNumericIdentityFibreProjection,
     pub original_cross_resource_needs:Vec<OriginalCrossResourceNeedObservation>,
     pub structural_binding:NativeBindingStructuralReceipt,
+    pub original_mention_binding_campaign:NativeMentionBindingCampaign,
     pub original_h9_readiness:NativeH9ReadinessReceipt,
     pub governed_identity_rollback_probe:Option<NativeGovernedIdentityProbe>,
 }
@@ -1403,6 +1805,8 @@ pub fn transport_original_numeric_candidates_for_source_answer(
     let (nominal_head_objects_inserted,nominal_head_token_supports_inserted,nominal_heads_remaining)=
         materialize_prior_nominal_heads(&mut tx,numeric_run_ref,&answer.source_document_ref,
             answer.original_focus_span[0] as i64,budget)?;
+    let mut original_mention_binding_campaign=original_mention_binding_campaign(
+        &mut tx,numeric_run_ref,&answer.source_document_ref,&answer.source_content_sha256,focus_token,budget)?;
     // Materialize the exact existing occurrence relation. Recency is the only
     // exclusion here: morphology/quotation/type refinement is not proved yet.
     // Lack of a live occurrence object is not negative evidence.
@@ -1478,6 +1882,7 @@ pub fn transport_original_numeric_candidates_for_source_answer(
     if !open{return Err(NativeNumericAuditError::SourcePolicy);}
     let (morphology_observations_inserted,candidates_without_morphology_observation)=
         refine_original_numeric_morphology(&mut tx,demand,focus_token,numeric_run_ref,&answer.source_document_ref,budget)?;
+    persist_original_mention_assessments(&mut tx,demand,focus_token,&mut original_mention_binding_campaign)?;
     let original_h6_evidence_inserted=run_original_h6_producer(&mut tx,demand,numeric_run_ref,&answer.source_document_ref)?;
     let (original_horizon_observations,original_document_identity_observations)=
         observe_original_resolution_fibre(&mut tx,demand,numeric_run_ref,&answer.source_document_ref)?;
@@ -1491,12 +1896,13 @@ pub fn transport_original_numeric_candidates_for_source_answer(
     // Only run the document-scoped original admission probe after bounded
     // occurrence/morphology work is drained. This is still not typed coverage.
     let governed_identity_rollback_probe=if remaining==0&&nominal_heads_remaining==0
-        &&candidates_without_morphology_observation==0{
+        &&candidates_without_morphology_observation==0
+        &&original_mention_binding_campaign.newly_materialized_span_objects<budget{
         Some(probe_original_governed_identity(&mut tx,numeric_run_ref,&answer.source_document_ref,demand)?)
     }else{None};
     tx.commit()?;
     Ok(NativeNumericCandidateTransportReceipt{
-        schema:"slr-native-candidate-only-transport-v2",
+        schema:"slr-native-candidate-only-transport-v3",
         numeric_run_ref:numeric_run_ref.into(),demand_id:demand,source_object_id:source,
         inserted_candidate_ids:ids,remaining_untransported_count:remaining,
         represented_candidate_count:count,outside_model_possible:open,
@@ -1505,7 +1911,7 @@ pub fn transport_original_numeric_candidates_for_source_answer(
         morphology_observations_inserted,candidates_without_morphology_observation,
         original_horizon_observations,original_document_identity_observations,
         original_parser_identity_producer,document_identity_fibre,original_cross_resource_needs,
-        structural_binding,original_h9_readiness,governed_identity_rollback_probe,
+        structural_binding,original_mention_binding_campaign,original_h9_readiness,governed_identity_rollback_probe,
     })
 }
 
@@ -1563,6 +1969,40 @@ mod tests{
         p.unresolved_keys.clear();
         p.admitted_classes.insert(30,vec![12]);
         assert_eq!(covered_unique_class(&p,true),None);
+    }
+    #[test]
+    fn original_binding_all_three_referential_types_and_accessibility(){
+        assert!(original_binding_type("semantic.mention_identity","NOUN","entity_reference"));
+        assert!(!original_binding_type("semantic.mention_identity","PRON","entity_reference"));
+        assert!(original_binding_type("semantic.eventuality","VERB","eventuality_reference"));
+        assert!(original_binding_type("semantic.embedded_proposition","VERB","proposition_reference"));
+        assert!(!original_binding_type("semantic.eventuality","VERB","entity_reference"));
+        let r=BindingAnchor{start:20,quotation:Some(1),sentence:Some(2),..Default::default()};
+        let mut c=BindingAnchor{start:10,quotation:Some(0),sentence:Some(1),..Default::default()};
+        assert_eq!(original_accessibility_path(&r,&c),"quotation_boundary_crossed");
+        c.reporting=Some("report".into());
+        let p=original_accessibility_path(&r,&c);
+        assert_eq!(p,"reporting_content_boundary");
+        assert!(!original_path_allowed(p,"entity_reference"));
+        assert!(original_path_allowed(p,"proposition_reference"));
+        c.quotation=Some(1);c.sentence=Some(2);
+        assert_eq!(original_accessibility_path(&r,&c),"same_sentence");
+        c.start=20;assert_eq!(original_accessibility_path(&r,&c),"not_preceding_reference");
+    }
+    #[test]
+    fn original_mention_licenses_retain_name_components_and_span(){
+        let t=|id,pos:&str,orth:&str|NativeMentionToken{
+            id,region:1,sentence:1,start:id,end:id+1,orth:orth.into(),pos:pos.into(),
+            lemma:id,head:Some(id),morph:vec![],
+        };
+        let tokens=vec![t(1,"PROPN","George"),t(2,"PROPN","Bush"),t(3,"VERB","said"),
+            t(4,"NOUN","president"),t(5,"NOUN","the")];
+        let s=nominal_span_indices(&tokens);
+        assert_eq!(s.len(),4);
+        assert_eq!(s[&(0,1)],vec!["lexical_token"]);
+        assert_eq!(s[&(0,2)],vec!["named_entity_shape"]);
+        assert_eq!(s[&(1,2)],vec!["lexical_token"]);
+        assert_eq!(s[&(3,4)],vec!["lexical_token"]);
     }
     #[test]
     fn unsupported_scope_refused_before_any_sql(){
