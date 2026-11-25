@@ -590,12 +590,22 @@ pub fn persist_long_document_compilation(
     let mut client = Client::connect(config.database_url(), NoTls)?;
     let mut tx = client.transaction()?;
     tx.batch_execute(LONG_DOCUMENT_INGEST_SCHEMA_SQL)?;
+    lock_partition(&mut tx, &compilation.source_revision_ref)?;
+    let current = active_partition(&mut tx, &compilation.source_revision_ref)?;
+    let expected = partition_ref(document);
+    if current.as_ref().is_some_and(|r| r != &expected) {
+        return Err(LongDocumentIngestStoreError::PartitionNotCurrent);
+    }
+    let stored_count: i64 = tx.query_one("SELECT count(*)::bigint FROM ingest.long_document_region WHERE source_revision_ref=$1",
+        &[&compilation.source_revision_ref])?.get(0);
+    if stored_count != document.regions.len() as i64 {
+        return Err(LongDocumentIngestStoreError::PartitionNotCurrent);
+    }
 
     for assignment in &compilation.assignments {
         let (disposition, statement_ref, parser_receipt_ref, error_ref) =
             disposition_parts(&assignment.disposition);
-        tx.execute(
-            "INSERT INTO ingest.region_compilation_assignment (
+        let legacy_sql = "INSERT INTO ingest.region_compilation_assignment (
                 source_revision_ref, region_ref, disposition, statement_ref,
                 parser_receipt_ref, error_ref, source_region_preserved,
                 semantic_authority_created, claim_truth_promoted
@@ -607,20 +617,24 @@ pub fn persist_long_document_compilation(
                 error_ref = EXCLUDED.error_ref,
                 source_region_preserved = TRUE,
                 semantic_authority_created = FALSE,
-                claim_truth_promoted = FALSE",
-            &[
-                &compilation.source_revision_ref,
-                &assignment.region_ref,
-                &disposition,
-                &statement_ref,
-                &parser_receipt_ref,
-                &error_ref,
-            ],
-        )?;
+                claim_truth_promoted = FALSE";
+        let mut params: Vec<&(dyn postgres::types::ToSql + Sync)> = vec![
+            &compilation.source_revision_ref, &assignment.region_ref,
+            &disposition, &statement_ref, &parser_receipt_ref, &error_ref,
+        ];
+        if let Some(partition) = &current {
+            let sql = legacy_sql.replace("ingest.region_compilation_assignment", "ingest.partition_region_compilation_assignment")
+                .replace("semantic_authority_created, claim_truth_promoted", "semantic_authority_created, claim_truth_promoted, partition_ref")
+                .replace("TRUE,FALSE,FALSE)", "TRUE,FALSE,FALSE,$7)")
+                .replace("ON CONFLICT (source_revision_ref, region_ref)", "ON CONFLICT (source_revision_ref, partition_ref, region_ref)");
+            params.push(partition);
+            tx.execute(sql.as_str(), &params)?;
+        } else {
+            tx.execute(legacy_sql, &params)?;
+        }
     }
 
-    tx.execute(
-        "INSERT INTO ingest.lossless_compilation_receipt (
+    let legacy_sql = "INSERT INTO ingest.lossless_compilation_receipt (
             source_revision_ref, source_ref, exact_region_count,
             semantic_candidate_region_count, compiled_statement_count,
             parser_residual_count, candidate_pnf_count,
@@ -646,20 +660,30 @@ pub fn persist_long_document_compilation(
             creates_semantic_authority = FALSE,
             applicability_promoted = FALSE,
             claim_truth_promoted = FALSE,
-            parse_failure_deletes_source = FALSE",
-        &[
-            &compilation.source_revision_ref,
-            &compilation.source_ref,
-            &(compilation.exact_region_count as i64),
-            &(compilation.semantic_candidate_region_count as i64),
-            &(compilation.compiled_statement_count as i64),
-            &(compilation.residuals.len() as i64),
-            &(compilation.candidate_pnf_count as i64),
-            &(compilation.transport_or_nonsemantic_region_count as i64),
-            &(compilation.source_region_accounted_count as i64),
-            &(compilation.source_region_loss_count as i64),
-        ],
-    )?;
+            parse_failure_deletes_source = FALSE";
+    let exact_count = compilation.exact_region_count as i64;
+    let semantic_count = compilation.semantic_candidate_region_count as i64;
+    let compiled_count = compilation.compiled_statement_count as i64;
+    let residual_count = compilation.residuals.len() as i64;
+    let pnf_count = compilation.candidate_pnf_count as i64;
+    let transport_count = compilation.transport_or_nonsemantic_region_count as i64;
+    let accounted_count = compilation.source_region_accounted_count as i64;
+    let loss_count = compilation.source_region_loss_count as i64;
+    let mut params: Vec<&(dyn postgres::types::ToSql + Sync)> = vec![
+        &compilation.source_revision_ref, &compilation.source_ref,
+        &exact_count, &semantic_count, &compiled_count, &residual_count,
+        &pnf_count, &transport_count, &accounted_count, &loss_count,
+    ];
+    if let Some(partition) = &current {
+        let sql = legacy_sql.replace("ingest.lossless_compilation_receipt", "ingest.partition_lossless_compilation_receipt")
+            .replace("claim_truth_promoted, parse_failure_deletes_source", "claim_truth_promoted, parse_failure_deletes_source, partition_ref")
+            .replace("TRUE,FALSE,FALSE,FALSE,FALSE", "TRUE,FALSE,FALSE,FALSE,FALSE,$11")
+            .replace("ON CONFLICT (source_revision_ref)", "ON CONFLICT (source_revision_ref, partition_ref)");
+        params.push(partition);
+        tx.execute(sql.as_str(), &params)?;
+    } else {
+        tx.execute(legacy_sql, &params)?;
+    }
     tx.commit()?;
 
     load_long_document_ingest_receipt(config, &compilation.source_revision_ref)
@@ -673,8 +697,10 @@ pub fn load_long_document_regions(
     let mut client = Client::connect(config.database_url(), NoTls)?;
     client.batch_execute(LONG_DOCUMENT_INGEST_SCHEMA_SQL)?;
 
-    let rows = client.query(
-        "SELECT
+    let mut tx = client.transaction()?;
+    lock_partition(&mut tx, source_revision_ref)?;
+    let current = active_partition(&mut tx, source_revision_ref)?;
+    let legacy_sql = "SELECT
            r.source_ref,
            r.region_ref,
            r.parent_region_ref,
@@ -693,9 +719,20 @@ pub fn load_long_document_regions(
            ON a.source_revision_ref = r.source_revision_ref
           AND a.region_ref = r.region_ref
          WHERE r.source_revision_ref = $1
-         ORDER BY r.start_char, r.end_char, r.region_ref",
-        &[&source_revision_ref],
-    )?;
+         ORDER BY r.start_char, r.end_char, r.region_ref";
+    let rows = if let Some(partition) = &current {
+        let sql = legacy_sql.replace("ingest.region_compilation_assignment", "ingest.partition_region_compilation_assignment")
+            .replace("WHERE r.source_revision_ref = $1", "WHERE r.source_revision_ref = $1 AND a.partition_ref=$2");
+        tx.query(sql.as_str(), &[&source_revision_ref, partition])?
+    } else {
+        tx.query(legacy_sql, &[&source_revision_ref])?
+    };
+    let expected: i64 = tx.query_one("SELECT count(*)::bigint FROM ingest.long_document_region WHERE source_revision_ref=$1",
+        &[&source_revision_ref])?.get(0);
+    if current.is_some() && rows.len() as i64 != expected {
+        return Err(LongDocumentIngestStoreError::PartitionNotCurrent);
+    }
+    tx.commit()?;
 
     rows.into_iter()
         .map(|row| {
@@ -764,24 +801,38 @@ pub fn load_long_document_ingest_receipt(
     let mut client = Client::connect(config.database_url(), NoTls)?;
     client.batch_execute(LONG_DOCUMENT_INGEST_SCHEMA_SQL)?;
 
-    let row = client.query_one(
-        "SELECT source_ref, exact_region_count, compiled_statement_count,
+    let mut tx = client.transaction()?;
+    lock_partition(&mut tx, source_revision_ref)?;
+    let current = active_partition(&mut tx, source_revision_ref)?;
+    let legacy_sql = "SELECT source_ref, exact_region_count, compiled_statement_count,
                 parser_residual_count, source_region_loss_count,
                 candidate_only, creates_semantic_authority,
                 applicability_promoted, claim_truth_promoted,
                 parse_failure_deletes_source
          FROM ingest.lossless_compilation_receipt
-         WHERE source_revision_ref = $1",
-        &[&source_revision_ref],
-    )?;
-
-    let assignment_rows = client.query(
-        "SELECT disposition, COUNT(*)::BIGINT
+         WHERE source_revision_ref = $1";
+    let legacy_assignments = "SELECT disposition, COUNT(*)::BIGINT
          FROM ingest.region_compilation_assignment
          WHERE source_revision_ref = $1
-         GROUP BY disposition",
-        &[&source_revision_ref],
-    )?;
+         GROUP BY disposition";
+    let (row, assignment_rows) = if let Some(partition) = &current {
+        let sql = legacy_sql.replace("ingest.lossless_compilation_receipt", "ingest.partition_lossless_compilation_receipt")
+            + " AND partition_ref=$2";
+        let row = tx.query_opt(sql.as_str(), &[&source_revision_ref, partition])?
+            .ok_or(LongDocumentIngestStoreError::PartitionNotCurrent)?;
+        let sql = legacy_assignments.replace("ingest.region_compilation_assignment", "ingest.partition_region_compilation_assignment")
+            .replace("GROUP BY disposition", "AND partition_ref=$2 GROUP BY disposition");
+        (row, tx.query(sql.as_str(), &[&source_revision_ref, partition])?)
+    } else {
+        (tx.query_one(legacy_sql, &[&source_revision_ref])?,
+         tx.query(legacy_assignments, &[&source_revision_ref])?)
+    };
+    let expected: i64 = tx.query_one("SELECT count(*)::bigint FROM ingest.long_document_region WHERE source_revision_ref=$1",
+        &[&source_revision_ref])?.get(0);
+    if row.get::<_,i64>(1) != expected {
+        return Err(LongDocumentIngestStoreError::PartitionNotCurrent);
+    }
+    tx.commit()?;
 
     let counts = assignment_rows
         .into_iter()
