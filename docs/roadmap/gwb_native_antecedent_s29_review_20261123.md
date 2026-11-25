@@ -8,6 +8,8 @@ Native binding v2 now reopens the original numeric source locator with a SHA-256
 
 
 
+The v2 receipt also observes the original m135 target-support and provider-quality entity-occurrence projections, existing H9 ready work and m119/m120 consumer-contract admission reasons for the focus and related occurrence demands. No fabricated contract, target occurrence, query or provider execution. An absent H9 queue or contract is distinguished from a rejected admission or absent provider-quality target.
+
 ## Native binding execution handoff — 24 November
 
 SLR `9bdd6e94` + `7b658b22` extend the existing explicit `bind` CLI:

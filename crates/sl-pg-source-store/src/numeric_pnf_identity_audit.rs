@@ -1058,6 +1058,83 @@ fn run_original_h6_producer(
 }
 
 
+
+#[derive(Debug,Clone,Serialize)]
+pub struct NativeH9DemandReadiness {
+    pub demand_id:i64,
+    pub source_object_id:Option<i64>,
+    pub semantic_target_occurrences:i64,
+    pub provider_quality_entity_occurrences:i64,
+    pub ready_h9_work_items:i64,
+    pub matched_contract_rows:i64,
+    pub admitted_external_need_rows:i64,
+}
+#[derive(Debug,Clone,Serialize)]
+pub struct NativeH9AdmissionObservation{
+    pub demand_id:i64,
+    pub consumer_ref:String,
+    pub query_ref:String,
+    pub policy_ref:String,
+    pub contract_id:Option<i64>,
+    pub anchor_object_id:Option<i64>,
+    pub label_symbol_id:Option<i64>,
+    pub admission_reason:i16,
+    pub admitted:bool,
+}
+#[derive(Debug,Clone,Serialize)]
+pub struct NativeH9ReadinessReceipt{
+    pub related_demands:Vec<NativeH9DemandReadiness>,
+    pub original_admission_rows:Vec<NativeH9AdmissionObservation>,
+    pub provider_execution_performed:bool,
+}
+// Read the original producer-specific target occurrence and consumer
+// contracts. A cross-sentence antecedent candidate is not itself an H9
+// semantic target occurrence. No work/contract is fabricated when absent.
+fn observe_native_h9_readiness(
+    tx:&mut postgres::Transaction<'_>,demand:i64,run_ref:&str,document_ref:&str,
+)->Result<NativeH9ReadinessReceipt,NativeNumericAuditError>{
+    let related=tx.query(
+        "SELECT d.demand_id,d.source_object_id,
+          (SELECT count(*)::bigint FROM execution.semantic_pnf_demand_h9_target_support_v1 v WHERE v.demand_id=d.demand_id),
+          (SELECT count(*)::bigint FROM execution.semantic_pnf_demand_parser_entity_occurrence_v1 v WHERE v.demand_id=d.demand_id),
+          (SELECT count(*)::bigint FROM execution.semantic_pnf_consumer_horizon_work_queue w
+            WHERE w.demand_id=d.demand_id AND w.horizon=9 AND w.work_state=1)
+         FROM execution.semantic_pnf_demand d
+         JOIN execution.semantic_pnf_region r ON r.region_id=d.source_region_id
+         WHERE r.run_ref=$2 AND r.document_ref=$3 AND
+          (d.demand_id=$1 OR EXISTS (
+             SELECT 1 FROM execution.semantic_pnf_candidate_universe u
+             WHERE u.demand_id=$1 AND u.target_kind=1 AND u.target_id=d.source_object_id))
+         ORDER BY d.demand_id",
+        &[&demand,&run_ref,&document_ref])?;
+    let ids=related.iter().map(|r|r.get::<_,i64>(0)).collect::<Vec<_>>();
+    let admission=tx.query(
+        "SELECT demand_id,consumer_ref,query_ref,policy_ref,contract_id,
+                anchor_object_id,label_symbol_id,admission_reason,admitted
+         FROM execution.semantic_pnf_h9_external_admission_v1
+         WHERE demand_id=ANY($1::bigint[])
+         ORDER BY demand_id,consumer_ref,query_ref,policy_ref,contract_id",
+        &[&ids])?;
+    let original_admission_rows=admission.iter().map(|r|NativeH9AdmissionObservation{
+        demand_id:r.get(0),consumer_ref:r.get(1),query_ref:r.get(2),policy_ref:r.get(3),
+        contract_id:r.get(4),anchor_object_id:r.get(5),label_symbol_id:r.get(6),
+        admission_reason:r.get(7),admitted:r.get(8),
+    }).collect::<Vec<_>>();
+    let related_demands=related.iter().map(|r|{
+        let id:i64=r.get(0);
+        NativeH9DemandReadiness{
+            demand_id:id,source_object_id:r.get(1),
+            semantic_target_occurrences:r.get(2),provider_quality_entity_occurrences:r.get(3),
+            ready_h9_work_items:r.get(4),
+            matched_contract_rows:original_admission_rows.iter()
+                .filter(|a|a.demand_id==id&&a.contract_id.is_some()).count() as i64,
+            admitted_external_need_rows:original_admission_rows.iter()
+                .filter(|a|a.demand_id==id&&a.admitted).count() as i64,
+        }
+    }).collect();
+    Ok(NativeH9ReadinessReceipt{related_demands,original_admission_rows,provider_execution_performed:false})
+}
+
 // Original binding_candidate_sets.py paragraph/quotation prefix rules.
 // Codepoint coordinates, not UTF-8 byte offsets. These are parser-anchor
 // observations, not proof of reporting scope or mention-identity factor type.
@@ -1274,6 +1351,7 @@ pub struct NativeNumericCandidateTransportReceipt {
     pub document_identity_fibre:NativeNumericIdentityFibreProjection,
     pub original_cross_resource_needs:Vec<OriginalCrossResourceNeedObservation>,
     pub structural_binding:NativeBindingStructuralReceipt,
+    pub original_h9_readiness:NativeH9ReadinessReceipt,
     pub governed_identity_rollback_probe:Option<NativeGovernedIdentityProbe>,
 }
 pub fn transport_original_numeric_candidates_for_source_answer(
@@ -1407,6 +1485,7 @@ pub fn transport_original_numeric_candidates_for_source_answer(
     let original_cross_resource_needs=observe_original_cross_resource_needs(&mut tx,demand,numeric_run_ref,&answer.source_document_ref)?;
     let original_parser_identity_producer=original_parser_identity_producer_probe(
         &mut tx,numeric_run_ref,&answer.source_document_ref,demand)?;
+    let original_h9_readiness=observe_native_h9_readiness(&mut tx,demand,numeric_run_ref,&answer.source_document_ref)?;
     let structural_binding=observe_native_binding_structure(&mut tx,demand,focus_token,
         numeric_run_ref,&answer.source_document_ref,&answer.source_content_sha256)?;
     // Only run the document-scoped original admission probe after bounded
@@ -1426,7 +1505,7 @@ pub fn transport_original_numeric_candidates_for_source_answer(
         morphology_observations_inserted,candidates_without_morphology_observation,
         original_horizon_observations,original_document_identity_observations,
         original_parser_identity_producer,document_identity_fibre,original_cross_resource_needs,
-        structural_binding,governed_identity_rollback_probe,
+        structural_binding,original_h9_readiness,governed_identity_rollback_probe,
     })
 }
 
