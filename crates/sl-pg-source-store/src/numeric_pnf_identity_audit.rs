@@ -2757,6 +2757,18 @@ fn sync_native_partition_consumer(
         source_digest_ref text NOT NULL,delta_digest text NOT NULL,
         affected_queue_rows bigint NOT NULL CHECK(affected_queue_rows>=0),
         PRIMARY KEY(run_ref,document_ref,source_revision_ref,partition_ref)
+    );
+    CREATE TABLE IF NOT EXISTS execution.slr_native_partition_consumer_ack (
+        run_ref text NOT NULL,document_ref text NOT NULL,source_revision_ref text NOT NULL,
+        partition_ref text NOT NULL,demand_id bigint NOT NULL,
+        consumer_ref text NOT NULL,query_ref text NOT NULL,policy_ref text NOT NULL,
+        affected boolean NOT NULL,
+        PRIMARY KEY(run_ref,document_ref,source_revision_ref,partition_ref,demand_id,consumer_ref,query_ref,policy_ref),
+        FOREIGN KEY(run_ref,document_ref,source_revision_ref,partition_ref)
+          REFERENCES execution.slr_native_partition_wake_receipt(run_ref,document_ref,source_revision_ref,partition_ref),
+        FOREIGN KEY(run_ref,document_ref,source_revision_ref,demand_id,consumer_ref,query_ref,policy_ref)
+          REFERENCES execution.slr_native_consumer_source_interval(run_ref,document_ref,source_revision_ref,demand_id,consumer_ref,query_ref,policy_ref)
+          ON DELETE CASCADE
     );")?;
     let doc=&answer.source_document_ref;
     let rev=&answer.source_revision_ref;
@@ -2788,16 +2800,20 @@ fn sync_native_partition_consumer(
         }
         previous=Some(c.partition_ref.as_str());
         let delta_digest=bridge_digest(c)?;
-        if let Some(row)=tx.query_opt("SELECT previous_partition_ref,source_digest_ref,delta_digest
+        let prior=tx.query_opt("SELECT previous_partition_ref,source_digest_ref,delta_digest
             FROM execution.slr_native_partition_wake_receipt
             WHERE run_ref=$1 AND document_ref=$2 AND source_revision_ref=$3 AND partition_ref=$4",
-            &[&run,doc,rev,&c.partition_ref])? {
+            &[&run,doc,rev,&c.partition_ref])?;
+        if let Some(row)=&prior {
             if row.get::<_,String>(0)!=c.previous_partition_ref
                 ||row.get::<_,String>(1)!=c.source_digest_ref ||row.get::<_,String>(2)!=delta_digest {
                 return Err(NativeNumericAuditError::ForeignSource);
             }
-            reused.push(c.partition_ref.clone());
-            continue;
+        } else {
+            tx.execute("INSERT INTO execution.slr_native_partition_wake_receipt
+                (run_ref,document_ref,source_revision_ref,partition_ref,previous_partition_ref,source_digest_ref,delta_digest,affected_queue_rows)
+                VALUES($1,$2,$3,$4,$5,$6,$7,0)",&[&run,doc,rev,&c.partition_ref,&c.previous_partition_ref,
+                &c.source_digest_ref,&delta_digest])?;
         }
         let mut starts=Vec::new();let mut ends=Vec::new();
         for r in &c.added {
@@ -2808,24 +2824,47 @@ fn sync_native_partition_consumer(
         }
         // Intersect exact source intervals (including absence dependencies)
         // before enqueue. Original m139 handles ordinary positive evidence.
-        let rows=tx.execute("WITH changed AS (
+        // A partition receipt alone is not a consumer receipt: consumers
+        // registered later must not inherit a previous consumer's ack.
+        // Reuse m094's exact work key; ack unrelated scopes without waking.
+        let row=tx.query_one("WITH changed AS (
             SELECT * FROM unnest($5::bigint[],$6::bigint[]) AS r(start_char,end_char)
-        ), affected AS (
-            SELECT DISTINCT d.demand_id,d.consumer_ref,d.query_ref,d.policy_ref
-            FROM changed c JOIN execution.slr_native_consumer_source_interval d
-              ON int8range(d.start_char,d.end_char,'[)') && int8range(c.start_char,c.end_char,'[)')
+        ), pending AS MATERIALIZED (
+            SELECT d.demand_id,d.consumer_ref,d.query_ref,d.policy_ref,
+              EXISTS(SELECT 1 FROM changed c WHERE
+                int8range(d.start_char,d.end_char,'[)') && int8range(c.start_char,c.end_char,'[)')) AS affected
+            FROM execution.slr_native_consumer_source_interval d
             WHERE d.run_ref=$1 AND d.document_ref=$2 AND d.source_revision_ref=$3 AND d.source_sha256=$4
+              AND NOT EXISTS(SELECT 1 FROM execution.slr_native_partition_consumer_ack a
+                WHERE a.run_ref=d.run_ref AND a.document_ref=d.document_ref
+                  AND a.source_revision_ref=d.source_revision_ref AND a.partition_ref=$7
+                  AND a.demand_id=d.demand_id AND a.consumer_ref=d.consumer_ref
+                  AND a.query_ref=d.query_ref AND a.policy_ref=d.policy_ref)
+        ), woken AS (
+            INSERT INTO execution.semantic_pnf_consumer_horizon_work_queue
+                (demand_id,consumer_ref,query_ref,policy_ref,horizon,work_state,completed_at)
+            SELECT demand_id,consumer_ref,query_ref,policy_ref,3,1,NULL FROM pending WHERE affected
+            ON CONFLICT(demand_id,consumer_ref,query_ref,policy_ref,horizon)
+            DO UPDATE SET work_state=1,completed_at=NULL RETURNING demand_id
+        ), acknowledged AS (
+            INSERT INTO execution.slr_native_partition_consumer_ack
+                (run_ref,document_ref,source_revision_ref,partition_ref,demand_id,consumer_ref,query_ref,policy_ref,affected)
+            SELECT $1,$2,$3,$7,demand_id,consumer_ref,query_ref,policy_ref,affected FROM pending
+            RETURNING demand_id
         )
-        INSERT INTO execution.semantic_pnf_consumer_horizon_work_queue
-            (demand_id,consumer_ref,query_ref,policy_ref,horizon,work_state,completed_at)
-        SELECT demand_id,consumer_ref,query_ref,policy_ref,3,1,NULL FROM affected
-        ON CONFLICT(demand_id,consumer_ref,query_ref,policy_ref,horizon)
-        DO UPDATE SET work_state=1,completed_at=NULL",&[&run,doc,rev,sha,&starts,&ends])?;
-        tx.execute("INSERT INTO execution.slr_native_partition_wake_receipt
-            (run_ref,document_ref,source_revision_ref,partition_ref,previous_partition_ref,source_digest_ref,delta_digest,affected_queue_rows)
-            VALUES($1,$2,$3,$4,$5,$6,$7,$8)",&[&run,doc,rev,&c.partition_ref,&c.previous_partition_ref,
-            &c.source_digest_ref,&delta_digest,&(rows as i64)])?;
-        applied.push(c.partition_ref.clone());affected+=rows;
+        SELECT (SELECT count(*)::bigint FROM woken),(SELECT count(*)::bigint FROM acknowledged)",
+        &[&run,doc,rev,sha,&starts,&ends,&c.partition_ref])?;
+        let rows:i64=row.get(0);let acks:i64=row.get(1);
+        if rows<0 || acks<rows {return Err(NativeNumericAuditError::ForeignSource);}
+        if rows>0 {
+            tx.execute("UPDATE execution.slr_native_partition_wake_receipt
+                SET affected_queue_rows=affected_queue_rows+$5
+                WHERE run_ref=$1 AND document_ref=$2 AND source_revision_ref=$3 AND partition_ref=$4",
+                &[&run,doc,rev,&c.partition_ref,&rows])?;
+        }
+        if prior.is_some() && acks==0 { reused.push(c.partition_ref.clone()); }
+        else { applied.push(c.partition_ref.clone()); }
+        affected+=rows as u64;
     }
     Ok(NativePartitionWakeReceipt{applied_partition_refs:applied,already_applied_partition_refs:reused,
         affected_queue_rows:affected,dependency_scope_start_char:0,dependency_scope_end_char:end})
