@@ -1,5 +1,12 @@
 # C4.11: source-native antecedent review on original SLR S29
 
+## 25 November — first binding acceptance and governed replay
+
+Operator receipt [f6c14e5](https://github.com/chboishabba/slr/blob/f6c14e59191ab861c1972b78a6a158c8fc4a24fa/native-numeric-binding.json): 25 focused Rust + 1 CLI tests reported passing; 49 nominal heads inserted, zero remaining; 64 represented with 34 untransported; 192 H3/H6/H9 observations (all execution residuals); 33 parser identity candidate rows (27 name expansion, four kind 2, two kind 4), zero admitted classes, zero H6 insertions, no observed external needs. This is not typed coverage or semantic admission.
+
+Native binding v2 now reopens the original numeric source locator with a SHA-256 check and reports source-coordinate quotation/paragraph context and exact head POS, retaining reporting/clause and typed mention-factor residuals. After bounded transport and morphology drain, it exercises the existing m090 refresh, m080 governed admission and m086 supported Level-3 substitution in a nested rollback probe. The probe reports prospective classes and newly observed derivation refs, verifies immutable Level-1 and restored Level-3/class snapshots, and never commits admission. Probe IDs are ephemeral; sequences may advance. Existing open-world and focus identity remain unpaid. The class-selection gate explicitly requires independently paid coverage and no unresolved/conflicting keys. This is not the full original accessibility/typed factor port, class-aware focus-demand witness, or a provider request. No new schema or Python restart. Source-written, not Cargo/PostgreSQL-tested by assistant; run the existing bind command again with 64 --commit (receipt schema v2). H9 remains separately licensed by m119 and existing consumer contracts. F0-F5 remain open.
+
+
 
 ## Native binding execution handoff — 24 November
 

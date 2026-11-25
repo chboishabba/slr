@@ -8,6 +8,7 @@
 use crate::NativeSourceLocalAnswer;
 use postgres::{Client,NoTls};
 use serde::Serialize;
+use sha2::{Digest,Sha256};
 use thiserror::Error;
 use std::collections::{BTreeMap,BTreeSet};
 
@@ -23,6 +24,8 @@ pub enum NativeNumericAuditError{
     WitnessNotCurrent,
     #[error("selected witness has no original persisted Level-3 dependency")]
     NoWitnessedLevelThree,
+    #[error("original admission probe changed immutable Level-1 or failed rollback preservation")]
+    AdmissionProbeInvariant,
     #[error("original retraction failed preservation or current-projection checks; transaction rolled back")]
     RetractionInvariant,
 }
@@ -629,7 +632,7 @@ pub struct NativeNumericHorizonObservation{
     pub refuted:bool,
     pub strict_preference:bool,
 }
-#[derive(Debug,Clone,Serialize)]
+#[derive(Debug,Clone,Serialize,PartialEq,Eq)]
 pub struct NativeNumericDocumentIdentityObservation{
     pub object_id:i64,
     pub admitted_entity_ids:Vec<i64>,
@@ -1054,6 +1057,195 @@ fn run_original_h6_producer(
     Ok(inserted)
 }
 
+
+// Original binding_candidate_sets.py paragraph/quotation prefix rules.
+// Codepoint coordinates, not UTF-8 byte offsets. These are parser-anchor
+// observations, not proof of reporting scope or mention-identity factor type.
+fn source_binding_context(text:&str,offset:i64)->Option<(usize,usize)>{
+    let n=usize::try_from(offset).ok()?;
+    let mut straight=0usize;let mut left=0usize;let mut right=0usize;
+    let mut paragraphs=0usize;let mut previous_newline=false;
+    let mut count=0usize;
+    for ch in text.chars().take(n){
+        count+=1;
+        match ch {
+            '"' => straight+=1,
+            '“' => left+=1,
+            '”' => right+=1,
+            _ => {}
+        }
+        // Python str.count("\n\n") counts non-overlapping pairs.
+        if ch=='\n'&&previous_newline{paragraphs+=1;previous_newline=false;}
+        else{previous_newline=ch=='\n';}
+    }
+    if count!=n{return None;}
+    Some((paragraphs,straight%2+left.saturating_sub(right)))
+}
+
+#[derive(Debug,Clone,Serialize)]
+pub struct NativeBindingStructuralObservation{
+    pub target_kind:i16,
+    pub target_id:i64,
+    pub exact_head_token_id:Option<i64>,
+    pub parser_pos:Option<String>,
+    pub first_char:Option<i64>,
+    pub same_sentence:Option<bool>,
+    pub quotation_depth:Option<usize>,
+    pub paragraph_index:Option<usize>,
+    pub quotation_boundary_observed:Option<bool>,
+    pub accessibility_residual:&'static str,
+}
+#[derive(Debug,Clone,Serialize)]
+pub struct NativeBindingStructuralReceipt{
+    pub canonical_source_reopened:bool,
+    pub focus_quotation_depth:Option<usize>,
+    pub focus_paragraph_index:Option<usize>,
+    pub observations:Vec<NativeBindingStructuralObservation>,
+    pub typed_factor_coverage_paid:bool,
+}
+fn observe_native_binding_structure(
+    tx:&mut postgres::Transaction<'_>,demand:i64,focus_token:i64,
+    run_ref:&str,document_ref:&str,expected_sha:&str,
+)->Result<NativeBindingStructuralReceipt,NativeNumericAuditError>{
+    let row=tx.query_one(
+        "SELECT src.locator,t.start_char,t.sentence_id
+         FROM execution.semantic_parser_token t
+         JOIN execution.semantic_parser_source src
+           ON src.run_ref=t.run_ref AND src.document_ref=t.document_ref
+         WHERE t.token_id=$1 AND t.run_ref=$2 AND t.document_ref=$3
+           AND encode(src.content_sha256,'hex')=$4",
+        &[&focus_token,&run_ref,&document_ref,&expected_sha])?;
+    let path:String=row.get(0);let focus_start:i64=row.get(1);
+    let focus_sentence:i64=row.get(2);
+    // Locator is the original numeric parser's durable source artifact.
+    // Missing/mismatched bytes leave context unknown; never use other text.
+    let text=std::fs::read(path).ok().filter(|bytes|
+        hex(&Sha256::digest(bytes))==expected_sha)
+        .and_then(|bytes|String::from_utf8(bytes).ok());
+    let focus=text.as_deref().and_then(|s|source_binding_context(s,focus_start));
+    let rows=tx.query(
+        "SELECT u.target_kind,u.target_id,min(t.start_char),
+                CASE WHEN count(DISTINCT t.sentence_id)=1 THEN min(t.sentence_id) END,
+                CASE WHEN count(DISTINCT t.token_id) FILTER
+                    (WHERE t.lemma_symbol_id=o.head_symbol_id)=1
+                    THEN min(t.token_id) FILTER (WHERE t.lemma_symbol_id=o.head_symbol_id) END,
+                CASE WHEN count(DISTINCT t.token_id) FILTER
+                    (WHERE t.lemma_symbol_id=o.head_symbol_id)=1
+                    THEN min(pos.symbol_text) FILTER (WHERE t.lemma_symbol_id=o.head_symbol_id) END
+         FROM execution.semantic_pnf_candidate_universe u
+         LEFT JOIN execution.semantic_pnf_object o ON u.target_kind=1 AND o.object_id=u.target_id AND o.active
+         LEFT JOIN execution.semantic_pnf_region r ON r.region_id=o.region_id
+           AND r.run_ref=$2 AND r.document_ref=$3
+         LEFT JOIN execution.semantic_pnf_object_token_support s ON s.object_id=o.object_id
+           AND r.region_id IS NOT NULL
+         LEFT JOIN execution.semantic_parser_token t ON t.token_id=s.token_id
+           AND t.run_ref=$2 AND t.document_ref=$3 AND t.representation_version=2
+         LEFT JOIN execution.semantic_symbol pos ON pos.symbol_id=t.pos_symbol_id
+         WHERE u.demand_id=$1 GROUP BY u.target_kind,u.target_id
+         ORDER BY u.target_kind,u.target_id",
+        &[&demand,&run_ref,&document_ref])?;
+    let observations=rows.iter().map(|r|{
+        let first:Option<i64>=r.get(2);let sentence:Option<i64>=r.get(3);
+        let head:Option<i64>=r.get(4);let pos:Option<String>=r.get(5);
+        let ctx=text.as_deref().zip(first).and_then(|(s,n)|source_binding_context(s,n));
+        let boundary=focus.zip(ctx).map(|(a,b)|a.1!=b.1);
+        let same=sentence.map(|s|s==focus_sentence);
+        let residual=if first.is_none()||head.is_none(){"exact_anchor_missing_or_ambiguous"}
+            else if focus.is_none()||ctx.is_none(){"canonical_context_unavailable"}
+            else if boundary==Some(true){"quotation_boundary_reporting_scope_unpaid"}
+            else if pos.as_deref()!=Some("NOUN")&&pos.as_deref()!=Some("PROPN"){"entity_factor_type_unpaid"}
+            else{"clause_reporting_and_mention_factor_correspondence_unpaid"};
+        NativeBindingStructuralObservation{
+            target_kind:r.get(0),target_id:r.get(1),exact_head_token_id:head,
+            parser_pos:pos,first_char:first,same_sentence:same,
+            quotation_depth:ctx.map(|x|x.1),paragraph_index:ctx.map(|x|x.0),
+            quotation_boundary_observed:boundary,accessibility_residual:residual,
+        }
+    }).collect();
+    Ok(NativeBindingStructuralReceipt{
+        canonical_source_reopened:text.is_some(),
+        focus_quotation_depth:focus.map(|x|x.1),focus_paragraph_index:focus.map(|x|x.0),
+        observations,typed_factor_coverage_paid:false,
+    })
+}
+
+// Class-level uniqueness is not occurrence uniqueness. This helper is only
+// a consumer gate; coverage must be independently paid by the original owner.
+fn covered_unique_class(p:&NativeNumericIdentityFibreProjection,coverage:bool)->Option<i64>{
+    if !coverage||p.outside_model_possible||!p.unresolved_keys.is_empty()
+        ||!p.conflicting_objects.is_empty()||p.admitted_classes.len()!=1{return None;}
+    p.admitted_classes.iter().next().filter(|(_,xs)|!xs.is_empty()).map(|(id,_)|*id)
+}
+
+#[derive(Debug,Clone,Serialize)]
+pub struct NativeGovernedIdentityProbe{
+    pub admission_owner:&'static str,
+    pub level_three_owner:&'static str,
+    pub admitted_source_witness_count:i64,
+    pub candidate_class_projection:NativeNumericIdentityFibreProjection,
+    pub covered_unique_entity_id:Option<i64>,
+    pub level_three_refs_new_in_probe:Vec<String>,
+    pub level_three_rows_after_refresh:i64,
+    pub immutable_level_one_preserved:bool,
+    pub rollback_preserved_prior_level_three:bool,
+    pub rollback_preserved_prior_candidate_classes:bool,
+    pub persisted:bool,
+    pub focus_identity_paid:bool,
+}
+// Run the original governed m080 policy and original m086 substitution
+// producer, on the exact document, in a savepoint. No focus identity is
+// admitted by this call; even locally licensed parser witnesses are only
+// observed because the source/typed binding coverage is not yet certified.
+fn probe_original_governed_identity(
+    tx:&mut postgres::Transaction<'_>,run_ref:&str,document_ref:&str,demand:i64,
+)->Result<NativeGovernedIdentityProbe,NativeNumericAuditError>{
+    let row=tx.query_one(
+        "SELECT r.run_id,r.document_id FROM execution.semantic_pnf_demand d
+         JOIN execution.semantic_pnf_region r ON r.region_id=d.source_region_id
+         WHERE d.demand_id=$1 AND r.run_ref=$2 AND r.document_ref=$3",
+        &[&demand,&run_ref,&document_ref])?;
+    let run:i64=row.get(0);let document:i64=row.get(1);
+    let level_one=level_one_snapshot(tx,run,document)?;
+    let prior=level_three_snapshot(tx,run,document)?;
+    let (_,prior_classes)=observe_original_resolution_fibre(tx,demand,run_ref,document_ref)?;
+    let mut probe=tx.transaction()?;
+    probe.query_one("SELECT execution.refresh_numeric_pnf_parser_identity_evidence($1,$2)",
+        &[&run,&document])?;
+    let admitted:i64=probe.query_one(
+        "SELECT execution.admit_numeric_pnf_parser_identity_evidence($1,$2)",
+        &[&run,&document])?.get(0);
+    let (horizons,classes)=observe_original_resolution_fibre(&mut probe,demand,run_ref,document_ref)?;
+    let outside:bool=probe.query_one(
+        "SELECT outside_model_possible FROM execution.semantic_pnf_demand_open_world_state WHERE demand_id=$1",
+        &[&demand])?.get(0);
+    let projection=project_original_identity_fibre(&horizons,&classes,outside);
+    let rows:i64=probe.query_one(
+        "SELECT execution.refresh_numeric_pnf_supported_identity_substitution_derivations($1,$2)",
+        &[&run,&document])?.get(0);
+    let after=level_three_snapshot(&mut probe,run,document)?;
+    let refs=after.keys().filter(|k|!prior.contains_key(*k)).cloned().collect();
+    let immutable=level_one==level_one_snapshot(&mut probe,run,document)?;
+    probe.rollback()?;
+    let rollback_level_three=prior==level_three_snapshot(tx,run,document)?;
+    let (_,restored)=observe_original_resolution_fibre(tx,demand,run_ref,document_ref)?;
+    let rollback_classes=prior_classes==restored;
+    if !immutable||!rollback_level_three||!rollback_classes
+        ||level_one!=level_one_snapshot(tx,run,document)?{
+        return Err(NativeNumericAuditError::AdmissionProbeInvariant);
+    }
+    Ok(NativeGovernedIdentityProbe{
+        admission_owner:"execution.admit_numeric_pnf_parser_identity_evidence",
+        level_three_owner:"execution.refresh_numeric_pnf_supported_identity_substitution_derivations",
+        admitted_source_witness_count:admitted,
+        covered_unique_entity_id:covered_unique_class(&projection,false),
+        candidate_class_projection:projection,level_three_refs_new_in_probe:refs,
+        level_three_rows_after_refresh:rows,immutable_level_one_preserved:immutable,
+        rollback_preserved_prior_level_three:rollback_level_three,
+        rollback_preserved_prior_candidate_classes:rollback_classes,
+        persisted:false,focus_identity_paid:false,
+    })
+}
+
 /// Candidate-only, exact-source consumer transport. This extends the represented
 /// fibre, not the capped legacy planner. It never selects, refutes, closes
 /// coverage, admits a witness, or substitutes a Level-3 argument.
@@ -1081,6 +1273,8 @@ pub struct NativeNumericCandidateTransportReceipt {
     pub original_parser_identity_producer:OriginalParserIdentityProducerObservation,
     pub document_identity_fibre:NativeNumericIdentityFibreProjection,
     pub original_cross_resource_needs:Vec<OriginalCrossResourceNeedObservation>,
+    pub structural_binding:NativeBindingStructuralReceipt,
+    pub governed_identity_rollback_probe:Option<NativeGovernedIdentityProbe>,
 }
 pub fn transport_original_numeric_candidates_for_source_answer(
     numeric_url:&str,numeric_run_ref:&str,answer:&NativeSourceLocalAnswer,
@@ -1213,9 +1407,17 @@ pub fn transport_original_numeric_candidates_for_source_answer(
     let original_cross_resource_needs=observe_original_cross_resource_needs(&mut tx,demand,numeric_run_ref,&answer.source_document_ref)?;
     let original_parser_identity_producer=original_parser_identity_producer_probe(
         &mut tx,numeric_run_ref,&answer.source_document_ref,demand)?;
+    let structural_binding=observe_native_binding_structure(&mut tx,demand,focus_token,
+        numeric_run_ref,&answer.source_document_ref,&answer.source_content_sha256)?;
+    // Only run the document-scoped original admission probe after bounded
+    // occurrence/morphology work is drained. This is still not typed coverage.
+    let governed_identity_rollback_probe=if remaining==0&&nominal_heads_remaining==0
+        &&candidates_without_morphology_observation==0{
+        Some(probe_original_governed_identity(&mut tx,numeric_run_ref,&answer.source_document_ref,demand)?)
+    }else{None};
     tx.commit()?;
     Ok(NativeNumericCandidateTransportReceipt{
-        schema:"slr-native-candidate-only-transport-v1",
+        schema:"slr-native-candidate-only-transport-v2",
         numeric_run_ref:numeric_run_ref.into(),demand_id:demand,source_object_id:source,
         inserted_candidate_ids:ids,remaining_untransported_count:remaining,
         represented_candidate_count:count,outside_model_possible:open,
@@ -1224,6 +1426,7 @@ pub fn transport_original_numeric_candidates_for_source_answer(
         morphology_observations_inserted,candidates_without_morphology_observation,
         original_horizon_observations,original_document_identity_observations,
         original_parser_identity_producer,document_identity_fibre,original_cross_resource_needs,
+        structural_binding,governed_identity_rollback_probe,
     })
 }
 
@@ -1253,6 +1456,34 @@ mod tests{
         assert_eq!(result.unresolved_keys,vec![(1,12),(1,13)]);
         assert_eq!(result.conflicting_objects,vec![13]);
         assert!(result.outside_model_possible);
+    }
+    #[test]
+    fn native_binding_source_context_uses_unicode_nonoverlapping_prefix(){
+        let s="é\n\n\n“a” \"b";
+        assert_eq!(source_binding_context(s,1),Some((0,0)));
+        assert_eq!(source_binding_context(s,5),Some((1,1)));
+        assert_eq!(source_binding_context(s,7),Some((1,0)));
+        assert_eq!(source_binding_context(s,9),Some((1,1)));
+        assert_eq!(source_binding_context(s,99),None);
+        assert_eq!(source_binding_context(s,-1),None);
+    }
+    #[test]
+    fn covered_class_gate_distinguishes_multiple_occurrences_from_unknowns(){
+        let mut p=NativeNumericIdentityFibreProjection{
+            admitted_classes:BTreeMap::from([(20,vec![10,11])]),
+            unresolved_keys:vec![],conflicting_objects:vec![],refuted_keys:vec![],
+            outside_model_possible:false,
+        };
+        assert_eq!(covered_unique_class(&p,true),Some(20));
+        assert_eq!(covered_unique_class(&p,false),None);
+        p.outside_model_possible=true;
+        assert_eq!(covered_unique_class(&p,true),None);
+        p.outside_model_possible=false;
+        p.unresolved_keys.push((1,12));
+        assert_eq!(covered_unique_class(&p,true),None);
+        p.unresolved_keys.clear();
+        p.admitted_classes.insert(30,vec![12]);
+        assert_eq!(covered_unique_class(&p,true),None);
     }
     #[test]
     fn unsupported_scope_refused_before_any_sql(){
