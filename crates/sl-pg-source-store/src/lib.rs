@@ -261,6 +261,7 @@ pub use numeric_pnf_identity_audit::{
     NumericDemandWorldStatus, NativeNumericRetractionReceipt,
     retract_original_numeric_identity_for_source_answer,
     transport_original_numeric_candidates_for_source_answer, NativeNumericCandidateTransportReceipt,
+    transport_original_numeric_candidates_for_source_answer_with_partition, NativePartitionWakeReceipt,
 };
 pub use numeric_pnf_pipeline::{
     run_native_numeric_exact_source_slice, run_native_numeric_prefix_slice, deterministic_numeric_run_ref,
@@ -417,6 +418,7 @@ pub use plain_text_document_adapter::{
 pub use long_document_ingest_store::{
     install_long_document_ingest_schema, load_long_document_ingest_receipt,
     load_long_document_regions, load_long_document_structure,
+    load_source_partition_changes, SourcePartitionChange, SourcePartitionInsertedRegion,
     persist_long_document_compilation, persist_long_document_structure,
     LongDocumentIngestStoreError, PersistedLongDocumentIngestReceipt,
     PersistedLongDocumentRegion, PersistedLongDocumentStructureRegion,
