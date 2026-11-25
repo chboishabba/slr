@@ -2591,6 +2591,11 @@ pub struct NativeBoundedIdentityParity {
 pub struct NativeIdentitySupportIndexReceipt {
     pub scope_ref:String,
     pub observed_rows:usize,
+    pub support_revision:Option<i64>,
+    pub journaled_change_rows:usize,
+    pub affected_token_ids:Vec<i64>,
+    pub registered_consumer_work_keys:usize,
+    pub consumer_queue_rows_written:u64,
     pub inserted_rows:usize,
     pub changed_rows:usize,
     pub withdrawn_rows:usize,
@@ -2677,7 +2682,20 @@ fn sync_identity_support_index(
     CREATE INDEX IF NOT EXISTS slr_native_identity_support_sentence_idx
        ON execution.slr_native_identity_support_index(scope_ref,sentence_id,lane,key);
     CREATE INDEX IF NOT EXISTS slr_native_identity_support_family_idx
-       ON execution.slr_native_identity_support_index(scope_ref,family_id,lane,key);")?;
+       ON execution.slr_native_identity_support_index(scope_ref,family_id,lane,key);
+    CREATE TABLE IF NOT EXISTS execution.slr_native_identity_support_revision (
+        scope_ref text NOT NULL REFERENCES execution.slr_native_identity_support_scope(scope_ref),
+        revision bigint NOT NULL CHECK(revision>0),
+        change_count bigint NOT NULL CHECK(change_count>0),
+        PRIMARY KEY(scope_ref,revision)
+    );
+    CREATE TABLE IF NOT EXISTS execution.slr_native_identity_support_change (
+        scope_ref text NOT NULL,revision bigint NOT NULL,lane smallint NOT NULL,key text NOT NULL,
+        before_row jsonb,after_row jsonb,
+        PRIMARY KEY(scope_ref,revision,lane,key),
+        FOREIGN KEY(scope_ref,revision) REFERENCES execution.slr_native_identity_support_revision(scope_ref,revision),
+        CHECK(before_row IS DISTINCT FROM after_row)
+    );")?;
     tx.query_one("SELECT pg_advisory_xact_lock(hashtext('slr-native-identity-support-index-v1'),hashtext($1))",&[&scope_ref])?;
     tx.execute("INSERT INTO execution.slr_native_identity_support_scope VALUES($1,$2) ON CONFLICT DO NOTHING",&[&scope_ref,&scope])?;
     let stored:serde_json::Value=tx.query_one("SELECT scope_payload FROM execution.slr_native_identity_support_scope WHERE scope_ref=$1",&[&scope_ref])?.get(0);
@@ -2691,10 +2709,12 @@ fn sync_identity_support_index(
     SELECT CASE WHEN p.key IS NULL THEN 1 WHEN n.key IS NULL THEN 2
         WHEN (p.sentence_id,p.family_id,p.payload) IS DISTINCT FROM (n.sentence_id,n.family_id,n.payload) THEN 3
         ELSE 4 END::smallint,
-        p.sentence_id,n.sentence_id,p.family_id,n.family_id,COALESCE(p.lane,n.lane)
+        p.sentence_id,n.sentence_id,p.family_id,n.family_id,COALESCE(p.lane,n.lane),
+        COALESCE(p.key,n.key),CASE WHEN p.key IS NOT NULL THEN to_jsonb(p) END,
+        CASE WHEN n.key IS NOT NULL THEN to_jsonb(n) END
       FROM prior p FULL JOIN incoming n USING(lane,key)",&[&scope_ref,&packet])?;
     let(mut inserted,mut withdrawn,mut changed,mut unchanged)=(0usize,0usize,0usize,0usize);
-    let mut sentences=BTreeSet::new();let mut families=BTreeSet::new();let mut hot_changed=false;
+    let mut sentences=BTreeSet::new();let mut families=BTreeSet::new();let mut hot_changed=false;let mut journal=Vec::new();
     for d in deltas{
         match d.get::<_,i16>(0){
             1=>inserted+=1,2=>withdrawn+=1,3=>changed+=1,4=>{unchanged+=1;continue;},
@@ -2703,6 +2723,11 @@ fn sync_identity_support_index(
         sentences.extend(d.get::<_,Option<i64>>(1));sentences.extend(d.get::<_,Option<i64>>(2));
         families.extend(d.get::<_,Option<i64>>(3));families.extend(d.get::<_,Option<i64>>(4));
         hot_changed|=matches!(d.get::<_,i16>(5),6|7);
+        journal.push(serde_json::json!({
+            "lane":d.get::<_,i16>(5),"key":d.get::<_,String>(6),
+            "before_row":d.get::<_,Option<serde_json::Value>>(7),
+            "after_row":d.get::<_,Option<serde_json::Value>>(8)
+        }));
     }
     let sentence_ids=sentences.into_iter().collect::<Vec<_>>();
     let family_ids=families.into_iter().collect::<Vec<_>>();
@@ -2720,16 +2745,79 @@ fn sync_identity_support_index(
         WHEN 4 THEN (payload->>'anchor_object_id')::bigint
         WHEN 5 THEN (payload->>'source_object_id')::bigint ELSE NULL END
     FROM support
-    WHERE lane IN (3,4,5) AND ($5::boolean OR sentence_id=ANY($3::bigint[]) OR family_id=ANY($4::bigint[]))
+    WHERE lane IN (1,3,4,5) AND ($5::boolean OR sentence_id=ANY($3::bigint[]) OR family_id=ANY($4::bigint[]))
     ORDER BY lane,key",&[&scope_ref,&packet,&sentence_ids,&family_ids,&hot_changed])?;
-    let mut affected_names=BTreeSet::new();let mut affected_anchors=BTreeSet::new();
+    let mut affected_names=BTreeSet::new();let mut affected_anchors=BTreeSet::new();let mut affected_tokens=BTreeSet::new();
     for row in affected {
-        if row.get::<_,i16>(0)==5 {
+        let lane:i16=row.get(0);
+        if matches!(lane,1|3|5) {
             let key:String=row.get(1);
-            affected_names.insert(key.parse::<i64>().map_err(|_|NativeNumericAuditError::AdmissionProbeInvariant)?);
+            let token=key.parse::<i64>().map_err(|_|NativeNumericAuditError::AdmissionProbeInvariant)?;
+            affected_tokens.insert(token);
+            if lane==5{affected_names.insert(token);}
         }
         affected_anchors.extend(row.get::<_,Option<i64>>(2));
     }
+    // Persist the exact old/new row delta in the same transaction as the
+    // derived support index and the original m094 queue wake. A digest or
+    // an empty support delta is not a coverage/admission receipt.
+    let changed_count=inserted+changed+withdrawn;
+    if journal.len()!=changed_count{return Err(NativeNumericAuditError::AdmissionProbeInvariant);}
+    let affected_token_ids=affected_tokens.into_iter().collect::<Vec<_>>();
+    let affected_anchor_object_ids=affected_anchors.into_iter().collect::<Vec<_>>();
+    let (support_revision,registered_consumer_work_keys,consumer_queue_rows_written)=if changed_count>0{
+        let revision:i64=tx.query_one("SELECT COALESCE(max(revision),0)+1 FROM execution.slr_native_identity_support_revision WHERE scope_ref=$1",&[&scope_ref])?.get(0);
+        tx.execute("INSERT INTO execution.slr_native_identity_support_revision(scope_ref,revision,change_count) VALUES($1,$2,$3)",
+            &[&scope_ref,&revision,&(changed_count as i64)])?;
+        let journal_packet=serde_json::Value::Array(journal);
+        let n=tx.execute("INSERT INTO execution.slr_native_identity_support_change(scope_ref,revision,lane,key,before_row,after_row)
+            SELECT $1,$2,r.lane,r.key,r.before_row,r.after_row
+            FROM jsonb_to_recordset($3) r(lane smallint,key text,before_row jsonb,after_row jsonb)",
+            &[&scope_ref,&revision,&journal_packet])?;
+        if n!=changed_count as u64{return Err(NativeNumericAuditError::AdmissionProbeInvariant);}
+        // m091/m094 numeric source kinds: 1 token, 2 object. Also reopen
+        // existing absence/interval consumers using OLD and NEW source spans.
+        // A document-wide family change may touch an earlier mention.
+        let work=tx.query_one("WITH incoming AS (
+            SELECT * FROM jsonb_to_recordset($2) AS r(lane smallint,key text,sentence_id bigint,family_id bigint,payload jsonb)
+        ), support AS (
+            SELECT lane,key,sentence_id,family_id,payload FROM execution.slr_native_identity_support_index WHERE scope_ref=$1
+            UNION SELECT lane,key,sentence_id,family_id,payload FROM incoming
+        ), spans AS (
+            SELECT DISTINCT (payload->>'start_char')::bigint AS a,(payload->>'end_char')::bigint AS b
+              FROM support WHERE lane=1 AND key::bigint=ANY($3::bigint[])
+        ), changed_source AS (
+            SELECT 1::smallint AS kind,unnest($3::bigint[]) AS id
+            UNION SELECT 2::smallint,unnest($4::bigint[])
+        ), affected AS (
+            SELECT d.demand_id,d.consumer_ref,d.query_ref,d.policy_ref,d.minimum_horizon AS horizon
+              FROM changed_source c
+              JOIN execution.semantic_pnf_consumer_reverse_dependency d ON d.source_kind=c.kind AND d.source_id=c.id
+              JOIN execution.semantic_pnf_demand q ON q.demand_id=d.demand_id
+              JOIN execution.semantic_pnf_region r ON r.region_id=q.source_region_id
+             WHERE r.run_ref=$5 AND r.document_ref=$6
+            UNION
+            SELECT d.demand_id,d.consumer_ref,d.query_ref,d.policy_ref,3::smallint
+              FROM execution.slr_native_consumer_source_interval d
+             WHERE d.run_ref=$5 AND d.document_ref=$6 AND d.source_revision_ref=$7
+               AND d.source_sha256=$8 AND d.parser_run_ref=$9
+               AND ($10::boolean OR EXISTS(SELECT 1 FROM spans s WHERE s.a<d.end_char AND s.b>d.start_char))
+        ), queued AS (
+            INSERT INTO execution.semantic_pnf_consumer_horizon_work_queue AS q
+                (demand_id,consumer_ref,query_ref,policy_ref,horizon,work_state,completed_at)
+            SELECT demand_id,consumer_ref,query_ref,policy_ref,horizon,1,NULL FROM affected
+            ON CONFLICT(demand_id,consumer_ref,query_ref,policy_ref,horizon)
+            DO UPDATE SET work_state=1,completed_at=NULL
+            WHERE q.work_state<>1 OR q.completed_at IS NOT NULL RETURNING demand_id
+        )
+        SELECT (SELECT count(*)::bigint FROM affected),(SELECT count(*)::bigint FROM queued)",
+        &[&scope_ref,&packet,&affected_token_ids,&affected_anchor_object_ids,&run_ref,
+          &answer.source_document_ref,&answer.source_revision_ref,&answer.source_content_sha256,
+          &answer.original_parser_run_ref,&hot_changed])?;
+        let matched:i64=work.get(0);let written:i64=work.get(1);
+        if matched<0||written<0||written>matched{return Err(NativeNumericAuditError::AdmissionProbeInvariant);}
+        (Some(revision),matched as usize,written as u64)
+    }else{(None,0,0)};
     let removed=tx.execute("DELETE FROM execution.slr_native_identity_support_index p
         WHERE p.scope_ref=$1 AND NOT EXISTS(SELECT 1 FROM jsonb_to_recordset($2) AS n(lane smallint,key text)
             WHERE n.lane=p.lane AND n.key=p.key)",&[&scope_ref,&packet])?;
@@ -2744,10 +2832,12 @@ fn sync_identity_support_index(
     if removed!=withdrawn as u64||written!=(inserted+changed) as u64
        ||inserted+changed+unchanged!=rows.len(){return Err(NativeNumericAuditError::AdmissionProbeInvariant);}
     Ok(NativeIdentitySupportIndexReceipt{
-        scope_ref,observed_rows:rows.len(),inserted_rows:inserted,changed_rows:changed,
+        scope_ref,observed_rows:rows.len(),support_revision,journaled_change_rows:changed_count,
+        affected_token_ids,registered_consumer_work_keys,consumer_queue_rows_written,
+        inserted_rows:inserted,changed_rows:changed,
         withdrawn_rows:withdrawn,unchanged_rows:unchanged,
         affected_sentence_ids:sentence_ids,affected_family_ids:family_ids,
-        affected_name_token_ids:affected_names.into_iter().collect(),affected_anchor_object_ids:affected_anchors.into_iter().collect(),
+        affected_name_token_ids:affected_names.into_iter().collect(),affected_anchor_object_ids,
         hot_symbol_scope_changed:hot_changed,
         zero_family_mentions:rows.iter().filter(|r|r.lane==5&&r.payload["full_count"].as_i64()==Some(0)).count(),
         unanchored_mentions:rows.iter().filter(|r|r.lane==5&&r.payload["source_object_id"].is_null()).count(),
