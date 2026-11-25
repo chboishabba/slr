@@ -82,6 +82,7 @@ pub struct NumericDemandWorldStatus{
     pub selected_live_object_id:Option<i64>,
     pub live_candidate_count:i64,
     pub invalid_refutation_count:i64,
+    pub historical_h6_proof_revalidation_required:bool,
     pub producer_h9_target_occurrence_count:i64,
     pub quality_gated_h9_entity_occurrence_count:i64,
     pub represented_candidate_count:i64,
@@ -270,7 +271,7 @@ pub fn audit_original_numeric_identity_for_source_answer(
              WHERE state.demand_id=$1 AND NOT state.refuted
              ORDER BY state.target_kind,state.target_id",
             &[demand_id])?;
-        let invalid_refutation:i64=tx.query_one(
+        let mut invalid_refutation:i64=tx.query_one(
             "SELECT count(*)::bigint
              FROM execution.semantic_pnf_candidate_state_v1 state
              LEFT JOIN execution.semantic_pnf_candidate_evidence evidence
@@ -281,6 +282,26 @@ pub fn audit_original_numeric_identity_for_source_answer(
              WHERE state.demand_id=$1 AND state.refuted
                AND evidence.evidence_id IS NULL",
             &[demand_id])?.get(0);
+        let current_h6_installed:bool=tx.query_one("SELECT to_regclass('execution.slr_native_current_candidate_evidence_v1') IS NOT NULL",&[])?.get(0);
+        let historical_h6_proof_revalidation_required=if current_h6_installed{
+            let stale:i64=tx.query_one("SELECT count(*)::bigint FROM execution.semantic_pnf_candidate_evidence e
+                WHERE e.demand_id=$1 AND e.horizon=6 AND NOT EXISTS(
+                   SELECT 1 FROM execution.slr_native_current_candidate_evidence_v1 c WHERE c.evidence_id=e.evidence_id)",
+                &[demand_id])?.get(0);
+            invalid_refutation+=tx.query_one("SELECT count(*)::bigint FROM execution.semantic_pnf_candidate_state_v1 s
+                WHERE s.demand_id=$1 AND s.refuted AND EXISTS(
+                   SELECT 1 FROM execution.semantic_pnf_candidate_evidence e WHERE e.evidence_id=s.admissibility_evidence_id
+                     AND NOT EXISTS(SELECT 1 FROM execution.slr_native_current_candidate_evidence_v1 c WHERE c.evidence_id=e.evidence_id))",
+                &[demand_id])?.get::<_,i64>(0);
+            stale>0
+        }else{
+            // Before installation, the legacy H6 carrier has no validity
+            // proof. Never certify a closed world based on that absence.
+            tx.query_one("SELECT EXISTS(SELECT 1 FROM execution.semantic_pnf_candidate_evidence
+                WHERE demand_id=$1 AND horizon=6 AND evidence_family=2
+                  AND evidence_kind IN('h6_discourse_factor_role_signature','h6_temporal_factor_role_signature'))",
+                &[demand_id])?.get(0)
+        };
         let live_object=if live.len()==1&&live[0].get::<_,i16>(0)==1{
             Some(live[0].get::<_,i64>(1))
         }else{None};
@@ -375,7 +396,7 @@ pub fn audit_original_numeric_identity_for_source_answer(
             frontier_unique_object_count:unique_count,
             selected_live_object_id:selected_live_object,
             live_candidate_count:live.len() as i64,
-            invalid_refutation_count:invalid_refutation,
+            invalid_refutation_count:invalid_refutation,historical_h6_proof_revalidation_required,
             producer_h9_target_occurrence_count:h9_target,
             quality_gated_h9_entity_occurrence_count:h9_entities,
             represented_candidate_count:represented,
@@ -383,7 +404,7 @@ pub fn audit_original_numeric_identity_for_source_answer(
         });
         if !outside&&coverage.as_deref().is_some_and(|s|!s.is_empty())
             &&!limited&&residual==0&&unique_count==1
-            &&represented-refuted==1&&invalid_refutation==0
+            &&represented-refuted==1&&invalid_refutation==0&&!historical_h6_proof_revalidation_required
             &&selected_live_object.is_some() {
             actual_unique=true;
         }
