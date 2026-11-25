@@ -477,13 +477,19 @@ fn require_authenticated_referee_receipt(
     demand: &FormalProofDemand, evidence: &FormalEvidenceReceiptInput,
 ) -> Result<(), FormalProofBridgeError> {
     locator.validate()?;
+    // Strict binding is exact even when the optional DA51 coordinate
+    // is absent. The historical compatibility validator permits extras.
+    if demand.da51_address != evidence.da51_address {
+        return Err(FormalProofBridgeError::Da51Mismatch);
+    }
     let exists: bool = tx.query_one(
         "SELECT to_regclass('formal.referee_receipt') IS NOT NULL", &[])?.get(0);
     if !exists { return Err(FormalProofBridgeError::UnauthenticatedRefereeReceipt); }
     let read_only: bool = tx.query_one(
         "SELECT has_table_privilege(current_user,'formal.referee_receipt','SELECT')
          AND NOT EXISTS(SELECT 1 FROM pg_roles r
-           WHERE pg_has_role(current_user,r.oid,'MEMBER') AND (
+           WHERE (pg_has_role(current_user,r.oid,'MEMBER')
+               OR pg_has_role(session_user,r.oid,'MEMBER')) AND (
              r.rolsuper OR has_table_privilege(r.oid,'formal.referee_receipt','INSERT,UPDATE,DELETE,TRUNCATE,TRIGGER')
              OR has_any_column_privilege(r.oid,'formal.referee_receipt','INSERT,UPDATE')
              OR has_schema_privilege(r.oid,'formal','CREATE')))",
