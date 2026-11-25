@@ -562,6 +562,10 @@ pub fn enqueue_parser_regions(
         )? as usize;
     }
 
+    if inserted>0{
+        tx.execute("UPDATE ingest.parser_run SET status='active',completed_at=NULL
+            WHERE parser_run_ref=$1 AND source_revision_ref=$2",&[&run.parser_run_ref,&run.source_revision_ref])?;
+    }
     tx.commit()?;
     Ok(inserted)
 }
@@ -1331,18 +1335,27 @@ pub fn complete_parser_run(
     config: &DatabaseConfig,
     parser_run_ref: &str,
 ) -> Result<ParserRunState, DbNativeParserError> {
-    let state = parser_run_state(config, parser_run_ref)?;
-    if !state.complete {
-        return Err(DbNativeParserError::RunStillActive);
-    }
     let mut client = Client::connect(config.database_url(), NoTls)?;
-    client.execute(
-        "UPDATE ingest.parser_run
-         SET status = 'complete', completed_at = NOW()
-         WHERE parser_run_ref = $1",
-        &[&parser_run_ref],
-    )?;
-    Ok(state)
+    client.batch_execute(DB_NATIVE_PARSER_SCHEMA_SQL)?;
+    let mut tx=client.transaction()?;
+    let revision:String=tx.query_opt("SELECT source_revision_ref FROM ingest.parser_run WHERE parser_run_ref=$1",&[&parser_run_ref])?
+        .ok_or_else(||DbNativeParserError::MissingJob(parser_run_ref.to_owned()))?.get(0);
+    // Share the source partition lock with both enqueue paths and additive
+    // repair. Completion is checked inside that transaction, not before it.
+    tx.query_one("SELECT pg_advisory_xact_lock(hashtext('slr-long-document-partition:v1'),hashtext($1))",&[&revision])?;
+    let rows=tx.query("SELECT status,count(*)::bigint FROM ingest.parser_job WHERE parser_run_ref=$1 GROUP BY status",&[&parser_run_ref])?;
+    let counts=rows.into_iter().map(|row|(row.get::<_,String>(0),row.get::<_,i64>(1) as usize)).collect::<BTreeMap<_,_>>();
+    let queued=*counts.get("queued").unwrap_or(&0);
+    let leased=*counts.get("leased").unwrap_or(&0);
+    let succeeded=*counts.get("succeeded").unwrap_or(&0);
+    let residual=*counts.get("residual").unwrap_or(&0);
+    if queued!=0||leased!=0{return Err(DbNativeParserError::RunStillActive);}
+    tx.execute("UPDATE ingest.parser_run SET status='complete',completed_at=NOW()
+        WHERE parser_run_ref=$1 AND source_revision_ref=$2 AND (status<>'complete' OR completed_at IS NULL)",
+        &[&parser_run_ref,&revision])?;
+    tx.commit()?;
+    Ok(ParserRunState{parser_run_ref:parser_run_ref.to_owned(),queued,leased,succeeded,residual,
+        unattempted_semantic_regions:0,complete:true})
 }
 
 impl DbNativeParserSnapshot {
