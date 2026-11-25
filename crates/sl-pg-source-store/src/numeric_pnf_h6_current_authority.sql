@@ -211,25 +211,33 @@ WHERE (NOT EXISTS(SELECT 1 FROM execution.slr_native_h6_managed_demand m WHERE m
 
 -- Preserve the original public ABI, including neutral represented rows.
 CREATE OR REPLACE VIEW execution.semantic_pnf_candidate_evidence_horizon_v1 AS
-WITH horizon(horizon) AS (
-    VALUES (3::SMALLINT), (6::SMALLINT), (9::SMALLINT)
+-- One keyed evidence traversal, three filtered accumulators. Keep SUM
+-- numeric until the original bigint output boundary; zero evidence counts
+-- separately from absent evidence. Do not prefilter away neutral atoms.
+-- Lean NumericPnfRustPortContract.three_horizon_tallies_exact.
+WITH candidate_bins AS NOT MATERIALIZED (
+    SELECT u.demand_id,u.target_kind,u.target_id,
+      COALESCE(sum(e.signed_residual) FILTER (WHERE e.horizon<=3),0) AS signed3,
+      COALESCE(sum(e.signed_residual) FILTER (WHERE e.horizon<=6),0) AS signed6,
+      COALESCE(sum(e.signed_residual) FILTER (WHERE e.horizon<=9),0) AS signed9,
+      count(e.evidence_id) FILTER (WHERE e.horizon<=3) AS count3,
+      count(e.evidence_id) FILTER (WHERE e.horizon<=6) AS count6,
+      count(e.evidence_id) FILTER (WHERE e.horizon<=9) AS count9
+    FROM execution.semantic_pnf_candidate_universe u
+    LEFT JOIN execution.slr_native_current_candidate_evidence_v1 e
+      ON e.demand_id=u.demand_id AND e.target_kind=u.target_kind AND e.target_id=u.target_id
+    GROUP BY u.demand_id,u.target_kind,u.target_id
 )
-SELECT universe.demand_id,
-       universe.target_kind,
-       universe.target_id,
-       horizon.horizon,
-       COALESCE(sum(evidence.signed_residual), 0)::BIGINT AS signed_residual,
-       sign(COALESCE(sum(evidence.signed_residual), 0))::SMALLINT AS phase,
-       count(evidence.evidence_id)::BIGINT AS evidence_count
-  FROM execution.semantic_pnf_candidate_universe AS universe
- CROSS JOIN horizon
-  LEFT JOIN execution.slr_native_current_candidate_evidence_v1 AS evidence
-    ON evidence.demand_id = universe.demand_id
-   AND evidence.target_kind = universe.target_kind
-   AND evidence.target_id = universe.target_id
-   AND evidence.horizon <= horizon.horizon
- GROUP BY universe.demand_id, universe.target_kind, universe.target_id,
-          horizon.horizon;
+SELECT b.demand_id,b.target_kind,b.target_id,h.horizon,
+       h.signed_residual::bigint AS signed_residual,
+       sign(h.signed_residual)::smallint AS phase,
+       h.evidence_count::bigint AS evidence_count
+FROM candidate_bins b
+CROSS JOIN LATERAL (VALUES
+    (3::smallint,b.signed3,b.count3),
+    (6::smallint,b.signed6,b.count6),
+    (9::smallint,b.signed9,b.count9)
+) h(horizon,signed_residual,evidence_count);
 
 CREATE OR REPLACE VIEW execution.semantic_pnf_candidate_evidence_classification_v1 AS
 SELECT evidence.evidence_id,
@@ -522,3 +530,4 @@ WHERE NOT EXISTS(SELECT 1 FROM execution.slr_native_current_authority_contract
     WHERE contract_ref='slr-native-current-authority:v4')
 ON CONFLICT DO NOTHING;
 INSERT INTO execution.slr_native_current_authority_contract VALUES('slr-native-current-authority:v4') ON CONFLICT DO NOTHING;
+INSERT INTO execution.slr_native_current_authority_contract VALUES('slr-native-current-authority:v5') ON CONFLICT DO NOTHING;
