@@ -1648,10 +1648,11 @@ fn materialize_native_binding_bridge(
     }
     let focus=tokens.get(&focus_token).ok_or(NativeNumericAuditError::ForeignSource)?;
     if focus.pos!="PRON" {return Err(NativeNumericAuditError::ForeignSource);}
-    let relation_tokens=tokens.values().map(|t|NativeRelationToken{
+    let mut relation_tokens=tokens.values().map(|t|NativeRelationToken{
         id:t.id,region:t.region,lemma_id:t.lemma_id,head:t.head,start:t.start,end:t.end,
         orth:t.orth.clone(),lemma:t.lemma.clone(),pos:t.pos.clone(),dep:t.dep.clone(),
     }).collect::<Vec<_>>();
+    relation_tokens.sort_by_key(|t|(t.start,t.end,t.id));
     if relation_tokens.iter().any(|t|tokens.get(&t.head).map_or(true,|h|h.region!=t.region)){
         return Err(NativeNumericAuditError::ForeignSource);
     }
@@ -1898,6 +1899,7 @@ fn covered_unique_class(p:&NativeNumericIdentityFibreProjection,coverage:bool)->
 pub struct NativeParserWitnessWithdrawalProbe{
     pub witness_id:i64,
     pub affected_level_three_refs:Vec<String>,
+    pub nonvacuous_dependency:bool,
     pub witness_history_preserved:bool,
     pub projection_removed:bool,
     pub dependent_rows_removed:bool,
@@ -1909,16 +1911,43 @@ fn probe_parser_witness_withdrawals(
     tx:&mut postgres::Transaction<'_>,run:i64,doc:i64,
     classes:&[NativeNumericDocumentIdentityObservation],
 )->Result<Vec<NativeParserWitnessWithdrawalProbe>,NativeNumericAuditError>{
-    let ids=classes.iter().flat_map(|c|c.admitted_witness_ids.iter().copied()).collect::<BTreeSet<_>>();
+    let candidates=classes.iter().flat_map(|c|c.admitted_witness_ids.iter().copied()).collect::<BTreeSet<_>>();
+    // Read the actual derivation dependency fibre, including base/anchor
+    // witnesses not in the focus candidate projection. No synthetic witness.
+    let dependencies=tx.query(
+        "WITH scoped AS (
+          SELECT d.derivation_id FROM execution.semantic_pnf_factor_derivation d
+          JOIN execution.semantic_pnf_interface i ON i.interface_id=d.scope_interface_id
+          JOIN execution.semantic_pnf_region r ON r.region_id=i.region_id
+          WHERE r.run_id=$1 AND r.document_id=$2 AND d.epistemic_level=3
+         ), used AS (
+          SELECT unnest(a.identity_witness_ids) AS witness_id
+          FROM execution.semantic_pnf_factor_derivation_argument a JOIN scoped s USING(derivation_id)
+          UNION
+          SELECT unnest(a.identity_witness_ids) AS witness_id
+          FROM execution.semantic_pnf_factor_derivation_support a JOIN scoped s USING(derivation_id)
+         )
+         SELECT DISTINCT w.witness_id FROM used u
+         JOIN execution.semantic_pnf_identity_witness w ON w.witness_id=u.witness_id
+         JOIN execution.semantic_pnf_identity_witness_admission a ON a.witness_id=w.witness_id
+         JOIN execution.semantic_pnf_object o ON o.object_id=w.source_object_id
+         JOIN execution.semantic_pnf_region r ON r.region_id=o.region_id
+         WHERE r.run_id=$1 AND r.document_id=$2 AND w.authority_class=2 AND a.admission_state=2
+         ORDER BY w.witness_id",&[&run,&doc])?.iter().map(|r|r.get::<_,i64>(0)).collect::<BTreeSet<_>>();
+    let ids=dependencies.iter().copied().chain(candidates.difference(&dependencies).copied()).collect::<Vec<_>>();
     let level_one=level_one_snapshot(tx,run,doc)?;
     let before=level_three_snapshot(tx,run,doc)?;
     let mut receipts=Vec::new();
     for id in ids.into_iter().take(64){
         let eligible:bool=tx.query_one(
-            "SELECT EXISTS(SELECT 1 FROM execution.semantic_pnf_identity_evidence_witness p
-             JOIN execution.semantic_pnf_identity_witness_admission a ON a.witness_id=p.witness_id
-             JOIN execution.semantic_pnf_identity_evidence_candidate c ON c.candidate_id=p.candidate_id
-             WHERE p.witness_id=$1 AND a.admission_state=2 AND c.run_id=$2 AND c.document_id=$3)",
+            "SELECT EXISTS(SELECT 1 FROM execution.semantic_pnf_identity_witness w
+             JOIN execution.semantic_pnf_identity_witness_admission a ON a.witness_id=w.witness_id
+             JOIN execution.semantic_pnf_object o ON o.object_id=w.source_object_id
+             JOIN execution.semantic_pnf_region r ON r.region_id=o.region_id
+             WHERE w.witness_id=$1 AND w.authority_class=2 AND a.admission_state=2
+               AND r.run_id=$2 AND r.document_id=$3
+               AND EXISTS(SELECT 1 FROM execution.semantic_pnf_identity_projection p
+                 WHERE p.source_object_id=w.source_object_id AND $1=ANY(p.witness_ids)))",
             &[&id,&run,&doc])?.get(0);
         if !eligible{continue;}
         let affected:Vec<String>=tx.query(
@@ -1964,8 +1993,11 @@ fn probe_parser_witness_withdrawals(
         let restored=before==level_three_snapshot(tx,run,doc)?
             &&level_one==level_one_snapshot(tx,run,doc)?
             &&tx.query_one("SELECT admission_state=2 FROM execution.semantic_pnf_identity_witness_admission WHERE witness_id=$1",&[&id])?.get::<_,bool>(0);
+        if !changed||!history||!removed||!dependent||!immutable||!unaffected||!restored{
+            return Err(NativeNumericAuditError::RetractionInvariant);
+        }
         receipts.push(NativeParserWitnessWithdrawalProbe{
-            witness_id:id,affected_level_three_refs:affected,witness_history_preserved:changed&&history,
+            witness_id:id,nonvacuous_dependency:!affected.is_empty(),affected_level_three_refs:affected,witness_history_preserved:changed&&history,
             projection_removed:removed,dependent_rows_removed:dependent,immutable_level_one_preserved:immutable,
             unaffected_level_three_preserved:unaffected,rollback_restored:restored,
         });
@@ -2055,6 +2087,7 @@ pub struct NativeProjectedRelationProbe{
     pub original_supported_substitutions:i64,
     pub new_level_three_refs:Vec<String>,
     pub withdrawal_probes:Vec<NativeParserWitnessWithdrawalProbe>,
+    pub nonvacuous_withdrawal_count:usize,
     pub projected_level_one_preserved:bool,
     pub outer_level_one_restored:bool,
     pub outer_level_three_restored:bool,
@@ -2199,6 +2232,7 @@ fn projected_relation_probe(
             vec!["entity_reference","eventuality_reference","proposition_reference","expletive_realisation"]},
         projected_focus_subject_factor_ids:focus_factor_ids,
         original_direct_substitutions:direct,original_supported_substitutions:supported,new_level_three_refs:new_refs,
+        nonvacuous_withdrawal_count:withdrawal_probes.iter().filter(|p|p.nonvacuous_dependency).count(),
         withdrawal_probes,projected_level_one_preserved:preserved,outer_level_one_restored:one_restored,
         outer_level_three_restored:three_restored,persisted:false,full_original_relation_parity_paid:false,focus_identity_paid:false,
     })
@@ -2218,6 +2252,7 @@ pub struct NativeGovernedIdentityProbe{
     pub source_factor_count:i64,
     pub focus_factor_argument_count:i64,
     pub witness_withdrawal_probes:Vec<NativeParserWitnessWithdrawalProbe>,
+    pub nonvacuous_withdrawal_count:usize,
     pub projected_relation_probe:NativeProjectedRelationProbe,
     pub immutable_level_one_preserved:bool,
     pub rollback_preserved_prior_level_three:bool,
@@ -2293,7 +2328,9 @@ fn probe_original_governed_identity(
         covered_unique_entity_id:covered_unique_class(&projection,false),
         candidate_class_projection:projection,level_three_refs_new_in_probe:refs,
         level_three_rows_after_refresh:rows,direct_level_three_rows_after_refresh:direct,
-        source_factor_count,focus_factor_argument_count,factor_alignment_counts,witness_withdrawal_probes,projected_relation_probe,
+        source_factor_count,focus_factor_argument_count,factor_alignment_counts,
+        nonvacuous_withdrawal_count:witness_withdrawal_probes.iter().filter(|p|p.nonvacuous_dependency).count(),
+        witness_withdrawal_probes,projected_relation_probe,
         immutable_level_one_preserved:immutable,
         rollback_preserved_prior_level_three:rollback_level_three,
         rollback_preserved_prior_candidate_classes:rollback_classes,
@@ -2615,6 +2652,8 @@ pub struct OriginalBindingMemberReuse {
     pub accessibility_path_ref:String,
     pub distance_tokens:i32,
     pub original_span_coordinates:Vec<(i32,i32)>,
+    pub exact_projection_token_ids:Vec<i64>,
+    pub native_inverse_matches_snapshot:bool,
     pub exact_same_manifestation_numeric_object_ids:Vec<i64>,
 }
 #[derive(Debug,Clone,Serialize)]
@@ -2633,6 +2672,8 @@ pub struct OriginalBindingSetReuse {
     pub original_index_prefix_matches_full_query:bool,
     pub original_index_query_complete:bool,
     pub original_index_member_count:usize,
+    pub native_projection_verified:bool,
+    pub exact_entity_inverse_complete:bool,
     pub original_cap_deferred_count:usize,
     pub original_exclusion_summaries:Vec<(String,i32)>,
     pub original_members:Vec<OriginalBindingMemberReuse>,
@@ -2736,7 +2777,35 @@ pub fn reuse_original_binding_and_identity_owners(
             let same=doc==&answer.source_document_ref;
             // Use original canonical span index, not a numeric parser-token
             // ordinal guess. Distinct factor revisions remain distinct.
-            let rows=tx.query(
+            let has_native_projection:bool=tx.query_one(
+                "SELECT to_regclass('execution.slr_native_binding_anchor_projection') IS NOT NULL",&[])?.get(0);
+            let rows=if has_native_projection{
+                tx.query(
+                    "SELECT DISTINCT s.reference_factor_ref,s.reference_factor_revision_ref,
+                        s.candidate_set_ref,s.generator_build_ref,s.referential_type_ref,
+                        s.accessibility_declaration_ref,s.compatibility_declaration_ref,s.member_count
+                     FROM resolution.binding_candidate_set s
+                     JOIN pnf.factor_anchor a ON a.factor_revision_ref=s.reference_factor_revision_ref
+                         AND a.document_ref=s.document_ref
+                     JOIN execution.slr_native_binding_anchor_projection p ON p.factor_revision_ref=a.factor_revision_ref
+                         AND p.active AND p.document_ref=a.document_ref AND p.run_ref=$4
+                     JOIN corpus.span sp ON sp.span_ref=p.span_ref AND sp.document_ref=a.document_ref
+                     JOIN execution.binding_candidate_set_build b ON b.candidate_set_ref=s.candidate_set_ref
+                         AND b.generator_build_ref=s.generator_build_ref
+                         AND b.reference_factor_revision_ref=s.reference_factor_revision_ref
+                         AND b.referential_type_ref=s.referential_type_ref
+                         AND b.accessibility_declaration_ref=s.accessibility_declaration_ref
+                         AND b.compatibility_declaration_ref=s.compatibility_declaration_ref
+                         AND b.document_pnf_index_ref=p.snapshot_ref AND b.build_state_ref='completed'
+                     WHERE s.document_ref=$1 AND sp.start_char=$2 AND sp.end_char=$3
+                       AND a.parser_pos_ref='PRON' AND a.pnf_kind_ref LIKE 'semantic.argument%'
+                     ORDER BY s.reference_factor_ref,s.reference_factor_revision_ref,s.candidate_set_ref",
+                    &[doc,&start,&end,&numeric_run])?
+            }else{Vec::new()};
+            // Do not use the known-bad v1 native chart. Genuine non-native
+            // original factors remain visible through the historical owner.
+            let mut rows=rows;
+            rows.extend(tx.query(
                 "SELECT DISTINCT s.reference_factor_ref,s.reference_factor_revision_ref,
                     s.candidate_set_ref,s.generator_build_ref,s.referential_type_ref,
                     s.accessibility_declaration_ref,s.compatibility_declaration_ref,s.member_count
@@ -2754,11 +2823,13 @@ pub fn reuse_original_binding_and_identity_owners(
                      AND b.build_state_ref='completed'
                  WHERE s.document_ref=$1 AND sp.start_char=$2 AND sp.end_char=$3
                    AND a.parser_pos_ref='PRON' AND a.pnf_kind_ref LIKE 'semantic.argument%'
+                   AND a.factor_revision_ref NOT LIKE 'factor-revision:native-binding:%'
+                   AND a.factor_revision_ref NOT LIKE 'factor-revision:native-binding-v2:%'
                    AND NOT EXISTS (SELECT 1 FROM corpus.span other WHERE other.document_ref=a.document_ref
                        AND other.start_token=a.start_token AND other.end_token=a.end_token
                        AND (other.start_char<>sp.start_char OR other.end_char<>sp.end_char))
                  ORDER BY s.reference_factor_ref,s.reference_factor_revision_ref,s.candidate_set_ref",
-                &[doc,&start,&end])?;
+                &[doc,&start,&end])?);
             for row in rows{
                 let reference:String=row.get(0);let revision:String=row.get(1);
                 let set:String=row.get(2);let build:String=row.get(3);
@@ -2781,55 +2852,113 @@ pub fn reuse_original_binding_and_identity_owners(
                     .iter().map(|r|(r.get(0),r.get(1))).collect();
                 let mut members=Vec::new();
                 for (member_revision,factor,path,distance) in &full{
-                    let spans=tx.query(
-                        "SELECT DISTINCT sp.start_char,sp.end_char FROM pnf.factor_anchor a
-                         JOIN corpus.span sp ON sp.document_ref=a.document_ref
-                             AND sp.start_token=a.start_token AND sp.end_token=a.end_token
-                         WHERE a.factor_revision_ref=$1 AND a.document_ref=$2
-                         ORDER BY sp.start_char,sp.end_char",&[member_revision,doc])?
-                        .iter().map(|r|(r.get::<_,i32>(0),r.get::<_,i32>(1))).collect::<Vec<_>>();
+                    let native=member_revision.starts_with("factor-revision:native-binding-v2:");
+                    let mut projection_ids=Vec::new();
+                    let mut snapshot_objects=Vec::new();
+                    let mut native_inverse=false;
+                    let spans=if native&&has_native_projection{
+                        let link=tx.query_one(
+                            "SELECT s.start_char,s.end_char,p.token_ids,p.object_ids
+                             FROM execution.slr_native_binding_anchor_projection p
+                             JOIN corpus.span s ON s.span_ref=p.span_ref AND s.document_ref=p.document_ref
+                             JOIN execution.binding_candidate_set_build b ON b.document_pnf_index_ref=p.snapshot_ref
+                             WHERE p.factor_revision_ref=$1 AND p.document_ref=$2 AND p.run_ref=$3
+                               AND p.active AND b.generator_build_ref=$4 AND b.build_state_ref='completed'",
+                            &[member_revision,doc,&numeric_run,&build])?;
+                        projection_ids=link.get(2);snapshot_objects=link.get(3);
+                        vec![(link.get::<_,i32>(0),link.get::<_,i32>(1))]
+                    }else{
+                        tx.query(
+                            "SELECT DISTINCT sp.start_char,sp.end_char FROM pnf.factor_anchor a
+                             JOIN corpus.span sp ON sp.document_ref=a.document_ref
+                                 AND sp.start_token=a.start_token AND sp.end_token=a.end_token
+                             WHERE a.factor_revision_ref=$1 AND a.document_ref=$2
+                             ORDER BY sp.start_char,sp.end_char",&[member_revision,doc])?
+                            .iter().map(|r|(r.get::<_,i32>(0),r.get::<_,i32>(1))).collect::<Vec<_>>()
+                    };
                     let mut objects=Vec::new();
-                    // Only same original manifestation + unique canonical span.
-                    // Exact support is a correspondence, not identity admission.
-                    if same&&typ=="entity_reference"&&spans.len()==1{
+                    if same&&spans.len()==1{
                         let (a,b)=spans[0];
-                        objects=tx.query(
-                            "WITH expected AS (
-                                SELECT array_agg(token_id ORDER BY token_id) AS ids,min(start_char) AS a,max(end_char) AS b
-                                FROM execution.semantic_parser_token WHERE run_ref=$1 AND document_ref=$2
-                                  AND representation_version=2 AND start_char >= $3 AND end_char <= $4
-                             ), actual AS (
-                                SELECT o.object_id,array_agg(DISTINCT s.token_id ORDER BY s.token_id) AS ids
-                                FROM execution.semantic_pnf_object o JOIN execution.semantic_pnf_region r ON r.region_id=o.region_id
-                                JOIN execution.semantic_pnf_object_token_support s ON s.object_id=o.object_id
-                                WHERE r.run_ref=$1 AND r.document_ref=$2 AND o.active GROUP BY o.object_id
-                             )
-                             SELECT actual.object_id FROM actual,expected WHERE actual.ids=expected.ids
-                               AND expected.a=$3 AND expected.b=$4 ORDER BY actual.object_id",
-                            &[&numeric_run,doc,&i64::from(a),&i64::from(b)])?
-                            .iter().map(|r|r.get(0)).collect();
+                        if native{
+                            // Check each exact support token, in source order.
+                            // For relations the support can be discontinuous.
+                            let actual=tx.query(
+                                "SELECT token_id,start_char,end_char FROM execution.semantic_parser_token
+                                 WHERE run_ref=$1 AND document_ref=$2 AND representation_version=2
+                                   AND token_id=ANY($3::bigint[]) ORDER BY start_char,end_char,token_id",
+                                &[&numeric_run,doc,&projection_ids])?;
+                            native_inverse=actual.iter().map(|r|r.get::<_,i64>(0)).eq(projection_ids.iter().copied())
+                                &&actual.first().map(|r|r.get::<_,i64>(1))==Some(i64::from(a))
+                                &&actual.last().map(|r|r.get::<_,i64>(2))==Some(i64::from(b));
+                            if typ=="entity_reference"{
+                                let mut sorted=projection_ids.clone();sorted.sort_unstable();
+                                objects=tx.query(
+                                    "SELECT o.object_id FROM execution.semantic_pnf_object o
+                                     JOIN execution.semantic_pnf_region r ON r.region_id=o.region_id
+                                     JOIN execution.semantic_pnf_object_token_support s ON s.object_id=o.object_id
+                                     JOIN execution.semantic_parser_token t ON t.token_id=s.token_id
+                                     WHERE r.run_ref=$1 AND r.document_ref=$2 AND r.region_kind=1 AND o.active
+                                     GROUP BY o.object_id
+                                     HAVING bool_and(t.run_ref=$1 AND t.document_ref=$2 AND t.representation_version=2)
+                                       AND array_agg(DISTINCT t.token_id ORDER BY t.token_id)=$3::bigint[]
+                                     ORDER BY o.object_id",&[&numeric_run,doc,&sorted])?
+                                    .iter().map(|r|r.get(0)).collect();
+                                snapshot_objects.sort_unstable();snapshot_objects.dedup();
+                                native_inverse &= objects==snapshot_objects;
+                            }
+                        }else if typ=="entity_reference"{
+                            objects=tx.query(
+                                "WITH expected AS (
+                                    SELECT array_agg(token_id ORDER BY token_id) AS ids,min(start_char) AS a,max(end_char) AS b
+                                    FROM execution.semantic_parser_token WHERE run_ref=$1 AND document_ref=$2
+                                      AND representation_version=2 AND start_char >= $3 AND end_char <= $4
+                                 ), actual AS (
+                                    SELECT o.object_id,array_agg(DISTINCT s.token_id ORDER BY s.token_id) AS ids
+                                    FROM execution.semantic_pnf_object o JOIN execution.semantic_pnf_region r ON r.region_id=o.region_id
+                                    JOIN execution.semantic_pnf_object_token_support s ON s.object_id=o.object_id
+                                    WHERE r.run_ref=$1 AND r.document_ref=$2 AND o.active GROUP BY o.object_id
+                                 )
+                                 SELECT actual.object_id FROM actual,expected WHERE actual.ids=expected.ids
+                                   AND expected.a=$3 AND expected.b=$4 ORDER BY actual.object_id",
+                                &[&numeric_run,doc,&i64::from(a),&i64::from(b)])?
+                                .iter().map(|r|r.get(0)).collect();
+                        }
                     }
                     members.push(OriginalBindingMemberReuse{
                         candidate_factor_ref:factor.clone(),candidate_factor_revision_ref:member_revision.clone(),
                         accessibility_path_ref:path.clone(),distance_tokens:*distance,
-                        original_span_coordinates:spans,exact_same_manifestation_numeric_object_ids:objects,
+                        original_span_coordinates:spans,exact_projection_token_ids:projection_ids,
+                        native_inverse_matches_snapshot:native_inverse,exact_same_manifestation_numeric_object_ids:objects,
                     });
                 }
-                if same&&parity&&prefix{reusable.push(set.clone());}
+                let native_reference=revision.starts_with("factor-revision:native-binding-v2:");
+                let native_projection_verified=native_reference&&members.iter().all(|m|m.native_inverse_matches_snapshot);
+                let exact_entity_inverse_complete=typ=="entity_reference"&&members.iter().all(|m|
+                    m.original_span_coordinates.len()==1&&!m.exact_same_manifestation_numeric_object_ids.is_empty()
+                    &&(!native_reference||m.native_inverse_matches_snapshot));
+                // Index self-consistency alone is not reusable correspondence.
+                if same&&parity&&prefix&&exact_entity_inverse_complete{reusable.push(set.clone());}
+                if native_reference&&!native_projection_verified{
+                    residuals.push(format!("native_binding_projection_inverse_mismatch:{set}"));
+                }
+                if typ=="entity_reference"&&!exact_entity_inverse_complete{
+                    residuals.push(format!("entity_binding_inverse_incomplete:{set}"));
+                }
                 sets.push(OriginalBindingSetReuse{
                     document_ref:doc.clone(),same_manifestation:same,reference_factor_ref:reference,
                     reference_factor_revision_ref:revision,candidate_set_ref:set,generator_build_ref:build,
                     referential_type_ref:typ,accessibility_declaration_ref:access,compatibility_declaration_ref:compat,
                     original_persisted_member_count:count,original_index_matches_persisted_members:parity,
                     original_index_prefix_matches_full_query:prefix,original_index_query_complete:true,
-                    original_index_member_count:full.len(),original_cap_deferred_count:full.len().saturating_sub(64),
+                    original_index_member_count:full.len(),native_projection_verified,exact_entity_inverse_complete,
+                    original_cap_deferred_count:full.len().saturating_sub(64),
                     original_exclusion_summaries:exclusions,original_members:members,
                 });
             }
         }
     }else{residuals.push("original_structural_binding_owner_not_installed".into());}
     if sets.is_empty(){residuals.push("no_persisted_exact_focus_binding_set_in_original_compiler".into());}
-    if reusable.is_empty(){residuals.push("no_same_manifestation_binding_set_with_original_index_parity".into());}
+    if reusable.is_empty(){residuals.push("no_same_manifestation_entity_binding_set_with_complete_inverse_and_index_parity".into());}
     let runs=tx.query("SELECT DISTINCT run_ref FROM execution.semantic_parser_source
         WHERE document_ref=$1 AND encode(content_sha256,'hex')=$2 ORDER BY run_ref",
         &[&answer.source_document_ref,&sha])?.iter().map(|r|r.get::<_,String>(0)).collect::<Vec<_>>();
@@ -2847,7 +2976,7 @@ pub fn reuse_original_binding_and_identity_owners(
         residuals.push("no_current_witnessed_focus_level_three_on_exact_manifestation_runs".into());
     }
     Ok(OriginalOwnerReuseReceipt{
-        schema:"slr-native-original-binding-owner-reuse-v1",source_revision_ref:answer.source_revision_ref.clone(),
+        schema:"slr-native-original-binding-owner-reuse-v2",source_revision_ref:answer.source_revision_ref.clone(),
         source_sha256:sha,same_manifestation_document_ref:answer.source_document_ref.clone(),
         source_content_equal_compiler_documents:docs.into_iter().collect(),
         original_binding_owner_available:owner_available,original_binding_sets:sets,
