@@ -865,6 +865,7 @@ pub struct OriginalParserIdentityProducerObservation{
     pub name_overflow_rows:i64,
     pub admission_executed:bool,
     pub admitted_candidate_witnesses:Vec<OriginalParserCandidateWitnessObservation>,
+    pub bounded_identity_parity:Option<NativeBoundedIdentityParity>,
 }
 fn observe_refreshed_parser_identity_producer(
     probe:&mut postgres::Transaction<'_>,run_id:i64,document_id:i64,demand:i64,
@@ -895,7 +896,7 @@ fn observe_refreshed_parser_identity_producer(
         producer_ref:"execution.refresh_numeric_pnf_parser_identity_evidence",
         scope:"current_numeric_document_candidate_projection_not_global_coverage",
         refreshed_in_rollback_probe:true,candidate_rows:rows,name_overflow_rows:overflow,
-        admission_executed:false,admitted_candidate_witnesses:Vec::new(),
+        admission_executed:false,admitted_candidate_witnesses:Vec::new(),bounded_identity_parity:None,
     })
 }
 
@@ -2558,6 +2559,147 @@ pub struct NativeGovernedIdentityProbe{
 // producer, on the exact document, in a savepoint. No focus identity is
 // admitted by this call; even locally licensed parser witnesses are only
 // observed because the source/typed binding coverage is not yet certified.
+/// Bounded producer parity is an explicit audit gate, not a second
+/// admission path. Original m080 remains the sole witness authority.
+/// All reference and bounded executions happen in rollback savepoints.
+#[derive(Debug,Clone,Serialize)]
+pub struct NativeBoundedIdentityParity {
+    pub reference_candidate_rows:usize,
+    pub bounded_candidate_rows:usize,
+    pub omitted_ambiguous_rows:usize,
+    pub overflow_mentions:usize,
+    pub reference_admitted_witnesses:usize,
+    pub bounded_admitted_witnesses:usize,
+    pub candidate_projection_exact:bool,
+    pub original_admission_projection_exact:bool,
+    pub reference_elapsed_ms:u128,
+    pub bounded_elapsed_ms:u128,
+    pub full_typed_coverage_paid:bool,
+    pub persisted:bool,
+}
+
+type ParserEvidenceKey=(i64,i64,i16,Option<i64>,Option<i64>,Option<i64>,String,i16);
+fn parser_evidence_keys(tx:&mut postgres::Transaction<'_>,run:i64,doc:i64)
+    ->Result<BTreeSet<ParserEvidenceKey>,NativeNumericAuditError>{
+    // A bounded acceptance campaign may not silently truncate the
+    // reference relation. Fail if the explicit audit budget is exceeded.
+    let rows=tx.query("SELECT source_object_id,target_object_id,witness_kind,
+        source_token_id,target_token_id,sentence_id,evidence_ref,candidate_count
+        FROM execution.semantic_pnf_identity_evidence_candidate
+        WHERE run_id=$1 AND document_id=$2 AND evidence_state=1
+        LIMIT 100001",&[&run,&doc])?;
+    if rows.len()>100000 {return Err(NativeNumericAuditError::AdmissionProbeInvariant);}
+    let keys=rows.iter().map(|r|(r.get(0),r.get(1),r.get(2),r.get(3),r.get(4),r.get(5),r.get(6),r.get(7)))
+        .collect::<BTreeSet<_>>();
+    if keys.len()!=rows.len(){return Err(NativeNumericAuditError::AdmissionProbeInvariant);}
+    Ok(keys)
+}
+
+fn parser_admitted_witness_keys(tx:&mut postgres::Transaction<'_>,run:i64,doc:i64)
+    ->Result<BTreeSet<String>,NativeNumericAuditError>{
+    // Dense witness/entity IDs can differ across rollback savepoints.
+    // Compare the complete original semantic witness key, not allocation.
+    let rows=tx.query("SELECT DISTINCT jsonb_build_array(w.source_object_id,e.entity_ref,
+        w.witness_kind,w.authority_class,w.candidate_count,w.source_interface_id,
+        p.witness_role,c.source_object_id,c.target_object_id,c.witness_kind,c.evidence_ref)::text
+        FROM execution.semantic_pnf_identity_evidence_candidate c
+        JOIN execution.semantic_pnf_identity_evidence_witness p ON p.candidate_id=c.candidate_id
+        JOIN execution.semantic_pnf_identity_witness w ON w.witness_id=p.witness_id
+        JOIN execution.semantic_pnf_identity_witness_admission a ON a.witness_id=w.witness_id AND a.admission_state=2
+        JOIN execution.semantic_pnf_canonical_entity e ON e.entity_id=w.target_entity_id
+        WHERE c.run_id=$1 AND c.document_id=$2 AND c.evidence_state IN (1,2,3)
+        LIMIT 100001",&[&run,&doc])?;
+    if rows.len()>100000 {return Err(NativeNumericAuditError::AdmissionProbeInvariant);}
+    Ok(rows.iter().map(|r|r.get::<_,String>(0)).collect())
+}
+
+/// Select the exact deterministic first K eligible rows of each original
+/// name fibre. All other lanes remain literally equal. The input here is
+/// the independently reopened original reference relation.
+fn bounded_parser_evidence_reference(reference:&BTreeSet<ParserEvidenceKey>,limit:usize)
+    ->Result<(BTreeSet<ParserEvidenceKey>,BTreeMap<(i64,i64),usize>),NativeNumericAuditError>{
+    if limit==0{return Err(NativeNumericAuditError::AdmissionProbeInvariant);}
+    let mut retained=BTreeSet::new();
+    let mut name_groups:BTreeMap<(i64,i64),Vec<(i64,&ParserEvidenceKey)>>=BTreeMap::new();
+    for key in reference {
+        if key.2!=3 {retained.insert(key.clone());continue;}
+        let token=key.3.ok_or(NativeNumericAuditError::AdmissionProbeInvariant)?;
+        let (head,entity)=key.6.rsplit_once(':').ok_or(NativeNumericAuditError::AdmissionProbeInvariant)?;
+        let entity=entity.parse::<i64>().map_err(|_|NativeNumericAuditError::AdmissionProbeInvariant)?;
+        if entity<=0 || head!=format!("proper-name-expansion:{token}") {
+            return Err(NativeNumericAuditError::AdmissionProbeInvariant);
+        }
+        name_groups.entry((key.0,token)).or_default().push((entity,key));
+    }
+    let mut overflow=BTreeMap::new();
+    for (mention,mut rows) in name_groups {
+        rows.sort_by_key(|(entity,k)|(*entity,k.1,k.4));
+        if rows.len()>limit {
+            if rows.iter().any(|(_,k)|k.7<=1) {return Err(NativeNumericAuditError::AdmissionProbeInvariant);}
+            overflow.insert(mention,rows.len()-limit);
+        }
+        retained.extend(rows.into_iter().take(limit).map(|(_,k)|k.clone()));
+    }
+    Ok((retained,overflow))
+}
+
+fn refresh_bounded_parser_identity_with_parity(
+    probe:&mut postgres::Transaction<'_>,run:i64,doc:i64,
+)->Result<(NativeBoundedIdentityParity,BTreeSet<String>),NativeNumericAuditError>{
+    let (reference,reference_witnesses,reference_elapsed_ms)={
+        let mut reference_tx=probe.transaction()?;
+        let started=std::time::Instant::now();
+        reference_tx.query_one("SELECT execution.refresh_numeric_pnf_parser_identity_evidence($1,$2)",&[&run,&doc])?;
+        let elapsed=started.elapsed().as_millis();
+        let keys=parser_evidence_keys(&mut reference_tx,run,doc)?;
+        reference_tx.query_one("SELECT execution.admit_numeric_pnf_parser_identity_evidence($1,$2)",&[&run,&doc])?;
+        let witnesses=parser_admitted_witness_keys(&mut reference_tx,run,doc)?;
+        reference_tx.rollback()?;
+        (keys,witnesses,elapsed)
+    };
+    let (expected,expected_overflow)=bounded_parser_evidence_reference(&reference,16)?;
+    // Initialize the session-local schema before creating a temporary function.
+    probe.batch_execute("CREATE TEMP TABLE slr_identity_probe_scope (run_id bigint) ON COMMIT DROP;")?;
+    probe.batch_execute(include_str!("numeric_pnf_identity_bounded.sql"))?;
+    let started=std::time::Instant::now();
+    probe.query_one("SELECT pg_temp.slr_refresh_numeric_pnf_parser_identity_evidence_bounded($1,$2)",&[&run,&doc])?;
+    let bounded_elapsed_ms=started.elapsed().as_millis();
+    let actual=parser_evidence_keys(probe,run,doc)?;
+    if actual!=expected {return Err(NativeNumericAuditError::AdmissionProbeInvariant);}
+    // Exact original family count and eligible count are independently
+    // reopened from the indexed source carrier. Every omitted reference
+    // row must be accounted for by an overflow entry, never a refutation.
+    let overflow=probe.query("SELECT o.source_object_id,o.source_token_id,
+        o.possible_target_count,o.retained_target_limit,
+        (SELECT count(*) FROM pg_temp.slr_identity_family f
+          WHERE f.family_lemma_symbol_id=o.family_lemma_symbol_id),
+        (SELECT count(*) FROM pg_temp.slr_identity_family f
+          JOIN pg_temp.slr_identity_token m ON m.token_id=o.source_token_id
+          WHERE f.family_lemma_symbol_id=o.family_lemma_symbol_id
+            AND m.lemma_symbol_id=o.family_lemma_symbol_id
+            AND f.anchor_object_id<>o.source_object_id
+            AND NOT (m.sentence_ref=f.sentence_ref AND m.start_char>=f.start_char AND m.end_char<=f.end_char))
+        FROM execution.semantic_pnf_proper_name_evidence_overflow o
+        WHERE o.run_id=$1 AND o.document_id=$2",&[&run,&doc])?;
+    let mut actual_overflow=BTreeMap::new();
+    for r in overflow {
+        let key=(r.get::<_,i64>(0),r.get::<_,i64>(1));
+        let full:i64=r.get(2);let cap:i16=r.get(3);let reopened:i64=r.get(4);let eligible:i64=r.get(5);
+        if cap!=16 || full!=reopened || eligible<=i64::from(cap) || full<eligible
+            || actual_overflow.insert(key,(eligible-i64::from(cap)) as usize).is_some(){
+            return Err(NativeNumericAuditError::AdmissionProbeInvariant);
+        }
+    }
+    if expected_overflow!=actual_overflow{return Err(NativeNumericAuditError::AdmissionProbeInvariant);}
+    Ok((NativeBoundedIdentityParity{
+        reference_candidate_rows:reference.len(),bounded_candidate_rows:actual.len(),
+        omitted_ambiguous_rows:reference.len()-actual.len(),overflow_mentions:actual_overflow.len(),
+        reference_admitted_witnesses:reference_witnesses.len(),bounded_admitted_witnesses:0,
+        candidate_projection_exact:true,original_admission_projection_exact:false,
+        reference_elapsed_ms,bounded_elapsed_ms,full_typed_coverage_paid:false,persisted:false,
+    },reference_witnesses))
+}
+
 fn probe_original_governed_identity(
     tx:&mut postgres::Transaction<'_>,run_ref:&str,document_ref:&str,demand:i64,
 )->Result<(OriginalParserIdentityProducerObservation,NativeGovernedIdentityProbe),NativeNumericAuditError>{
@@ -2572,8 +2714,12 @@ fn probe_original_governed_identity(
     let (_,prior_classes)=observe_original_resolution_fibre(tx,demand,run_ref,document_ref)?;
     let mut probe=tx.transaction()?;
     let started=std::time::Instant::now();
-    probe.query_one("SELECT execution.refresh_numeric_pnf_parser_identity_evidence($1,$2)",
-        &[&run,&document])?;
+    let bounded=if std::env::var("SLR_NATIVE_BOUNDED_IDENTITY_PROBE").as_deref()==Ok("1") {
+        Some(refresh_bounded_parser_identity_with_parity(&mut probe,run,document)?)
+    } else {
+        probe.query_one("SELECT execution.refresh_numeric_pnf_parser_identity_evidence($1,$2)",&[&run,&document])?;
+        None
+    };
     let parser_refresh_elapsed_ms=started.elapsed().as_millis();
     let mut original_parser_identity_producer=observe_refreshed_parser_identity_producer(&mut probe,run,document,demand)?;
     let started=std::time::Instant::now();
@@ -2582,6 +2728,14 @@ fn probe_original_governed_identity(
         &[&run,&document])?.get(0);
     let parser_admission_elapsed_ms=started.elapsed().as_millis();
     observe_original_parser_candidate_witnesses(&mut probe,run,document,&mut original_parser_identity_producer)?;
+    if let Some((mut parity,reference_witnesses))=bounded {
+        let current=parser_admitted_witness_keys(&mut probe,run,document)?;
+        if current!=reference_witnesses{return Err(NativeNumericAuditError::AdmissionProbeInvariant);}
+        parity.bounded_admitted_witnesses=current.len();
+        parity.original_admission_projection_exact=true;
+        original_parser_identity_producer.producer_ref="pg_temp.slr_refresh_numeric_pnf_parser_identity_evidence_bounded";
+        original_parser_identity_producer.bounded_identity_parity=Some(parity);
+    }
     let (horizons,classes)=observe_original_resolution_fibre(&mut probe,demand,run_ref,document_ref)?;
     let outside:bool=probe.query_one(
         "SELECT outside_model_possible FROM execution.semantic_pnf_demand_open_world_state WHERE demand_id=$1",
