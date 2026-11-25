@@ -1268,15 +1268,17 @@ pub struct NativeH6ValidityReceipt {
 }
 fn ensure_native_h6_current_authority(tx:&mut postgres::Transaction<'_>,demand:i64)
     ->Result<(),NativeNumericAuditError>{
-    let installed:bool=tx.query_one("SELECT to_regclass('execution.slr_native_current_authority_contract') IS NOT NULL",&[])?.get(0);
+    let installed:bool=tx.query_one("SELECT to_regprocedure('execution.slr_reconcile_native_candidate_only_debt(bigint,boolean,boolean)') IS NOT NULL",&[])?.get(0);
     if !installed{
         tx.query_one("SELECT pg_advisory_xact_lock(hashtext('slr-native-h6-current:v1'))",&[])?;
-        let ready:bool=tx.query_one("SELECT to_regclass('execution.slr_native_current_authority_contract') IS NOT NULL",&[])?.get(0);
+        let ready:bool=tx.query_one("SELECT to_regprocedure('execution.slr_reconcile_native_candidate_only_debt(bigint,boolean,boolean)') IS NOT NULL",&[])?.get(0);
         if !ready{tx.batch_execute(include_str!("numeric_pnf_h6_current_authority.sql"))?;}
     }
     let intact:bool=tx.query_one("SELECT EXISTS(SELECT 1 FROM execution.slr_native_h6_current_contract WHERE contract_ref='slr-native-h6-current:v1')
       AND EXISTS(SELECT 1 FROM execution.slr_native_h3_current_contract WHERE contract_ref='slr-native-h3-current:v1')
-      AND EXISTS(SELECT 1 FROM execution.slr_native_current_authority_contract WHERE contract_ref='slr-native-current-authority:v1')
+      AND EXISTS(SELECT 1 FROM execution.slr_native_current_authority_contract WHERE contract_ref='slr-native-current-authority:v2')
+      AND position('slr_native_candidate_only_authority_absent' in pg_get_functiondef(
+         'execution.slr_reconcile_native_candidate_only_debt(bigint,boolean,boolean)'::regprocedure))>0
       AND position('slr_native_current_authority_usable' in pg_get_functiondef(
          'execution.numeric_pnf_consumer_stop_at_horizon(bigint,text,text,text,smallint)'::regprocedure))>0
       AND position('slr_native_h3_validity_current' in pg_get_viewdef('execution.slr_native_current_candidate_evidence_v1'::regclass))>0
@@ -1518,7 +1520,21 @@ fn process_original_native_consumer_horizons(
     let h3_changed=reconcile_native_h3_validity(tx,demand)?;
     let mut h6_validity=reopen_native_h6_validity(tx,demand)?;
     h6_validity.native_h3_state_rows_changed=h3_changed;
-    let nonmonotone=nonmonotone||!h6_validity.original_consumer_authority_reconciled;
+    // A checked, drained represented slice with no original authority
+    // can settle scheduling debt. A live proof/coverage/admissibility or
+    // sufficiency claim remains blocked and needs its original owner.
+    let debt_retired=if h6_validity.durable_nonmonotone_authority_pending
+        && represented_slice_drained && h6_validity.current_projection_exact {
+        tx.query_one("SELECT execution.slr_reconcile_native_candidate_only_debt($1,$2,$3)",
+            &[&demand,&represented_slice_drained,&h6_validity.current_projection_exact])?.get::<_,bool>(0)
+    }else{false};
+    if debt_retired {
+        h6_validity.durable_nonmonotone_authority_pending=false;
+        h6_validity.original_consumer_authority_reconciled=
+            h6_validity.current_stale_admissibility_event_ids.is_empty()
+            &&!h6_validity.original_proof_or_sufficiency_revalidation_required;
+    }
+    let nonmonotone=(nonmonotone&&!debt_retired)||!h6_validity.original_consumer_authority_reconciled;
     if h3_changed>0 {
         for horizon in [3i16,6,9]{
             tx.query_one("SELECT execution.slr_refresh_native_preference($1,$2)",&[&demand,&horizon])?;
