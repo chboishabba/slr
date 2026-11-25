@@ -1,5 +1,26 @@
 # C4.11: source-native antecedent review on original SLR S29
 
+## 2026-11-26 — accepted direct candidate milestone; governed v8 continuation
+
+Verified operator result [f974e9e](https://github.com/chboishabba/slr/commit/f974e9e50deaeb68d342eab4632f04772d951afc), immutable receipts under .native-direct-candidate-checkpoint. Implementation b0fe66107940, original source SHA 7ff2ec8ffe6243871ad682e7d7060fe3b84025fb15dbe229154d7aa7f6a72b30, original parser run 56ea4c0a05c3beb97f05dfe447570c7d753f15d8b8bf76cb86145ca41f8f2d63, first=0,count=1, executable b75b56684f862f594d95c988aad85397ced2f4096c04eb1d6a7ada9ee932d9fd. Exact candidate staging/warm replay paid; zero rule solves and physical mutations on warm path; one observed token revalidated. Operator reports native Rust 50/50 and CLI 1/1. Preserve these accepted bytes, do not rerun the one-sentence staging as a proxy for max-cut. Full relation, governed identity, authority publication, direct activation remain false in the original receipt. Neither whole source nor nontrivial normative closure is certified by this one-token scope.
+
+Current v8 blocker is the reported Lean compile defect after updating stale DASHI checkout. Exact diagnostic not supplied and kernel unavailable here. Lean #112 [36b3ffdd](https://github.com/chboishabba/dashi_lean4/commit/36b3ffdde77467e036ae48356233b2164dee1c53) retains per-module diagnostic and actual source/head/output hashes and rejects sorry-dependent build output. v8 records build/golden logs and fails before DB source-gap changes if the formal build fails. Both individual Lean module checks remain bounded at 90s; outer formal build bound covers both (200s default). This hardening is NOT a proof repair or kernel acceptance. Recover the exact first diagnostic, repair the existing theorem without weakening its premises, then run the bounded original endpoint using a fresh exact-head checkpoint. No re-run of accepted direct candidate staging is needed.
+
+### Exact historical unpaid cuts (from native-numeric-binding-v7-endpoint.json, not a new live readback)
+
+| Cut | Source-owned payment |
+| --- | --- |
+| [230,2215), 1644 nonwhitespace chars | Original heading-excluded paragraph [233,2213), paragraph:2, SHA 3353183887413c376127f43212fe366120d7617a78d1a56c4efb80098828b928 |
+| [2660,3603), 738 nonwhitespace chars | Original heading-excluded paragraph [2663,3602), paragraph:5, SHA 804286ed86b3c48072007ef291d672143013a815e621c977929d5c694eaf4760 |
+| Actual source-gap payment | Reuse publish_native_prefix_heading_repair -> publish_heading_partition -> extend_plain_text_heading_exclusions; original run enqueue/reuse and parser readback; then load_source_partition_changes -> sync_native_partition_consumer. Require both source_region_prefix_covered and original_parser_token_prefix_covered; preserve immutable old region identities, no new source or parser. |
+| Demand 22165, historical object 72766 | 166 represented unresolved typed keys, outside-model possible, zero admitted classes/refuted keys. Reopen actual post-repair demand coordinates, do not hard-code old numeric IDs as identity. Historical index entity family 125 (64 retained, 61 deferred), eventuality 17, proposition 1, plus expletive alternative. Complete typed coverage needs all live kinds and justified omissions/refutations, not just more retained entity rows. |
+| Morphology and relation residuals | Two historical headless/multihead spans; preserve missing observations as residuals unless actual source evidence resolves them. Use existing typed relation packet, original relation/index and signed horizon producers, not a new resolver. |
+| H9 | Original v7 related demand 22165 has zero semantic target occurrences, quality entity occurrences, ready H9 items, matched contracts and admissions. Reopen original target-support/quality/consumer-demand relation. A cross-sentence antecedent is not a target occurrence. No external provider call unless the exact target and active consumer axis license it; H9 is not a mandatory external-world lookup for internal source-local resolution. |
+| Governed identity / L3 | CurrentFocusOwnerProof and original witnessed identity owner: exact scoped coverage, actual live unique resolution, current original accepted witness/constraints, independent bound referee proof, exact inverse/readback. If coverage or authority is still missing, report unresolved. No Boolean promotion, no fabricated H9 row. |
+
+Agda/Lean golden, SLR production, SensibLaw deprecated historical reference only. Native hierarchical direct activation and current-generation publication remain open separately from the v8 compatibility/governed endpoint. No main/prototype changes or CI. No new local kernel, Rust or DB campaign executed by this audit.
+
+
 ## 2026-11-26 — direct candidate carrier, staging and exact replay (source-written)
 
 **Disposition:** Agda and Lean golden; SLR native Rust/PostgreSQL production; SensibLaw deprecated read-only historical fixture/provenance donor. No implementation in SensibLaw, no new semantic authority engine, no CI. Preserve v7 and v8 compatibility as separate lanes from direct activation.

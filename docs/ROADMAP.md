@@ -11,6 +11,10 @@ PostgreSQL is the durable publication boundary, not a mandatory internal executi
 The controlling [native PNF maximum-cut reconciliation](roadmap/gwb_native_antecedent_s29_review_20261123.md)
 separates legacy compatibility acceptance from golden direct production activation.
 
+## Accepted direct candidate milestone (2026-11-26)
+
+[f974e9e](https://github.com/chboishabba/slr/commit/f974e9e50deaeb68d342eab4632f04772d951afc) records exact bounded one-sentence candidate staging and warm zero recomputation/mutations. Operator reports 50/50 Rust + 1/1 CLI. Preserve this paid scope; v8 is blocked by a reported Lean compile defect, followed by genuine original source-gap repair and typed/governed witness obligations. See the [detailed maximum-cut roadmap](roadmap/gwb_native_antecedent_s29_review_20261123.md). No full direct activation or governed identity is paid.
+
 ## Current native PNF execution disposition (2026-11-26)
 
 Direct source-addressed candidate composition, exact codec inverse and candidate staging/reopen are source-written on [SLR #78](https://github.com/chboishabba/slr/pull/78); see the [detailed maximum-cut state](roadmap/gwb_native_antecedent_s29_review_20261123.md). This is not full golden direct production activation. Current authority publication, hierarchy delta transport, independent typed parity/coverage and transactional reconciliation remain unpaid; no Rust/PostgreSQL/kernel acceptance executed here. The deprecated prototype is not a runtime dependency. Preserve the existing compatibility baseline separately.

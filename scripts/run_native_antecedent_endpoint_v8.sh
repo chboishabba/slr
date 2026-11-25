@@ -47,8 +47,15 @@ capture() {
   jq -e 'type=="object"' "$dest.tmp" >/dev/null
   mv "$dest.tmp" "$dest"
 }
-bounded "$SLR_NATIVE_LEAN_WORKSET_EXECUTABLE" --build >&2
-bounded bash "$DASHI_LEAN_ROOT/scripts/check_native_typed_evidence_golden.sh" >&2
+# Keep the real first failing kernel diagnostic and exact checkout rather
+# than replacing it with a generic failed endpoint or stale proof receipt.
+# Each module has its own 90s bound inside --build; the outer bound must
+# permit both independently bounded invocations.
+if ! timeout --kill-after=5s "${SLR_NATIVE_FORMAL_BUILD_TIMEOUT:-200s}" "$SLR_NATIVE_LEAN_WORKSET_EXECUTABLE" --build 2>&1 | tee "$checkpoint/lean-build.log" >&2; then
+  echo "Formal build blocked; inspect $checkpoint/lean-build.log" >&2
+  exit 3
+fi
+bounded bash "$DASHI_LEAN_ROOT/scripts/check_native_typed_evidence_golden.sh" 2>&1 | tee "$checkpoint/lean-typed-evidence.log" >&2
 bounded cargo test -p sensiblaw-pg-source-store --lib numeric_pnf >&2
 bounded cargo test -p sensiblaw-cli numeric_pnf_native >&2
 bounded cargo build -p sensiblaw-cli >&2
