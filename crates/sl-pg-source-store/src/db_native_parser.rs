@@ -97,6 +97,10 @@ CREATE TABLE IF NOT EXISTS ingest.parser_token (
     PRIMARY KEY (compilation_key, token_ordinal)
 );
 
+-- TAG is an optional observation of the original parser artifact, never
+-- inferred from POS. Older products retain NULL and their original identity.
+ALTER TABLE ingest.parser_token ADD COLUMN IF NOT EXISTS original_tag TEXT NULL;
+
 CREATE INDEX IF NOT EXISTS parser_token_span_idx
 ON ingest.parser_token(compilation_key, start_char, end_char);
 
@@ -152,6 +156,8 @@ pub enum DbNativeParserError {
     ParserProductIdentityConflict,
     #[error("parser artifact digest does not match exact JSON bytes")]
     ArtifactDigestMismatch,
+    #[error("original TAG artifact does not match exact normalized token coordinates")]
+    ArtifactTagMismatch,
     #[error("persisted parser output violates candidate-only boundary")]
     PromotionBoundary,
     #[error("parser run cannot complete while queued or leased work remains")]
@@ -713,12 +719,12 @@ pub fn enqueue_parser_regions_with_content_reuse(
                     r#"
                     INSERT INTO ingest.parser_token (
                         compilation_key, token_ordinal, start_char, end_char,
-                        surface, lemma, pos, morph_json, head_ordinal, dependency_ref
+                        surface, lemma, pos, morph_json, head_ordinal, dependency_ref, original_tag
                     )
                     SELECT $1, token_ordinal,
                            start_char - $2 + $3,
                            end_char - $2 + $3,
-                           surface, lemma, pos, morph_json, head_ordinal, dependency_ref
+                           surface, lemma, pos, morph_json, head_ordinal, dependency_ref, original_tag
                     FROM ingest.parser_token
                     WHERE compilation_key=$4
                     ORDER BY token_ordinal
@@ -969,6 +975,57 @@ pub fn persist_parser_success_with_entities(
     writer.persist_success_with_entities(job, worker_ref, tokens, entities, artifact)
 }
 
+/// Extract optional original TAG observations from the existing immutable
+/// parser artifact. The normalized token rows and wire coordinates must
+/// agree before any TAG is retained. This deliberately accepts no POS
+/// fallback, inferred tag, or tag-only packet detached from the parse.
+fn original_artifact_tags(
+    artifact: Option<&Value>,
+    region_start: u64,
+    tokens: &[ParserTokenRecord],
+) -> Result<Vec<Option<String>>, DbNativeParserError> {
+    let missing=||vec![None;tokens.len()];
+    let Some(rows)=artifact.and_then(|a|a.get("tokens")).and_then(Value::as_array)
+        else{return Ok(missing())};
+    if !rows.iter().any(|r|r.get("tag").is_some_and(|v|!v.is_null())){
+        return Ok(missing());
+    }
+    let mut indexed=BTreeMap::new();
+    for r in rows {
+        let ordinal=r.get("token_ordinal").and_then(Value::as_u64)
+            .ok_or(DbNativeParserError::ArtifactTagMismatch)?;
+        if indexed.insert(ordinal,r).is_some(){return Err(DbNativeParserError::ArtifactTagMismatch);}
+    }
+    if indexed.len()!=tokens.len(){return Err(DbNativeParserError::ArtifactTagMismatch);}
+    tokens.iter().map(|t|{
+        let r=indexed.get(&u64::from(t.token_ordinal))
+            .ok_or(DbNativeParserError::ArtifactTagMismatch)?;
+        let coordinate=|k:&str|r.get(k).and_then(Value::as_u64).and_then(|v|region_start.checked_add(v));
+        let head=match r.get("head_ordinal"){
+            Some(Value::Null)=>None,
+            Some(v)=>Some(v.as_u64().ok_or(DbNativeParserError::ArtifactTagMismatch)?),
+            None=>return Err(DbNativeParserError::ArtifactTagMismatch),
+        };
+        let morphology=t.morph_json.as_deref().map(serde_json::from_str::<Value>).transpose()?;
+        if coordinate("start_char")!=Some(u64::from(t.start_char))
+            || coordinate("end_char")!=Some(u64::from(t.end_char))
+            || r.get("surface").and_then(Value::as_str)!=Some(t.surface.as_str())
+            || r.get("lemma").and_then(Value::as_str)!=Some(t.lemma.as_str())
+            || r.get("pos").and_then(Value::as_str)!=Some(t.pos.as_str())
+            || r.get("dependency_ref").and_then(Value::as_str)!=Some(t.dependency_ref.as_str())
+            || head!=t.head_ordinal.map(u64::from)
+            || r.get("morph").filter(|v|!v.is_null())!=morphology.as_ref(){
+            return Err(DbNativeParserError::ArtifactTagMismatch);
+        }
+        match r.get("tag"){
+            None|Some(Value::Null)=>Ok(None),
+            Some(Value::String(tag)) if tag.is_empty()=>Ok(None),
+            Some(Value::String(tag)) if !tag.trim().is_empty()=>Ok(Some(tag.clone())),
+            _=>Err(DbNativeParserError::ArtifactTagMismatch),
+        }
+    }).collect()
+}
+
 fn persist_parser_success_with_entities_on_client(
     client: &mut Client,
     job: &ClaimedParserJob,
@@ -996,11 +1053,16 @@ fn persist_parser_success_with_entities_on_client(
             ));
         }
     }
+    let mut original_artifact=None;
     if let Some(artifact) = artifact {
         require(&artifact.format_ref)?;
         require(&artifact.content_digest_ref)?;
         if let Some(json) = artifact.artifact_json.as_deref() {
-            let _: Value = serde_json::from_str(json)?;
+            let parsed: Value = serde_json::from_str(json)?;
+            // Only the existing normalized wire artifact format owns TAG.
+            if artifact.format_ref=="application/vnd.sensiblaw.spacy-region+json" {
+                original_artifact=Some(parsed);
+            }
             if sha256_content_ref(json.as_bytes()) != artifact.content_digest_ref {
                 return Err(DbNativeParserError::ArtifactDigestMismatch);
             }
@@ -1010,6 +1072,7 @@ fn persist_parser_success_with_entities_on_client(
         }
     }
 
+    let original_tags=original_artifact_tags(original_artifact.as_ref(),job.start_char,tokens)?;
     let mut tx = client.transaction()?;
 
 
@@ -1084,17 +1147,17 @@ fn persist_parser_success_with_entities_on_client(
             r#"
             INSERT INTO ingest.parser_token (
               compilation_key, token_ordinal, start_char, end_char,
-              surface, lemma, pos, morph_json, head_ordinal, dependency_ref
+              surface, lemma, pos, morph_json, head_ordinal, dependency_ref, original_tag
             )
             SELECT $1, token_ordinal, start_char, end_char,
-                   surface, lemma, pos, morph_json, head_ordinal, dependency_ref
+                   surface, lemma, pos, morph_json, head_ordinal, dependency_ref, original_tag
             FROM UNNEST(
               $2::INTEGER[], $3::BIGINT[], $4::BIGINT[],
               $5::TEXT[], $6::TEXT[], $7::TEXT[], $8::TEXT[],
-              $9::INTEGER[], $10::TEXT[]
+              $9::INTEGER[], $10::TEXT[], $11::TEXT[]
             ) AS u(
               token_ordinal, start_char, end_char,
-              surface, lemma, pos, morph_json, head_ordinal, dependency_ref
+              surface, lemma, pos, morph_json, head_ordinal, dependency_ref, original_tag
             )
             "#,
             &[
@@ -1108,6 +1171,7 @@ fn persist_parser_success_with_entities_on_client(
                 &morph_json,
                 &head_ordinals,
                 &dependencies,
+                &original_tags,
             ],
         )?;
     }
@@ -1818,6 +1882,21 @@ pub fn audit_candidate_pnf_evidence(
 mod tests {
     use super::*;
     use crate::CandidatePnfRole;
+
+    #[test]
+    fn exact_original_artifact_tag_is_not_a_pos_fallback() {
+        let token=ParserTokenRecord{token_ordinal:0,start_char:10,end_char:12,surface:"he".into(),
+            lemma:"he".into(),pos:"PRON".into(),morph_json:Some(r#"{"Person":"3"}"#.into()),
+            head_ordinal:Some(0),dependency_ref:"ROOT".into()};
+        let mut artifact=serde_json::json!({"tokens":[{"token_ordinal":0,"start_char":0,"end_char":2,
+            "surface":"he","lemma":"he","pos":"PRON","tag":"PRP","morph":{"Person":"3"},
+            "head_ordinal":0,"dependency_ref":"ROOT"}]});
+        assert_eq!(original_artifact_tags(Some(&artifact),10,&[token.clone()]).unwrap(),vec![Some("PRP".into())]);
+        artifact["tokens"][0]["start_char"]=serde_json::json!(1);
+        assert!(matches!(original_artifact_tags(Some(&artifact),10,&[token.clone()]),Err(DbNativeParserError::ArtifactTagMismatch)));
+        artifact["tokens"][0].as_object_mut().unwrap().remove("tag");
+        assert_eq!(original_artifact_tags(Some(&artifact),10,&[token]).unwrap(),vec![None]);
+    }
 
     #[test]
     fn source_bound_candidate_evidence_audit_matches_original_tokens() {

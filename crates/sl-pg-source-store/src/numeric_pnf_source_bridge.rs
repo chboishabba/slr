@@ -38,6 +38,8 @@ pub struct OriginalNumericRawToken{
     pub morph_json:Option<String>,
     pub head_ordinal:Option<i32>,
     pub dependency_ref:String,
+    #[serde(skip_serializing_if="Option::is_none")]
+    pub original_tag:Option<String>,
     pub original_tag_unavailable:bool,
     pub semantic_admission_paid:bool,
 }
@@ -177,17 +179,21 @@ pub(crate) fn load_exact_native_numeric_evidence_scope(
     // One indexed source-run fetch per observation family, NOT 2N remote
     // round trips for N source/parser regions. The original per-region
     // source/coordinate checks below are unchanged.
-    let all_token_rows=db.query(
-        "SELECT token.token_ordinal,token.start_char,token.end_char,
+    // Older read-only databases need no DDL. A missing column is an
+    // explicit absent capability, never a fabricated POS-as-TAG claim.
+    let tag_column:bool=db.query_one("SELECT EXISTS(SELECT 1 FROM pg_attribute
+        WHERE attrelid='ingest.parser_token'::regclass AND attname='original_tag' AND NOT attisdropped)",&[])?.get(0);
+    let tag=if tag_column{"token.original_tag"}else{"NULL::text"};
+    let token_sql=format!("SELECT token.token_ordinal,token.start_char,token.end_char,
                 token.surface,token.lemma,token.pos,token.morph_json,
                 token.head_ordinal,token.dependency_ref,
-                token.compilation_key
+                token.compilation_key,{tag}
          FROM ingest.parser_token AS token
          JOIN ingest.parser_job AS job
            ON job.compilation_key=token.compilation_key
          WHERE job.parser_run_ref=$1 AND ($2::bigint IS NULL OR job.region_start_char<=$2)
-         ORDER BY token.compilation_key,token.token_ordinal",
-        &[&parser_run_ref,&focus])?;
+         ORDER BY token.compilation_key,token.token_ordinal");
+    let all_token_rows=db.query(&token_sql,&[&parser_run_ref,&focus])?;
     let mut token_rows_by_job=BTreeMap::<String,Vec<postgres::Row>>::new();
     for row in all_token_rows{
         let key:String=row.get(9);
@@ -245,6 +251,10 @@ pub(crate) fn load_exact_native_numeric_evidence_scope(
             let morph_json:Option<String>=row.get(6);
             let head_ordinal:Option<i32>=row.get(7);
             let dependency_ref:String=row.get(8);
+            let original_tag:Option<String>=row.get(10);
+            if original_tag.as_deref().is_some_and(|tag|tag.trim().is_empty()){
+                return Err(NativeNumericSourceError::ParserToken);
+            }
             if ordinal<0||prev_ord.is_some_and(|prior|ordinal<=prior)
                 ||token_start<start||token_end>end
                 ||original_span(text,&bounds,token_start,token_end)?!=surface
@@ -257,7 +267,7 @@ pub(crate) fn load_exact_native_numeric_evidence_scope(
                 compilation_key:compilation_key.clone(),original_token_ordinal:ordinal,
                 start_char:token_start,end_char:token_end,surface,lemma,pos,
                 morph_json,head_ordinal,dependency_ref,
-                original_tag_unavailable:true,semantic_admission_paid:false,
+                original_tag_unavailable:original_tag.is_none(),original_tag,semantic_admission_paid:false,
             });
         }
         for t in &tokens{
@@ -296,9 +306,10 @@ pub(crate) fn load_exact_native_numeric_evidence_scope(
         }
         if text[bounds[start as usize]..bounds[end as usize]].chars().zip(&covered)
             .any(|(ch,paid)|!ch.is_whitespace()&&!*paid){full_document=false;}
+        let full_numeric_tag_capability_available=tokens.iter().all(|t|t.original_tag.is_some());
         fibres.push(OriginalNumericSentenceFibre{
             compilation_key,region_ref,start_char:start,end_char:end,
-            tokens,entities,full_numeric_tag_capability_available:false,
+            tokens,entities,full_numeric_tag_capability_available,
         });
     }
     if text[bounds[last_end as usize]..].chars().any(|c|!c.is_whitespace()){full_document=false;}
@@ -307,9 +318,13 @@ pub(crate) fn load_exact_native_numeric_evidence_scope(
     }
     let original_token_count=fibres.iter().map(|f|f.tokens.len()).sum();
     let mut residuals=vec![
-        "original_SLR_parser_does_not_persist_numeric_TAG_symbol_capability".into(),
         "original_numeric_PNF_object_and_H9_typed_demand_not_paid".into(),
     ];
+    if fibres.iter().any(|f|!f.full_numeric_tag_capability_available){
+        // Preserve the historical missing-capability residual on older
+        // products; never infer an original tag from its POS.
+        residuals.insert(0,"original_SLR_parser_does_not_persist_numeric_TAG_symbol_capability".into());
+    }
     if !full_document{
         residuals.push("parser_run_does_not_cover_entire_canonical_document".into());
     }
@@ -597,7 +612,7 @@ mod tests{
             start_char:0,end_char:2,surface:"he".into(),
             lemma:"he".into(),pos:"PRON".into(),morph_json:None,
             head_ordinal:None,dependency_ref:"nsubj".into(),
-            original_tag_unavailable:true,semantic_admission_paid:false,
+            original_tag:None,original_tag_unavailable:true,semantic_admission_paid:false,
         };
         assert!(token.original_tag_unavailable);
         assert!(!token.semantic_admission_paid);

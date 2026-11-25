@@ -172,11 +172,11 @@ pub fn plan_original_native_numeric_parser(
                 pos:t.pos.clone(),
                 // Exact original numeric fallback convention when a tag
                 // is absent: tag=POS with tag_origin_id=3.
-                tag:t.pos.clone(),dependency:t.dependency_ref.clone(),
+                tag:t.original_tag.clone().unwrap_or_else(||t.pos.clone()),dependency:t.dependency_ref.clone(),
                 head_token_ref:target.0,
                 head_start_char:target.1,head_end_char:target.2,
                 lemma_origin_id:if has_lemma{1}else{2},
-                pos_origin_id:1,tag_origin_id:3,dependency_origin_id:1,
+                pos_origin_id:1,tag_origin_id:if t.original_tag.is_some(){1}else{3},dependency_origin_id:1,
                 morph_json:t.morph_json.clone(),
                 creates_semantic_authority:false,
             });
@@ -207,8 +207,9 @@ pub fn plan_original_native_numeric_parser(
         });
     }
     let mut residuals=source.residuals.clone();
-    residuals.push(
-        "numeric_parser_tag_is_explicit_POS_fallback_not_original_TAG".into());
+    if sentences.iter().flat_map(|s|&s.tokens).any(|t|t.tag_origin_id!=1){
+        residuals.push("numeric_parser_tag_is_explicit_POS_fallback_not_original_TAG".into());
+    }
     residuals.push(
         "numeric_anaphor_identity_remains_open_until_original_SQL_demand_and_witness".into());
     Ok(NativeNumericParserPlan{
@@ -261,7 +262,7 @@ mod tests {
                     start_char:0,end_char:2,surface:"he".into(),
                     lemma:"he".into(),pos:"PRON".into(),morph_json:None,
                     head_ordinal:Some(0),dependency_ref:"ROOT".into(),
-                    original_tag_unavailable:true,semantic_admission_paid:false,
+                    original_tag:None,original_tag_unavailable:true,semantic_admission_paid:false,
                 }],entities:vec![],full_numeric_tag_capability_available:false,
             }],original_region_count:1,original_token_count:1,
             full_document_coverage_paid:true,residuals:vec![],
@@ -272,5 +273,14 @@ mod tests {
             plan.sentences[0].tokens[0].token_ref);
         assert_eq!(plan.sentences[0].tokens[0].tag_origin_id,3);
         assert!(!plan.semantic_identity_paid);
+        let mut tagged=source.clone();
+        tagged.parser_regions[0].tokens[0].original_tag=Some("PRP".into());
+        tagged.parser_regions[0].tokens[0].original_tag_unavailable=false;
+        tagged.parser_regions[0].full_numeric_tag_capability_available=true;
+        let tagged_plan=plan_original_native_numeric_parser(&tagged,"num:run").unwrap();
+        assert_eq!(tagged_plan.sentences[0].tokens[0].tag,"PRP");
+        assert_eq!(tagged_plan.sentences[0].tokens[0].tag_origin_id,1);
+        assert_eq!(tagged_plan.sentences[0].tokens[0].token_ref,plan.sentences[0].tokens[0].token_ref);
+        assert!(!tagged_plan.semantic_identity_paid);
     }
 }
