@@ -1970,6 +1970,7 @@ pub struct NativeBindingBridgeReceipt {
     pub anchors:usize,pub mention_anchors:usize,pub relation_anchors:usize,
     pub native_relation_reductions:usize,pub native_role_reductions:usize,
     pub native_action_metadata_reductions:usize,
+    pub native_relation_algebra_rows:usize,
     pub question_mode_observation:Option<serde_json::Value>,pub original_tag_capability_missing_count:usize,
     pub focus_reference_anchors:usize,pub retired_index_anchors:u64,
     pub candidate_sets:Vec<NativeBindingSetBridgeReceipt>,
@@ -2138,7 +2139,10 @@ fn materialize_native_binding_bridge(
         let a=bridge_anchor(name.clone(),kind,&ids,vec![],&tokens,&source,meta)?;
         // Original structural binder tests first-token precedence; retain the
         // entire relation support separately, including discontinuities.
-        if a.ordinal<focus.ordinal{anchors.push(a);relation_anchors+=1;}
+        // Keep the entire containing sentence relation carrier, including
+        // the focus predicate itself. The original binding query owns
+        // preceding-accessibility, not this materialization step.
+        anchors.push(a);relation_anchors+=1;
         for (ordinal,(role,id)) in relation.roles.iter().enumerate(){
             if relation_role_constraint(relation.relation_type,role).is_none(){continue;}
             let key=format!("{name}:role:{ordinal}:{role}:{id}");
@@ -2147,12 +2151,12 @@ fn materialize_native_binding_bridge(
             let a=bridge_anchor(key.clone(),&role_kind,&[*id],vec![],&tokens,&source,meta)?;
             if *id==focus_token&&relation.relation_type=="predicate"&&matches!(*role,"subject"|"object"|"argument"){
                 focus_keys.push(key);anchors.push(a);
-            }else if a.ordinal<focus.ordinal{anchors.push(a);}
+            }else{anchors.push(a);}
         }
         if relation.relation_type=="predicate"{
             let key=format!("{name}:feature:action_meta");
             let a=bridge_anchor(key,"semantic.predicate_inflection",&[relation.head_token_id],vec![],&tokens,&source,meta)?;
-            if a.ordinal<focus.ordinal{anchors.push(a);}
+            anchors.push(a);
         }
     }
     if focus_keys.is_empty(){return Err(NativeNumericAuditError::SourcePolicy);}
@@ -2250,6 +2254,7 @@ fn materialize_native_binding_bridge(
         if &stored!=q{return Err(NativeNumericAuditError::ForeignSource);}
     }
     let mut references=Vec::new();
+    let mut relation_factor_keys=BTreeMap::<String,(String,String)>::new();
     for a in &anchors{
         let suffix=bridge_digest(&(&snapshot,a))?;
         let factor=format!("factor:native-binding-v2:{suffix}");
@@ -2309,11 +2314,17 @@ fn materialize_native_binding_bridge(
         if !valid||!metadata||stored_morph!=a.morphology.iter().cloned().collect::<BTreeSet<_>>(){
             return Err(NativeNumericAuditError::ForeignSource);
         }
+        relation_factor_keys.insert(a.key.clone(),(factor.clone(),revision.clone()));
         if focus_keys.contains(&a.key){
             persist_native_reference_alternatives(tx,&factor,&revision,a.kind=="semantic.argument.subject")?;
             references.push((factor,revision));
         }
     }
+    // Weld the actual source relation fibres to the original algebra
+    // alternative, residual and constraint carriers; no bare index anchor
+    // can stand in for the original relation-valued candidate.
+    let relation_algebra_rows=materialize_native_relation_algebra(tx,doc,&snapshot,
+        &relation_reductions,question_mode.as_ref(),&relation_factor_keys)?;
     let mut sets=Vec::new();
     for (factor,revision) in references{
         for typ in ["entity_reference","eventuality_reference","proposition_reference"]{
@@ -2346,7 +2357,7 @@ fn materialize_native_binding_bridge(
         snapshot_ref:snapshot,source_parser_tokens:tokens.len(),anchors:anchors.len(),mention_anchors,
         relation_anchors,native_relation_reductions:relation_reductions.len(),
         native_role_reductions:relation_reductions.iter().map(|r|r.role_factors.len()).sum(),
-        native_action_metadata_reductions:relation_reductions.iter().filter(|r|r.action_meta.is_some()).count(),
+        native_action_metadata_reductions:relation_reductions.iter().filter(|r|r.action_meta.is_some()).count(),native_relation_algebra_rows:relation_algebra_rows,
         question_mode_observation:question_mode,original_tag_capability_missing_count:missing_original_tags,focus_reference_anchors:focus_keys.len(),retired_index_anchors:retired,candidate_sets:sets,
         focus_reference_alternatives:alternatives,original_index_candidate_evidence_inserted,
         exact_index_entity_objects_outside_transport,indexed_entity_spans_missing_from_projected,
@@ -2360,6 +2371,107 @@ fn materialize_native_binding_bridge(
         structural_relation_parity_paid:false,typed_coverage_paid:false,
     })
 }
+/// Original m006 algebra and existing factor-revision owners. The native
+/// relation payload is bound to the immutable revision and read back; role
+/// constraints retain ordered source occurrence identity in their own key.
+fn persist_relation_candidate(
+    tx:&mut postgres::Transaction<'_>,factor:&str,revision:&str,typ:&str,
+    payload:&serde_json::Value,grammar:&str,relation:&str,residuals:&[&str],
+)->Result<(),NativeNumericAuditError>{
+    let suffix=bridge_digest(&(revision,typ,payload,grammar,relation))?;
+    let alternative=format!("alternative:native-relation:{suffix}");
+    let bytes=Sha256::digest(suffix.as_bytes()).to_vec();
+    let literal=serde_json::to_string(payload).map_err(|_|NativeNumericAuditError::ForeignSource)?;
+    tx.execute("INSERT INTO algebra.alternative(alternative_ref,type_ref,value_literal,authority_state_ref,alternative_sha256)
+        VALUES($1,$2,$3,'candidate_only',$4) ON CONFLICT DO NOTHING",&[&alternative,&typ,&literal,&bytes])?;
+    tx.execute("INSERT INTO algebra.factor_alternative(factor_ref,alternative_ref,alternative_state_ref)
+        VALUES($1,$2,'alternative') ON CONFLICT DO NOTHING",&[&factor,&alternative])?;
+    tx.execute("INSERT INTO algebra.factor_revision_alternative(factor_revision_ref,alternative_ref,alternative_state_ref)
+        VALUES($1,$2,'alternative') ON CONFLICT DO NOTHING",&[&revision,&alternative])?;
+    for provenance in [grammar,relation]{
+        tx.execute("INSERT INTO algebra.alternative_derivation(alternative_ref,derivation_ref)
+            VALUES($1,$2) ON CONFLICT DO NOTHING",&[&alternative,&provenance])?;
+    }
+    for residual in residuals{
+        let key=format!("{revision}:residual:{residual}");
+        let digest=Sha256::digest(key.as_bytes()).to_vec();
+        tx.execute("INSERT INTO algebra.residual(residual_ref,target_ref,residual_type_ref,residual_state_ref,residual_sha256)
+            VALUES($1,$2,$3,'open',$4) ON CONFLICT DO NOTHING",&[&key,&revision,residual,&digest])?;
+    }
+    let valid:bool=tx.query_one("SELECT EXISTS(SELECT 1 FROM algebra.alternative a
+        JOIN algebra.factor_revision_alternative r ON r.alternative_ref=a.alternative_ref
+        WHERE a.alternative_ref=$1 AND r.factor_revision_ref=$2 AND a.type_ref=$3
+          AND a.value_literal=$4 AND a.authority_state_ref='candidate_only' AND a.alternative_sha256=$5)",
+        &[&alternative,&revision,&typ,&literal,&bytes])?.get(0);
+    if !valid{return Err(NativeNumericAuditError::ForeignSource);}
+    Ok(())
+}
+fn materialize_native_relation_algebra(
+    tx:&mut postgres::Transaction<'_>,doc:&str,snapshot:&str,
+    rows:&[NativeRelationReductionRow],question:Option<&serde_json::Value>,
+    keys:&BTreeMap<String,(String,String)>,
+)->Result<usize,NativeNumericAuditError>{
+    let mut count=0usize;
+    for row in rows{
+        let (root,revision)=keys.get(&row.relation_ref).ok_or(NativeNumericAuditError::ForeignSource)?;
+        let packet=serde_json::to_value(row).map_err(|_|NativeNumericAuditError::ForeignSource)?;
+        persist_relation_candidate(tx,root,revision,row.candidate_type,&packet,row.grammar_ref,&row.relation_ref,&row.residuals)?;
+        count+=1;
+        for role in &row.role_factors{
+            let ordinal=role["ordinal"].as_u64().ok_or(NativeNumericAuditError::ForeignSource)?;
+            let name=role["role"].as_str().ok_or(NativeNumericAuditError::ForeignSource)?;
+            let token=role["token_id"].as_i64().ok_or(NativeNumericAuditError::ForeignSource)?;
+            let key=format!("{}:role:{ordinal}:{name}:{token}",row.relation_ref);
+            let (factor,rev)=keys.get(&key).ok_or(NativeNumericAuditError::ForeignSource)?;
+            let residuals=role["residuals"].as_array().ok_or(NativeNumericAuditError::ForeignSource)?
+                .iter().map(|x|x.as_str().ok_or(NativeNumericAuditError::ForeignSource)).collect::<Result<Vec<_>,_>>()?;
+            persist_relation_candidate(tx,factor,rev,"semantic.argument_candidate",role,row.grammar_ref,&row.relation_ref,&residuals)?;
+            let constraint=role["constraint"].as_str().ok_or(NativeNumericAuditError::ForeignSource)?;
+            let suffix=bridge_digest(&(snapshot,rev,revision,constraint,ordinal,role))?;
+            let cref=format!("constraint:native-relation:{suffix}");
+            let sha=Sha256::digest(suffix.as_bytes()).to_vec();
+            tx.execute("INSERT INTO algebra.constraint(constraint_ref,constraint_type_ref,required,declaration_ref,constraint_sha256)
+              VALUES($1,$2,TRUE,(SELECT declaration_ref FROM algebra.declaration WHERE declaration_ref=$3),$4) ON CONFLICT DO NOTHING",
+              &[&cref,&constraint,&row.grammar_ref,&sha])?;
+            for (f,direction) in [(factor,"source"),(root,"target")]{
+                tx.execute("INSERT INTO algebra.constraint_factor(constraint_ref,factor_ref,factor_role_ref)
+                    VALUES($1,$2,$3) ON CONFLICT DO NOTHING",&[&cref,f,&direction])?;
+            }
+            let exact:bool=tx.query_one("SELECT EXISTS(SELECT 1 FROM algebra.constraint c
+                JOIN algebra.constraint_factor s ON s.constraint_ref=c.constraint_ref AND s.factor_role_ref='source'
+                JOIN algebra.constraint_factor t ON t.constraint_ref=c.constraint_ref AND t.factor_role_ref='target'
+                WHERE c.constraint_ref=$1 AND c.constraint_type_ref=$2 AND c.required AND c.constraint_sha256=$3
+                   AND s.factor_ref=$4 AND t.factor_ref=$5)",&[&cref,&constraint,&sha,factor,root])?.get(0);
+            if !exact{return Err(NativeNumericAuditError::ForeignSource);}
+            count+=1;
+        }
+        if let Some(meta)=&row.action_meta{
+            let key=format!("{}:feature:action_meta",row.relation_ref);
+            let (f,rev)=keys.get(&key).ok_or(NativeNumericAuditError::ForeignSource)?;
+            persist_relation_candidate(tx,f,rev,"semantic.predicate_inflection_candidate",meta,row.grammar_ref,&row.relation_ref,&[])?;
+            count+=1;
+        }
+    }
+    if let Some(q)=question{
+        // Mode-only relation has no atom binding. Preserve it as an algebra
+        // candidate without manufacturing a token anchor or referent.
+        let suffix=bridge_digest(&(snapshot,q))?;
+        let factor=format!("factor:native-question:{suffix}");
+        let revision=format!("factor-revision:native-question:{suffix}");
+        let sha=Sha256::digest(suffix.as_bytes()).to_vec();
+        tx.execute("INSERT INTO algebra.factor(factor_ref,document_ref,factor_type_ref,closure_state_ref,factor_sha256)
+            VALUES($1,$2,'semantic.embedded_proposition','requires_external_resolution',$3) ON CONFLICT DO NOTHING",
+            &[&factor,&doc,&sha])?;
+        tx.execute("INSERT INTO algebra.factor_revision(factor_revision_ref,factor_ref,closure_state_ref,factor_sha256)
+            VALUES($1,$2,'requires_external_resolution',$3) ON CONFLICT DO NOTHING",&[&revision,&factor,&sha])?;
+        persist_relation_candidate(tx,&factor,&revision,"semantic.composition_candidate",q,"grammar:semantic:composition:v0_4",
+            &format!("native-question-mode:{}",bridge_digest(&(doc,q))?),
+            &["composition_scope_unresolved","proposition_truth_not_evaluated"])?;
+        count+=1;
+    }
+    Ok(count)
+}
+
 fn persist_native_reference_alternatives(
     tx:&mut postgres::Transaction<'_>,factor:&str,revision:&str,subject:bool,
 )->Result<(),NativeNumericAuditError>{
