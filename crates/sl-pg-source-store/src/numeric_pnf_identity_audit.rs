@@ -2582,6 +2582,7 @@ pub struct NativeNumericCandidateTransportReceipt {
     pub original_document_identity_observations:Vec<NativeNumericDocumentIdentityObservation>,
     pub original_parser_identity_producer:Option<OriginalParserIdentityProducerObservation>,
     pub parser_identity_refresh_invocations:usize,
+    pub lean_typed_evidence:Option<serde_json::Value>,
     pub document_identity_fibre:NativeNumericIdentityFibreProjection,
     pub original_cross_resource_needs:Vec<OriginalCrossResourceNeedObservation>,
     pub structural_binding:NativeBindingStructuralReceipt,
@@ -2590,6 +2591,86 @@ pub struct NativeNumericCandidateTransportReceipt {
     pub original_h9_readiness:NativeH9ReadinessReceipt,
     pub governed_identity_rollback_probe:Option<NativeGovernedIdentityProbe>,
 }
+/// Reopen the actual original m086 latest admissibility evidence and invoke
+/// the existing Lean executable on the exact demand fibre. This is a typed
+/// live-evidence producer, NOT the original coverage or identity authority.
+fn produce_lean_typed_evidence(
+    tx: &mut postgres::Transaction<'_>, answer: &NativeSourceLocalAnswer,
+    run: &str, demand: i64, source: i64, snapshot: &str, outside: bool,
+    horizons: &[NativeNumericHorizonObservation],
+) -> Result<Option<serde_json::Value>, NativeNumericAuditError> {
+    use std::io::Write;
+    use std::process::{Command,Stdio};
+    let Some(executable) = std::env::var_os("SLR_NATIVE_LEAN_WORKSET_EXECUTABLE") else {
+        return Ok(None);
+    };
+    let rows = tx.query("SELECT s.target_kind,s.target_id,s.refuted,
+        COALESCE(a.event_kind,0)::smallint,COALESCE(a.event_id,0)::bigint,
+        COALESCE(e.evidence_id,0)::bigint,COALESCE(e.demand_id,0)::bigint,
+        COALESCE(e.target_kind,0)::smallint,COALESCE(e.target_id,0)::bigint,
+        COALESCE(e.evidence_ref,'')
+        FROM execution.semantic_pnf_candidate_state_v1 s
+        LEFT JOIN execution.semantic_pnf_candidate_latest_admissibility a
+          ON a.demand_id=s.demand_id AND a.target_kind=s.target_kind AND a.target_id=s.target_id
+        LEFT JOIN execution.semantic_pnf_candidate_evidence e ON e.evidence_id=a.evidence_id
+        WHERE s.demand_id=$1 ORDER BY s.target_kind,s.target_id", &[&demand])?;
+    let mut candidates = Vec::new();
+    let mut represented = Vec::new();
+    let mut refuted = Vec::new();
+    let mut live = Vec::new();
+    for row in rows {
+        let kind:i16=row.get(0); let id:i64=row.get(1); let rejected:bool=row.get(2);
+        let event:i16=row.get(3); let event_id:i64=row.get(4); let evidence_id:i64=row.get(5);
+        let ed:i64=row.get(6); let ek:i16=row.get(7); let et:i64=row.get(8);
+        let evidence_ref:String=row.get(9);
+        if kind<=0 || id<=0 || event<0 || event>2 || rejected!=(event==1)
+            || (event!=0 && (event_id<=0 || evidence_id<=0 || ed!=demand || ek!=kind || et!=id || evidence_ref.is_empty()))
+            || (event==0 && event_id!=0) {
+            return Err(NativeNumericAuditError::ForeignSource);
+        }
+        let key=serde_json::json!({"target_kind":kind,"target_id":id});
+        represented.push(key.clone());
+        if rejected { refuted.push(key); } else { live.push(key); }
+        candidates.push(serde_json::json!({"target_kind":kind,"target_id":id,
+            "refuted":rejected,"event_kind":event,"event_id":event_id,"evidence_id":evidence_id,
+            "evidence_demand":ed,"evidence_target_kind":ek,"evidence_target_id":et,"evidence_ref":evidence_ref}));
+    }
+    let horizon_keys=horizons.iter().filter(|h|h.horizon==3)
+        .map(|h|serde_json::json!({"target_kind":h.target_kind,"target_id":h.target_id}))
+        .collect::<Vec<_>>();
+    let horizon_refuted=horizons.iter().filter(|h|h.horizon==3 && h.refuted)
+        .map(|h|serde_json::json!({"target_kind":h.target_kind,"target_id":h.target_id}))
+        .collect::<Vec<_>>();
+    if horizon_keys!=represented || horizon_refuted!=refuted {
+        return Err(NativeNumericAuditError::ForeignSource);
+    }
+    // All signed/zero horizon rows are included in the input identity; the
+    // Lean selection does not use their sign as a refutation.
+    let mut input=serde_json::json!({"schema":"slr-native-typed-evidence-input-v1",
+        "source_sha256":answer.source_content_sha256,"source_revision_ref":answer.source_revision_ref,
+        "numeric_run_ref":run,"snapshot_ref":snapshot,"demand_id":demand,"source_object_id":source,
+        "outside_model_possible":outside,"candidates":candidates,"horizons":horizons});
+    let digest=bridge_digest(&input)?;
+    input["input_digest"]=serde_json::json!(digest);
+    let expected=serde_json::json!({"schema":"slr-native-typed-evidence-output-v1",
+        "source_sha256":answer.source_content_sha256,"source_revision_ref":answer.source_revision_ref,
+        "numeric_run_ref":run,"snapshot_ref":snapshot,"input_digest":digest,
+        "demand_id":demand,"source_object_id":source,"outside_model_possible":outside,
+        "represented":represented,"refuted":refuted,"live":live,
+        "typed_coverage_paid":false,"identity_paid":false});
+    let bytes=serde_json::to_vec(&input).map_err(|_|NativeNumericAuditError::ForeignSource)?;
+    let mut child=Command::new("timeout").args(["--kill-after=5s","90s"]).arg(executable)
+        .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn()
+        .map_err(|e|NativeNumericAuditError::Database(format!("Lean typed evidence start: {e}")))?;
+    child.stdin.take().ok_or(NativeNumericAuditError::ForeignSource)?.write_all(&bytes)
+        .map_err(|e|NativeNumericAuditError::Database(format!("Lean typed evidence input: {e}")))?;
+    let output=child.wait_with_output().map_err(|e|NativeNumericAuditError::Database(format!("Lean typed evidence process: {e}")))?;
+    if !output.status.success(){return Err(NativeNumericAuditError::Database(format!("Lean typed evidence: {}",String::from_utf8_lossy(&output.stderr))));}
+    let actual:serde_json::Value=serde_json::from_slice(&output.stdout).map_err(|_|NativeNumericAuditError::ForeignSource)?;
+    if actual!=expected{return Err(NativeNumericAuditError::ForeignSource);}
+    Ok(Some(actual))
+}
+
 pub fn transport_original_numeric_candidates_for_source_answer(
     numeric_url:&str,numeric_run_ref:&str,answer:&NativeSourceLocalAnswer,
     budget:usize,
@@ -2722,6 +2803,8 @@ pub fn transport_original_numeric_candidates_for_source_answer(
     let (original_horizon_observations,original_document_identity_observations)=
         observe_original_resolution_fibre(&mut tx,demand,numeric_run_ref,&answer.source_document_ref)?;
     let document_identity_fibre=project_original_identity_fibre(&original_horizon_observations,&original_document_identity_observations,open);
+    let lean_typed_evidence=produce_lean_typed_evidence(&mut tx,answer,numeric_run_ref,demand,source,
+        &native_binding_bridge.snapshot_ref,open,&original_horizon_observations)?;
     let original_cross_resource_needs=observe_original_cross_resource_needs(&mut tx,demand,numeric_run_ref,&answer.source_document_ref)?;
     let original_h9_readiness=observe_native_h9_readiness(&mut tx,demand,numeric_run_ref,&answer.source_document_ref)?;
     let structural_binding=observe_native_binding_structure(&mut tx,demand,focus_token,
@@ -2747,7 +2830,7 @@ pub fn transport_original_numeric_candidates_for_source_answer(
         nominal_head_objects_inserted,nominal_head_token_supports_inserted,nominal_heads_remaining,original_h6_evidence_inserted,
         morphology_observations_inserted,candidates_without_morphology_observation,morphology_head_unobservable_count,
         original_horizon_observations,original_document_identity_observations,
-        original_parser_identity_producer,parser_identity_refresh_invocations,document_identity_fibre,original_cross_resource_needs,
+        original_parser_identity_producer,parser_identity_refresh_invocations,lean_typed_evidence,document_identity_fibre,original_cross_resource_needs,
         structural_binding,native_binding_bridge,original_mention_binding_campaign,original_h9_readiness,governed_identity_rollback_probe,
     })
 }
