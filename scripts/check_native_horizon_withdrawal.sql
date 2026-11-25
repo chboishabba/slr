@@ -143,4 +143,42 @@ BEGIN
 END;
 $$;
 
+-- Derived authority projection isolation. These are synthetic rollback
+-- outcome rows on an actual managed demand, not proof/certificate writes.
+DO $slr_debt_test$
+DECLARE d bigint := current_setting('slr.test_demand')::bigint;
+        c text := 'slr:rollback-debt:'||txid_current()::text;
+        q text := c||':query';
+        unaffected text := c||':candidate-only';
+BEGIN
+    DELETE FROM execution.slr_native_h3_authority_debt WHERE demand_id=d;
+    INSERT INTO execution.semantic_pnf_consumer_horizon_work_queue
+      (demand_id,consumer_ref,query_ref,policy_ref,horizon,work_state,completed_at)
+    VALUES(d,c,q,'',6,2,CURRENT_TIMESTAMP),(d,unaffected,q,'',6,2,CURRENT_TIMESTAMP);
+    INSERT INTO execution.semantic_pnf_consumer_horizon_outcome
+      (demand_id,consumer_ref,query_ref,policy_ref,horizon,outcome_state,
+       evidence_count,nonneutral_evidence_count,represented_candidate_count,
+       preferred_candidate_count,proof_unique,consumer_sufficient,residual_required)
+    VALUES(d,c,q,'',6,4,1,1,1,1,true,false,false),
+          (d,unaffected,q,'',6,2,1,1,1,1,false,false,true);
+    -- No reverse dependency is registered by either fixture consumer.
+    -- Demand-level authority debt must nevertheless invalidate the old
+    -- authority outcome, without waking a candidate-only unrelated fibre.
+    INSERT INTO execution.slr_native_h3_authority_debt(demand_id) VALUES(d);
+    IF EXISTS(SELECT 1 FROM execution.semantic_pnf_consumer_horizon_outcome o
+      WHERE o.demand_id=d AND o.consumer_ref=c AND o.query_ref=q)
+       OR NOT EXISTS(SELECT 1 FROM execution.semantic_pnf_consumer_horizon_work_queue w
+      WHERE w.demand_id=d AND w.consumer_ref=c AND w.query_ref=q
+      AND w.horizon=6 AND w.work_state=1 AND w.completed_at IS NULL)
+       OR NOT EXISTS(SELECT 1 FROM execution.semantic_pnf_consumer_horizon_outcome o
+      WHERE o.demand_id=d AND o.consumer_ref=unaffected AND o.query_ref=q AND o.outcome_state=2)
+       OR NOT EXISTS(SELECT 1 FROM execution.semantic_pnf_consumer_horizon_work_queue w
+      WHERE w.demand_id=d AND w.consumer_ref=unaffected AND w.query_ref=q AND w.work_state=2)
+    THEN RAISE EXCEPTION 'demand-wide authority suspension or candidate isolation failed'; END IF;
+    IF execution.slr_suspend_native_debt_outcomes(ARRAY[d])<>0 THEN
+        RAISE EXCEPTION 'repeated debt suspension was not a no-op';
+    END IF;
+END;
+$slr_debt_test$;
+
 ROLLBACK;
