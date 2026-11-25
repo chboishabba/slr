@@ -2785,7 +2785,7 @@ fn sync_identity_support_index(
             UNION SELECT lane,key,sentence_id,family_id,payload FROM incoming
         ), spans AS (
             SELECT DISTINCT (payload->>'start_char')::bigint AS a,(payload->>'end_char')::bigint AS b
-              FROM support WHERE lane=1 AND key::bigint=ANY($3::bigint[])
+              FROM support WHERE lane=1 AND (payload->>'token_id')::bigint=ANY($3::bigint[])
         ), changed_source AS (
             SELECT 1::smallint AS kind,unnest($3::bigint[]) AS id
             UNION SELECT 2::smallint,unnest($4::bigint[])
