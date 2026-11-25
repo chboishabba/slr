@@ -112,6 +112,24 @@ pub(crate) fn load_exact_native_numeric_evidence_scope(
     config:&DatabaseConfig,source_revision_ref:&str,parser_run_ref:&str,
     rule_set_revision:&str,focus:Option<i64>,
 )->Result<(OriginalNativeNumericEvidence,Vec<(i64,i64)>),NativeNumericSourceError>{
+    load_exact_native_numeric_evidence_selected(config,source_revision_ref,parser_run_ref,rule_set_revision,focus,None)
+}
+
+/// The same read-only snapshot owner, with observation rows restricted to
+/// the selected ordered job keys. Inventory remains metadata; no token scan
+/// outside the requested window. A window never proves global coverage.
+pub(crate) fn load_exact_native_numeric_evidence_window(
+    config:&DatabaseConfig,source_revision_ref:&str,parser_run_ref:&str,
+    rule_set_revision:&str,first:usize,count:usize,
+)->Result<(OriginalNativeNumericEvidence,Vec<(i64,i64)>),NativeNumericSourceError>{
+    if !(1..=64).contains(&count){return Err(NativeNumericSourceError::JobScope);}
+    load_exact_native_numeric_evidence_selected(config,source_revision_ref,parser_run_ref,rule_set_revision,None,Some((first,count)))
+}
+
+fn load_exact_native_numeric_evidence_selected(
+    config:&DatabaseConfig,source_revision_ref:&str,parser_run_ref:&str,
+    rule_set_revision:&str,focus:Option<i64>,window:Option<(usize,usize)>,
+)->Result<(OriginalNativeNumericEvidence,Vec<(i64,i64)>),NativeNumericSourceError>{
     if source_revision_ref.is_empty()||parser_run_ref.is_empty()
         ||rule_set_revision.is_empty(){
         return Err(NativeNumericSourceError::SourceManifest);
@@ -176,6 +194,10 @@ pub(crate) fn load_exact_native_numeric_evidence_scope(
          ORDER BY region_start_char,region_end_char,compilation_key",
         &[&parser_run_ref])?;
     if jobs.is_empty(){return Err(NativeNumericSourceError::JobScope);}
+    let selected_keys=if let Some((first,count))=window{
+        if first>jobs.len(){return Err(NativeNumericSourceError::JobScope);}
+        Some(jobs.iter().skip(first).take(count).map(|row|row.get::<_,String>(0)).collect::<Vec<_>>())
+    }else{None};
     // One indexed source-run fetch per observation family, NOT 2N remote
     // round trips for N source/parser regions. The original per-region
     // source/coordinate checks below are unchanged.
@@ -192,8 +214,9 @@ pub(crate) fn load_exact_native_numeric_evidence_scope(
          JOIN ingest.parser_job AS job
            ON job.compilation_key=token.compilation_key
          WHERE job.parser_run_ref=$1 AND ($2::bigint IS NULL OR job.region_start_char<=$2)
+           AND ($3::text[] IS NULL OR job.compilation_key=ANY($3::text[]))
          ORDER BY token.compilation_key,token.token_ordinal");
-    let all_token_rows=db.query(&token_sql,&[&parser_run_ref,&focus])?;
+    let all_token_rows=db.query(&token_sql,&[&parser_run_ref,&focus,&selected_keys])?;
     let mut token_rows_by_job=BTreeMap::<String,Vec<postgres::Row>>::new();
     for row in all_token_rows{
         let key:String=row.get(9);
@@ -206,8 +229,9 @@ pub(crate) fn load_exact_native_numeric_evidence_scope(
          JOIN ingest.parser_job AS job
            ON job.compilation_key=entity.compilation_key
          WHERE job.parser_run_ref=$1 AND ($2::bigint IS NULL OR job.region_start_char<=$2)
+           AND ($3::text[] IS NULL OR job.compilation_key=ANY($3::text[]))
          ORDER BY entity.compilation_key,entity.entity_ordinal",
-        &[&parser_run_ref,&focus])?;
+        &[&parser_run_ref,&focus,&selected_keys])?;
     let mut entity_rows_by_job=BTreeMap::<String,Vec<postgres::Row>>::new();
     for row in all_entity_rows{
         let key:String=row.get(5);
@@ -217,7 +241,7 @@ pub(crate) fn load_exact_native_numeric_evidence_scope(
     let mut inventory=Vec::with_capacity(jobs.len());
     let mut last_end=0i64;
     let mut full_document=true;
-    for job in jobs{
+    for (job_index,job) in jobs.into_iter().enumerate(){
         let compilation_key:String=job.get(0);
         let region_ref:String=job.get(1);
         let start:i64=job.get(2);
@@ -235,7 +259,8 @@ pub(crate) fn load_exact_native_numeric_evidence_scope(
         }
         last_end=end;
         inventory.push((start,end));
-        if focus.is_some_and(|f|start>f){full_document=false;continue;}
+        if focus.is_some_and(|f|start>f)||window.is_some_and(|(first,count)|
+            job_index<first||job_index-first>=count){full_document=false;continue;}
         let rows=token_rows_by_job.remove(&compilation_key)
             .unwrap_or_default();
         let mut ordinals=BTreeSet::new();

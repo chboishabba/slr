@@ -346,8 +346,19 @@ pub fn compile_direct_numeric_candidates(
 )->Result<DirectNumericCandidateSlice,NumericPipelineError>{
     if !(1..=64).contains(&max_sentences){return Err(NumericPipelineError::Budget);}
     let run=deterministic_numeric_run_ref(&source.manifest);
+    if first>source.parser_regions.len(){return Err(NumericPipelineError::Budget);}
+    if source.parser_regions.is_empty(){
+        return Ok(DirectNumericCandidateSlice{
+            schema:"slr-direct-numeric-candidate-slice-v1",source_revision_ref:source.manifest.source_revision_ref.clone(),
+            original_source_sha256:source.manifest.canonical_content_sha256.clone(),
+            original_parser_run_ref:source.manifest.parser_run_ref.clone(),numeric_run_ref:run,
+            source_document_ref:source.manifest.document_ref.clone(),first_sentence:first,next_sentence:first,
+            represented_sentence_count:0,source_full_document_coverage_paid:false,sentences:vec![],
+            sentence_local_database_crossings:0,production_parser_token_writes:0,candidate_only:true,
+            governed_identity_paid:false,level_three_paid:false,direct_production_activation_paid:false,
+        });
+    }
     let plan=plan_original_native_numeric_parser(source,&run)?;
-    if first>plan.sentences.len(){return Err(NumericPipelineError::Budget);}
     let mut rows=Vec::new();
     let mut tokens=0usize;
     for sentence in plan.sentences.iter().skip(first).take(max_sentences){
@@ -368,6 +379,19 @@ pub fn compile_direct_numeric_candidates(
     })
 }
 
+
+
+pub fn inspect_direct_numeric_source_slice(
+    config:&DatabaseConfig,source_revision:&str,parser_run:&str,first:usize,count:usize,
+)->Result<DirectNumericCandidateSlice,NumericPipelineError>{
+    let (source,inventory)=crate::numeric_pnf_source_bridge::load_exact_native_numeric_evidence_window(
+        config,source_revision,parser_run,"slr-strict-numeric-pnf-v1",first,count)?;
+    let mut receipt=compile_direct_numeric_candidates(&source,0,count)?;
+    receipt.first_sentence=first;
+    receipt.next_sentence=first+receipt.sentences.len();
+    receipt.represented_sentence_count=inventory.len();
+    Ok(receipt)
+}
 
 fn checked_direct_codec_parity(
     direct:&DirectNumericSentenceCandidate,reference_tokens:&[NumericToken],

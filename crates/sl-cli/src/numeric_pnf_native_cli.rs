@@ -8,7 +8,7 @@
 
 use sensiblaw_pg_source_store::{
     load_database_config, load_exact_native_numeric_evidence, prepare_native_endpoint_replay,
-    plan_original_native_numeric_parser, deterministic_numeric_run_ref, compile_direct_numeric_candidates,
+    plan_original_native_numeric_parser, deterministic_numeric_run_ref, inspect_direct_numeric_source_slice,
     run_native_numeric_exact_source_slice, run_native_numeric_prefix_slice, OriginalNativeNumericEvidence,
     inspect_native_antecedent_review, native_antecedent_frontier,
     compile_native_source_local_answer,
@@ -88,9 +88,8 @@ pub fn run(args:&[String])->Result<(),String>{
             let count=count.parse::<usize>().map_err(|_|"invalid sentence budget")?;
             if !(1..=64).contains(&count){return Err("direct inspection budget must be 1..=64".into());}
             let config=load_database_config(None).map_err(|e|e.to_string())?;
-            let evidence=load_exact_native_numeric_evidence(&config,source_revision,parser_run,"slr-strict-numeric-pnf-v1")
+            let receipt=inspect_direct_numeric_source_slice(&config,source_revision,parser_run,first,count)
                 .map_err(|e|e.to_string())?;
-            let receipt=compile_direct_numeric_candidates(&evidence,first,count).map_err(|e|e.to_string())?;
             print_json(&receipt)
         }
         [subcommand,review,parser_run,flag] if subcommand=="prefix-prepare"&&(flag=="--commit"||flag=="--inspect")=>{
