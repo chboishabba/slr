@@ -81,6 +81,8 @@ RETURNS trigger LANGUAGE plpgsql AS $slr_debt$
 BEGIN
     PERFORM execution.slr_suspend_native_debt_outcomes(
       ARRAY(SELECT demand_id FROM inserted_debt));
+    PERFORM execution.slr_suspend_native_identity_derivations(
+      ARRAY(SELECT demand_id FROM inserted_debt));
     RETURN NULL;
 END;
 $slr_debt$;
@@ -89,6 +91,112 @@ CREATE TRIGGER slr_native_authority_debt_suspend
 AFTER INSERT ON execution.slr_native_h3_authority_debt
 REFERENCING NEW TABLE AS inserted_debt
 FOR EACH STATEMENT EXECUTE FUNCTION execution.slr_suspend_native_authority_on_debt();
+
+-- Exact reverse coordinates of original m069/m072 resolution witnesses.
+-- A resolution-anchor witness has NULL demand_id, so retain its original
+-- resolution-interface and selected target join. Never suspend by name.
+CREATE INDEX IF NOT EXISTS slr_identity_witness_demand_idx
+    ON execution.semantic_pnf_identity_witness(demand_id,witness_id) WHERE demand_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS slr_identity_witness_resolution_anchor_idx
+    ON execution.semantic_pnf_identity_witness(resolution_interface_id,source_object_id)
+    WHERE demand_id IS NULL AND witness_kind=1;
+
+CREATE OR REPLACE VIEW execution.slr_native_blocked_identity_fibre_v1 AS
+SELECT w.source_object_id,w.authority_class,d.demand_id
+FROM execution.slr_native_h3_authority_debt d
+JOIN execution.semantic_pnf_identity_witness w ON w.demand_id=d.demand_id
+JOIN execution.semantic_pnf_identity_witness_admission a ON a.witness_id=w.witness_id AND a.admission_state=2
+UNION
+SELECT w.source_object_id,w.authority_class,d.demand_id
+FROM execution.slr_native_h3_authority_debt d
+JOIN execution.semantic_pnf_frontier_resolution r ON r.demand_id=d.demand_id
+JOIN execution.semantic_pnf_identity_witness w
+  ON w.resolution_interface_id=r.interface_id
+ AND w.source_object_id=r.selected_target_id
+ AND w.witness_kind=1 AND w.demand_id IS NULL
+JOIN execution.semantic_pnf_identity_witness_admission a ON a.witness_id=w.witness_id AND a.admission_state=2
+WHERE r.selected_target_kind=1;
+
+-- m074 current identity ABI. Test ambiguity on the original whole
+-- accepted fibre; then suppress a blocked group. Never filter individual
+-- blocked witnesses before uniqueness (that can manufacture uniqueness).
+CREATE OR REPLACE VIEW execution.semantic_pnf_identity_projection AS
+SELECT witness.source_object_id,
+       witness.authority_class,
+       min(witness.target_entity_id) AS target_entity_id,
+       array_agg(witness.witness_id ORDER BY witness.witness_id) AS witness_ids,
+       count(*)::bigint AS witness_count
+FROM execution.semantic_pnf_identity_witness witness
+JOIN execution.semantic_pnf_identity_witness_admission admission
+  ON admission.witness_id=witness.witness_id AND admission.admission_state=2
+JOIN execution.semantic_pnf_canonical_entity entity
+  ON entity.entity_id=witness.target_entity_id AND entity.authority_class=witness.authority_class
+WHERE witness.candidate_count=1
+ AND NOT EXISTS(SELECT 1 FROM execution.slr_native_blocked_identity_fibre_v1 b
+   WHERE b.source_object_id=witness.source_object_id AND b.authority_class=witness.authority_class)
+GROUP BY witness.source_object_id,witness.authority_class
+HAVING count(DISTINCT witness.target_entity_id)=1;
+
+-- Exact reverse of m086 direct/shared-token support, preserving the
+-- authority coordinate. Suppression must propagate across the entire
+-- support fibre too: a surviving different path must not become unique
+-- simply because an unresolved path has been hidden.
+CREATE OR REPLACE VIEW execution.slr_native_blocked_identity_slot_v1 AS
+SELECT e.factor_id,e.slot_ordinal,b.authority_class,b.demand_id
+FROM execution.slr_native_blocked_identity_fibre_v1 b
+JOIN execution.semantic_pnf_hyperedge e ON e.object_id=b.source_object_id
+UNION
+SELECT e.factor_id,e.slot_ordinal,b.authority_class,b.demand_id
+FROM execution.slr_native_blocked_identity_fibre_v1 b
+JOIN execution.semantic_pnf_object bo ON bo.object_id=b.source_object_id
+JOIN execution.semantic_pnf_region br ON br.region_id=bo.region_id
+JOIN execution.semantic_pnf_object_token_support bs ON bs.object_id=b.source_object_id
+JOIN execution.semantic_pnf_object_token_support fs ON fs.token_id=bs.token_id AND fs.object_id<>bs.object_id
+JOIN execution.semantic_pnf_hyperedge e ON e.object_id=fs.object_id
+JOIN execution.semantic_pnf_factor f ON f.factor_id=e.factor_id
+JOIN execution.semantic_pnf_region fr ON fr.region_id=f.region_id
+ AND fr.run_id=br.run_id AND fr.document_id=br.document_id;
+
+-- Original m086 unique support owner, with group-wide debt suppression.
+CREATE OR REPLACE VIEW execution.semantic_pnf_factor_identity_support_unique_v1 AS
+WITH unambiguous AS (
+    SELECT factor_id,slot_ordinal,authority_class
+    FROM execution.semantic_pnf_factor_identity_support_v1
+    GROUP BY factor_id,slot_ordinal,authority_class
+    HAVING count(DISTINCT target_entity_id)=1
+)
+SELECT DISTINCT ON (support.factor_id,support.slot_ordinal,support.authority_class) support.*
+FROM execution.semantic_pnf_factor_identity_support_v1 support
+JOIN unambiguous u USING(factor_id,slot_ordinal,authority_class)
+WHERE NOT EXISTS(SELECT 1 FROM execution.slr_native_blocked_identity_slot_v1 b
+ WHERE b.factor_id=support.factor_id AND b.slot_ordinal=support.slot_ordinal
+   AND b.authority_class=support.authority_class)
+ORDER BY support.factor_id,support.slot_ordinal,support.authority_class,
+ support.support_kind,support.identity_source_object_id,support.support_token_id NULLS FIRST;
+
+-- Only the two existing rebuildable L3 substitution owners are retired.
+-- No witness/admission revision, immutable premise, or unrelated rule
+-- is modified. The existing owner can rebuild once authority is paid.
+CREATE OR REPLACE FUNCTION execution.slr_suspend_native_identity_derivations(selected_demands bigint[])
+RETURNS bigint LANGUAGE plpgsql AS $slr_l3$
+DECLARE retired bigint;
+BEGIN
+    IF COALESCE(cardinality(selected_demands),0)=0 THEN RETURN 0; END IF;
+    WITH blocked AS MATERIALIZED (
+        SELECT DISTINCT factor_id,authority_class
+        FROM execution.slr_native_blocked_identity_slot_v1
+        WHERE demand_id=ANY(selected_demands)
+    )
+    DELETE FROM execution.semantic_pnf_factor_derivation d
+    USING execution.semantic_pnf_factor_derivation_premise p,blocked b
+    WHERE d.derivation_id=p.derivation_id AND p.premise_ordinal=0
+      AND p.factor_id=b.factor_id AND d.authority_class=b.authority_class
+      AND d.epistemic_level=3
+      AND d.rule_ref IN('identity-substitution:v1','identity-supported-substitution:v1');
+    GET DIAGNOSTICS retired=ROW_COUNT;
+    RETURN retired;
+END;
+$slr_l3$;
 
 -- Reuse original m094/m139 reverse-dependency and consumer work queue.
 -- Like m163, consume only the statement-local inserted delta. Initial
@@ -639,3 +747,8 @@ WHERE NOT EXISTS(SELECT 1 FROM execution.slr_native_current_authority_contract
     WHERE contract_ref='slr-native-current-authority:v7');
 INSERT INTO execution.slr_native_current_authority_contract VALUES('slr-native-current-authority:v7') ON CONFLICT DO NOTHING;
 INSERT INTO execution.slr_native_current_authority_contract VALUES('slr-native-current-authority:v8') ON CONFLICT DO NOTHING;
+SELECT execution.slr_suspend_native_identity_derivations(
+    ARRAY(SELECT demand_id FROM execution.slr_native_h3_authority_debt))
+WHERE NOT EXISTS(SELECT 1 FROM execution.slr_native_current_authority_contract
+    WHERE contract_ref='slr-native-current-authority:v9');
+INSERT INTO execution.slr_native_current_authority_contract VALUES('slr-native-current-authority:v9') ON CONFLICT DO NOTHING;
