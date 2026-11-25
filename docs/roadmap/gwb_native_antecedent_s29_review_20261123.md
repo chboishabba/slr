@@ -1,5 +1,28 @@
 # C4.11: source-native antecedent review on original SLR S29
 
+## 25 November — integrated native binding chart v5 + original owner readback
+
+Implemented corrective native code on SLR PR #78: [f41b8e4](https://github.com/chboishabba/slr/commit/f41b8e4858a63095204b5c433985bef131060118), [23ccc7c](https://github.com/chboishabba/slr/commit/23ccc7c5c62d186db041dbf3ceedacb9542d5c2c), [18d68bb](https://github.com/chboishabba/slr/commit/18d68bb2260ccde9942752884fabaa73be01ee36), [061d5da](https://github.com/chboishabba/slr/commit/061d5da72db88b3af3010fab08cd508c4afe5f1a), [bd7f0c2](https://github.com/chboishabba/slr/commit/bd7f0c28349fe6ef02f97021e9ee56b869507354).
+
+- Recover exact source bytes and original parser token support. Global observed-source ordinal by nonoverlapping Unicode spans; sentence IDs remain distinct; exact span envelope and ordered token support separately retained from original first-token binder anchor. Report exact uncovered prefix intervals, not just count. Original mention spans with zero/multiple numeric objects remain first class. Original observed paragraph/quotation and morphology, relation-backed predicate/composition clause/reporting metadata; nonprojected structural families explicitly unpaid. This is observed parser chart order, NOT canonical tokenizer coverage.
+- Transactional repair of the defective native v1 index: archive exact mutable anchor rows in execution.slr_native_binding_anchor_history, mark former binding builds superseded, retire obsolete active anchors only; preserve original immutable factors/revisions/spans/candidate sets/members. Scope to exact source document and one run; refuse foreign active owner/mixed run. Native v2 projection table links each factor revision to exact source span, token IDs, inverse occurrence IDs and snapshot. Snapshot binds actual parser tape, metadata and source coordinates. Verify stored anchor and morphology before acceptance. Two additive projection/history tables are created by the explicitly authorized local commit path; original migrations/function bodies are unchanged.
+- Materialize all three referential candidate sets using original m009, with persisted candidate-only reference alternatives and unresolved states, exact capped/full parity and content-bound build references. Expletive is a separate subject alternative, never an empty-set conclusion. Original indexed entity membership (including cap-deferred) feeds m086 zero-sign candidate evidence; no refutation, preference or identity inferred from membership or absence. New approximation-only evidence writes discontinued. Prior zero-sign historical evidence retained.
+- Original owner readback uses explicit revision/span/snapshot links, verifies exact token support and numeric inverse sets, rejects known-bad v1 references, and gates reuse on actual inverse correspondence rather than SQL parity alone. Relation candidates retain ordered support without pretending numeric factor parity. Actual Level-3 dependency witness IDs (including base witnesses outside candidate projection) prioritized for original m073 withdrawal; verify history, proof removal, unaffected Level-3, immutable Level-1, rollback and forward producer replay. A zero nonvacuous count is not inverse acceptance.
+- Integrated `bind-campaign` emits v2 campaign with v5 transaction receipts and the original-owner readback in the same JSON. Acceptance: expected 3 typed sets per focus argument; no collapsed local-coordinate spans; original capped/full parity; exact source token inverse and explicit zero/many occurrence residuals; retired v1 rows absent from active binder; witness dependencies and replay verified where present. Compare actual scope, not previous candidate count. No full Python compiler or CI. Source-written and pushed, not Cargo/PostgreSQL-tested here (no Rust toolchain or workstation DB). Coverage, full canonical factor parity, governed focus identity, focus Level-3 and external property still independently unpaid. Do not manufacture them from passing plumbing. Assistant inspects committed receipt itself.
+
+Run from SLR branch at this head:
+
+```bash
+set -o pipefail
+cargo test -p sensiblaw-pg-source-store --lib numeric_pnf &&
+cargo test -p sensiblaw-cli numeric_pnf_native &&
+cargo run -p sensiblaw-cli -- numeric-pnf-native bind-campaign \
+  review-item:native-antecedent-candidate:sha256:25e927f12a0092fbed143669f6a0621fa004636d728074d576275b361da8f7d1 \
+  parser-run:sha256:56ea4c0a05c3beb97f05dfe447570c7d753f15d8b8bf76cb86145ca41f8f2d63 \
+  64 --commit | tee native-numeric-binding-v5-campaign.json
+```
+
+
 ## 25 November — independent v4 receipt audit: coordinate bridge rejected, native execution retained
 
 Reviewed exact committed [v4](https://github.com/chboishabba/slr/blob/105e8c0577f3e91eb0efacada90a724d562ba821/native-numeric-binding-v4.json) and [reuse v2](https://github.com/chboishabba/slr/blob/105e8c0577f3e91eb0efacada90a724d562ba821/native-original-owner-reuse-v2.json), rather than operator summary. Operator reports 31/31 focused tests; committed receipts establish 164 represented objects, 492 horizon observations, zero transport/morphology remainder, 137 projected nominal spans, two without exact objects, 125 compatible before cap / 61 deferred, 334 observed prefix tokens and 2,382 uncovered non-whitespace prefix codepoints. The SQL owner returns 18/18 persisted-member parity, but all 18 paths are same_sentence and all distances 1. Seventeen have ambiguous span coordinates and no exact numeric object; just one maps to object 73280. This is index self-consistency over defective native inputs, not source correspondence. Do not accept these 18 as the original typed candidate population or use them to close identity.
