@@ -868,6 +868,7 @@ pub struct OriginalParserIdentityProducerObservation{
     pub bounded_identity_parity:Option<NativeBoundedIdentityParity>,
     pub evidence_delta_frontier:Option<NativeIdentityEvidenceDelta>,
     pub support_index:Option<NativeIdentitySupportIndexReceipt>,
+    pub scoped_admission_parity:Option<NativeScopedAdmissionParity>,
 }
 fn observe_refreshed_parser_identity_producer(
     probe:&mut postgres::Transaction<'_>,run_id:i64,document_id:i64,demand:i64,
@@ -898,7 +899,7 @@ fn observe_refreshed_parser_identity_producer(
         producer_ref:"execution.refresh_numeric_pnf_parser_identity_evidence",
         scope:"current_numeric_document_candidate_projection_not_global_coverage",
         refreshed_in_rollback_probe:true,candidate_rows:rows,name_overflow_rows:overflow,
-        admission_executed:false,admitted_candidate_witnesses:Vec::new(),bounded_identity_parity:None,evidence_delta_frontier:None,support_index:None,
+        admission_executed:false,admitted_candidate_witnesses:Vec::new(),bounded_identity_parity:None,evidence_delta_frontier:None,support_index:None,scoped_admission_parity:None,
     })
 }
 
@@ -2979,6 +2980,89 @@ fn refresh_bounded_parser_identity_with_parity(
     },reference_witnesses,delta))
 }
 
+#[derive(Debug,Clone,Serialize)]
+pub struct NativeScopedAdmissionParity {
+    pub target_object_id:i64,
+    pub withdrawn_direct_candidates:u64,
+    pub changed_witness_keys:usize,
+    pub reference_admission_exact:bool,
+    pub unrelated_admission_revisions_preserved:bool,
+    pub immutable_level_one_preserved:bool,
+    pub rollback_restored:bool,
+    pub persisted:bool,
+}
+
+/// Exercise the existing m080 authority on a real target group, comparing
+/// reference full admission against a scoped replay after the SAME direct
+/// evidence withdrawal. No invented candidate or live authority mutation.
+/// This does not certify arbitrary delta coverage or Level-3 retraction.
+fn probe_scoped_parser_admission(
+    tx:&mut postgres::Transaction<'_>,run:i64,doc:i64,
+)->Result<Option<NativeScopedAdmissionParity>,NativeNumericAuditError>{
+    let Some(row)=tx.query_opt("SELECT c.target_object_id
+        FROM execution.semantic_pnf_identity_evidence_candidate c
+        WHERE c.run_id=$1 AND c.document_id=$2 AND c.evidence_state=2
+          AND c.witness_kind IN (2,4,6)
+        ORDER BY EXISTS(SELECT 1 FROM execution.semantic_pnf_identity_evidence_candidate n
+            WHERE n.run_id=c.run_id AND n.document_id=c.document_id
+              AND n.target_object_id=c.target_object_id AND n.witness_kind=3 AND n.evidence_state=2) DESC,
+            c.target_object_id LIMIT 1",&[&run,&doc])? else{return Ok(None);};
+    let target:i64=row.get(0);
+    let targets=vec![target];
+    let before=parser_admitted_witness_keys(tx,run,doc)?;
+    let level_one=level_one_snapshot(tx,run,doc)?;
+    let unrelated_sql="SELECT a.witness_id,a.admission_state,a.revision
+        FROM execution.semantic_pnf_identity_witness_admission a
+        JOIN execution.semantic_pnf_identity_witness w ON w.witness_id=a.witness_id
+        JOIN execution.semantic_pnf_canonical_entity e ON e.entity_id=w.target_entity_id
+        JOIN execution.semantic_pnf_object o ON o.object_id=w.source_object_id
+        JOIN execution.semantic_pnf_region r ON r.region_id=o.region_id
+        WHERE r.run_id=$1 AND r.document_id=$2 AND e.anchor_object_id IS DISTINCT FROM $3::bigint
+        ORDER BY a.witness_id";
+    let read_unrelated=|db:&mut postgres::Transaction<'_>|->Result<Vec<(i64,i16,i64)>,NativeNumericAuditError>{
+        Ok(db.query(unrelated_sql,&[&run,&doc,&target])?.iter().map(|r|(r.get(0),r.get(1),r.get(2))).collect())
+    };
+    let unrelated=read_unrelated(tx)?;
+    let withdraw_sql="UPDATE execution.semantic_pnf_identity_evidence_candidate SET evidence_state=4
+      WHERE run_id=$1 AND document_id=$2 AND target_object_id=$3 AND witness_kind IN (2,4,6)
+        AND evidence_state IN (1,2,3)";
+    let(reference,withdrawn)={
+        let mut p=tx.transaction()?;
+        p.execute("UPDATE execution.semantic_pnf_identity_evidence_candidate SET evidence_state=1
+            WHERE run_id=$1 AND document_id=$2 AND evidence_state IN (1,2,3) AND evidence_state<>1",&[&run,&doc])?;
+        let n=p.execute(withdraw_sql,&[&run,&doc,&target])?;
+        p.query_one("SELECT execution.admit_numeric_pnf_parser_identity_evidence($1,$2)",&[&run,&doc])?;
+        let keys=parser_admitted_witness_keys(&mut p,run,doc)?;
+        if level_one!=level_one_snapshot(&mut p,run,doc)?{return Err(NativeNumericAuditError::AdmissionProbeInvariant);}
+        p.rollback()?;
+        (keys,n)
+    };
+    let(scoped,unrelated_preserved,immutable)={
+        let mut p=tx.transaction()?;
+        p.batch_execute(include_str!("numeric_pnf_identity_admit_scoped.sql"))?;
+        p.execute("UPDATE execution.semantic_pnf_identity_evidence_candidate SET evidence_state=1
+            WHERE run_id=$1 AND document_id=$2 AND target_object_id=$3
+              AND evidence_state IN (1,2,3) AND evidence_state<>1",&[&run,&doc,&target])?;
+        let n=p.execute(withdraw_sql,&[&run,&doc,&target])?;
+        if n!=withdrawn{return Err(NativeNumericAuditError::AdmissionProbeInvariant);}
+        p.query_one("SELECT pg_temp.slr_admit_numeric_pnf_parser_identity_targets($1,$2,$3)",&[&run,&doc,&targets])?;
+        let keys=parser_admitted_witness_keys(&mut p,run,doc)?;
+        let preserved=unrelated==read_unrelated(&mut p)?;
+        let immutable=level_one==level_one_snapshot(&mut p,run,doc)?;
+        p.rollback()?;
+        (keys,preserved,immutable)
+    };
+    let restored=before==parser_admitted_witness_keys(tx,run,doc)?
+        &&unrelated==read_unrelated(tx)?&&level_one==level_one_snapshot(tx,run,doc)?;
+    if scoped!=reference||!unrelated_preserved||!immutable||!restored||withdrawn==0 {
+        return Err(NativeNumericAuditError::AdmissionProbeInvariant);
+    }
+    Ok(Some(NativeScopedAdmissionParity{target_object_id:target,withdrawn_direct_candidates:withdrawn,
+        changed_witness_keys:before.symmetric_difference(&scoped).count(),
+        reference_admission_exact:true,unrelated_admission_revisions_preserved:unrelated_preserved,
+        immutable_level_one_preserved:immutable,rollback_restored:restored,persisted:false}))
+}
+
 fn probe_original_governed_identity(
     tx:&mut postgres::Transaction<'_>,run_ref:&str,document_ref:&str,demand:i64,answer:&NativeSourceLocalAnswer,
 )->Result<(OriginalParserIdentityProducerObservation,NativeGovernedIdentityProbe),NativeNumericAuditError>{
@@ -3016,6 +3100,7 @@ fn probe_original_governed_identity(
         original_parser_identity_producer.producer_ref="pg_temp.slr_refresh_numeric_pnf_parser_identity_evidence_bounded";
         original_parser_identity_producer.bounded_identity_parity=Some(parity);
         original_parser_identity_producer.evidence_delta_frontier=Some(delta);
+        original_parser_identity_producer.scoped_admission_parity=probe_scoped_parser_admission(&mut probe,run,document)?;
     }
     let (horizons,classes)=observe_original_resolution_fibre(&mut probe,demand,run_ref,document_ref)?;
     let outside:bool=probe.query_one(
