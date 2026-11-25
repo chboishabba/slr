@@ -69,6 +69,17 @@ fn install(url:&str)->Result<bool>{
     if !installed{tx.batch_execute(include_str!("numeric_pnf_endpoint_replay.sql"))?;}
     let ready:bool=tx.query_one("SELECT slr_native_replay.fence_intact()",&[])?.get(0);
     let ready=if ready{true}else{tx.query_one("SELECT slr_native_replay.install_fence()",&[])?.get(0)};
+    if ready && stamp_on(&mut tx)?.is_none(){
+        // A catalog/storage rewrite can be visible without DDL event
+        // notification. Rebaseline only under an intact event trigger
+        // and increment generation, never reusing earlier cached receipts.
+        tx.execute("UPDATE slr_native_replay.fence f SET generation=f.generation+1,
+              last_catalog_snapshot=slr_native_replay.catalog_snapshot()
+            WHERE f.singleton AND f.last_catalog_snapshot IS DISTINCT FROM slr_native_replay.catalog_snapshot()
+              AND EXISTS(SELECT 1 FROM pg_event_trigger e WHERE e.evtname='slr_endpoint_replay_catalog_change'
+                AND e.evtenabled='A' AND e.evtevent='ddl_command_end'
+                AND e.evtfoid='slr_native_replay.capture_catalog_change()'::regprocedure)",&[])?;
+    }
     let intact=ready && stamp_on(&mut tx)?.is_some();
     tx.commit()?;
     Ok(intact)
