@@ -250,6 +250,10 @@ BEGIN
     INSERT INTO execution.slr_native_h3_authority_debt(demand_id) VALUES(d);
     SELECT count(*) INTO blocked_groups FROM execution.slr_native_blocked_identity_fibre_v1 WHERE demand_id=d;
     SELECT count(*) INTO blocked_slots FROM execution.slr_native_blocked_identity_slot_v1 WHERE demand_id=d;
+    IF blocked_groups>0 AND (execution.slr_native_candidate_only_authority_absent(d)
+       OR execution.slr_reconcile_native_candidate_only_debt(d,true,true)) THEN
+        RAISE EXCEPTION 'candidate-only execution reactivated suspended admitted identity';
+    END IF;
     IF EXISTS(SELECT 1 FROM execution.slr_native_blocked_identity_fibre_v1 b
         JOIN execution.semantic_pnf_identity_projection p USING(source_object_id,authority_class)
         WHERE b.demand_id=d)
