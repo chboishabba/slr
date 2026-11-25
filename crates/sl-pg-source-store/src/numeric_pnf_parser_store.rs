@@ -608,14 +608,17 @@ pub fn persist_original_numeric_parser_plan(
             &[&sentence.sentence_ref,&plan.numeric_run_ref,
               &plan.source_document_ref])?.get(0);
         if sentence_id<=0{return Err(NumericParserStoreError::ExistingConflict);}
-        let token_ids=if n>0 {
-            tx.query(
-                "SELECT nextval(pg_get_serial_sequence(
-                    'execution.semantic_parser_token','token_id'))::bigint
-                 FROM generate_series(1,$1::integer)",
-                &[&(n as i32)])?.into_iter().map(|r|r.get::<_,i64>(0))
-                .collect::<Vec<_>>()
-        }else{Vec::new()};
+        // Resolve the durable natural keys before allocating missing IDs.
+        // Sequence consumption and dependency heads must be stable on replay.
+        let refs=sentence.tokens.iter().map(|t|t.token_ref.clone()).collect::<Vec<_>>();
+        let token_ids=tx.query(
+            "SELECT COALESCE(t.token_id,nextval(pg_get_serial_sequence(
+                 'execution.semantic_parser_token','token_id')))::bigint
+             FROM unnest($1::text[]) WITH ORDINALITY AS wanted(ref,ord)
+             LEFT JOIN execution.semantic_parser_token t ON t.token_ref=wanted.ref
+             ORDER BY wanted.ord", &[&refs])?
+            .into_iter().map(|r|r.get::<_,i64>(0)).collect::<Vec<_>>();
+        if token_ids.len()!=n{return Err(NumericParserStoreError::ExistingConflict);}
         let mut planned_ids=BTreeMap::<String,i64>::new();
         for (token,id) in sentence.tokens.iter().zip(&token_ids) {
             if *id<=0||planned_ids.insert(token.token_ref.clone(),*id).is_some(){
@@ -626,7 +629,6 @@ pub fn persist_original_numeric_parser_plan(
             planned_ids.get(&t.head_token_ref).copied()
                 .ok_or(NumericParserStoreError::InvalidSentence))
             .collect::<Result<Vec<_>,_>>()?;
-        let refs=sentence.tokens.iter().map(|t|t.token_ref.clone()).collect::<Vec<_>>();
         let ords=sentence.tokens.iter().map(|t|t.original_token_ordinal as i64)
             .collect::<Vec<i64>>();
         let starts=sentence.tokens.iter().map(|t|t.start_char).collect::<Vec<_>>();
@@ -704,9 +706,12 @@ pub fn persist_original_numeric_parser_plan(
         let mismatches:i64=tx.query_one(
             "WITH expected AS (
                SELECT * FROM unnest($4::text[],$5::bytea[],
-                  $6::bigint[],$7::bigint[],$8::bigint[],$9::bigint[])
+                  $6::bigint[],$7::bigint[],$8::bigint[],$9::bigint[],
+                  $10::bigint[],$11::bigint[],$12::bigint[],$13::bigint[],
+                  $14::bigint[],$15::bigint[],$16::smallint[],$17::smallint[])
                AS expected(token_ref,token_digest,head_token_id,
-                           start_char,end_char,ordinal))
+                           start_char,end_char,ordinal,orth,lemma,pos,tag,dep,morph,
+                           lemma_origin,tag_origin))
              SELECT count(*)::bigint
              FROM expected
              LEFT JOIN execution.semantic_parser_token AS t
@@ -722,12 +727,22 @@ pub fn persist_original_numeric_parser_plan(
                OR t.end_char IS DISTINCT FROM expected.end_char
                OR t.local_token_ordinal IS DISTINCT FROM expected.ordinal
                OR t.head_token_id IS DISTINCT FROM expected.head_token_id
+               OR t.orth_symbol_id IS DISTINCT FROM expected.orth
+               OR t.lemma_symbol_id IS DISTINCT FROM expected.lemma
+               OR t.pos_symbol_id IS DISTINCT FROM expected.pos
+               OR t.tag_symbol_id IS DISTINCT FROM expected.tag
+               OR t.dependency_symbol_id IS DISTINCT FROM expected.dep
+               OR t.morph_set_id IS DISTINCT FROM expected.morph
+               OR t.lemma_origin_id IS DISTINCT FROM expected.lemma_origin
+               OR t.tag_origin_id IS DISTINCT FROM expected.tag_origin
+               OR t.pos_origin_id IS DISTINCT FROM 1
+               OR t.dependency_origin_id IS DISTINCT FROM 1
                OR head.sentence_id IS DISTINCT FROM t.sentence_id
                OR head.start_char IS DISTINCT FROM t.head_start_char
                OR head.end_char IS DISTINCT FROM t.head_end_char",
             &[&plan.numeric_run_ref,&plan.source_document_ref,
               &sentence.sentence_ref,&refs,&digests,&head_ids,
-              &starts,&ends,&ords])?.get(0);
+              &starts,&ends,&ords,&orth,&lemma,&pos,&tag,&dep,&morph,&lemma_origin,&tag_origin])?.get(0);
         if mismatches>0{return Err(NumericParserStoreError::ExistingConflict);}
         // Entity observations are candidates and must remain NER source
         // spans; one setwise statement per bounded sentence, not N SQL calls.
