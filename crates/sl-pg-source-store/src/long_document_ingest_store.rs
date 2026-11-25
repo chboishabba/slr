@@ -411,6 +411,90 @@ pub(crate) fn publish_heading_partition(
     })
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct SourcePartitionInsertedRegion {
+    pub region_ref: String,
+    pub parent_region_ref: String,
+    pub start_char: i64,
+    pub end_char: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct SourcePartitionChange {
+    pub source_revision_ref: String,
+    pub source_digest_ref: String,
+    pub previous_partition_ref: String,
+    pub partition_ref: String,
+    pub added: Vec<SourcePartitionInsertedRegion>,
+}
+
+/// Exact additive changes in ancestry order. This is the source-side
+/// durable change carrier; the numeric DB acknowledges each partition
+/// separately after enqueueing the original consumer work queue.
+pub fn load_source_partition_changes(
+    config: &DatabaseConfig, revision: &str, digest: &str,
+) -> Result<Vec<SourcePartitionChange>, LongDocumentIngestStoreError> {
+    let mut db=Client::connect(config.database_url(),NoTls)?;
+    let mut tx=db.transaction()?;
+    tx.batch_execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY; SET LOCAL statement_timeout='90000ms'")?;
+    let available:bool=tx.query_one("SELECT to_regclass('ingest.long_document_partition_head') IS NOT NULL", &[])?.get(0);
+    if !available { return Ok(Vec::new()); }
+    let Some(mut head)=active_partition(&mut tx,revision)? else { return Ok(Vec::new()); };
+    let mut changes=Vec::new();
+    let mut visited=BTreeSet::new();
+    let mut child_count=None;
+    loop {
+        if !visited.insert(head.clone()) || visited.len()>128 {
+            return Err(LongDocumentIngestStoreError::PartitionNotCurrent);
+        }
+        let row=tx.query_one("SELECT previous_partition_ref,source_digest_ref,exact_region_count,added_region_refs
+            FROM ingest.long_document_partition_revision WHERE source_revision_ref=$1 AND partition_ref=$2",
+            &[&revision,&head])?;
+        let previous:Option<String>=row.get(0);
+        let source_digest:String=row.get(1);
+        let count:i64=row.get(2);
+        let refs:Vec<String>=row.get(3);
+        if source_digest!=digest || count<0 || child_count.is_some_and(|n|n!=count) {
+            return Err(LongDocumentIngestStoreError::PartitionNotCurrent);
+        }
+        let Some(previous)=previous else {
+            if !refs.is_empty() { return Err(LongDocumentIngestStoreError::PartitionNotCurrent); }
+            break;
+        };
+        if refs.is_empty() || refs.len()>128 || count<refs.len() as i64 {
+            return Err(LongDocumentIngestStoreError::PartitionNotCurrent);
+        }
+        let rows=tx.query("SELECT region_ref,parent_region_ref,start_char,end_char,region_kind,
+            candidate_only,creates_semantic_authority,claim_truth_promoted
+            FROM ingest.long_document_region WHERE source_revision_ref=$1 AND region_ref=ANY($2)
+            ORDER BY start_char,end_char,region_ref",&[&revision,&refs])?;
+        if rows.len()!=refs.len() { return Err(LongDocumentIngestStoreError::PartitionNotCurrent); }
+        let mut added=Vec::new();
+        for row in rows {
+            let region_ref:String=row.get(0);
+            let parent:Option<String>=row.get(1);
+            let start:i64=row.get(2);
+            let end:i64=row.get(3);
+            if start<0 || end<=start || row.get::<_,String>(4)!="sentence"
+                || !row.get::<_,bool>(5)||row.get::<_,bool>(6)||row.get::<_,bool>(7) {
+                return Err(LongDocumentIngestStoreError::PartitionNotCurrent);
+            }
+            added.push(SourcePartitionInsertedRegion{
+                region_ref,parent_region_ref:parent.ok_or(LongDocumentIngestStoreError::PartitionNotCurrent)?,
+                start_char:start,end_char:end,
+            });
+        }
+        child_count=Some(count-refs.len() as i64);
+        changes.push(SourcePartitionChange{source_revision_ref:revision.into(),
+            source_digest_ref:source_digest,previous_partition_ref:previous.clone(),
+            partition_ref:head,added});
+        head=previous;
+    }
+    changes.reverse();
+    tx.commit()?;
+    Ok(changes)
+}
+
 pub fn persist_long_document_structure(
     config: &DatabaseConfig,
     document: &LongDocumentSource,
