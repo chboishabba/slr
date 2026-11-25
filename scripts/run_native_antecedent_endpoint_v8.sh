@@ -77,6 +77,12 @@ capture "$checkpoint/cold.json" "${cli[@]}" endpoint "$review" "$run" --commit
 # no persisted evidence, no authority write. This is not owner revalidation.
 command -v psql >/dev/null
 demand=$(jq -er '.binding_passes[-1].demand_id | select(type=="number")' "$checkpoint/cold.json")
+consumer=$(jq -er '.binding_passes[-1].consumer_horizon_work.consumer_ref' "$checkpoint/cold.json")
+query=$(jq -er '.binding_passes[-1].consumer_horizon_work.query_ref' "$checkpoint/cold.json")
+policy=$(jq -er '.binding_passes[-1].consumer_horizon_work.policy_ref' "$checkpoint/cold.json")
+bounded psql "$SENSIBLAW_DATABASE_URL" -X -v "demand_id=$demand" \
+  -v "consumer_ref=$consumer" -v "query_ref=$query" -v "policy_ref=$policy" \
+  -f scripts/check_native_h6_producer_parity.sql > "$checkpoint/h6-producer-parity-rollback.log" 2>&1
 bounded psql "$SENSIBLAW_DATABASE_URL" -X -v "demand_id=$demand" \
   -f scripts/check_native_horizon_withdrawal.sql > "$checkpoint/h3-withdrawal-rollback.log"
 export SLR_NATIVE_IDENTITY_REPLAY_MODE=1
