@@ -815,3 +815,56 @@ mod tests {
         ));
     }
 }
+
+#[cfg(test)]
+mod heading_repair_reopen_tests {
+    use super::*;
+    use crate::{build_plain_text_long_document_source, extend_plain_text_heading_exclusions};
+
+    fn rows(doc: &LongDocumentSource) -> Vec<PersistedLongDocumentStructureRegion> {
+        doc.regions.iter().map(|r| PersistedLongDocumentStructureRegion {
+            source_revision_ref: r.source_revision_ref.clone(),
+            source_ref: doc.ingest.source_ref.clone(),
+            region_ref: r.region_ref.clone(),
+            parent_region_ref: r.parent_region_ref.clone(),
+            region_kind: region_kind_db(r.kind).into(),
+            start_char: r.start_char,
+            end_char: r.end_char,
+            candidate_only: true,
+            creates_semantic_authority: false,
+            claim_truth_promoted: false,
+        }).collect()
+    }
+
+    #[test]
+    fn exact_repair_reopens_but_partial_or_forged_partition_fails() {
+        let text = "Chapter One\nFirst. Second.\n\nLater.";
+        let (legacy, _) = build_plain_text_long_document_source(
+            "book:fixture", "revision:fixture", "plain", "receipt:fixture",
+            None, None, text,
+        ).unwrap();
+        let parent = legacy.regions.iter()
+            .find(|r| r.kind == DocumentRegionKind::Paragraph).unwrap();
+        let (extended, added) = extend_plain_text_heading_exclusions(
+            &legacy, text, &[parent.region_ref.clone()],
+        ).unwrap();
+        assert_eq!(added.len(), 3);
+        let original_rows = rows(&legacy);
+        assert_eq!(reopen_heading_repaired_structure(&legacy, text, &original_rows).unwrap(), legacy);
+        let exact = rows(&extended);
+        assert_eq!(reopen_heading_repaired_structure(&legacy, text, &exact).unwrap(), extended);
+
+        let mut partial = exact.clone();
+        partial.pop();
+        assert!(reopen_heading_repaired_structure(&legacy, text, &partial).is_err());
+        let mut foreign = exact.clone();
+        foreign.last_mut().unwrap().parent_region_ref = Some("foreign".into());
+        assert!(reopen_heading_repaired_structure(&legacy, text, &foreign).is_err());
+        let mut shifted = exact.clone();
+        shifted.last_mut().unwrap().start_char += 1;
+        assert!(reopen_heading_repaired_structure(&legacy, text, &shifted).is_err());
+        let mut duplicate = exact.clone();
+        duplicate.push(exact.last().unwrap().clone());
+        assert!(reopen_heading_repaired_structure(&legacy, text, &duplicate).is_err());
+    }
+}
