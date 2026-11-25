@@ -35,14 +35,30 @@ CREATE TABLE IF NOT EXISTS execution.slr_native_h6_validity_history(
     PRIMARY KEY(evidence_id,revision)
 );
 
+-- A physical support journal delta alone cannot reconcile the original
+-- proof/coverage authority. This debt survives later empty passes.
+CREATE TABLE IF NOT EXISTS execution.slr_native_h3_authority_debt(
+    demand_id bigint PRIMARY KEY REFERENCES execution.semantic_pnf_demand(demand_id) ON DELETE CASCADE,
+    first_observed_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Reuse original m094/m139 reverse-dependency and consumer work queue.
 -- Like m163, consume only the statement-local inserted delta. Initial
 -- supported observation is not a validity change (m139 owns insertion).
 -- First observed withdrawal and later true/false revisions are changes.
 -- No new dependency graph, authority event or semantic refutation.
 CREATE OR REPLACE FUNCTION execution.slr_wake_native_validity_delta()
-RETURNS trigger LANGUAGE plpgsql AS $
+RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
+    -- Debt belongs to the original demand, not the calling consumer or
+    -- the current support bit. A later restoration must not delete it.
+    -- Both validity journals use this statement-local path.
+    INSERT INTO execution.slr_native_h3_authority_debt(demand_id)
+    SELECT DISTINCT v.demand_id FROM inserted_validity v
+    JOIN execution.slr_native_h6_managed_demand m ON m.demand_id=v.demand_id
+    WHERE NOT v.supported
+    ON CONFLICT DO NOTHING;
+
     WITH atoms AS MATERIALIZED (
         SELECT e.evidence_id,e.source_region_id,e.source_interface_id
         FROM inserted_validity v
@@ -76,7 +92,7 @@ BEGIN
     WHERE q.work_state<>1 OR q.completed_at IS NOT NULL;
     RETURN NULL;
 END;
-$;
+$$;
 
 DROP TRIGGER IF EXISTS slr_native_h3_validity_delta_wake ON execution.slr_native_h3_validity_history;
 CREATE TRIGGER slr_native_h3_validity_delta_wake
@@ -89,12 +105,6 @@ AFTER INSERT ON execution.slr_native_h6_validity_history
 REFERENCING NEW TABLE AS inserted_validity
 FOR EACH STATEMENT EXECUTE FUNCTION execution.slr_wake_native_validity_delta();
 
--- A physical support journal delta alone cannot reconcile the original
--- proof/coverage authority. This debt survives later empty passes.
-CREATE TABLE IF NOT EXISTS execution.slr_native_h3_authority_debt(
-    demand_id bigint PRIMARY KEY REFERENCES execution.semantic_pnf_demand(demand_id) ON DELETE CASCADE,
-    first_observed_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
 -- Source: original SensibLaw m110 at f9c4670ef04b40e8153caa7dd00fa1eba7013ef4, blob 41bf2232b43a53fb8e0373559206e5fec430d629.
 -- Reopen the actual discourse/temporal signature relation independently of
 -- scheduling/stop or admissibility state. An already-completed horizon or later stop does not
@@ -265,7 +275,7 @@ CREATE TABLE IF NOT EXISTS execution.slr_native_candidate_reconciliation_history
 );
 
 CREATE OR REPLACE FUNCTION execution.slr_native_candidate_only_authority_absent(selected_demand_id bigint)
-RETURNS boolean LANGUAGE sql STABLE AS $
+RETURNS boolean LANGUAGE sql STABLE AS $$
 SELECT EXISTS(SELECT 1 FROM execution.slr_native_h6_managed_demand WHERE demand_id=selected_demand_id)
  AND EXISTS(SELECT 1 FROM execution.semantic_pnf_demand d WHERE d.demand_id=selected_demand_id
        AND d.resolved_target_kind IS NULL AND d.resolved_target_id IS NULL)
@@ -273,11 +283,11 @@ SELECT EXISTS(SELECT 1 FROM execution.slr_native_h6_managed_demand WHERE demand_
  AND NOT EXISTS(SELECT 1 FROM execution.semantic_pnf_frontier_resolution WHERE demand_id=selected_demand_id AND outcome_state=2)
  AND EXISTS(SELECT 1 FROM execution.semantic_pnf_demand_open_world_state WHERE demand_id=selected_demand_id AND outside_model_possible)
  AND NOT EXISTS(SELECT 1 FROM execution.semantic_pnf_consumer_sufficiency_current_v1 WHERE demand_id=selected_demand_id AND certificate_state=1);
-$;
+$$;
 
 CREATE OR REPLACE FUNCTION execution.slr_reconcile_native_candidate_only_debt(
     selected_demand_id bigint, represented_slice_drained boolean, projection_exact boolean
-) RETURNS boolean LANGUAGE plpgsql AS $
+) RETURNS boolean LANGUAGE plpgsql AS $$
 DECLARE retired bigint;
 BEGIN
     IF current_setting('transaction_isolation') <> 'serializable' THEN
@@ -296,7 +306,7 @@ BEGIN
     GET DIAGNOSTICS retired=ROW_COUNT;
     RETURN retired=1;
 END;
-$;
+$$;
 
 -- Original m095 certificate state is historical authority. A physical
 -- withdrawal does not fabricate a replacement certificate or restore a
@@ -497,4 +507,18 @@ CREATE TABLE IF NOT EXISTS execution.slr_native_h3_current_contract(contract_ref
 INSERT INTO execution.slr_native_h3_current_contract VALUES('slr-native-h3-current:v1') ON CONFLICT DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS execution.slr_native_current_authority_contract(contract_ref text PRIMARY KEY);
-INSERT INTO execution.slr_native_current_authority_contract VALUES('slr-native-current-authority:v3') ON CONFLICT DO NOTHING;
+-- A pre-v4 journal may have recorded withdrawal then restoration without
+-- durable debt. Conservatively reopen that historical obligation once,
+-- rather than assuming an earlier certificate remains usable.
+INSERT INTO execution.slr_native_h3_authority_debt(demand_id)
+SELECT DISTINCT historical.demand_id
+FROM (
+    SELECT demand_id FROM execution.slr_native_h3_validity_history WHERE NOT supported
+    UNION
+    SELECT demand_id FROM execution.slr_native_h6_validity_history WHERE NOT supported
+) historical
+JOIN execution.slr_native_h6_managed_demand m USING(demand_id)
+WHERE NOT EXISTS(SELECT 1 FROM execution.slr_native_current_authority_contract
+    WHERE contract_ref='slr-native-current-authority:v4')
+ON CONFLICT DO NOTHING;
+INSERT INTO execution.slr_native_current_authority_contract VALUES('slr-native-current-authority:v4') ON CONFLICT DO NOTHING;
