@@ -12,7 +12,7 @@ use sensiblaw_pg_source_store::{
     run_native_numeric_exact_source_slice, run_native_numeric_prefix_slice, OriginalNativeNumericEvidence,
     inspect_native_antecedent_review, native_antecedent_frontier,
     compile_native_source_local_answer,
-    audit_original_numeric_identity_for_source_answer,
+    audit_original_numeric_identity_for_source_answer, certify_original_focus_identity,
     reuse_original_binding_and_identity_owners,
     retract_original_numeric_identity_for_source_answer,
     transport_original_numeric_candidates_for_source_answer,
@@ -130,6 +130,23 @@ pub fn run(args:&[String])->Result<(),String>{
             // The original publication receipt already binds the immutable
             // source/parser manifest. Do not reopen the full original tape.
             let numeric_run=publication.last().ok_or("no scoped publication receipt")?.numeric_run_ref.clone();
+            // Closed original typed worlds must be reopened through the
+            // actual original authority, not sent back to candidate-only transport.
+            let existing=audit_original_numeric_identity_for_source_answer(&url,&numeric_run,&answer)
+                .map_err(|e|e.to_string())?;
+            if existing.numeric_demand_open_world.iter().any(|w|!w.outside_model_possible){
+                let certificate=certify_original_focus_identity(&url,&numeric_run,&answer).map_err(|e|e.to_string())?;
+                return print_json(&serde_json::json!({
+                    "schema":"slr-native-antecedent-endpoint-v1","prefix_scope":scope,
+                    "numeric_publication":publication,"source_local_answer":answer,
+                    "original_focus_certificate":certificate,
+                    "outcome":"original_focus_authority_readback_separate_from_full_relation_parity",
+                    "governed_identity_paid":certificate.governed_identity_paid,
+                    "level_three_paid":certificate.level_three_paid,
+                    "full_relation_parity_paid":false,
+                    "external_qid_paid":false,"historical_truth_paid":false
+                }));
+            }
             let source_partition_changes=load_source_partition_changes(&config,&scope.source_revision_ref,
                 &format!("sha256:{}",scope.source_sha256)).map_err(|e|e.to_string())?;
             let mut passes=Vec::new();
@@ -137,10 +154,12 @@ pub fn run(args:&[String])->Result<(),String>{
                 let step=transport_original_numeric_candidates_for_source_answer_with_partition(
                     &url,&numeric_run,&answer,64,&source_partition_changes)
                     .map_err(|e|e.to_string())?;
-                let done=step.governed_identity_rollback_probe.is_some();
+                let done=(step.governed_identity_rollback_probe.is_some()||step.identity_execution_replay.is_some())
+                    &&(!step.consumer_horizon_work.h3_ready_after&&!step.consumer_horizon_work.h6_ready_after
+                        ||step.consumer_horizon_work.nonmonotone_input_residual);
                 let progress=!step.inserted_candidate_ids.is_empty()||step.nominal_head_objects_inserted>0
                     ||step.original_mention_binding_campaign.newly_materialized_span_objects>0
-                    ||step.morphology_observations_inserted>0;
+                    ||step.morphology_observations_inserted>0||step.consumer_horizon_work.h3_processed||step.consumer_horizon_work.h6_processed;
                 passes.push(step);
                 if done||!progress{break;}
             }
@@ -204,7 +223,10 @@ pub fn run(args:&[String])->Result<(),String>{
             });
             let identity=readback.original_numeric_audits.iter().any(|a|a.numeric_run_ref==numeric_run&&a.original_accepted_document_identity_paid);
             let l3=readback.original_numeric_audits.iter().any(|a|a.numeric_run_ref==numeric_run&&a.original_level_three_substitution_paid);
-            let endpoint=if identity&&l3&&prefix_complete&&cross_owner&&inverse{
+            let endpoint=if identity&&l3&&prefix_complete&&cross_owner&&inverse
+                &&last.complete_typed_coverage_paid&&!last.outside_model_possible
+                &&last.native_binding_bridge.structural_relation_parity_paid
+                &&last.consumer_horizon_work.h6_validity.original_consumer_authority_reconciled{
                 "governed_source_answer"
             }else{"source_local_answer_with_governed_identity_unresolved"};
             print_json(&serde_json::json!({
