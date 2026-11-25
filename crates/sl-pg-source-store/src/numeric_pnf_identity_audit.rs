@@ -1125,37 +1125,118 @@ fn materialize_prior_nominal_heads(
     Ok((objects as i64,supports as i64,remaining))
 }
 
-// Reuse m110's actual typed factor/role and temporal producer on an exact
-// demand-local consumer queue. Do not advance or certify H3 completion:
-// a partial source can still gather useful H6 evidence without closing H3.
-fn run_original_h6_producer(
-    tx:&mut postgres::Transaction<'_>,demand:i64,run_ref:&str,document_ref:&str,
-)->Result<i64,NativeNumericAuditError>{
-    let row=tx.query_one(
-        "SELECT r.run_id,r.document_id
-         FROM execution.semantic_pnf_demand d JOIN execution.semantic_pnf_region r
-         ON r.region_id=d.source_region_id
-         WHERE d.demand_id=$1 AND r.run_ref=$2 AND r.document_ref=$3",
-        &[&demand,&run_ref,&document_ref])?;
-    let run_id:i64=row.get(0);let document_id:i64=row.get(1);
-    let consumer="slr-native-numeric-pnf";
-    let query=format!("numeric-demand:{demand}");
-    let policy="candidate-only-h6:v1";
-    tx.execute(
-        "INSERT INTO execution.semantic_pnf_consumer_horizon_work_queue
-           (demand_id,consumer_ref,query_ref,policy_ref,horizon,work_state)
-         VALUES($1,$2,$3,$4,6,1)
-         ON CONFLICT(demand_id,consumer_ref,query_ref,policy_ref,horizon)
-         DO UPDATE SET work_state=1,completed_at=NULL",
-        &[&demand,&consumer,&query,&policy])?;
-    let inserted:i64=tx.query_one(
-        "SELECT execution.refresh_numeric_pnf_h6_discourse_temporal_evidence_for_consumer(
-           $1,$2,$3,$4,$5,FALSE)",
-        &[&run_id,&document_id,&consumer,&query,&policy])?.get(0);
-    Ok(inserted)
+/// Original m094/m110 queue execution for the exact source-local consumer.
+/// A completed horizon means the represented work slice was processed, not
+/// exhaustive typed coverage, unique identity, or a completed external H9.
+#[derive(Debug,Clone,Serialize)]
+pub struct NativeConsumerHorizonWorkReceipt {
+    pub consumer_ref:String,
+    pub query_ref:String,
+    pub policy_ref:String,
+    pub h3_ready_before:bool,
+    pub h3_processed:bool,
+    pub h6_ready_before:bool,
+    pub h6_processed:bool,
+    pub h6_producer_invocations:usize,
+    pub h6_evidence_inserted:i64,
+    pub h9_residual_ready:bool,
+    pub represented_slice_drained:bool,
+    pub nonmonotone_input_residual:bool,
+    pub typed_coverage_paid:bool,
+    pub external_execution_performed:bool,
 }
 
-
+fn process_original_native_consumer_horizons(
+    tx:&mut postgres::Transaction<'_>,demand:i64,run_ref:&str,answer:&NativeSourceLocalAnswer,
+    represented_slice_drained:bool,inputs_changed:bool,nonmonotone:bool,
+)->Result<NativeConsumerHorizonWorkReceipt,NativeNumericAuditError>{
+    let row=tx.query_one("SELECT r.run_id,r.document_id FROM execution.semantic_pnf_demand d
+        JOIN execution.semantic_pnf_region r ON r.region_id=d.source_region_id
+        WHERE d.demand_id=$1 AND r.run_ref=$2 AND r.document_ref=$3",
+        &[&demand,&run_ref,&answer.source_document_ref])?;
+    let run:i64=row.get(0);let doc:i64=row.get(1);
+    let consumer=answer.consumer_scope_ref;
+    let query=&answer.original_review_item_ref;
+    let policy=&answer.original_policy_ref;
+    // The original 110 owner accepts a consumer/query/policy scope, not
+    // a demand parameter. Reject a foreign demand registered under this key.
+    let foreign:bool=tx.query_one("SELECT EXISTS(
+        SELECT 1 FROM execution.semantic_pnf_consumer_horizon_work_queue w
+        JOIN execution.semantic_pnf_demand d ON d.demand_id=w.demand_id
+        JOIN execution.semantic_pnf_region r ON r.region_id=d.source_region_id
+        WHERE r.run_id=$1 AND r.document_id=$2 AND w.consumer_ref=$3
+          AND w.query_ref=$4 AND w.policy_ref=$5 AND w.demand_id<>$6)",
+        &[&run,&doc,&consumer,query,policy,&demand])?.get(0);
+    if foreign{return Err(NativeNumericAuditError::ForeignSource);}
+    tx.execute("INSERT INTO execution.semantic_pnf_consumer_horizon_work_queue
+        (demand_id,consumer_ref,query_ref,policy_ref,horizon)
+        VALUES($1,$2,$3,$4,3) ON CONFLICT DO NOTHING",
+        &[&demand,&consumer,query,policy])?;
+    if inputs_changed {
+        tx.execute("UPDATE execution.semantic_pnf_consumer_horizon_work_queue
+            SET work_state=1,completed_at=NULL WHERE demand_id=$1 AND consumer_ref=$2
+            AND query_ref=$3 AND policy_ref=$4 AND horizon=3 AND work_state<>1",
+            &[&demand,&consumer,query,policy])?;
+    }
+    // Register exact positive source-coordinate dependencies for existing
+    // evidence and typed candidate objects. The original m139/163 triggers
+    // own subsequent evidence wakeups. The separate interval registration
+    // covers previously absent source/family observations.
+    tx.execute("INSERT INTO execution.semantic_pnf_consumer_reverse_dependency
+        (source_kind,source_id,demand_id,consumer_ref,query_ref,policy_ref,minimum_horizon,dependency_kind)
+        SELECT c.kind,c.id,$1,$2,$3,$4,3,1 FROM (
+          SELECT 2::smallint AS kind,d.source_object_id AS id FROM execution.semantic_pnf_demand d WHERE d.demand_id=$1
+          UNION SELECT 5::smallint,d.source_interface_id FROM execution.semantic_pnf_demand d WHERE d.demand_id=$1
+          UNION SELECT 4::smallint,d.source_region_id FROM execution.semantic_pnf_demand d WHERE d.demand_id=$1
+          UNION SELECT 2::smallint,u.target_id FROM execution.semantic_pnf_candidate_universe u WHERE u.demand_id=$1 AND u.target_kind=1
+          UNION SELECT 1::smallint,s.token_id FROM execution.semantic_pnf_candidate_universe u
+            JOIN execution.semantic_pnf_object_token_support s ON s.object_id=u.target_id
+            WHERE u.demand_id=$1 AND u.target_kind=1
+          UNION SELECT 6::smallint,e.evidence_id FROM execution.semantic_pnf_candidate_evidence e WHERE e.demand_id=$1 AND e.horizon=3
+          UNION SELECT 4::smallint,e.source_region_id FROM execution.semantic_pnf_candidate_evidence e WHERE e.demand_id=$1 AND e.horizon=3
+          UNION SELECT 5::smallint,e.source_interface_id FROM execution.semantic_pnf_candidate_evidence e WHERE e.demand_id=$1 AND e.horizon=3
+        ) c WHERE c.id IS NOT NULL ON CONFLICT DO NOTHING",&[&demand,&consumer,query,policy])?;
+    let ready=|db:&mut postgres::Transaction<'_>,horizon:i16|->Result<bool,NativeNumericAuditError>{
+        Ok(db.query_one("SELECT EXISTS(SELECT 1 FROM execution.semantic_pnf_consumer_horizon_work_queue
+          WHERE demand_id=$1 AND consumer_ref=$2 AND query_ref=$3 AND policy_ref=$4
+            AND horizon=$5 AND work_state=1)",&[&demand,&consumer,query,policy,&horizon])?.get(0))
+    };
+    let h3_ready=ready(tx,3)?;
+    let mut h3_processed=false;
+    // H3 owner work is the already materialized bounded represented slice.
+    // Nonmonotone support changes need original evidence withdrawal first;
+    // m110's insert-only H6 cannot silently retire old positive evidence.
+    if represented_slice_drained && !nonmonotone && h3_ready {
+        tx.query_one("SELECT execution.advance_numeric_pnf_horizon_work_for_consumer($1,$2,3::smallint,$3,$4,$5)",
+            &[&run,&doc,&consumer,query,policy])?;
+        h3_processed=!ready(tx,3)?;
+        if !h3_processed{return Err(NativeNumericAuditError::AdmissionProbeInvariant);}
+    }
+    let h6_ready=ready(tx,6)?;
+    let mut h6_processed=false;let mut h6_evidence_inserted=0i64;let mut h6_invocations=0usize;
+    if represented_slice_drained&&!nonmonotone&&!ready(tx,3)?&&h6_ready{
+        // Do not invoke the document-wide preference rebuild in process_h6.
+        // Use the actual scoped evidence owner and original scoped advance.
+        // Existing H6 evidence remains append-only, preserving signed/zero H3.
+        h6_invocations=1;
+        h6_evidence_inserted=tx.query_one("SELECT execution.refresh_numeric_pnf_h6_discourse_temporal_evidence_for_consumer($1,$2,$3,$4,$5,FALSE)",
+            &[&run,&doc,&consumer,query,policy])?.get(0);
+        tx.query_one("SELECT execution.advance_numeric_pnf_horizon_work_for_consumer($1,$2,6::smallint,$3,$4,$5)",
+            &[&run,&doc,&consumer,query,policy])?;
+        h6_processed=!ready(tx,6)?;
+        if !h6_processed{return Err(NativeNumericAuditError::AdmissionProbeInvariant);}
+    }
+    // A newly inserted H6 atom may legitimately wake an H3 dependency via
+    // the original trigger. Leave that work ready; never acknowledge a wake
+    // that arrived after its original processing pass.
+    Ok(NativeConsumerHorizonWorkReceipt{
+        consumer_ref:consumer.into(),query_ref:query.clone(),policy_ref:policy.clone(),
+        h3_ready_before:h3_ready,h3_processed,h6_ready_before:h6_ready,h6_processed,
+        h6_producer_invocations:h6_invocations,h6_evidence_inserted,
+        h9_residual_ready:ready(tx,9)?,represented_slice_drained,nonmonotone_input_residual:nonmonotone,
+        typed_coverage_paid:false,external_execution_performed:false,
+    })
+}
 
 #[derive(Debug,Clone,Serialize)]
 pub struct NativeH9DemandReadiness {
@@ -3604,6 +3685,7 @@ pub struct NativeNumericCandidateTransportReceipt {
     pub nominal_head_token_supports_inserted:i64,
     pub nominal_heads_remaining:i64,
     pub original_h6_evidence_inserted:i64,
+    pub consumer_horizon_work:NativeConsumerHorizonWorkReceipt,
     pub morphology_observations_inserted:usize,
     pub candidates_without_morphology_observation:i64,
     pub morphology_head_unobservable_count:usize,
@@ -4038,14 +4120,6 @@ pub fn transport_original_numeric_candidates_for_source_answer_with_partition(
         refine_original_numeric_morphology(&mut tx,demand,focus_token,numeric_run_ref,&answer.source_document_ref,budget)?;
     let native_binding_bridge=materialize_native_binding_bridge(&mut tx,numeric_run_ref,
         &answer.source_document_ref,&answer.source_content_sha256,focus_token,demand,&original_mention_binding_campaign)?;
-    let original_h6_evidence_inserted=run_original_h6_producer(&mut tx,demand,numeric_run_ref,&answer.source_document_ref)?;
-    let (original_horizon_observations,original_document_identity_observations)=
-        observe_original_resolution_fibre(&mut tx,demand,numeric_run_ref,&answer.source_document_ref)?;
-    let document_identity_fibre=project_original_identity_fibre(&original_horizon_observations,&original_document_identity_observations,open);
-    let lean_typed_evidence=produce_lean_typed_evidence(&mut tx,answer,numeric_run_ref,demand,source,
-        &native_binding_bridge.snapshot_ref,open,&original_horizon_observations)?;
-    let original_cross_resource_needs=observe_original_cross_resource_needs(&mut tx,demand,numeric_run_ref,&answer.source_document_ref)?;
-    let original_h9_readiness=observe_native_h9_readiness(&mut tx,demand,numeric_run_ref,&answer.source_document_ref)?;
     let structural_binding=observe_native_binding_structure(&mut tx,demand,focus_token,
         numeric_run_ref,&answer.source_document_ref,&answer.source_content_sha256)?;
     // Only run the document-scoped original admission probe after bounded
@@ -4058,6 +4132,27 @@ pub fn transport_original_numeric_candidates_for_source_answer_with_partition(
         let (observed,governed)=probe_original_governed_identity(&mut tx,numeric_run_ref,&answer.source_document_ref,demand,answer)?;
         (Some(observed),Some(governed))
     }else{(None,None)};
+    let represented_slice_drained=remaining==0&&nominal_heads_remaining==0
+        &&candidates_without_morphology_observation==0
+        &&original_mention_binding_campaign.spans_without_exact_objects==0
+        &&original_mention_binding_campaign.prefix_uncovered_nonwhitespace==0;
+    let support_delta=original_parser_identity_producer.as_ref().and_then(|p|p.support_index.as_ref());
+    let nonmonotone=support_delta.is_some_and(|p|p.withdrawn_rows>0||p.changed_rows>0&&p.hot_symbol_scope_changed);
+    let inputs_changed=source_partition_wake.affected_queue_rows>0
+        ||nominal_head_objects_inserted>0||nominal_head_token_supports_inserted>0||!ids.is_empty()
+        ||morphology_observations_inserted>0||original_mention_binding_campaign.newly_materialized_span_objects>0
+        ||native_binding_bridge.original_index_candidate_evidence_inserted>0
+        ||support_delta.is_some_and(|p|p.journaled_change_rows>0);
+    let consumer_horizon_work=process_original_native_consumer_horizons(&mut tx,demand,numeric_run_ref,
+        answer,represented_slice_drained,inputs_changed,nonmonotone)?;
+    let original_h6_evidence_inserted=consumer_horizon_work.h6_evidence_inserted;
+    let (original_horizon_observations,original_document_identity_observations)=
+        observe_original_resolution_fibre(&mut tx,demand,numeric_run_ref,&answer.source_document_ref)?;
+    let document_identity_fibre=project_original_identity_fibre(&original_horizon_observations,&original_document_identity_observations,open);
+    let lean_typed_evidence=produce_lean_typed_evidence(&mut tx,answer,numeric_run_ref,demand,source,
+        &native_binding_bridge.snapshot_ref,open,&original_horizon_observations)?;
+    let original_cross_resource_needs=observe_original_cross_resource_needs(&mut tx,demand,numeric_run_ref,&answer.source_document_ref)?;
+    let original_h9_readiness=observe_native_h9_readiness(&mut tx,demand,numeric_run_ref,&answer.source_document_ref)?;
     let parser_identity_refresh_invocations=original_parser_identity_producer.as_ref()
         .map_or(0,|p|if p.bounded_identity_parity.is_some(){3}else{1});
     tx.commit()?;
@@ -4067,7 +4162,7 @@ pub fn transport_original_numeric_candidates_for_source_answer_with_partition(
         inserted_candidate_ids:ids,remaining_untransported_count:remaining,
         represented_candidate_count:count,outside_model_possible:open,
         complete_typed_coverage_paid:false,
-        nominal_head_objects_inserted,nominal_head_token_supports_inserted,nominal_heads_remaining,original_h6_evidence_inserted,
+        nominal_head_objects_inserted,nominal_head_token_supports_inserted,nominal_heads_remaining,original_h6_evidence_inserted,consumer_horizon_work,
         morphology_observations_inserted,candidates_without_morphology_observation,morphology_head_unobservable_count,
         original_horizon_observations,original_document_identity_observations,
         original_parser_identity_producer,parser_identity_refresh_invocations,lean_typed_evidence,source_partition_wake,document_identity_fibre,original_cross_resource_needs,
