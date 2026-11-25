@@ -16,7 +16,7 @@ use crate::{
     NumericToken,NumericOperatorLexicon,NumericSentenceLease,
     NumericMdlWeights,NativeSentenceClosure,
 };
-use crate::numeric_pnf_parser_store::{intern_all,NumericParserStoreError};
+use crate::numeric_pnf_parser_store::{intern_all,NumericParserStoreError,checked_native_parser_sentence_refs};
 use crate::numeric_pnf_operator::NumericOperatorError;
 use crate::numeric_pnf_sql::NumericSqlError;
 use crate::numeric_pnf_parser_plan::NumericParserPlanError;
@@ -91,6 +91,10 @@ pub struct NumericPipelineReceipt {
     pub entity_occurrence_token_supports_inserted:i64,
     pub frontier_jobs_completed:usize,
     pub frontier_jobs_remaining:Option<i64>,
+    pub exact_parser_sentence_receipts:bool,
+    pub already_verified_required_refs:Vec<String>,
+    pub revalidated_existing_sentence_refs:Vec<String>,
+    pub original_observation_scan_performed:bool,
     pub bounded_replay_supported:bool,
     pub all_original_typed_demands_covered:bool,
     pub unique_document_identity_paid:bool,
@@ -549,7 +553,10 @@ fn run_native_numeric_scoped_slice(
     }
     let required_sentence_refs=plan.sentences.iter().filter(|s|required_prefix_region(s.start_char,focus))
         .map(|s|s.sentence_ref.clone()).collect::<Vec<_>>();
-    let already_published_required=required_sentence_refs.iter().filter(|s|known.contains(*s)).cloned().collect::<Vec<_>>();
+    let verified=checked_native_parser_sentence_refs(&mut bootstrap_db,&plan)?;
+    if !verified.is_subset(&known){return Err(NumericPipelineError::ForeignRun);}
+    let already_published_required=required_sentence_refs.iter().filter(|s|verified.contains(*s)).cloned().collect::<Vec<_>>();
+    let already_verified_required_refs=already_published_required.clone();
     let (missing_required_sentence_refs,lean_workset_checked)=consumer_prefix_workset(
         &plan.original_source_sha256,&run_ref,&required_sentence_refs,&already_published_required,focus.is_some())?;
     let missing_required=missing_required_sentence_refs.iter().cloned().collect::<BTreeSet<_>>();
@@ -568,6 +575,8 @@ fn run_native_numeric_scoped_slice(
         selected.push(sentence.clone());
     }
     let selected_sentence_refs=selected.iter().map(|s|s.sentence_ref.clone()).collect::<Vec<_>>();
+    let revalidated_existing_sentence_refs=selected_sentence_refs.iter().filter(|s|known.contains(*s)).cloned().collect::<Vec<_>>();
+    let newly_registered_sentence_refs=selected_sentence_refs.iter().filter(|s|!known.contains(*s)).cloned().collect::<Vec<_>>();
     let just_inserted=if selected.is_empty(){
         0
     }else{
@@ -600,8 +609,12 @@ fn run_native_numeric_scoped_slice(
     if !current.is_subset(&expected) ||current.len()>expected.len(){
         return Err(NumericPipelineError::ForeignRun);
     }
-    let pending_parser_sentences=plan.sentences.iter().filter(|s|required_prefix_region(s.start_char,focus)&&!current.contains(&s.sentence_ref)).count();
-    let unrelated_pending_parser_sentences=expected.len()-current.len()-pending_parser_sentences;
+    let verified_after=checked_native_parser_sentence_refs(&mut bootstrap_db,&plan)?;
+    if !verified_after.is_subset(&current){return Err(NumericPipelineError::ForeignRun);}
+    let pending_parser_sentences=plan.sentences.iter().filter(|s|required_prefix_region(s.start_char,focus)&&!verified_after.contains(&s.sentence_ref)).count();
+    let physical_missing_required=required_sentence_refs.iter().filter(|s|!current.contains(*s)).count();
+    let unrelated_pending_parser_sentences=expected.len()-current.len()-physical_missing_required;
+    let exact_parser_sentence_receipts=pending_parser_sentences==0;
     let lex=lexicon(numeric_database_url)?;
     // The number staged in this invocation is a receipt fact, not a
     // claim about global source coverage or completed numeric work.
@@ -690,12 +703,13 @@ fn run_native_numeric_scoped_slice(
         original_observations_loaded:original.original_token_count,
         required_sentence_refs,lean_workset_checked,missing_required_sentence_refs,
         already_published_required_refs:already_published_required,
-        newly_registered_sentence_refs:selected_sentence_refs,closed_sentence_region_starts,
+        newly_registered_sentence_refs,closed_sentence_region_starts,
         sentence_jobs_completed:completed,sentence_jobs_remaining:remaining as usize,
         entity_occurrence_objects_inserted:entity_objects,
         entity_occurrence_token_supports_inserted:entity_supports,
         frontier_jobs_completed:frontier_completed,frontier_jobs_remaining:frontier_remaining,
-        bounded_replay_supported:false,all_original_typed_demands_covered:false,
+        exact_parser_sentence_receipts,already_verified_required_refs,revalidated_existing_sentence_refs,
+        original_observation_scan_performed:true,bounded_replay_supported:false,all_original_typed_demands_covered:false,
         unique_document_identity_paid:false,level_three_identity_substitution_paid:false,
         external_qid_paid:false,historical_truth_paid:false,residuals,
     })
