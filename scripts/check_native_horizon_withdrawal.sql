@@ -49,18 +49,22 @@ BEGIN
         RAISE EXCEPTION 'unchecked or undrained execution cleared authority debt';
     END IF;
     IF execution.slr_native_candidate_only_authority_absent(d) THEN
-        IF NOT execution.slr_reconcile_native_candidate_only_debt(d,true,true)
-           OR NOT execution.slr_native_current_authority_usable(d) THEN
+        IF NOT execution.slr_reconcile_native_candidate_only_debt(d,true,true) THEN
             RAISE EXCEPTION 'checked authority-free represented slice remained blocked';
+        END IF;
+        IF NOT execution.slr_native_current_authority_usable(d) THEN
+            RAISE EXCEPTION 'settled candidate-only debt still suspended execution';
         END IF;
         IF execution.slr_reconcile_native_candidate_only_debt(d,true,true)
            OR (SELECT count(*) FROM execution.slr_native_candidate_reconciliation_history WHERE demand_id=d)<>debt_history+1 THEN
             RAISE EXCEPTION 'candidate reconciliation was not idempotent';
         END IF;
     ELSE
-        IF execution.slr_reconcile_native_candidate_only_debt(d,true,true)
-           OR execution.slr_native_current_authority_usable(d) THEN
+        IF execution.slr_reconcile_native_candidate_only_debt(d,true,true) THEN
             RAISE EXCEPTION 'candidate-only reconciliation consumed original authority';
+        END IF;
+        IF execution.slr_native_current_authority_usable(d) THEN
+            RAISE EXCEPTION 'original authority debt was no longer suspended';
         END IF;
     END IF;
     IF represented<>(SELECT count(*) FROM execution.semantic_pnf_candidate_universe WHERE demand_id=d)
