@@ -704,7 +704,7 @@ fn read_focus_owner_binding(url:&str,run:&str,answer:&NativeSourceLocalAnswer)
             "audit":coordinates,"numeric_fence_sha256":fence_digest});
         let digest=hex(&Sha256::digest(serde_json::to_vec(&payload).map_err(|_|NativeNumericAuditError::ForeignSource)?));
         let expected=serde_json::json!({"schema":"slr-current-numeric-focus-owner-proof:v1",
-            "binding_sha256":digest,"coverage_and_identity_theorem":"Wikidata.GwbCoreferenceFormalRepair.unique_source_local_referent",
+            "binding_sha256":digest,"coverage_and_identity_theorem":"Wikidata.Slr.GwbCoreferenceFormalRepair.current_focus_owner_proof_pays_exact_scope",
             "proof_kind":"exact_current_scoped_coverage_and_governed_identity"});
         // Locator is routing only. Authentication is exclusively against
         // the existing independently issued referee row, never this input.
@@ -3570,7 +3570,7 @@ fn assemble_original_relation_packet(doc:&str,sha:&str,revision:&str,parser_run:
         return Err(NativeNumericAuditError::ForeignSource);
     }
     for (i,relation) in relations.iter().enumerate(){
-        if relation["id"]!=format!("e{}",i+1){return Err(NativeNumericAuditError::ForeignSource);}
+        if relation["id"].as_str()!=Some(format!("e{}",i+1).as_str()){return Err(NativeNumericAuditError::ForeignSource);}
         for role in relation["roles"].as_array().ok_or(NativeNumericAuditError::ForeignSource)?{
             if role.get("atom").and_then(|v|v.as_str()).is_some_and(|id|!atoms.contains_key(id)){
                 return Err(NativeNumericAuditError::ForeignSource);
@@ -5794,6 +5794,52 @@ pub fn transport_original_numeric_candidates_for_source_answer_with_partition(
 #[cfg(test)]
 mod tests{
     use super::*;
+    #[test]
+    fn historical_singleton_without_current_projection_is_not_identity(){
+        let h=NativeNumericHorizonObservation{target_kind:1,target_id:7,horizon:3,
+            signed_residual:0,phase:0,evidence_count:1,active:true,
+            execution_residual:false,refuted:false,strict_preference:false};
+        let mut c=NativeNumericDocumentIdentityObservation{object_id:7,
+            admitted_entity_ids:vec![8],admitted_witness_ids:vec![9],current_projection_usable:false};
+        let blocked=project_original_identity_fibre(&[h.clone()],&[c.clone()],false);
+        assert!(blocked.admitted_classes.is_empty());
+        assert_eq!(blocked.unresolved_keys,vec![(1,7)]);
+        c.current_projection_usable=true;
+        let current=project_original_identity_fibre(&[h],&[c],false);
+        assert_eq!(current.admitted_classes.get(&8),Some(&vec![7]));
+        assert!(current.unresolved_keys.is_empty());
+    }
+
+    #[test]
+    fn repeated_relation_role_keeps_distinct_factors_and_last_explicit_constraint(){
+        let roles=vec![serde_json::json!({"role":"item","atom":"a1"}),
+            serde_json::json!({"role":"item","atom":"a2"})];
+        let mut cross=original_relation_reference("doc","grammar",1,"conjunction",roles,
+            BTreeMap::from([("a1".into(),10),("a2".into(),11)])).unwrap();
+        cross.atom_span_refs=BTreeMap::from([("a1".into(),"span1".into()),("a2".into(),"span2".into())]);
+        cross.atom_payloads=BTreeMap::from([("a1".into(),serde_json::json!({"id":"a1","span":[0,1],"text":"a"})),
+            ("a2".into(),serde_json::json!({"id":"a2","span":[2,3],"text":"b"}))]);
+        let mut factors=Vec::new();let mut constraints=BTreeMap::new();
+        original_reduction_projection("doc",&cross,"grammar","semantic.coordination",
+            "semantic.coordination_candidate",&[],&mut factors,&mut constraints).unwrap();
+        assert_eq!(factors.len(),3);
+        assert_ne!(factors[1]["factor_ref"],factors[2]["factor_ref"]);
+        let key=format!("constraint:{}:item",cross.reconstructed_root_factor_ref);
+        assert_eq!(constraints[&key]["payload"]["atom_span_ref"],"span2");
+    }
+
+    #[test]
+    fn question_mode_is_relation_observation_not_composition_host_or_content(){
+        let cross=original_relation_reference("doc","grammar",1,"composition",
+            vec![serde_json::json!({"role":"mode","value":"question"})],BTreeMap::new()).unwrap();
+        let mut factors=Vec::new();let mut constraints=BTreeMap::new();
+        original_reduction_projection("doc",&cross,"grammar","semantic.embedded_proposition",
+            "semantic.composition_candidate",&["composition_scope_unresolved"],&mut factors,&mut constraints).unwrap();
+        assert_eq!(factors.len(),1);
+        assert_eq!(factors[0]["metadata"]["bindings"],serde_json::json!([]));
+        assert_eq!(factors[0]["closure_state"],"requires_external_resolution");
+    }
+
     #[test]
     fn identity_delta_distinguishes_payload_change_from_new_and_withdrawn_keys(){
         let kept=name_key(10,20,1,1);

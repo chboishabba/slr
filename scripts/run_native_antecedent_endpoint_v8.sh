@@ -73,6 +73,28 @@ done
 export SLR_NATIVE_IDENTITY_REPLAY_MODE=0
 export SLR_NATIVE_ENDPOINT_REPLAY_MODE=0
 capture "$checkpoint/cold.json" "${cli[@]}" endpoint "$review" "$run" --commit
+# Closed original authority and candidate-only execution are different
+# branches. Never index nonexistent binding passes or require a closed
+# answer to hit a candidate-only cache. Publish the actual separate gate.
+if jq -e '.original_focus_certificate != null' "$checkpoint/cold.json" >/dev/null; then
+  jq '{
+    schema:"slr-native-antecedent-endpoint-v8",
+    campaign:"closed_original_authority",
+    candidate_execution_acceptance_paid:false,
+    current_owner_proof_authenticated:(.original_focus_certificate.independent_current_owner_authenticated==true),
+    governed_focus_authority_paid:(.governed_identity_paid==true and .level_three_paid==true and
+      .original_focus_certificate.independent_current_owner_authenticated==true and
+      .original_focus_certificate.rollback_readback_exact==true),
+    full_relation_parity_paid:(.full_relation_parity_paid==true),
+    integrated_acceptance_paid:false,
+    original_focus_certificate
+  }' "$checkpoint/cold.json" > "$checkpoint/acceptance.json.tmp"
+  mv "$checkpoint/acceptance.json.tmp" "$checkpoint/acceptance.json"
+  jq 'del(.original_focus_certificate)' "$checkpoint/acceptance.json"
+  # A governed readback does not replace the independent candidate and
+  # whole-relation differential campaigns.
+  exit 3
+fi
 # Actual represented H3 projection negative control; no fabricated fixture,
 # no persisted evidence, no authority write. This is not owner revalidation.
 command -v psql >/dev/null
@@ -145,10 +167,13 @@ jq -s '
    identity_input_zero_refresh_paid:(try (.[1]|identity_replay_gate) catch false),
    warm_zero_semantic_work_paid:(try (.[1]|warm_gate) catch false),
    semantic_endpoint_paid:(try (.[1]|semantic_gate) catch false),
+   supplied_prefix_relation_parity_paid:(.[0].binding_passes[-1].native_binding_bridge.original_relation_packet.complete_supplied_prefix_relation_parity==true),
+   source_parser_leaf_scope_used:(.[1].endpoint_execution_replay.source_parser_leaf_scope_used==true),
    external_qid_paid:false,historical_truth_paid:false}
-  | . + {integrated_acceptance_paid:(.candidate_reference_parity_paid and
-      .exact_replayed_source_answer and .exact_replayed_persisted_fibre and .warm_zero_semantic_work_paid and .semantic_endpoint_paid)}
+  | . + {candidate_execution_acceptance_paid:(.candidate_reference_parity_paid and
+      .exact_replayed_source_answer and .exact_replayed_persisted_fibre and .warm_zero_semantic_work_paid)}
+  | . + {integrated_acceptance_paid:(.candidate_execution_acceptance_paid and .semantic_endpoint_paid)}
 ' "$checkpoint/cold.json" "$checkpoint/replay.json" > "$checkpoint/acceptance.json.tmp"
 mv "$checkpoint/acceptance.json.tmp" "$checkpoint/acceptance.json"
-jq '{schema,candidate_reference_parity_paid,replay_candidate_reference_parity_observed,exact_replayed_source_answer,exact_replayed_persisted_fibre,identity_input_zero_refresh_paid,warm_zero_semantic_work_paid,semantic_endpoint_paid,integrated_acceptance_paid}' "$checkpoint/acceptance.json"
+jq '{schema,candidate_reference_parity_paid,replay_candidate_reference_parity_observed,exact_replayed_source_answer,exact_replayed_persisted_fibre,identity_input_zero_refresh_paid,warm_zero_semantic_work_paid,candidate_execution_acceptance_paid,supplied_prefix_relation_parity_paid,source_parser_leaf_scope_used,semantic_endpoint_paid,integrated_acceptance_paid}' "$checkpoint/acceptance.json"
 jq -e '.integrated_acceptance_paid==true' "$checkpoint/acceptance.json" >/dev/null
