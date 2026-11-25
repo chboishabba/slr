@@ -95,6 +95,46 @@ BEGIN
     CREATE INDEX ON slr_identity_family(family_lemma_symbol_id,anchor_object_id);
     ANALYZE slr_identity_family;
 
+    -- Exact indexed family dependency carrier. Include zero-member families,
+    -- unanchored mentions, and embedded PERSON tokens: these are negative/
+    -- unresolved dependencies, not absent work. Numeric IDs are local lookup
+    -- coordinates, not independent semantic identity.
+    CREATE TEMP TABLE slr_identity_mention_scope ON COMMIT DROP AS
+    WITH family_cardinality AS MATERIALIZED (
+        SELECT family_lemma_symbol_id,count(*)::BIGINT AS full_count
+          FROM slr_identity_family GROUP BY family_lemma_symbol_id
+    ), family_anchor_cardinality AS MATERIALIZED (
+        SELECT family_lemma_symbol_id,anchor_object_id,count(*)::BIGINT AS anchor_count
+          FROM slr_identity_family GROUP BY family_lemma_symbol_id,anchor_object_id
+    )
+    SELECT mention.token_id,mention.sentence_ref,mention.start_char,mention.end_char,
+           mention.lemma_symbol_id,mention_anchor.object_id AS source_object_id,
+           sentence.sentence_id,COALESCE(cardinality.full_count,0)::BIGINT AS full_count,
+           EXISTS (SELECT 1 FROM slr_identity_person p
+             WHERE p.sentence_ref=mention.sentence_ref AND p.start_char<=mention.start_char
+               AND p.end_char>=mention.end_char) AS embedded_in_person,
+           CASE WHEN mention_anchor.object_id IS NULL THEN NULL
+             ELSE COALESCE(cardinality.full_count,0) - COALESCE(ac.anchor_count,0) -
+                 (SELECT count(*) FROM slr_identity_family excluded
+                   WHERE excluded.family_lemma_symbol_id=mention.lemma_symbol_id
+                     AND excluded.sentence_ref=mention.sentence_ref
+                     AND excluded.start_char<=mention.start_char
+                     AND excluded.end_char>=mention.end_char
+                     AND excluded.anchor_object_id<>mention_anchor.object_id)
+           END AS eligible_count
+      FROM slr_identity_token mention
+      CROSS JOIN slr_identity_constant AS constant
+      JOIN slr_identity_sentence sentence ON sentence.sentence_ref=mention.sentence_ref
+      LEFT JOIN slr_identity_anchor mention_anchor ON mention_anchor.token_id=mention.token_id
+      LEFT JOIN family_cardinality cardinality ON cardinality.family_lemma_symbol_id=mention.lemma_symbol_id
+      LEFT JOIN family_anchor_cardinality ac ON ac.family_lemma_symbol_id=mention.lemma_symbol_id
+           AND ac.anchor_object_id=mention_anchor.object_id
+     WHERE mention.pos_symbol_id=constant.propn_id;
+    CREATE UNIQUE INDEX ON slr_identity_mention_scope(token_id);
+    CREATE INDEX ON slr_identity_mention_scope(lemma_symbol_id,token_id);
+    CREATE INDEX ON slr_identity_mention_scope(sentence_id,token_id);
+    ANALYZE slr_identity_mention_scope;
+
     WITH appos AS (
         SELECT source_token.token_id AS parser_source_token_id,
                target_token.token_id AS parser_target_token_id,
@@ -137,34 +177,11 @@ BEGIN
                'parser-appos:'||parser_source_token_id::TEXT||':'||parser_target_token_id::TEXT AS evidence_ref,
                1::SMALLINT AS candidate_count
           FROM appos
-    ), family_cardinality AS MATERIALIZED (
-        SELECT family_lemma_symbol_id,count(*)::BIGINT AS full_count
-          FROM slr_identity_family GROUP BY family_lemma_symbol_id
-    ), family_anchor_cardinality AS MATERIALIZED (
-        SELECT family_lemma_symbol_id,anchor_object_id,count(*)::BIGINT AS anchor_count
-          FROM slr_identity_family GROUP BY family_lemma_symbol_id,anchor_object_id
     ), proper_name_mention AS MATERIALIZED (
-        SELECT mention.token_id,mention.sentence_ref,mention.start_char,mention.end_char,
-               mention.lemma_symbol_id,mention_anchor.object_id AS source_object_id,
-               sentence.sentence_id,cardinality.full_count,
-               -- Inclusion/exclusion: remove same-object targets, then
-               -- same-span targets NOT already removed. Exact eligible count
-               -- without constructing the mention x family pair relation.
-               cardinality.full_count - COALESCE(ac.anchor_count,0) -
-                 (SELECT count(*) FROM slr_identity_family AS excluded
-                   WHERE excluded.family_lemma_symbol_id=mention.lemma_symbol_id
-                     AND excluded.sentence_ref=mention.sentence_ref
-                     AND excluded.start_char<=mention.start_char
-                     AND excluded.end_char>=mention.end_char
-                     AND excluded.anchor_object_id<>mention_anchor.object_id) AS eligible_count
-          FROM slr_identity_token AS mention
-          CROSS JOIN slr_identity_constant AS constant
-          JOIN slr_identity_sentence AS sentence ON sentence.sentence_ref=mention.sentence_ref
-          JOIN slr_identity_anchor AS mention_anchor ON mention_anchor.token_id=mention.token_id
-          JOIN family_cardinality AS cardinality ON cardinality.family_lemma_symbol_id=mention.lemma_symbol_id
-          LEFT JOIN family_anchor_cardinality ac ON ac.family_lemma_symbol_id=mention.lemma_symbol_id
-               AND ac.anchor_object_id=mention_anchor.object_id
-         WHERE mention.pos_symbol_id=propn_id
+        -- Legacy m090 parity mode only. Golden m085/Agda permission must
+        -- independently be checked for embedded_in_person before activation.
+        SELECT * FROM slr_identity_mention_scope
+         WHERE source_object_id IS NOT NULL AND full_count>0
     ), proper_name_evidence AS (
         SELECT mention.source_object_id,person.anchor_object_id AS target_object_id,
                3::SMALLINT AS witness_kind,mention.token_id AS source_token_id,
