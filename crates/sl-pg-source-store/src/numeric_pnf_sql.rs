@@ -108,6 +108,7 @@ pub fn publish_original_numeric_sentence(
     let mut db=Client::connect(database_url,NoTls)?;
     let mut tx=db.transaction()?;
     tx.batch_execute("SET LOCAL statement_timeout='90000ms'")?;
+    tx.query_one("SELECT pg_advisory_xact_lock(hashtext($1),hashtext($2))", &[&numeric_run_ref,&manifest.document_ref])?;
     let source=tx.query(
         "SELECT content_sha256,byte_count,char_count,encoding_ref
          FROM execution.semantic_parser_source
