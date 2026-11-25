@@ -128,6 +128,14 @@ pub fn run(args:&[String])->Result<(),String>{
                 publication.push(step);
                 if done{break;}
             }
+            if !publication.last().is_some_and(|p|p.exact_parser_sentence_receipts&&p.sentence_jobs_remaining==0){
+                return print_json(&serde_json::json!({
+                    "schema":"slr-native-antecedent-endpoint-v1","prefix_scope":scope,
+                    "numeric_publication":publication,"outcome":"bounded_original_numeric_publication_pending",
+                    "governed_identity_paid":false,"level_three_paid":false,"external_qid_paid":false,
+                    "historical_truth_paid":false
+                }));
+            }
             let inspection=inspect_native_antecedent_review(&config,review).map_err(|e|e.to_string())?;
             let frontier=native_antecedent_frontier(&config,review,parser_run).map_err(|e|e.to_string())?;
             let answer=compile_native_source_local_answer(&inspection,&frontier).map_err(|e|e.to_string())?;
