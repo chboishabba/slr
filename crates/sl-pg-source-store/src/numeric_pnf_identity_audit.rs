@@ -1268,15 +1268,17 @@ pub struct NativeH6ValidityReceipt {
 }
 fn ensure_native_h6_current_authority(tx:&mut postgres::Transaction<'_>,demand:i64)
     ->Result<(),NativeNumericAuditError>{
-    let installed:bool=tx.query_one("SELECT to_regprocedure('execution.slr_wake_native_validity_delta()') IS NOT NULL",&[])?.get(0);
+    let installed:bool=tx.query_one("SELECT EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='execution' AND p.proname='slr_wake_native_validity_delta' AND p.pronargs=0 AND position('slr_native_h3_authority_debt' in p.prosrc)>0)",&[])?.get(0);
     if !installed{
         tx.query_one("SELECT pg_advisory_xact_lock(hashtext('slr-native-h6-current:v1'))",&[])?;
-        let ready:bool=tx.query_one("SELECT to_regprocedure('execution.slr_wake_native_validity_delta()') IS NOT NULL",&[])?.get(0);
+        let ready:bool=tx.query_one("SELECT EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='execution' AND p.proname='slr_wake_native_validity_delta' AND p.pronargs=0 AND position('slr_native_h3_authority_debt' in p.prosrc)>0)",&[])?.get(0);
         if !ready{tx.batch_execute(include_str!("numeric_pnf_h6_current_authority.sql"))?;}
     }
     let intact:bool=tx.query_one("SELECT EXISTS(SELECT 1 FROM execution.slr_native_h6_current_contract WHERE contract_ref='slr-native-h6-current:v1')
       AND EXISTS(SELECT 1 FROM execution.slr_native_h3_current_contract WHERE contract_ref='slr-native-h3-current:v1')
-      AND EXISTS(SELECT 1 FROM execution.slr_native_current_authority_contract WHERE contract_ref='slr-native-current-authority:v3')
+      AND EXISTS(SELECT 1 FROM execution.slr_native_current_authority_contract WHERE contract_ref='slr-native-current-authority:v4')
+      AND position('slr_native_h3_authority_debt' in pg_get_functiondef(
+         'execution.slr_wake_native_validity_delta()'::regprocedure))>0
       AND (SELECT count(*)=2 FROM pg_trigger t WHERE NOT t.tgisinternal AND t.tgenabled IN ('O','A')
          AND t.tgfoid='execution.slr_wake_native_validity_delta()'::regprocedure
          AND t.tgnewtable='inserted_validity'
