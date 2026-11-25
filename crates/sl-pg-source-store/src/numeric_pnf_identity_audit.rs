@@ -1511,249 +1511,349 @@ fn original_mention_binding_campaign(
     })
 }
 
-/// Materialize the native parser coordinates required by the installed SQL
-/// binder.  This is deliberately a candidate-only bridge: it creates no
-/// identity witness, admission, or Level-3 derivation.  The native pipeline
-/// already owns the objects and token supports; this merely gives the legacy
-/// binder its source-bound factor/anchor view.
-fn materialize_native_binding_anchors(
-    tx: &mut postgres::Transaction<'_>,
-    run_ref: &str,
-    doc: &str,
-    demand: i64,
-    focus_token: i64,
-) -> Result<usize, NativeNumericAuditError> {
-    let focus = tx.query_one(
-        "SELECT t.local_token_ordinal,t.sentence_id,s.local_sentence_ordinal,
-                t.start_char,t.end_char,pos.symbol_text,dep.symbol_text
-         FROM execution.semantic_parser_token t
-         JOIN execution.semantic_parser_sentence s ON s.sentence_id=t.sentence_id
-         JOIN execution.semantic_symbol pos ON pos.symbol_id=t.pos_symbol_id
-         JOIN execution.semantic_symbol dep ON dep.symbol_id=t.dependency_symbol_id
-         WHERE t.token_id=$1 AND t.run_ref=$2 AND t.document_ref=$3
-           AND t.representation_version=2",
-        &[&focus_token, &run_ref, &doc],
-    )?;
-    let focus_local: i32 = focus.get(0);
-    let focus_sentence_id: i64 = focus.get(1);
-    let focus_sentence: i32 = focus.get(2);
-    let focus_start: i64 = focus.get(3);
-    let focus_end: i64 = focus.get(4);
-    let focus_pos: String = focus.get(5);
-    let focus_dep: String = focus.get(6);
-
-    let mut anchors: Vec<(String, String, String, i32, i32, i32, i32, i64, i64, String, String)> = Vec::new();
-    anchors.push((
-        format!("focus:{run_ref}:{focus_token}"),
-        "semantic.argument.subject".into(),
-        focus_pos,
-        focus_sentence,
-        focus_local,
-        focus_local + 1,
-        focus_local,
-        focus_start,
-        focus_end,
-        focus_dep,
-        "reference".into(),
-    ));
-
-    let candidates = tx.query(
-        "SELECT o.object_id,
-                min(t.local_token_ordinal),max(t.local_token_ordinal)+1,
-                min(t.start_char),max(t.end_char),
-                min(t.sentence_id),min(s.local_sentence_ordinal),
-                min(pos.symbol_text),min(dep.symbol_text)
-         FROM execution.semantic_pnf_candidate_universe u
-         JOIN execution.semantic_pnf_object o ON o.object_id=u.target_id
-             AND u.target_kind=1 AND o.active
-         JOIN execution.semantic_pnf_object_token_support os ON os.object_id=o.object_id
-         JOIN execution.semantic_parser_token t ON t.token_id=os.token_id
-             AND t.run_ref=$2 AND t.document_ref=$3
-             AND t.representation_version=2
-         JOIN execution.semantic_parser_sentence s ON s.sentence_id=t.sentence_id
-         JOIN execution.semantic_symbol pos ON pos.symbol_id=t.pos_symbol_id
-         JOIN execution.semantic_symbol dep ON dep.symbol_id=t.dependency_symbol_id
-         WHERE u.demand_id=$1
-         GROUP BY o.object_id
-         ORDER BY min(t.start_char),o.object_id",
-        &[&demand, &run_ref, &doc],
-    )?;
-    for row in candidates {
-        let object_id: i64 = row.get(0);
-        let start_token: i32 = row.get(1);
-        let end_token: i32 = row.get(2);
-        let start_char: i64 = row.get(3);
-        let end_char: i64 = row.get(4);
-        let sentence_id: i64 = row.get(5);
-        let sentence: i32 = row.get(6);
-        let pos: String = row.get(7);
-        let dep: String = row.get(8);
-        if !matches!(pos.as_str(), "NOUN" | "PROPN") {
-            continue;
+/// Candidate-only native source projection for the installed m009 binder.
+/// Observed parser rank is document-global, but is not canonical tokenizer
+/// parity when parser coverage is incomplete. The exact source interval and
+/// ordered token support are separate from the binder's first-token anchor.
+#[derive(Debug,Clone,Serialize)]
+struct NativeBindingAnchorV2 {
+    key:String,kind:String,token_ids:Vec<i64>,object_ids:Vec<i64>,
+    start_char:i64,end_char:i64,ordinal:i32,sentence:i32,
+    pos:String,dependency:String,paragraph:i32,quotation:i32,
+    clause:Option<String>,reporting:Option<String>,coordination:Option<String>,
+    morphology:Vec<(String,String)>,
+}
+#[derive(Debug,Clone,Serialize)]
+pub struct NativeBindingBridgeReceipt {
+    pub snapshot_ref:String,pub source_parser_tokens:usize,
+    pub anchors:usize,pub mention_anchors:usize,pub relation_anchors:usize,
+    pub focus_reference_anchors:usize,pub retired_index_anchors:u64,
+    pub candidate_sets:Vec<(String,String,usize,usize)>,
+    pub mention_spans_without_objects:usize,
+    pub mention_spans_with_multiple_objects:usize,
+    pub observed_document_order_verified:bool,
+    pub canonical_tokenizer_parity_paid:bool,
+    pub structural_relation_parity_paid:bool,
+    pub typed_coverage_paid:bool,
+}
+#[derive(Debug,Clone)]
+struct BridgeToken {
+    id:i64,sentence_id:i64,sentence:i32,ordinal:i32,start:i64,end:i64,
+    region:i64,head:i64,lemma_id:i64,orth:String,lemma:String,pos:String,dep:String,
+    morphology:Vec<(String,String)>,
+}
+fn bridge_morphology(rows:&[String])->Vec<(String,String)> {
+    let mut values=BTreeSet::new();
+    for row in rows{
+        if let Some((feature,raw))=row.split_once('='){
+            for value in raw.split(',').filter(|v|!v.is_empty()){
+                if !feature.is_empty(){values.insert((feature.to_owned(),value.to_owned()));}
+            }
         }
-        anchors.push((
-            format!("candidate:{run_ref}:{object_id}"),
-            "semantic.mention_identity".into(),
-            pos,
-            sentence,
-            start_token,
-            end_token,
-            start_token,
-            start_char,
-            end_char,
-            dep,
-            object_id.to_string(),
-        ));
-        let _ = sentence_id;
     }
-
-    let mut written = 0usize;
-    let document_ref = doc.to_owned();
-    for (key, kind, pos, sentence, start_token, end_token, _token, start_char,
-         end_char, dep, _source_id) in anchors {
-        let digest = Sha256::digest(
-            format!("slr-native-binding-anchor:v1:{run_ref}:{doc}:{key}:{kind}").as_bytes(),
-        );
-        let suffix = hex(&digest);
-        let factor_ref = format!("factor:native-binding:{suffix}");
-        let revision_ref = format!("factor-revision:native-binding:{suffix}");
-        let span_ref = format!("span:native-binding:{suffix}");
-        let factor_digest = Sha256::digest(
-            format!("factor:{doc}:{factor_ref}:{kind}").as_bytes(),
-        );
-        let start_char_i32 = i32::try_from(start_char).map_err(|_| NativeNumericAuditError::ForeignSource)?;
-        let end_char_i32 = i32::try_from(end_char).map_err(|_| NativeNumericAuditError::ForeignSource)?;
-        tx.execute(
-            "INSERT INTO corpus.span(span_ref,document_ref,start_char,end_char,
-                start_token,end_token,span_type_ref)
-             VALUES($1,$2,$3,$4,$5,$6,'native-binding-factor:v1')
-             ON CONFLICT(span_ref) DO NOTHING",
-            &[&span_ref, &document_ref.as_str(), &start_char_i32, &end_char_i32, &start_token, &end_token],
-        )?;
-        tx.execute(
-            "INSERT INTO algebra.factor(factor_ref,document_ref,factor_type_ref,
-                closure_state_ref,factor_sha256)
-             VALUES($1,$2,$3,'requires_external_resolution',$4)
-             ON CONFLICT(factor_ref) DO NOTHING",
-            &[&factor_ref, &document_ref, &kind, &&factor_digest[..]],
-        )?;
-        tx.execute(
-            "INSERT INTO algebra.factor_revision(factor_revision_ref,factor_ref,
-                closure_state_ref,factor_sha256)
-             VALUES($1,$2,'requires_external_resolution',$3)
-             ON CONFLICT(factor_revision_ref) DO NOTHING",
-            &[&revision_ref, &factor_ref, &&factor_digest[..]],
-        )?;
-        tx.execute(
-            "INSERT INTO pnf.factor_anchor(
-                factor_revision_ref,document_ref,sentence_index,start_token,end_token,
-                pnf_kind_ref,discourse_unit_ref,paragraph_index,quotation_depth,
-                parser_pos_ref,parser_dependency_ref)
-             VALUES($1,$2,$3,$4,$5,$6,$7,$3,0,$8,$9)
-             ON CONFLICT(factor_revision_ref) DO NOTHING",
-            &[&revision_ref, &document_ref, &sentence, &start_token, &end_token, &kind,
-              &format!("native-sentence:{sentence}"), &pos, &dep],
-        )?;
-        written += 1;
+    values.into_iter().collect()
+}
+fn bridge_anchor(
+    key:String,kind:&str,ids:&[i64],objects:Vec<i64>,
+    tokens:&BTreeMap<i64,BridgeToken>,text:&str,relation:Option<(&str,&str)>,
+)->Result<NativeBindingAnchorV2,NativeNumericAuditError>{
+    let mut support=ids.iter().map(|id|tokens.get(id).ok_or(NativeNumericAuditError::ForeignSource))
+        .collect::<Result<Vec<_>,_>>()?;
+    support.sort_by_key(|t|t.ordinal);
+    support.dedup_by_key(|t|t.id);
+    let first=*support.first().ok_or(NativeNumericAuditError::ForeignSource)?;
+    let last=*support.last().ok_or(NativeNumericAuditError::ForeignSource)?;
+    if support.iter().any(|t|t.sentence_id!=first.sentence_id){
+        return Err(NativeNumericAuditError::ForeignSource);
     }
-    let _ = (focus_sentence_id, focus_end);
-    Ok(written)
+    let (paragraph,quotation)=source_binding_context(text,first.start).ok_or(NativeNumericAuditError::ForeignSource)?;
+    let clause=match relation{
+        Some((name,"predicate"|"composition"))=>Some(format!("clause:{name}")),
+        _=>Some(format!("clause:sentence:{}:unresolved",first.sentence)),
+    };
+    let reporting=relation.filter(|(_,typ)|*typ=="composition").map(|(name,_)|name.to_owned());
+    let coordination=relation.filter(|(_,typ)|*typ=="conjunction").map(|(name,_)|name.to_owned());
+    Ok(NativeBindingAnchorV2{
+        key,kind:kind.into(),token_ids:support.iter().map(|t|t.id).collect(),
+        object_ids:objects,start_char:first.start,end_char:last.end,ordinal:first.ordinal,
+        sentence:first.sentence,pos:first.pos.clone(),dependency:first.dep.clone(),
+        paragraph:i32::try_from(paragraph).map_err(|_|NativeNumericAuditError::ForeignSource)?,
+        quotation:i32::try_from(quotation).map_err(|_|NativeNumericAuditError::ForeignSource)?,
+        clause,reporting,coordination,morphology:first.morphology.clone(),
+    })
+}
+fn bridge_digest<T:Serialize>(value:&T)->Result<String,NativeNumericAuditError>{
+    let bytes=serde_json::to_vec(value).map_err(|_|NativeNumericAuditError::ForeignSource)?;
+    Ok(hex(&Sha256::digest(bytes)))
+}
+fn materialize_native_binding_bridge(
+    tx:&mut postgres::Transaction<'_>,run_ref:&str,doc:&str,sha:&str,
+    focus_token:i64,campaign:&NativeMentionBindingCampaign,
+)->Result<NativeBindingBridgeReceipt,NativeNumericAuditError>{
+    let locator:String=tx.query_one(
+        "SELECT locator FROM execution.semantic_parser_source
+         WHERE run_ref=$1 AND document_ref=$2 AND encode(content_sha256,'hex')=$3",
+        &[&run_ref,&doc,&sha])?.get(0);
+    let bytes=std::fs::read(locator).map_err(|_|NativeNumericAuditError::ForeignSource)?;
+    if hex(&Sha256::digest(&bytes))!=sha{return Err(NativeNumericAuditError::ForeignSource);}
+    let source=String::from_utf8(bytes).map_err(|_|NativeNumericAuditError::ForeignSource)?;
+    let chars=source.chars().collect::<Vec<_>>();
+    // Global order over actual source coordinates, never sentence-local token
+    // indices or surrogate IDs. Missing source intervals remain unpaid.
+    let rows=tx.query(
+        "SELECT t.token_id,t.sentence_id,r.region_id,t.start_char,t.end_char,
+                t.head_token_id,t.lemma_symbol_id,orth.symbol_text,lemma.symbol_text,
+                pos.symbol_text,dep.symbol_text,
+                ARRAY(SELECT f.symbol_text||'='||v.symbol_text
+                  FROM execution.semantic_morph_set_member m
+                  JOIN execution.semantic_symbol f ON f.symbol_id=m.feature_symbol_id
+                  JOIN execution.semantic_symbol v ON v.symbol_id=m.value_symbol_id
+                  WHERE m.morph_set_id=t.morph_set_id ORDER BY f.symbol_text,v.symbol_text)
+         FROM execution.semantic_parser_token t
+         JOIN execution.semantic_pnf_sentence_region l ON l.sentence_id=t.sentence_id
+         JOIN execution.semantic_pnf_region r ON r.region_id=l.region_id
+         JOIN execution.semantic_symbol orth ON orth.symbol_id=t.orth_symbol_id
+         JOIN execution.semantic_symbol lemma ON lemma.symbol_id=t.lemma_symbol_id
+         JOIN execution.semantic_symbol pos ON pos.symbol_id=t.pos_symbol_id
+         JOIN execution.semantic_symbol dep ON dep.symbol_id=t.dependency_symbol_id
+         WHERE t.run_ref=$1 AND t.document_ref=$2 AND t.representation_version=2
+           AND r.run_ref=$1 AND r.document_ref=$2 AND r.region_kind=1 AND r.closure_state IN (2,3)
+         ORDER BY t.start_char,t.end_char,t.token_id",&[&run_ref,&doc])?;
+    let mut tokens=BTreeMap::new();
+    let mut seen_sentences=BTreeMap::new();
+    let mut prior_end=0usize;
+    let mut previous_sentence=None;
+    let mut sentence=-1i32;
+    for (ordinal,row) in rows.iter().enumerate(){
+        let id:i64=row.get(0);let sentence_id:i64=row.get(1);
+        if previous_sentence!=Some(sentence_id){
+            if seen_sentences.contains_key(&sentence_id){return Err(NativeNumericAuditError::ForeignSource);}
+            sentence=sentence.checked_add(1).ok_or(NativeNumericAuditError::ForeignSource)?;
+            seen_sentences.insert(sentence_id,sentence);previous_sentence=Some(sentence_id);
+        }
+        let start:i64=row.get(3);let end:i64=row.get(4);
+        let a=usize::try_from(start).map_err(|_|NativeNumericAuditError::ForeignSource)?;
+        let b=usize::try_from(end).map_err(|_|NativeNumericAuditError::ForeignSource)?;
+        let orth:String=row.get(7);
+        if a>=b||a<prior_end||b>chars.len()||chars[a..b].iter().collect::<String>()!=orth{
+            return Err(NativeNumericAuditError::ForeignSource);
+        }
+        prior_end=b;
+        let t=BridgeToken{id,sentence_id,sentence,
+            ordinal:i32::try_from(ordinal).map_err(|_|NativeNumericAuditError::ForeignSource)?,
+            region:row.get(2),start,end,head:row.get(5),lemma_id:row.get(6),orth,
+            lemma:row.get(8),pos:row.get(9),dep:row.get::<_,String>(10).to_ascii_lowercase(),
+            morphology:bridge_morphology(&row.get::<_,Vec<String>>(11))};
+        if tokens.insert(id,t).is_some(){return Err(NativeNumericAuditError::ForeignSource);}
+    }
+    let focus=tokens.get(&focus_token).ok_or(NativeNumericAuditError::ForeignSource)?;
+    if focus.pos!="PRON" {return Err(NativeNumericAuditError::ForeignSource);}
+    let relation_tokens=tokens.values().map(|t|NativeRelationToken{
+        id:t.id,region:t.region,lemma_id:t.lemma_id,head:t.head,start:t.start,end:t.end,
+        orth:t.orth.clone(),lemma:t.lemma.clone(),pos:t.pos.clone(),dep:t.dep.clone(),
+    }).collect::<Vec<_>>();
+    if relation_tokens.iter().any(|t|tokens.get(&t.head).map_or(true,|h|h.region!=t.region)){
+        return Err(NativeNumericAuditError::ForeignSource);
+    }
+    let mut relations=projected_predicate_relations(&relation_tokens);
+    relations.sort_by_key(|r|(r.region,r.head_token_id,r.relation_type,r.roles.clone()));
+    let mut anchors=Vec::new();
+    for span in &campaign.represented_spans{
+        let anchor=bridge_anchor(span.original_mention_ref.clone(),"semantic.mention_identity",
+            &span.token_ids,span.exact_object_ids.clone(),&tokens,&source,None)?;
+        if anchor.start_char!=span.start_char||anchor.end_char!=span.end_char||anchor.pos!=span.anchor_pos{
+            return Err(NativeNumericAuditError::ForeignSource);
+        }
+        anchors.push(anchor);
+    }
+    let mention_anchors=anchors.len();
+    let mut focus_keys=Vec::new();let mut relation_anchors=0usize;
+    for relation in &relations{
+        let name=format!("native-projected-relation:{}",bridge_digest(&(run_ref,doc,relation))?);
+        let ids=relation.roles.iter().map(|(_,id)|*id).collect::<Vec<_>>();
+        let meta=Some((name.as_str(),relation.relation_type));
+        let kind=if relation.relation_type=="predicate"{"semantic.eventuality"}else{"semantic.embedded_proposition"};
+        let a=bridge_anchor(name.clone(),kind,&ids,vec![],&tokens,&source,meta)?;
+        // Original structural binder tests first-token precedence; retain the
+        // entire relation support separately, including discontinuities.
+        if a.ordinal<focus.ordinal{anchors.push(a);relation_anchors+=1;}
+        for (role,id) in &relation.roles{
+            if *id!=focus_token||!matches!(*role,"subject"|"object"|"argument"){continue;}
+            let key=format!("{name}:argument:{role}:{id}");
+            let a=bridge_anchor(key.clone(),&format!("semantic.argument.{role}"),
+                &[*id],vec![],&tokens,&source,meta)?;
+            if !focus_keys.contains(&key){focus_keys.push(key);anchors.push(a);}
+        }
+    }
+    if focus_keys.is_empty(){return Err(NativeNumericAuditError::SourcePolicy);}
+    anchors.sort_by(|a,b|a.key.cmp(&b.key));
+    // Snapshot binds all observed parser coordinates, original projected
+    // anchor metadata, exact source and inverse object IDs; never a count key.
+    let tape=tokens.values().map(|t|(t.id,t.sentence_id,t.ordinal,t.start,t.end,t.head,
+        &t.pos,&t.dep,&t.morphology)).collect::<Vec<_>>();
+    let snapshot=format!("slr-native-binding-index:v2:{}",bridge_digest(&(run_ref,doc,sha,tape,&anchors))?);
+    // Explicit projection/history tables on the existing numeric DB. Old
+    // immutable factor/revision/member/span rows are never deleted. Only
+    // mutable anchor index rows are retired, after saving their exact JSON.
+    tx.batch_execute(
+        "CREATE TABLE IF NOT EXISTS execution.slr_native_binding_anchor_history(
+            factor_revision_ref text PRIMARY KEY,document_ref text NOT NULL,
+            anchor_payload jsonb NOT NULL,retired_at timestamptz NOT NULL DEFAULT now()
+         );
+         CREATE TABLE IF NOT EXISTS execution.slr_native_binding_anchor_projection(
+            factor_revision_ref text PRIMARY KEY REFERENCES algebra.factor_revision(factor_revision_ref),
+            run_ref text NOT NULL,document_ref text NOT NULL,snapshot_ref text NOT NULL,
+            span_ref text NOT NULL REFERENCES corpus.span(span_ref),
+            token_ids bigint[] NOT NULL,object_ids bigint[] NOT NULL,
+            active boolean NOT NULL
+         );
+         CREATE INDEX IF NOT EXISTS slr_native_binding_projection_doc_idx
+            ON execution.slr_native_binding_anchor_projection(document_ref,active,snapshot_ref);")?;
+    // A genuine legacy producer's index is not ours to retire or mix with a
+    // different token coordinate chart. Reject instead of contaminating it.
+    let foreign:bool=tx.query_one(
+        "SELECT EXISTS(SELECT 1 FROM pnf.factor_anchor a WHERE a.document_ref=$1
+          AND a.factor_revision_ref NOT LIKE 'factor-revision:native-binding:%'
+          AND a.factor_revision_ref NOT LIKE 'factor-revision:native-binding-v2:%')
+          OR EXISTS(SELECT 1 FROM execution.slr_native_binding_anchor_projection
+                    WHERE document_ref=$1 AND active AND run_ref<>$2)",
+        &[&doc,&run_ref])?.get(0);
+    if foreign{return Err(NativeNumericAuditError::ForeignSource);}
+    let legacy:bool=tx.query_one("SELECT EXISTS(SELECT 1 FROM pnf.factor_anchor
+        WHERE document_ref=$1 AND factor_revision_ref LIKE 'factor-revision:native-binding:%')",&[&doc])?.get(0);
+    if legacy && tx.query_one("SELECT count(DISTINCT run_ref)::bigint FROM execution.semantic_parser_source WHERE document_ref=$1",&[&doc])?.get::<_,i64>(0)!=1{
+        return Err(NativeNumericAuditError::ForeignSource);
+    }
+    tx.execute(
+        "INSERT INTO execution.slr_native_binding_anchor_history(factor_revision_ref,document_ref,anchor_payload)
+         SELECT a.factor_revision_ref,a.document_ref,to_jsonb(a) FROM pnf.factor_anchor a
+         WHERE a.document_ref=$1 AND (a.factor_revision_ref LIKE 'factor-revision:native-binding:%'
+            OR EXISTS(SELECT 1 FROM execution.slr_native_binding_anchor_projection p
+                 WHERE p.factor_revision_ref=a.factor_revision_ref AND p.snapshot_ref<>$2))
+         ON CONFLICT DO NOTHING",&[&doc,&snapshot])?;
+    tx.execute(
+        "UPDATE execution.binding_candidate_set_build b SET build_state_ref='superseded'
+         WHERE b.build_state_ref='completed' AND EXISTS(
+           SELECT 1 FROM pnf.factor_anchor a WHERE a.factor_revision_ref=b.reference_factor_revision_ref
+           AND a.document_ref=$1 AND (a.factor_revision_ref LIKE 'factor-revision:native-binding:%'
+            OR EXISTS(SELECT 1 FROM execution.slr_native_binding_anchor_projection p
+                WHERE p.factor_revision_ref=a.factor_revision_ref AND p.snapshot_ref<>$2)))",
+        &[&doc,&snapshot])?;
+    let retired=tx.execute(
+        "DELETE FROM pnf.factor_anchor a WHERE a.document_ref=$1
+          AND (a.factor_revision_ref LIKE 'factor-revision:native-binding:%'
+          OR EXISTS(SELECT 1 FROM execution.slr_native_binding_anchor_projection p
+            WHERE p.factor_revision_ref=a.factor_revision_ref AND p.snapshot_ref<>$2))",
+        &[&doc,&snapshot])?;
+    tx.execute("UPDATE execution.slr_native_binding_anchor_projection SET active=false
+        WHERE document_ref=$1 AND snapshot_ref<>$2 AND active",&[&doc,&snapshot])?;
+    let mut references=Vec::new();
+    for a in &anchors{
+        let suffix=bridge_digest(&(&snapshot,a))?;
+        let factor=format!("factor:native-binding-v2:{suffix}");
+        let revision=format!("factor-revision:native-binding-v2:{suffix}");
+        let span=format!("span:native-binding-v2:{suffix}");
+        let dg=Sha256::digest(format!("factor:{factor}").as_bytes()).to_vec();
+        let start=i32::try_from(a.start_char).map_err(|_|NativeNumericAuditError::ForeignSource)?;
+        let end=i32::try_from(a.end_char).map_err(|_|NativeNumericAuditError::ForeignSource)?;
+        let next=a.ordinal.checked_add(1).ok_or(NativeNumericAuditError::ForeignSource)?;
+        let morph=bridge_digest(&a.morphology)?;
+        tx.execute("INSERT INTO corpus.span(span_ref,document_ref,start_char,end_char,start_token,end_token,span_type_ref)
+            VALUES($1,$2,$3,$4,$5,$6,'native-binding-factor:v2') ON CONFLICT DO NOTHING",
+            &[&span,&doc,&start,&end,&a.ordinal,&next])?;
+        tx.execute("INSERT INTO algebra.factor(factor_ref,document_ref,factor_type_ref,closure_state_ref,factor_sha256)
+            VALUES($1,$2,$3,'requires_external_resolution',$4) ON CONFLICT DO NOTHING",
+            &[&factor,&doc,&a.kind,&dg])?;
+        tx.execute("INSERT INTO algebra.factor_revision(factor_revision_ref,factor_ref,closure_state_ref,factor_sha256)
+            VALUES($1,$2,'requires_external_resolution',$3) ON CONFLICT DO NOTHING",
+            &[&revision,&factor,&dg])?;
+        tx.execute("INSERT INTO pnf.factor_anchor(factor_revision_ref,document_ref,sentence_index,clause_ref,
+            start_token,end_token,pnf_kind_ref,morphology_sha256,discourse_unit_ref,paragraph_index,
+            quotation_depth,reporting_scope_ref,coordination_group_ref,parser_pos_ref,parser_dependency_ref)
+            VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) ON CONFLICT DO NOTHING",
+            &[&revision,&doc,&a.sentence,&a.clause,&a.ordinal,&next,&a.kind,&morph,
+              &format!("sentence:{}",a.sentence),&a.paragraph,&a.quotation,&a.reporting,
+              &a.coordination,&a.pos,&a.dependency])?;
+        for (feature,value) in &a.morphology{
+            tx.execute("INSERT INTO pnf.factor_morphology(factor_revision_ref,feature_ref,value_ref)
+                VALUES($1,$2,$3) ON CONFLICT DO NOTHING",&[&revision,feature,value])?;
+        }
+        tx.execute("INSERT INTO execution.slr_native_binding_anchor_projection
+            (factor_revision_ref,run_ref,document_ref,snapshot_ref,span_ref,token_ids,object_ids,active)
+            VALUES($1,$2,$3,$4,$5,$6,$7,true) ON CONFLICT(factor_revision_ref) DO UPDATE SET active=true",
+            &[&revision,&run_ref,&doc,&snapshot,&span,&a.token_ids,&a.object_ids])?;
+        // Verify inverse on the stored projection, not just insertion count.
+        let valid:bool=tx.query_one(
+            "SELECT EXISTS(SELECT 1 FROM execution.slr_native_binding_anchor_projection p
+              JOIN pnf.factor_anchor a ON a.factor_revision_ref=p.factor_revision_ref
+              JOIN corpus.span s ON s.span_ref=p.span_ref
+              WHERE p.factor_revision_ref=$1 AND p.run_ref=$2 AND p.document_ref=$3
+                AND p.snapshot_ref=$4 AND p.active AND p.token_ids=$5 AND p.object_ids=$6
+                AND s.document_ref=$3 AND s.start_char=$7 AND s.end_char=$8
+                AND s.start_token=$9 AND s.end_token=$10 AND a.start_token=$9 AND a.end_token=$10)",
+            &[&revision,&run_ref,&doc,&snapshot,&a.token_ids,&a.object_ids,&start,&end,&a.ordinal,&next])?.get(0);
+        if !valid{return Err(NativeNumericAuditError::ForeignSource);}
+        if focus_keys.contains(&a.key){references.push((factor,revision));}
+    }
+    let mut sets=Vec::new();
+    for (factor,revision) in references{
+        for typ in ["entity_reference","eventuality_reference","proposition_reference"]{
+            sets.push(materialize_native_binding_set_v2(tx,&snapshot,&doc,&factor,&revision,typ)?);
+        }
+    }
+    Ok(NativeBindingBridgeReceipt{
+        snapshot_ref:snapshot,source_parser_tokens:tokens.len(),anchors:anchors.len(),mention_anchors,
+        relation_anchors,focus_reference_anchors:focus_keys.len(),retired_index_anchors:retired,candidate_sets:sets,
+        mention_spans_without_objects:campaign.spans_without_exact_objects,
+        mention_spans_with_multiple_objects:campaign.represented_spans.iter().filter(|s|s.exact_object_ids.len()>1).count(),
+        observed_document_order_verified:true,canonical_tokenizer_parity_paid:false,
+        structural_relation_parity_paid:false,typed_coverage_paid:false,
+    })
+}
+fn materialize_native_binding_set_v2(
+    tx:&mut postgres::Transaction<'_>,snapshot:&str,doc:&str,factor:&str,revision:&str,typ:&str,
+)->Result<(String,String,usize,usize),NativeNumericAuditError>{
+    let access="binding-accessibility:document-structural:v0_3";
+    let compat="binding-compatibility:pnf-kind-morphology:v0_3";
+    let n:i64=tx.query_one("SELECT count(*)::bigint FROM pnf.factor_anchor WHERE document_ref=$1",&[&doc])?.get(0);
+    let full=exact_original_binding_members(tx,revision,typ,access,compat,
+        i32::try_from(n.max(1)).map_err(|_|NativeNumericAuditError::ForeignSource)?)?;
+    let members=exact_original_binding_members(tx,revision,typ,access,compat,64)?;
+    if !full.iter().take(64).eq(members.iter()) {return Err(NativeNumericAuditError::ForeignSource);}
+    let suffix=bridge_digest(&(snapshot,revision,typ,access,compat,&full))?;
+    let build=format!("binding-build:native-v2:{suffix}");
+    let set=format!("binding-set:native-v2:{suffix}");
+    let count=i32::try_from(members.len()).map_err(|_|NativeNumericAuditError::ForeignSource)?;
+    let set_sha=bridge_digest(&members)?;
+    tx.execute("INSERT INTO resolution.binding_candidate_set(candidate_set_ref,document_ref,reference_factor_ref,
+        reference_factor_revision_ref,referential_type_ref,accessibility_declaration_ref,compatibility_declaration_ref,
+        generator_build_ref,compatibility_state_ref,member_count,candidate_set_sha256)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,'compatible_candidate',$9,$10) ON CONFLICT DO NOTHING",
+        &[&set,&doc,&factor,&revision,&typ,&access,&compat,&build,&count,&set_sha])?;
+    for (i,(_,candidate,path,_)) in members.iter().enumerate(){
+        let dg=bridge_digest(&(&set,candidate,path))?;
+        let assessment=format!("binding-assessment:native-v2:{dg}");
+        tx.execute("INSERT INTO resolution.binding_compatibility_assessment(compatibility_assessment_ref,candidate_set_ref,
+            candidate_factor_ref,compatibility_state_ref,accessibility_path_ref,assessment_sha256)
+            VALUES($1,$2,$3,'compatible_candidate',$4,$5) ON CONFLICT DO NOTHING",
+            &[&assessment,&set,candidate,path,&dg])?;
+        tx.execute("INSERT INTO resolution.binding_candidate_member(candidate_set_ref,candidate_factor_ref,
+            compatibility_assessment_ref,accessibility_path_ref,ordinal) VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING",
+            &[&set,candidate,&assessment,path,&(i as i32)])?;
+    }
+    tx.execute("INSERT INTO execution.binding_candidate_set_build(generator_build_ref,candidate_set_ref,
+        reference_factor_revision_ref,document_pnf_index_ref,accessibility_declaration_ref,
+        compatibility_declaration_ref,referential_type_ref,build_key_sha256,build_state_ref)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,'completed')
+        ON CONFLICT(generator_build_ref) DO UPDATE SET build_state_ref='completed'",
+        &[&build,&set,&revision,&snapshot,&access,&compat,&typ,&suffix])?;
+    let stored=tx.query("SELECT candidate_factor_ref,accessibility_path_ref FROM resolution.binding_candidate_member
+        WHERE candidate_set_ref=$1 ORDER BY ordinal",&[&set])?
+        .iter().map(|r|(r.get::<_,String>(0),r.get::<_,String>(1))).collect::<Vec<_>>();
+    if !original_index_member_parity(&stored,&members){return Err(NativeNumericAuditError::ForeignSource);}
+    Ok((typ.into(),set,members.len(),full.len()))
 }
 
-fn materialize_native_binding_candidate_set(
-    tx: &mut postgres::Transaction<'_>,
-    run_ref: &str,
-    doc: &str,
-    focus_start: i64,
-    focus_end: i64,
-) -> Result<usize, NativeNumericAuditError> {
-    let reference = tx.query_opt(
-        "SELECT a.factor_revision_ref,f.factor_ref
-         FROM pnf.factor_anchor a
-         JOIN algebra.factor_revision r ON r.factor_revision_ref=a.factor_revision_ref
-         JOIN algebra.factor f ON f.factor_ref=r.factor_ref
-         WHERE a.document_ref=$1 AND a.start_token IS NOT NULL
-           AND a.parser_pos_ref='PRON' AND a.pnf_kind_ref='semantic.argument.subject'
-           AND EXISTS (SELECT 1 FROM corpus.span sp
-                       WHERE sp.document_ref=a.document_ref
-                         AND sp.start_token=a.start_token AND sp.end_token=a.end_token
-                         AND sp.start_char=$2 AND sp.end_char=$3)
-         ORDER BY a.factor_revision_ref LIMIT 1",
-        &[&doc, &i32::try_from(focus_start).map_err(|_| NativeNumericAuditError::ForeignSource)?,
-          &i32::try_from(focus_end).map_err(|_| NativeNumericAuditError::ForeignSource)?],
-    )?;
-    let Some(reference) = reference else { return Ok(0) };
-    let reference_revision: String = reference.get(0);
-    let reference_factor: String = reference.get(1);
-    let access = "binding-accessibility:document-structural:v0_3";
-    let compat = "binding-compatibility:pnf-kind-morphology:v0_3";
-    let typ = "entity_reference";
-    let members = tx.query(
-        "SELECT candidate_factor_revision_ref,candidate_factor_ref,
-                accessibility_path_ref,distance_tokens
-         FROM resolution.query_binding_candidates($1,$2,$3,$4,64)",
-        &[&reference_revision, &typ, &access, &compat],
-    )?;
-    let build_digest = Sha256::digest(
-        format!("slr-native-binding-build:v1:{run_ref}:{doc}:{reference_revision}:{typ}:{access}:{compat}").as_bytes(),
-    );
-    let suffix = hex(&build_digest);
-    let build_ref = format!("binding-build:native:{suffix}");
-    let set_ref = format!("binding-set:native:{suffix}");
-    let candidate_set_digest = Sha256::digest(
-        format!("binding-set:{set_ref}:{}", members.len()).as_bytes(),
-    );
-    tx.execute(
-        "INSERT INTO resolution.binding_candidate_set(
-            candidate_set_ref,document_ref,reference_factor_ref,
-            reference_factor_revision_ref,referential_type_ref,
-            accessibility_declaration_ref,compatibility_declaration_ref,
-            generator_build_ref,compatibility_state_ref,member_count,candidate_set_sha256)
-         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-         ON CONFLICT(candidate_set_ref) DO NOTHING",
-        &[&set_ref, &doc, &reference_factor, &reference_revision, &typ, &access,
-          &compat, &build_ref, &"compatible_candidate", &(members.len() as i32),
-          &hex(&candidate_set_digest)],
-    )?;
-    for (ordinal, row) in members.iter().enumerate() {
-        let candidate_revision: String = row.get(0);
-        let candidate_factor: String = row.get(1);
-        let path: String = row.get(2);
-        let assessment_digest = Sha256::digest(
-            format!("binding-assessment:{set_ref}:{candidate_factor}:{path}").as_bytes(),
-        );
-        let assessment_ref = format!("binding-assessment:native:{}", hex(&assessment_digest));
-        tx.execute(
-            "INSERT INTO resolution.binding_compatibility_assessment(
-                compatibility_assessment_ref,candidate_set_ref,candidate_factor_ref,
-                compatibility_state_ref,accessibility_path_ref,assessment_sha256)
-             VALUES($1,$2,$3,'compatible_candidate',$4,$5)
-             ON CONFLICT(candidate_set_ref,candidate_factor_ref) DO NOTHING",
-            &[&assessment_ref, &set_ref, &candidate_factor, &path, &hex(&assessment_digest)],
-        )?;
-        tx.execute(
-            "INSERT INTO resolution.binding_candidate_member(
-                candidate_set_ref,candidate_factor_ref,compatibility_assessment_ref,
-                accessibility_path_ref,ordinal)
-             VALUES($1,$2,$3,$4,$5)
-             ON CONFLICT(candidate_set_ref,candidate_factor_ref) DO NOTHING",
-            &[&set_ref, &candidate_factor, &assessment_ref, &path, &(ordinal as i32)],
-        )?;
-        let _ = candidate_revision;
-    }
-    tx.execute(
-        "INSERT INTO execution.binding_candidate_set_build(
-            generator_build_ref,candidate_set_ref,reference_factor_revision_ref,
-            document_pnf_index_ref,accessibility_declaration_ref,
-            compatibility_declaration_ref,referential_type_ref,build_key_sha256,
-            build_state_ref)
-         VALUES($1,$2,$3,$4,$5,$6,$7,$8,'completed')
-         ON CONFLICT(generator_build_ref) DO NOTHING",
-        &[&build_ref, &set_ref, &reference_revision,
-          &format!("pnf-index:native:{doc}"), &access, &compat, &typ, &hex(&build_digest)],
-    )?;
-    Ok(members.len())
-}
 // Record candidate-only source-derived assessments in original m086 evidence.
 // Never use cap exclusion or an incomplete graph to refute an occurrence.
 fn persist_original_mention_assessments(
@@ -2229,6 +2329,7 @@ pub struct NativeNumericCandidateTransportReceipt {
     pub document_identity_fibre:NativeNumericIdentityFibreProjection,
     pub original_cross_resource_needs:Vec<OriginalCrossResourceNeedObservation>,
     pub structural_binding:NativeBindingStructuralReceipt,
+    pub native_binding_bridge:NativeBindingBridgeReceipt,
     pub original_mention_binding_campaign:NativeMentionBindingCampaign,
     pub original_h9_readiness:NativeH9ReadinessReceipt,
     pub governed_identity_rollback_probe:Option<NativeGovernedIdentityProbe>,
@@ -2284,14 +2385,6 @@ pub fn transport_original_numeric_candidates_for_source_answer(
             answer.original_focus_span[0] as i64,budget)?;
     let mut original_mention_binding_campaign=original_mention_binding_campaign(
         &mut tx,numeric_run_ref,&answer.source_document_ref,&answer.source_content_sha256,focus_token,budget)?;
-    // Give the installed original SQL binder the native source-coordinate
-    // carrier.  This remains candidate-only; admission is still governed by
-    // the existing witness path below.
-    let _native_binding_anchor_count = materialize_native_binding_anchors(
-        &mut tx,numeric_run_ref,&answer.source_document_ref,demand,focus_token)?;
-    let _native_binding_member_count = materialize_native_binding_candidate_set(
-        &mut tx,numeric_run_ref,&answer.source_document_ref,
-        answer.original_focus_span[0] as i64,answer.original_focus_span[1] as i64)?;
     // Materialize the exact existing occurrence relation. Recency is the only
     // exclusion here: morphology/quotation/type refinement is not proved yet.
     // Lack of a live occurrence object is not negative evidence.
@@ -2376,6 +2469,8 @@ pub fn transport_original_numeric_candidates_for_source_answer(
     let original_parser_identity_producer=original_parser_identity_producer_probe(
         &mut tx,numeric_run_ref,&answer.source_document_ref,demand)?;
     let original_h9_readiness=observe_native_h9_readiness(&mut tx,demand,numeric_run_ref,&answer.source_document_ref)?;
+    let native_binding_bridge=materialize_native_binding_bridge(&mut tx,numeric_run_ref,
+        &answer.source_document_ref,&answer.source_content_sha256,focus_token,&original_mention_binding_campaign)?;
     let structural_binding=observe_native_binding_structure(&mut tx,demand,focus_token,
         numeric_run_ref,&answer.source_document_ref,&answer.source_content_sha256)?;
     // Only run the document-scoped original admission probe after bounded
@@ -2387,7 +2482,7 @@ pub fn transport_original_numeric_candidates_for_source_answer(
     }else{None};
     tx.commit()?;
     Ok(NativeNumericCandidateTransportReceipt{
-        schema:"slr-native-candidate-only-transport-v3",
+        schema:"slr-native-candidate-only-transport-v5",
         numeric_run_ref:numeric_run_ref.into(),demand_id:demand,source_object_id:source,
         inserted_candidate_ids:ids,remaining_untransported_count:remaining,
         represented_candidate_count:count,outside_model_possible:open,
@@ -2396,7 +2491,7 @@ pub fn transport_original_numeric_candidates_for_source_answer(
         morphology_observations_inserted,candidates_without_morphology_observation,
         original_horizon_observations,original_document_identity_observations,
         original_parser_identity_producer,document_identity_fibre,original_cross_resource_needs,
-        structural_binding,original_mention_binding_campaign,original_h9_readiness,governed_identity_rollback_probe,
+        structural_binding,native_binding_bridge,original_mention_binding_campaign,original_h9_readiness,governed_identity_rollback_probe,
     })
 }
 
