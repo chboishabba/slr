@@ -3632,6 +3632,229 @@ fn probe_scoped_parser_admission(
     Ok(results)
 }
 
+/// Explicit document-local publication. The original m080 owner issues the
+/// witnesses; the native implementation never promotes a source-answer
+/// policy to typed demand coverage, a focus identity, or historical truth.
+#[derive(Debug,Clone,Serialize)]
+pub struct NativeDocumentIdentityPublication {
+    pub requested:bool,
+    pub committed:bool,
+    pub blockers:Vec<&'static str>,
+    pub affected_target_ids:Vec<i64>,
+    pub affected_factor_ids:Vec<i64>,
+    pub candidate_rows_changed:u64,
+    pub overflow_rows_changed:u64,
+    pub reference_exact:bool,
+    pub immutable_level_one_preserved:bool,
+    pub unrelated_admissions_preserved:bool,
+    pub unrelated_derivations_preserved:bool,
+    pub focus_identity_paid:bool,
+}
+
+fn publish_checked_document_identity(
+    tx:&mut postgres::Transaction<'_>,run_ref:&str,answer:&NativeSourceLocalAnswer,
+    producer:&OriginalParserIdentityProducerObservation,probe_receipt:&NativeGovernedIdentityProbe,
+)->Result<NativeDocumentIdentityPublication,NativeNumericAuditError>{
+    let mut receipt=NativeDocumentIdentityPublication{
+        requested:true,committed:false,blockers:Vec::new(),affected_target_ids:Vec::new(),
+        affected_factor_ids:Vec::new(),candidate_rows_changed:0,overflow_rows_changed:0,
+        reference_exact:false,immutable_level_one_preserved:false,unrelated_admissions_preserved:false,
+        unrelated_derivations_preserved:false,focus_identity_paid:false,
+    };
+    let golden=producer.scoped_admission_parity.iter().any(|p|p.scenario=="agda-standalone-source-correction"
+        &&p.golden_producer_exact==Some(true)&&p.reference_admission_exact&&p.reference_level_three_exact
+        &&p.immutable_level_one_preserved&&p.rollback_restored);
+    let withdrawn=producer.scoped_admission_parity.iter().any(|p|p.scenario=="direct-withdrawal"
+        &&p.changed_witness_keys>0&&!p.changed_level_three_refs.is_empty()&&p.reference_level_three_exact
+        &&p.reference_admission_exact&&p.rollback_restored);
+    if !golden||!withdrawn||!probe_receipt.immutable_level_one_preserved
+       ||!probe_receipt.rollback_preserved_prior_level_three||!probe_receipt.rollback_preserved_prior_candidate_classes
+       ||!producer.support_index.as_ref().is_some_and(|p|p.delta_reference_exact){
+        receipt.blockers.push("original_reference_and_golden_rollback_parity_unpaid");
+    }
+    let row=tx.query_one("SELECT r.run_id,d.document_id FROM execution.semantic_pnf_run_identity r
+        CROSS JOIN execution.semantic_pnf_document_identity d WHERE r.run_ref=$1 AND d.document_ref=$2",
+        &[&run_ref,&answer.source_document_ref])?;
+    let run:i64=row.get(0);let doc:i64=row.get(1);
+    let source=tx.query_one("SELECT locator FROM execution.semantic_parser_source
+        WHERE run_ref=$1 AND document_ref=$2 AND encode(content_sha256,'hex')=$3",
+        &[&run_ref,&answer.source_document_ref,&answer.source_content_sha256])?;
+    let locator:String=source.get(0);
+    let bytes=std::fs::read(locator).map_err(|_|NativeNumericAuditError::ForeignSource)?;
+    if hex(&Sha256::digest(&bytes))!=answer.source_content_sha256{return Err(NativeNumericAuditError::ForeignSource);}
+    let text=std::str::from_utf8(&bytes).map_err(|_|NativeNumericAuditError::ForeignSource)?;
+    let chars=text.chars().collect::<Vec<_>>();
+    let mut covered=vec![false;chars.len()];
+    let tokens=tx.query("SELECT t.start_char,t.end_char FROM execution.semantic_parser_token t
+        JOIN execution.semantic_pnf_sentence_region l ON l.sentence_id=t.sentence_id
+        JOIN execution.semantic_pnf_region r ON r.region_id=l.region_id
+        WHERE t.run_ref=$1 AND t.document_ref=$2 AND t.representation_version=2
+          AND r.run_id=$3 AND r.document_id=$4 AND r.closure_state IN(2,3)
+        ORDER BY t.start_char,t.end_char,t.token_id",&[&run_ref,&answer.source_document_ref,&run,&doc])?;
+    let mut prev=0usize;
+    for t in tokens{
+        let a=usize::try_from(t.get::<_,i64>(0)).map_err(|_|NativeNumericAuditError::ForeignSource)?;
+        let b=usize::try_from(t.get::<_,i64>(1)).map_err(|_|NativeNumericAuditError::ForeignSource)?;
+        if a<prev||a>=b||b>covered.len(){return Err(NativeNumericAuditError::ForeignSource);}
+        covered[a..b].fill(true);prev=b;
+    }
+    if chars.iter().zip(&covered).any(|(c,paid)|!c.is_whitespace()&&!*paid) {
+        receipt.blockers.push("full_document_token_and_closed_region_coverage_unpaid");
+    }
+    let pending:bool=tx.query_one("SELECT EXISTS(SELECT 1 FROM execution.semantic_pnf_work_item w
+        JOIN execution.semantic_pnf_region r ON r.region_id=w.region_id
+        WHERE r.run_id=$1 AND r.document_id=$2 AND w.operation_id=1 AND w.state_id<>3)",
+        &[&run,&doc])?.get(0);
+    if pending{receipt.blockers.push("original_numeric_sentence_work_pending");}
+    // Original m080 can re-admit historical parser provenance. An explicit
+    // independently revoked witness is not permission to do that on replay.
+    let explicitly_revoked:bool=tx.query_one("SELECT EXISTS(
+        SELECT 1 FROM execution.semantic_pnf_identity_evidence_candidate c
+        JOIN execution.semantic_pnf_identity_evidence_witness p ON p.candidate_id=c.candidate_id
+        JOIN execution.semantic_pnf_identity_witness_admission a ON a.witness_id=p.witness_id
+        WHERE c.run_id=$1 AND c.document_id=$2 AND a.admission_state=3)",&[&run,&doc])?.get(0);
+    if explicitly_revoked{receipt.blockers.push("explicit_witness_revocation_requires_original_authority");}
+    if !receipt.blockers.is_empty(){return Ok(receipt);}
+    let level_one=level_one_snapshot(tx,run,doc)?;
+    let before_l3=level_three_snapshot(tx,run,doc)?;
+    let before_ids=scoped_derivation_ids(tx,run,doc)?;
+    let before_projection=identity_projection_snapshot(tx,run,doc)?;
+    let before=parser_evidence_keys_in_states(tx,run,doc,&[1,2,3])?;
+    let mut stage=tx.transaction()?;
+    stage.batch_execute("CREATE TEMP TABLE slr_document_publication_probe(singleton bool) ON COMMIT DROP;")?;
+    stage.batch_execute(include_str!("numeric_pnf_identity_bounded.sql"))?;
+    stage.query_one("SELECT pg_temp.slr_refresh_numeric_pnf_parser_identity_evidence_bounded($1,$2,TRUE)",&[&run,&doc])?;
+    // Independently reject fallback to a lexical match when an actual
+    // representation-support edge exists but no exact matching head does.
+    let unsupported_fallback:bool=stage.query_one("SELECT EXISTS(
+        SELECT 1 FROM pg_temp.slr_identity_anchor a
+        WHERE EXISTS(SELECT 1 FROM execution.semantic_pnf_object_token_support s
+                     WHERE s.token_id=a.token_id)
+          AND NOT EXISTS(SELECT 1 FROM execution.semantic_pnf_object_token_support s
+                     WHERE s.token_id=a.token_id AND s.object_id=a.object_id))",&[])?.get(0);
+    if unsupported_fallback{
+        stage.rollback()?;
+        receipt.blockers.push("golden_exact_support_priority_disagreement");
+        return Ok(receipt);
+    }
+    let desired=parser_evidence_keys(&mut stage,run,doc)?;
+    let overflow_sql="SELECT source_object_id,source_token_id,family_lemma_symbol_id,possible_target_count,retained_target_limit
+        FROM execution.semantic_pnf_proper_name_evidence_overflow WHERE run_id=$1 AND document_id=$2";
+    let read_overflow=|p:&mut postgres::Transaction<'_>|->Result<BTreeSet<(i64,i64,i64,i64,i16)>,NativeNumericAuditError>{
+        Ok(p.query(overflow_sql,&[&run,&doc])?.iter().map(|r|(r.get(0),r.get(1),r.get(2),r.get(3),r.get(4))).collect())
+    };
+    let desired_overflow=read_overflow(&mut stage)?;
+    stage.rollback()?;
+    let delta=identity_evidence_delta(&before,&desired)?;
+    let targets=delta.affected_target_object_ids;
+    // No write on identical current evidence unless the complete reference
+    // below discovers unpaid original admission/derivation work.
+    let packet=serde_json::Value::Array(desired.iter().map(|k|serde_json::json!({
+        "source_object_id":k.0,"target_object_id":k.1,"witness_kind":k.2,
+        "source_token_id":k.3,"target_token_id":k.4,"sentence_id":k.5,"evidence_ref":k.6,"candidate_count":k.7
+    })).collect());
+    let overflow_packet=serde_json::Value::Array(desired_overflow.iter().map(|k|serde_json::json!({
+        "source_object_id":k.0,"source_token_id":k.1,"family_lemma_symbol_id":k.2,
+        "possible_target_count":k.3,"retained_target_limit":k.4
+    })).collect());
+    let unrelated_sql="SELECT a.witness_id,a.admission_state,a.revision::text FROM execution.semantic_pnf_identity_witness_admission a
+        JOIN execution.semantic_pnf_identity_witness w ON w.witness_id=a.witness_id
+        JOIN execution.semantic_pnf_canonical_entity e ON e.entity_id=w.target_entity_id
+        JOIN execution.semantic_pnf_object o ON o.object_id=w.source_object_id
+        JOIN execution.semantic_pnf_region r ON r.region_id=o.region_id
+        WHERE r.run_id=$1 AND r.document_id=$2 AND NOT COALESCE(e.anchor_object_id=ANY($3::bigint[]),false)
+        ORDER BY a.witness_id";
+    let read_unrelated=|p:&mut postgres::Transaction<'_>|->Result<Vec<(i64,i16,String)>,NativeNumericAuditError>{
+        Ok(p.query(unrelated_sql,&[&run,&doc,&targets])?.iter().map(|r|(r.get(0),r.get(1),r.get(2))).collect())
+    };
+    let unrelated=read_unrelated(tx)?;
+    let mut scoped=tx.transaction()?;
+    scoped.batch_execute("CREATE TEMP TABLE slr_document_publication_scope(singleton bool) ON COMMIT DROP;")?;
+    scoped.batch_execute(include_str!("numeric_pnf_identity_admit_scoped.sql"))?;
+    scoped.batch_execute(include_str!("numeric_pnf_identity_substitution_scoped.sql"))?;
+    let retired=scoped.execute("UPDATE execution.semantic_pnf_identity_evidence_candidate c SET evidence_state=4
+        WHERE c.run_id=$1 AND c.document_id=$2 AND c.evidence_state IN(1,2,3)
+          AND NOT EXISTS(SELECT 1 FROM jsonb_to_recordset($3) n(source_object_id bigint,target_object_id bigint,
+              witness_kind smallint,evidence_ref text)
+              WHERE (n.source_object_id,n.target_object_id,n.witness_kind,n.evidence_ref)=
+                (c.source_object_id,c.target_object_id,c.witness_kind,c.evidence_ref))",&[&run,&doc,&packet])?;
+    let changed=scoped.execute("INSERT INTO execution.semantic_pnf_identity_evidence_candidate AS c
+        (run_id,document_id,source_object_id,target_object_id,witness_kind,source_token_id,target_token_id,sentence_id,evidence_ref,candidate_count,evidence_state)
+        SELECT $1,$2,n.source_object_id,n.target_object_id,n.witness_kind,n.source_token_id,n.target_token_id,n.sentence_id,n.evidence_ref,n.candidate_count,1
+        FROM jsonb_to_recordset($3) n(source_object_id bigint,target_object_id bigint,witness_kind smallint,
+            source_token_id bigint,target_token_id bigint,sentence_id bigint,evidence_ref text,candidate_count smallint)
+        ON CONFLICT(run_id,document_id,source_object_id,target_object_id,witness_kind,evidence_ref)
+        DO UPDATE SET evidence_state=1,source_token_id=EXCLUDED.source_token_id,target_token_id=EXCLUDED.target_token_id,
+          sentence_id=EXCLUDED.sentence_id,candidate_count=EXCLUDED.candidate_count
+        WHERE c.evidence_state=4 OR (c.source_token_id,c.target_token_id,c.sentence_id,c.candidate_count)
+          IS DISTINCT FROM (EXCLUDED.source_token_id,EXCLUDED.target_token_id,EXCLUDED.sentence_id,EXCLUDED.candidate_count)",
+        &[&run,&doc,&packet])?;
+    let overflow_removed=scoped.execute("DELETE FROM execution.semantic_pnf_proper_name_evidence_overflow o
+        WHERE o.run_id=$1 AND o.document_id=$2 AND NOT EXISTS(
+            SELECT 1 FROM jsonb_to_recordset($3) n(source_object_id bigint,source_token_id bigint,family_lemma_symbol_id bigint,
+                possible_target_count bigint,retained_target_limit smallint)
+            WHERE (o.source_object_id,o.source_token_id,o.family_lemma_symbol_id,o.possible_target_count,o.retained_target_limit)
+              =(n.source_object_id,n.source_token_id,n.family_lemma_symbol_id,n.possible_target_count,n.retained_target_limit))",
+        &[&run,&doc,&overflow_packet])?;
+    let overflow_added=scoped.execute("INSERT INTO execution.semantic_pnf_proper_name_evidence_overflow
+        (run_id,document_id,source_object_id,source_token_id,family_lemma_symbol_id,possible_target_count,retained_target_limit)
+        SELECT $1,$2,n.source_object_id,n.source_token_id,n.family_lemma_symbol_id,n.possible_target_count,n.retained_target_limit
+        FROM jsonb_to_recordset($3) n(source_object_id bigint,source_token_id bigint,family_lemma_symbol_id bigint,
+          possible_target_count bigint,retained_target_limit smallint)
+        WHERE NOT EXISTS(SELECT 1 FROM execution.semantic_pnf_proper_name_evidence_overflow o
+          WHERE o.run_id=$1 AND o.document_id=$2 AND
+          (o.source_object_id,o.source_token_id,o.family_lemma_symbol_id,o.possible_target_count,o.retained_target_limit)=
+          (n.source_object_id,n.source_token_id,n.family_lemma_symbol_id,n.possible_target_count,n.retained_target_limit))",
+        &[&run,&doc,&overflow_packet])?;
+    scoped.execute("UPDATE execution.semantic_pnf_identity_evidence_candidate SET evidence_state=1
+        WHERE run_id=$1 AND document_id=$2 AND target_object_id=ANY($3::bigint[])
+          AND evidence_state IN(2,3)",&[&run,&doc,&targets])?;
+    scoped.query_one("SELECT pg_temp.slr_admit_numeric_pnf_parser_identity_targets($1,$2,$3)",&[&run,&doc,&targets])?;
+    let projection=identity_projection_snapshot(&mut scoped,run,doc)?;
+    let sources=changed_projection_sources(&before_projection,&projection);
+    let factors=affected_identity_factors(&mut scoped,run,doc,&sources)?;
+    scoped.query_one("SELECT pg_temp.slr_refresh_identity_substitution_factors($1,$2,$3)",&[&run,&doc,&factors])?;
+    scoped.query_one("SELECT pg_temp.slr_refresh_supported_identity_substitution_factors($1,$2,$3)",&[&run,&doc,&factors])?;
+    let current=parser_evidence_keys_in_states(&mut scoped,run,doc,&[1,2,3])?;
+    let witness_keys=parser_admitted_witness_keys(&mut scoped,run,doc)?;
+    let after_l3=level_three_snapshot(&mut scoped,run,doc)?;
+    let after_ids=scoped_derivation_ids(&mut scoped,run,doc)?;
+    let unaffected=before_ids.iter().filter(|(_,(_,id))|!factors.contains(id)).all(|(k,v)|after_ids.get(k)==Some(v))
+        &&after_ids.iter().filter(|(_,(_,id))|!factors.contains(id)).all(|(k,v)|before_ids.get(k)==Some(v));
+    let unrelated_preserved=unrelated==read_unrelated(&mut scoped)?;
+    let immutable=level_one==level_one_snapshot(&mut scoped,run,doc)?;
+    if current!=desired||read_overflow(&mut scoped)?!=desired_overflow||!unaffected||!unrelated_preserved||!immutable{
+        return Err(NativeNumericAuditError::RetractionInvariant);
+    }
+    // Reference after the scoped candidate allocations uses the SAME
+    // original witness/entity IDs. It reconstructs the entire admitted
+    // projection in a savepoint; disagreement means no live publication.
+    let mut reference=scoped.transaction()?;
+    reference.execute("UPDATE execution.semantic_pnf_identity_evidence_candidate SET evidence_state=1
+        WHERE run_id=$1 AND document_id=$2 AND evidence_state IN(2,3)",&[&run,&doc])?;
+    reference.query_one("SELECT execution.admit_numeric_pnf_parser_identity_evidence($1,$2)",&[&run,&doc])?;
+    rebuild_reference_identity_level_three(&mut reference,run,doc)?;
+    let exact=witness_keys==parser_admitted_witness_keys(&mut reference,run,doc)?
+        &&projection==identity_projection_snapshot(&mut reference,run,doc)?
+        &&after_l3==level_three_snapshot(&mut reference,run,doc)?
+        &&level_one==level_one_snapshot(&mut reference,run,doc)?;
+    reference.rollback()?;
+    if !exact{return Err(NativeNumericAuditError::RetractionInvariant);}
+    // Do not label unchanged outside derivations as affected; preserve
+    // every nonselected original derivation payload as well as its ID.
+    for (key,value) in &before_l3{
+        if before_ids.get(key).is_some_and(|(_,id)|!factors.contains(id))&&after_l3.get(key)!=Some(value){
+            return Err(NativeNumericAuditError::RetractionInvariant);
+        }
+    }
+    scoped.commit()?;
+    receipt.committed=true;receipt.reference_exact=true;receipt.immutable_level_one_preserved=immutable;
+    receipt.unrelated_admissions_preserved=unrelated_preserved;receipt.unrelated_derivations_preserved=unaffected;
+    receipt.affected_target_ids=targets;receipt.affected_factor_ids=factors;
+    receipt.candidate_rows_changed=retired+changed;receipt.overflow_rows_changed=overflow_removed+overflow_added;
+    Ok(receipt)
+}
+
 fn probe_original_governed_identity(
     tx:&mut postgres::Transaction<'_>,run_ref:&str,document_ref:&str,demand:i64,answer:&NativeSourceLocalAnswer,
 )->Result<(OriginalParserIdentityProducerObservation,NativeGovernedIdentityProbe),NativeNumericAuditError>{
@@ -3781,6 +4004,7 @@ pub struct NativeNumericCandidateTransportReceipt {
     pub original_mention_binding_campaign:NativeMentionBindingCampaign,
     pub original_h9_readiness:NativeH9ReadinessReceipt,
     pub governed_identity_rollback_probe:Option<NativeGovernedIdentityProbe>,
+    pub document_identity_publication:Option<NativeDocumentIdentityPublication>,
 }
 /// Reopen the actual original m086 latest admissibility evidence and invoke
 /// the existing Lean executable on the exact demand fibre. This is a typed
@@ -4225,6 +4449,12 @@ pub fn transport_original_numeric_candidates_for_source_answer_with_partition(
     let consumer_horizon_work=process_original_native_consumer_horizons(&mut tx,demand,numeric_run_ref,
         answer,represented_slice_drained,inputs_changed,nonmonotone)?;
     let original_h6_evidence_inserted=consumer_horizon_work.h6_evidence_inserted;
+    let document_identity_publication=if std::env::var("SLR_NATIVE_DOCUMENT_IDENTITY_PUBLISH").as_deref()==Ok("1")
+        &&consumer_horizon_work.h6_validity.original_consumer_authority_reconciled {
+        if let (Some(producer),Some(probe))=(&original_parser_identity_producer,&governed_identity_rollback_probe){
+            Some(publish_checked_document_identity(&mut tx,numeric_run_ref,answer,producer,probe)?)
+        }else{None}
+    }else{None};
     let (original_horizon_observations,original_document_identity_observations)=
         observe_original_resolution_fibre(&mut tx,demand,numeric_run_ref,&answer.source_document_ref)?;
     let document_identity_fibre=project_original_identity_fibre(&original_horizon_observations,&original_document_identity_observations,open);
@@ -4250,7 +4480,7 @@ pub fn transport_original_numeric_candidates_for_source_answer_with_partition(
         morphology_observations_inserted,candidates_without_morphology_observation,morphology_head_unobservable_count,
         original_horizon_observations,original_document_identity_observations,
         original_parser_identity_producer,parser_identity_refresh_invocations,lean_typed_evidence,source_partition_wake,document_identity_fibre,original_cross_resource_needs,
-        structural_binding,native_binding_bridge,original_mention_binding_campaign,original_h9_readiness,governed_identity_rollback_probe,
+        structural_binding,native_binding_bridge,original_mention_binding_campaign,original_h9_readiness,governed_identity_rollback_probe,document_identity_publication,
     })
 }
 
