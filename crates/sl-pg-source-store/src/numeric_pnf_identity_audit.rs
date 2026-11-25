@@ -3264,7 +3264,8 @@ pub fn transport_original_numeric_candidates_for_source_answer_with_partition(
         let (observed,governed)=probe_original_governed_identity(&mut tx,numeric_run_ref,&answer.source_document_ref,demand)?;
         (Some(observed),Some(governed))
     }else{(None,None)};
-    let parser_identity_refresh_invocations=if governed_identity_rollback_probe.is_some(){1}else{0};
+    let parser_identity_refresh_invocations=original_parser_identity_producer.as_ref()
+        .map_or(0,|p|if p.bounded_identity_parity.is_some(){2}else{1});
     tx.commit()?;
     Ok(NativeNumericCandidateTransportReceipt{
         schema:"slr-native-candidate-only-transport-v6",
@@ -3283,6 +3284,36 @@ pub fn transport_original_numeric_candidates_for_source_answer_with_partition(
 #[cfg(test)]
 mod tests{
     use super::*;
+    fn name_key(source:i64,token:i64,entity:i64,count:i16)->ParserEvidenceKey{
+        (source,entity+100,3,Some(token),Some(entity+200),Some(1),
+            format!("proper-name-expansion:{token}:{entity}"),count)
+    }
+    #[test]
+    fn bounded_identity_exact_reference_keeps_full_family_and_direct_lanes(){
+        // Deliberately non-lexical ID order (2,10,100).
+        let mut reference=(1..=20).map(|id|name_key(10,20,id,20)).collect::<BTreeSet<_>>();
+        let other=name_key(10,21,100,20);
+        let direct=(10,99,4,Some(20),Some(98),Some(1),"parser-appos:20:98".into(),1);
+        reference.insert(other.clone());reference.insert(direct.clone());
+        let (retained,overflow)=bounded_parser_evidence_reference(&reference,16).unwrap();
+        assert_eq!(retained.len(),18);
+        assert_eq!(overflow,BTreeMap::from([((10,20),4)]));
+        assert!(retained.contains(&direct)&&retained.contains(&other));
+        for id in 1..=20 {
+            assert_eq!(retained.contains(&name_key(10,20,id,20)),id<=16);
+        }
+        assert_eq!(bounded_parser_evidence_reference(&reference,32).unwrap(),(reference,BTreeMap::new()));
+    }
+    #[test]
+    fn bounded_identity_never_discards_a_unique_or_foreign_evidence_row(){
+        let invalid=(1..=17).map(|id|name_key(10,20,id,1)).collect::<BTreeSet<_>>();
+        assert!(bounded_parser_evidence_reference(&invalid,16).is_err());
+        let mut key=name_key(10,20,1,1);
+        key.6="proper-name-expansion:999:1".into();
+        assert!(bounded_parser_evidence_reference(&BTreeSet::from([key]),16).is_err());
+        assert!(bounded_parser_evidence_reference(&BTreeSet::new(),0).is_err());
+    }
+
     #[test]
     fn original_binding_morphology_retains_missing_and_overlapping_features(){
         let f=vec!["Number=Sing".into(),"Gender=Masc".into(),"Person=3".into()];
