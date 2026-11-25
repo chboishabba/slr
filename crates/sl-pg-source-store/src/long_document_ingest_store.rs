@@ -158,6 +158,8 @@ pub struct PersistedLongDocumentRegion {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PersistedLongDocumentIngestReceipt {
+    /// None denotes the original immutable legacy partition.
+    pub partition_ref: Option<String>,
     pub source_ref: String,
     pub source_revision_ref: String,
     pub region_count: usize,
@@ -840,6 +842,7 @@ pub fn load_long_document_ingest_receipt(
         .collect::<BTreeMap<_, _>>();
 
     let receipt = PersistedLongDocumentIngestReceipt {
+        partition_ref: current,
         source_ref: row.get(0),
         source_revision_ref: source_revision_ref.to_owned(),
         region_count: row.get::<_, i64>(1) as usize,
@@ -1060,6 +1063,27 @@ mod heading_repair_reopen_tests {
             creates_semantic_authority: false,
             claim_truth_promoted: false,
         }).collect()
+    }
+
+    #[test]
+    fn partition_identity_distinguishes_extension_and_is_order_independent() {
+        let text = "Chapter One\nFirst. Second.\n\nLater.";
+        let (legacy, _) = build_plain_text_long_document_source(
+            "book:fixture", "revision:fixture", "plain", "receipt:fixture",
+            None, None, text,
+        ).unwrap();
+        let parent = legacy.regions.iter()
+            .find(|r| r.kind == DocumentRegionKind::Paragraph).unwrap();
+        let (extended, _) = extend_plain_text_heading_exclusions(
+            &legacy, text, &[parent.region_ref.clone()],
+        ).unwrap();
+        assert_ne!(partition_ref(&legacy), partition_ref(&extended));
+        assert_eq!(legacy.ingest.content_digest_ref, extended.ingest.content_digest_ref);
+        let mut reordered = extended.clone();
+        reordered.regions.reverse();
+        assert_eq!(partition_ref(&extended), partition_ref(&reordered));
+        reordered.regions[0].start_char += 1;
+        assert_ne!(partition_ref(&extended), partition_ref(&reordered));
     }
 
     #[test]
