@@ -304,7 +304,9 @@ pub fn audit_original_numeric_identity_for_source_answer(
                     AND (evidence_ref LIKE 'native-occurrence-transport:v1:%' OR evidence_ref LIKE 'native-binding-morphology:%'
                          OR evidence_ref LIKE 'native-binding-index-member:v2:%'))",&[demand_id])?.get::<_,bool>(0)
             };
-            stale>0||debt
+            let current_guard:bool=tx.query_one("SELECT to_regprocedure('execution.slr_native_current_authority_usable(bigint)') IS NOT NULL",&[])?.get(0);
+            let blocked=if current_guard{!tx.query_one("SELECT execution.slr_native_current_authority_usable($1)",&[demand_id])?.get::<_,bool>(0)}else{true};
+            stale>0||debt||blocked
         }else{
             // Before installation, the legacy H6 carrier has no validity
             // proof. Never certify a closed world based on that absence.
@@ -1266,14 +1268,17 @@ pub struct NativeH6ValidityReceipt {
 }
 fn ensure_native_h6_current_authority(tx:&mut postgres::Transaction<'_>,demand:i64)
     ->Result<(),NativeNumericAuditError>{
-    let installed:bool=tx.query_one("SELECT to_regclass('execution.slr_native_h3_current_contract') IS NOT NULL",&[])?.get(0);
+    let installed:bool=tx.query_one("SELECT to_regclass('execution.slr_native_current_authority_contract') IS NOT NULL",&[])?.get(0);
     if !installed{
         tx.query_one("SELECT pg_advisory_xact_lock(hashtext('slr-native-h6-current:v1'))",&[])?;
-        let ready:bool=tx.query_one("SELECT to_regclass('execution.slr_native_h3_current_contract') IS NOT NULL",&[])?.get(0);
+        let ready:bool=tx.query_one("SELECT to_regclass('execution.slr_native_current_authority_contract') IS NOT NULL",&[])?.get(0);
         if !ready{tx.batch_execute(include_str!("numeric_pnf_h6_current_authority.sql"))?;}
     }
     let intact:bool=tx.query_one("SELECT EXISTS(SELECT 1 FROM execution.slr_native_h6_current_contract WHERE contract_ref='slr-native-h6-current:v1')
       AND EXISTS(SELECT 1 FROM execution.slr_native_h3_current_contract WHERE contract_ref='slr-native-h3-current:v1')
+      AND EXISTS(SELECT 1 FROM execution.slr_native_current_authority_contract WHERE contract_ref='slr-native-current-authority:v1')
+      AND position('slr_native_current_authority_usable' in pg_get_functiondef(
+         'execution.numeric_pnf_consumer_stop_at_horizon(bigint,text,text,text,smallint)'::regprocedure))>0
       AND position('slr_native_h3_validity_current' in pg_get_viewdef('execution.slr_native_current_candidate_evidence_v1'::regclass))>0
       AND position('slr_native_current_candidate_evidence_v1' in pg_get_viewdef('execution.semantic_pnf_candidate_evidence_horizon_v1'::regclass))>0
       AND position('slr_native_current_candidate_evidence_v1' in pg_get_viewdef('execution.semantic_pnf_candidate_evidence_classification_v1'::regclass))>0
@@ -1404,10 +1409,14 @@ fn reopen_native_h6_validity(tx:&mut postgres::Transaction<'_>,demand:i64)
     // or sufficiency certificate referencing the old carrier needs its own
     // original authority; do not issue a synthetic restoration/refutation.
     let current_stale_events=tx.query("WITH latest AS (
-        SELECT DISTINCT ON(target_kind,target_id) event_id,evidence_id
+        SELECT DISTINCT ON(target_kind,target_id) event_id,evidence_id,target_kind,target_id
         FROM execution.semantic_pnf_candidate_admissibility_event WHERE demand_id=$1
         ORDER BY target_kind,target_id,event_id DESC)
-      SELECT event_id FROM latest WHERE evidence_id=ANY($2::bigint[]) ORDER BY event_id",
+      SELECT event_id FROM latest WHERE evidence_id=ANY($2::bigint[]) OR NOT EXISTS(
+        SELECT 1 FROM execution.slr_native_current_candidate_evidence_v1 e
+        WHERE e.evidence_id=latest.evidence_id AND e.demand_id=$1
+          AND e.target_kind=latest.target_kind AND e.target_id=latest.target_id)
+      ORDER BY event_id",
         &[&demand,&all_stale])?.iter().map(|r|r.get::<_,i64>(0)).collect::<Vec<_>>();
     let proof_or_sufficiency= !all_stale.is_empty() && tx.query_one("SELECT
         EXISTS(SELECT 1 FROM execution.semantic_pnf_frontier_resolution WHERE demand_id=$1 AND outcome_state=2)
@@ -1531,6 +1540,18 @@ fn process_original_native_consumer_horizons(
             SET work_state=1,completed_at=NULL WHERE demand_id=$1 AND consumer_ref=$2
               AND query_ref=$3 AND policy_ref=$4 AND horizon IN(6,9) AND work_state<>1",
             &[&demand,&consumer,query,policy])?;
+    }
+    // Suspend existing derived outcomes even when a pending queue cannot
+    // yet be completed. Do not rewrite any original proof/certificate rows.
+    let authority_usable:bool=tx.query_one("SELECT execution.slr_native_current_authority_usable($1)",&[&demand])?.get(0);
+    if !authority_usable {
+        for horizon in [3i16,6,9]{
+            tx.query_one("SELECT execution.refresh_numeric_pnf_consumer_horizon_outcome($1,$2,$3,$4,$5,$6)",
+                &[&run,&doc,&horizon,&consumer,query,policy])?;
+        }
+    }
+    if authority_usable!=h6_validity.original_consumer_authority_reconciled{
+        return Err(NativeNumericAuditError::AdmissionProbeInvariant);
     }
     let h3_ready=ready(tx,3)?;
     let mut h3_processed=false;

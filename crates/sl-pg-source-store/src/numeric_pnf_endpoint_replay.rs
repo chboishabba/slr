@@ -173,6 +173,26 @@ fn replayable_candidate(v:&Value)->bool{
 }
 fn false_or_true(b:bool)->Value{Value::Bool(b)}
 
+// The PostgreSQL fence cannot observe writes to the external canonical
+// source file. Reopen its exact indexed locator and verify bytes against
+// the receipt in the SAME numeric snapshot. This is one source-file read,
+// not a parser, binding, or observation scan.
+fn canonical_source_matches(db:&mut impl postgres::GenericClient,payload:&Value,implementation:&Value)->Result<bool>{
+    let Some(run)=payload["numeric_publication"].as_array().and_then(|p|p.last())
+        .and_then(|p|p["numeric_run_ref"].as_str()) else{return Ok(false)};
+    let Some(doc)=payload["source_local_answer"]["source_document_ref"].as_str() else{return Ok(false)};
+    let Some(expected)=payload["source_local_answer"]["source_content_sha256"].as_str() else{return Ok(false)};
+    let Some(root)=implementation["source_root"].as_str() else{return Ok(false)};
+    let rows=db.query("SELECT locator,encode(content_sha256,'hex'),byte_count
+        FROM execution.semantic_parser_source WHERE run_ref=$1 AND document_ref=$2",&[&run,&doc])?;
+    if rows.len()!=1||rows[0].get::<_,String>(1)!=expected{return Ok(false);}
+    let locator:String=rows[0].get(0);
+    let Ok(path)=PathBuf::from(locator).canonicalize() else{return Ok(false)};
+    if !path.starts_with(Path::new(root)){return Ok(false);}
+    let Ok(bytes)=std::fs::read(path) else{return Ok(false)};
+    Ok(i64::try_from(bytes.len()).ok()==Some(rows[0].get::<_,i64>(2))&&digest(&bytes)==expected)
+}
+
 impl NativeEndpointReplaySession {
     /// Cache row and numeric stamp share the same read-only snapshot.
     /// The source is collected on both sides of it. An intervening
@@ -186,9 +206,13 @@ impl NativeEndpointReplaySession {
         let n=stamp_on(&mut tx)?;
         let row=tx.query_opt("SELECT source_stamp,numeric_stamp,payload_sha256,payload
           FROM slr_native_replay.endpoint_receipt WHERE key_ref=$1",&[&self.key])?;
+        let source_bytes_verified=if let Some(row)=&row{
+            let payload:Value=row.get(3);
+            canonical_source_matches(&mut tx,&payload,&self.implementation)?
+        }else{false};
         tx.commit()?;
         let c=stamp(&self.source_url)?;
-        if a.as_deref()!=Some(before.source.as_str())||c!=a||n.as_deref()!=Some(before.numeric.as_str()){
+        if !source_bytes_verified||a.as_deref()!=Some(before.source.as_str())||c!=a||n.as_deref()!=Some(before.numeric.as_str()){
             return Ok(None);
         }
         let Some(row)=row else{return Ok(None)};
@@ -205,6 +229,7 @@ impl NativeEndpointReplaySession {
             "schema":"slr-native-endpoint-replay-hit:v1","hit":true,
             "source_stamp":before.source,"numeric_stamp":before.numeric,
             "source_observation_scan_performed":false,"numeric_binding_scan_performed":false,
+            "external_canonical_source_bytes_verified":true,
             "parser_identity_refresh_invocations":0,"semantic_recomputation_performed":false,
             "writes_semantic_state":false,"new_golden_kernel_execution":false,
             "current_authority_reused":false,"conservative_database_wide_invalidation":true
@@ -224,7 +249,8 @@ impl NativeEndpointReplaySession {
         let mut db=Client::connect(&self.numeric_url,NoTls)?;
         let mut tx=db.transaction()?;
         tx.batch_execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ; SET LOCAL statement_timeout='90000ms'")?;
-        if stamp_on(&mut tx)?.as_deref()!=Some(before.numeric.as_str()){return Ok(false);}
+        if stamp_on(&mut tx)?.as_deref()!=Some(before.numeric.as_str())
+            ||!canonical_source_matches(&mut tx,value,&self.implementation)?{return Ok(false);}
         tx.execute("INSERT INTO slr_native_replay.endpoint_receipt(key_ref,source_stamp,numeric_stamp,payload_sha256,payload)
           VALUES($1,$2,$3,$4,$5) ON CONFLICT(key_ref) DO UPDATE SET
           source_stamp=EXCLUDED.source_stamp,numeric_stamp=EXCLUDED.numeric_stamp,

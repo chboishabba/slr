@@ -182,6 +182,47 @@ SELECT evidence.evidence_id,
    AND universe.target_kind=evidence.target_kind
    AND universe.target_id=evidence.target_id;
 
+-- Original m095 certificate state is historical authority. A physical
+-- withdrawal does not fabricate a replacement certificate or restore a
+-- refuted candidate. It only suspends consumption until the owner checks it.
+CREATE OR REPLACE FUNCTION execution.slr_native_current_authority_usable(selected_demand_id bigint)
+RETURNS boolean LANGUAGE sql STABLE AS $
+SELECT NOT EXISTS(SELECT 1 FROM execution.slr_native_h6_managed_demand WHERE demand_id=selected_demand_id)
+ OR (
+    NOT EXISTS(SELECT 1 FROM execution.slr_native_h3_authority_debt WHERE demand_id=selected_demand_id)
+    AND NOT EXISTS(
+      SELECT 1 FROM execution.semantic_pnf_candidate_latest_admissibility a
+      WHERE a.demand_id=selected_demand_id AND NOT EXISTS(
+        SELECT 1 FROM execution.slr_native_current_candidate_evidence_v1 e
+        WHERE e.evidence_id=a.evidence_id AND e.demand_id=a.demand_id
+          AND e.target_kind=a.target_kind AND e.target_id=a.target_id))
+    AND NOT (
+      EXISTS(SELECT 1 FROM execution.semantic_pnf_candidate_evidence e WHERE e.demand_id=selected_demand_id
+        AND e.horizon IN(3,6) AND NOT EXISTS(
+          SELECT 1 FROM execution.slr_native_current_candidate_evidence_v1 c WHERE c.evidence_id=e.evidence_id))
+      AND (EXISTS(SELECT 1 FROM execution.semantic_pnf_frontier_resolution WHERE demand_id=selected_demand_id AND outcome_state=2)
+        OR EXISTS(SELECT 1 FROM execution.semantic_pnf_demand_open_world_state WHERE demand_id=selected_demand_id AND NOT outside_model_possible)
+        OR EXISTS(SELECT 1 FROM execution.semantic_pnf_consumer_sufficiency_current_v1 WHERE demand_id=selected_demand_id AND certificate_state=1)))
+ );
+$;
+
+-- Preserve the m095 public stop ABI and all query/policy certificate rules.
+-- The additional conjunction is a consumption guard, not new authority.
+CREATE OR REPLACE FUNCTION execution.numeric_pnf_consumer_stop_at_horizon(
+    selected_demand_id bigint, selected_consumer_ref text, selected_query_ref text,
+    selected_policy_ref text, selected_horizon smallint
+) RETURNS boolean LANGUAGE sql STABLE AS $
+SELECT execution.slr_native_current_authority_usable(selected_demand_id) AND EXISTS(
+    SELECT 1 FROM execution.semantic_pnf_consumer_sufficiency_current_v1 certificate
+    WHERE certificate.demand_id=selected_demand_id
+      AND certificate.consumer_ref=selected_consumer_ref AND certificate.query_ref=selected_query_ref
+      AND certificate.policy_ref=selected_policy_ref AND certificate.certificate_state=1
+      AND certificate.horizon<=selected_horizon
+      AND ((selected_policy_ref='' AND certificate.certificate_kind IN(1,3))
+        OR (selected_policy_ref<>'' AND certificate.certificate_kind IN(2,3)))
+);
+$;
+
 CREATE OR REPLACE FUNCTION execution.refresh_numeric_pnf_consumer_horizon_outcome(
     selected_run_id BIGINT,
     selected_document_id BIGINT,
@@ -209,7 +250,12 @@ BEGIN
            AND work.horizon=selected_horizon
          WHERE region.run_id=selected_run_id
            AND region.document_id=selected_document_id
-           AND work.work_state=2
+           AND (work.work_state=2 OR (
+             NOT execution.slr_native_current_authority_usable(demand.demand_id)
+             AND EXISTS(SELECT 1 FROM execution.semantic_pnf_consumer_horizon_outcome old
+               WHERE old.demand_id=demand.demand_id AND old.consumer_ref=selected_consumer_ref
+                 AND old.query_ref=selected_query_ref AND old.policy_ref=selected_policy_ref
+                 AND old.horizon=selected_horizon)))
     ), evidence_count AS MATERIALIZED (
         SELECT scoped.demand_id,
                count(evidence.evidence_id)::BIGINT AS evidence_count,
@@ -242,7 +288,7 @@ BEGIN
                evidence_count.nonneutral_evidence_count,
                candidate_count.represented_candidate_count,
                preferred_count.preferred_candidate_count,
-               EXISTS (
+               execution.slr_native_current_authority_usable(scoped.demand_id) AND EXISTS (
                    SELECT 1 FROM execution.semantic_pnf_frontier_resolution AS proof
                     WHERE proof.demand_id=scoped.demand_id
                       AND proof.outcome_state=2
@@ -333,3 +379,6 @@ INSERT INTO execution.slr_native_h6_current_contract VALUES('slr-native-h6-curre
 -- Version marker is written last, after all dependent views/functions.
 CREATE TABLE IF NOT EXISTS execution.slr_native_h3_current_contract(contract_ref text PRIMARY KEY);
 INSERT INTO execution.slr_native_h3_current_contract VALUES('slr-native-h3-current:v1') ON CONFLICT DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS execution.slr_native_current_authority_contract(contract_ref text PRIMARY KEY);
+INSERT INTO execution.slr_native_current_authority_contract VALUES('slr-native-current-authority:v1') ON CONFLICT DO NOTHING;
