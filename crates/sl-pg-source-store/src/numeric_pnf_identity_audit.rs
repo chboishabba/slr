@@ -2659,15 +2659,66 @@ fn produce_lean_typed_evidence(
         "represented":represented,"refuted":refuted,"live":live,
         "typed_coverage_paid":false,"identity_paid":false});
     let bytes=serde_json::to_vec(&input).map_err(|_|NativeNumericAuditError::ForeignSource)?;
-    let mut child=Command::new("timeout").args(["--kill-after=5s","90s"]).arg(executable)
+    let mut child=Command::new("timeout").args(["--kill-after=5s","90s"]).arg(&executable)
         .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn()
         .map_err(|e|NativeNumericAuditError::Database(format!("Lean typed evidence start: {e}")))?;
     child.stdin.take().ok_or(NativeNumericAuditError::ForeignSource)?.write_all(&bytes)
         .map_err(|e|NativeNumericAuditError::Database(format!("Lean typed evidence input: {e}")))?;
     let output=child.wait_with_output().map_err(|e|NativeNumericAuditError::Database(format!("Lean typed evidence process: {e}")))?;
     if !output.status.success(){return Err(NativeNumericAuditError::Database(format!("Lean typed evidence: {}",String::from_utf8_lossy(&output.stderr))));}
-    let actual:serde_json::Value=serde_json::from_slice(&output.stdout).map_err(|_|NativeNumericAuditError::ForeignSource)?;
+    let mut actual:serde_json::Value=serde_json::from_slice(&output.stdout).map_err(|_|NativeNumericAuditError::ForeignSource)?;
+    let receipt=actual.as_object_mut().and_then(|o|o.remove("kernel_receipt"))
+        .ok_or(NativeNumericAuditError::ForeignSource)?;
     if actual!=expected{return Err(NativeNumericAuditError::ForeignSource);}
+    // Independently reopen exact local kernel artifacts, not a supplied
+    // "kernel-certified" metadata string. This checks the projection theorem
+    // only; the original coverage/admission proof and authenticated formal
+    // payment still require their own authority.
+    let exe=std::fs::canonicalize(&executable).map_err(|_|NativeNumericAuditError::ForeignSource)?;
+    let root=exe.parent().and_then(|p|p.parent()).ok_or(NativeNumericAuditError::ForeignSource)?;
+    let dir=std::fs::canonicalize(receipt["artifact_dir"].as_str().ok_or(NativeNumericAuditError::ForeignSource)?)
+        .map_err(|_|NativeNumericAuditError::ForeignSource)?;
+    let base=std::fs::canonicalize(root.join(".dashi/native-typed-evidence"))
+        .map_err(|_|NativeNumericAuditError::ForeignSource)?;
+    if dir.parent()!=Some(base.as_path()) || receipt["schema"]!="slr-lean-typed-projection-kernel-v1"
+        || receipt["input_digest"]!=actual["input_digest"] || receipt["theorem"]!="slrTypedProjectionCertificate"
+        || receipt["kernel_checked"]!=true || receipt["typed_coverage_paid"]!=false || receipt["identity_paid"]!=false
+        || receipt["checker"].as_str().map_or(true,|x|x.is_empty()) {
+        return Err(NativeNumericAuditError::ForeignSource);
+    }
+    let read=|p:&std::path::Path|std::fs::read(p).map_err(|_|NativeNumericAuditError::ForeignSource);
+    let digest=|v:&[u8]|hex(&Sha256::digest(v));
+    let raw=read(&dir.join("input.json"))?;
+    let proof=read(&dir.join("Certificate.lean"))?;
+    let log=read(&dir.join("kernel.log"))?;
+    let contract=read(&root.join("DASHI/output-final_aristotle/RequestProject/Slr/NumericPnfRustPortContract.lean"))?;
+    let producer=read(&root.join("tools/NativePnfWorkset.lean"))?;
+    let key_list=|v:&serde_json::Value|->Result<String,NativeNumericAuditError>{
+        let keys=v.as_array().ok_or(NativeNumericAuditError::ForeignSource)?;
+        let items=keys.iter().map(|k|{
+            let kind=k["target_kind"].as_u64().ok_or(NativeNumericAuditError::ForeignSource)?;
+            let id=k["target_id"].as_u64().ok_or(NativeNumericAuditError::ForeignSource)?;
+            Ok(format!("⟨{kind}, {id}⟩"))
+        }).collect::<Result<Vec<_>,NativeNumericAuditError>>()?;
+        Ok(format!("[{}]",items.join(", ")))
+    };
+    let expected_proof=format!("import RequestProject.Slr.NumericPnfRustPortContract\nopen Wikidata.Slr.NumericPnfRustPortContract\ntheorem slrTypedProjectionCertificate : liveTypedKeys {} {} = {} := by decide\n#print axioms slrTypedProjectionCertificate\n",
+        key_list(&actual["represented"])?,
+        key_list(&actual["refuted"])?,
+        key_list(&actual["live"])?);
+    // jq -r adds one newline to the already newline-terminated theorem.
+    let proof_text=std::str::from_utf8(&proof).map_err(|_|NativeNumericAuditError::ForeignSource)?;
+    let log_text=std::str::from_utf8(&log).map_err(|_|NativeNumericAuditError::ForeignSource)?;
+    if raw!=bytes || proof_text.trim_end()!=expected_proof.trim_end()
+        || !log_text.contains("slrTypedProjectionCertificate") || log_text.contains("sorryAx")
+        || receipt["input_artifact_sha256"]!=digest(&raw)
+        || receipt["proof_sha256"]!=digest(&proof)
+        || receipt["kernel_log_sha256"]!=digest(&log)
+        || receipt["contract_sha256"]!=digest(&contract)
+        || receipt["producer_sha256"]!=digest(&producer) {
+        return Err(NativeNumericAuditError::ForeignSource);
+    }
+    actual["kernel_receipt"]=receipt;
     Ok(Some(actual))
 }
 
