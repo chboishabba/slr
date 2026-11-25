@@ -255,7 +255,7 @@ pub use numeric_pnf_parser_store::{
     NumericParserStoreError, NumericParserStoreReceipt,
 };
 pub use numeric_pnf_identity_audit::{
-    audit_original_numeric_identity_for_source_answer,
+    audit_original_numeric_identity_for_source_answer, certify_original_focus_identity, NativeFocusIdentityCertification,
     reuse_original_binding_and_identity_owners, OriginalOwnerReuseReceipt,
     NativeNumericAuditError, NativeNumericIdentityAudit,
     NumericDemandWorldStatus, NativeNumericRetractionReceipt,
