@@ -9,7 +9,7 @@
 //! strict reference parity, persistent checkpoint/repair tests and H9 witness.
 
 use crate::{
-    load_exact_native_numeric_evidence,plan_original_native_numeric_parser,
+    plan_original_native_numeric_parser,
     persist_original_numeric_parser_plan,compose_numeric_sentence_native,
     publish_original_numeric_sentence,
     DatabaseConfig,NativeManifest,NativeNumericParserPlan,
@@ -20,7 +20,8 @@ use crate::numeric_pnf_parser_store::{intern_all,NumericParserStoreError};
 use crate::numeric_pnf_operator::NumericOperatorError;
 use crate::numeric_pnf_sql::NumericSqlError;
 use crate::numeric_pnf_parser_plan::NumericParserPlanError;
-use crate::numeric_pnf_source_bridge::NativeNumericSourceError;
+use crate::numeric_pnf_source_bridge::{NativeNumericSourceError,load_exact_native_numeric_evidence_scope};
+use crate::numeric_pnf_parser_plan::{original_numeric_sentence_identity,digest_numeric_sentence_refs};
 use postgres::{Client,NoTls};
 use sha2::{Digest,Sha256};
 use serde::Serialize;
@@ -77,6 +78,12 @@ pub struct NumericPipelineReceipt {
     pub numeric_source_entity_count:usize,
     pub source_full_document_coverage_paid:bool,
     pub sentence_jobs_completed:usize,
+    pub consumer_prefix_start_bound:Option<i64>,
+    pub original_observations_loaded:usize,
+    pub required_sentence_refs:Vec<String>,
+    pub already_published_required_refs:Vec<String>,
+    pub newly_registered_sentence_refs:Vec<String>,
+    pub closed_sentence_region_starts:Vec<i64>,
     pub sentence_jobs_remaining:usize,
     pub entity_occurrence_objects_inserted:i64,
     pub entity_occurrence_token_supports_inserted:i64,
@@ -484,9 +491,9 @@ fn run_native_numeric_scoped_slice(
     if max_sentences==0||max_sentences>64{
         return Err(NumericPipelineError::Budget);
     }
-    let original=load_exact_native_numeric_evidence(
+    let (original,inventory)=load_exact_native_numeric_evidence_scope(
         slr,source_revision_ref,original_parser_run_ref,
-        "slr-strict-numeric-pnf-v1"
+        "slr-strict-numeric-pnf-v1",focus
     )?;
     let canonical=original_bytes(slr,&original.manifest)?;
     let run_ref=deterministic_numeric_run_ref(&original.manifest);
@@ -503,8 +510,14 @@ fn run_native_numeric_scoped_slice(
         &[&run_ref,&original.manifest.document_ref])?
         .into_iter().map(|r|r.get::<_,String>(0))
         .collect::<BTreeSet<_>>();
-    let expected=plan.sentences.iter().map(|s|s.sentence_ref.clone())
+    let expected=inventory.iter().map(|(start,end)|
+        original_numeric_sentence_identity(&run_ref,&original.manifest.document_ref,*start,*end).0)
         .collect::<BTreeSet<_>>();
+    if expected.len()!=inventory.len(){return Err(NumericPipelineError::ForeignRun);}
+    // Keep the original registration's global metadata inventory; do not
+    // assert globally complete token/entity evidence from a prefix-only tape.
+    plan.expected_total_sentence_regions=expected.len();
+    plan.expected_sentence_refs_sha256=digest_numeric_sentence_refs(&expected.iter().cloned().collect::<Vec<_>>());
     if !known.is_subset(&expected) {
         return Err(NumericPipelineError::ForeignRun);
     }
@@ -546,6 +559,9 @@ fn run_native_numeric_scoped_slice(
         token_budget+=sentence.tokens.len();
         selected.push(sentence.clone());
     }
+    let selected_sentence_refs=selected.iter().map(|s|s.sentence_ref.clone()).collect::<Vec<_>>();
+    let required_sentence_refs=plan.sentences.iter().map(|s|s.sentence_ref.clone()).collect::<Vec<_>>();
+    let already_published_required=required_sentence_refs.iter().filter(|s|known.contains(*s)).cloned().collect::<Vec<_>>();
     let just_inserted=if selected.is_empty(){
         0
     }else{
@@ -585,6 +601,7 @@ fn run_native_numeric_scoped_slice(
     // claim about global source coverage or completed numeric work.
     let _newly_registered_sentences=just_inserted;
     let mut completed=0usize;
+    let mut closed_sentence_region_starts=Vec::new();
     let mdl=NumericMdlWeights::default();
     while completed<max_sentences{
         let Some((lease,sentence_id))=lease_one(
@@ -596,10 +613,15 @@ fn run_native_numeric_scoped_slice(
         )?;
         let closure:NativeSentenceClosure=
             compose_numeric_sentence_native(lease.region_id,&tokens,&lex)?;
+        let region_start:i64=bootstrap_db.query_one(
+            "SELECT start_char FROM execution.semantic_pnf_region WHERE region_id=$1",
+            &[&lease.region_id])?.get(0);
+        if !required_prefix_region(region_start,focus){return Err(NumericPipelineError::ForeignRun);}
         publish_original_numeric_sentence(
             numeric_database_url,&original.manifest,&run_ref,
             &canonical,&lease,&closure,&mdl
         )?;
+        closed_sentence_region_starts.push(region_start);
         completed+=1;
     }
     let mut db=Client::connect(numeric_database_url,NoTls)?;
@@ -658,6 +680,10 @@ fn run_native_numeric_scoped_slice(
         )?.get::<_,i64>(0) as usize,
         source_full_document_coverage_paid:plan.full_document_coverage_paid
             &&pending_parser_sentences==0&&unrelated_pending_parser_sentences==0,
+        consumer_prefix_start_bound:focus,
+        original_observations_loaded:original.original_token_count,
+        required_sentence_refs,already_published_required_refs:already_published_required,
+        newly_registered_sentence_refs:selected_sentence_refs,closed_sentence_region_starts,
         sentence_jobs_completed:completed,sentence_jobs_remaining:remaining as usize,
         entity_occurrence_objects_inserted:entity_objects,
         entity_occurrence_token_supports_inserted:entity_supports,

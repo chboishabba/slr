@@ -52,7 +52,7 @@ fn sha256_ref(text: &str) -> String {
     format!("sha256:{:x}", hash.finalize())
 }
 
-fn chapter_heading(line: &str) -> bool {
+pub(crate) fn chapter_heading(line: &str) -> bool {
     let trimmed = line.trim();
     if trimmed.starts_with("# ") || trimmed.starts_with("## ") {
         return true;

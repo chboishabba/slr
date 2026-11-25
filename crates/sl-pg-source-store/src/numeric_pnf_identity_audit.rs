@@ -2736,7 +2736,7 @@ pub fn transport_original_numeric_candidates_for_source_answer(
         let (observed,governed)=probe_original_governed_identity(&mut tx,numeric_run_ref,&answer.source_document_ref,demand)?;
         (Some(observed),Some(governed))
     }else{(None,None)};
-    let parser_identity_refresh_invocations=usize::from(governed_identity_rollback_probe.is_some());
+    let parser_identity_refresh_invocations=if governed_identity_rollback_probe.is_some(){1}else{0};
     tx.commit()?;
     Ok(NativeNumericCandidateTransportReceipt{
         schema:"slr-native-candidate-only-transport-v6",

@@ -120,6 +120,11 @@ fn prefixed_ref(prefix:&str,digest:&[u8;32])->String {
     result
 }
 
+pub(crate) fn original_numeric_sentence_identity(run:&str,doc:&str,start:i64,end:i64)->(String,[u8;32]){
+    let digest=strict_numeric_digest(vec![bytes(run),bytes(doc),int(start),int(end),int(2)]);
+    (prefixed_ref("parser-sentence:",&digest),digest)
+}
+
 pub fn plan_original_native_numeric_parser(
     source:&OriginalNativeNumericEvidence,
     numeric_run_ref:&str,
@@ -132,11 +137,8 @@ pub fn plan_original_native_numeric_parser(
     }
     let mut sentences=Vec::with_capacity(source.parser_regions.len());
     for (source_sentence_index,region) in source.parser_regions.iter().enumerate() {
-        let sentence_digest=strict_numeric_digest(vec![
-            bytes(numeric_run_ref),bytes(&source.manifest.document_ref),
-            int(region.start_char),int(region.end_char),int(2),
-        ]);
-        let sentence_ref=prefixed_ref("parser-sentence:",&sentence_digest);
+        let (sentence_ref,sentence_digest)=original_numeric_sentence_identity(
+            numeric_run_ref,&source.manifest.document_ref,region.start_char,region.end_char);
         let mut temp=BTreeMap::new();
         for token in &region.tokens {
             let digest=strict_numeric_digest(vec![

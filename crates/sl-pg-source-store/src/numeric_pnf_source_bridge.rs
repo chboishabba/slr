@@ -102,6 +102,14 @@ pub fn load_exact_native_numeric_evidence(
     config:&DatabaseConfig,source_revision_ref:&str,parser_run_ref:&str,
     rule_set_revision:&str,
 )->Result<OriginalNativeNumericEvidence,NativeNumericSourceError>{
+    Ok(load_exact_native_numeric_evidence_scope(config,source_revision_ref,parser_run_ref,rule_set_revision,None)?.0)
+}
+/// The original job-coordinate inventory is cheap metadata. Only the selected
+/// source-region token/entity products enter the physical observation fold.
+pub(crate) fn load_exact_native_numeric_evidence_scope(
+    config:&DatabaseConfig,source_revision_ref:&str,parser_run_ref:&str,
+    rule_set_revision:&str,focus:Option<i64>,
+)->Result<(OriginalNativeNumericEvidence,Vec<(i64,i64)>),NativeNumericSourceError>{
     if source_revision_ref.is_empty()||parser_run_ref.is_empty()
         ||rule_set_revision.is_empty(){
         return Err(NativeNumericSourceError::SourceManifest);
@@ -175,9 +183,9 @@ pub fn load_exact_native_numeric_evidence(
          FROM ingest.parser_token AS token
          JOIN ingest.parser_job AS job
            ON job.compilation_key=token.compilation_key
-         WHERE job.parser_run_ref=$1
+         WHERE job.parser_run_ref=$1 AND ($2::bigint IS NULL OR job.region_start_char<=$2)
          ORDER BY token.compilation_key,token.token_ordinal",
-        &[&parser_run_ref])?;
+        &[&parser_run_ref,&focus])?;
     let mut token_rows_by_job=BTreeMap::<String,Vec<postgres::Row>>::new();
     for row in all_token_rows{
         let key:String=row.get(9);
@@ -189,15 +197,16 @@ pub fn load_exact_native_numeric_evidence(
          FROM ingest.parser_entity AS entity
          JOIN ingest.parser_job AS job
            ON job.compilation_key=entity.compilation_key
-         WHERE job.parser_run_ref=$1
+         WHERE job.parser_run_ref=$1 AND ($2::bigint IS NULL OR job.region_start_char<=$2)
          ORDER BY entity.compilation_key,entity.entity_ordinal",
-        &[&parser_run_ref])?;
+        &[&parser_run_ref,&focus])?;
     let mut entity_rows_by_job=BTreeMap::<String,Vec<postgres::Row>>::new();
     for row in all_entity_rows{
         let key:String=row.get(5);
         entity_rows_by_job.entry(key).or_default().push(row);
     }
-    let mut fibres=Vec::with_capacity(jobs.len());
+    let mut fibres=Vec::new();
+    let mut inventory=Vec::with_capacity(jobs.len());
     let mut last_end=0i64;
     let mut full_document=true;
     for job in jobs{
@@ -215,6 +224,8 @@ pub fn load_exact_native_numeric_evidence(
         }
         if start!=last_end{full_document=false;}
         last_end=end;
+        inventory.push((start,end));
+        if focus.is_some_and(|f|start>f){full_document=false;continue;}
         let rows=token_rows_by_job.remove(&compilation_key)
             .unwrap_or_default();
         let mut ordinals=BTreeSet::new();
@@ -290,7 +301,7 @@ pub fn load_exact_native_numeric_evidence(
     if !full_document{
         residuals.push("parser_run_does_not_cover_entire_canonical_document".into());
     }
-    Ok(OriginalNativeNumericEvidence{
+    Ok((OriginalNativeNumericEvidence{
         schema:"slr-exact-source-native-numeric-evidence-v1",
         manifest,original_source_ref,
         source_parser_family:r.get(6),
@@ -300,7 +311,7 @@ pub fn load_exact_native_numeric_evidence(
         original_token_count,parser_regions:fibres,
         full_document_coverage_paid:full_document,
         residuals,typed_identity_paid:false,external_qid_paid:false,
-    })
+    },inventory))
 }
 
 
@@ -315,11 +326,18 @@ pub struct NativePrefixRecoveryReceipt{
     pub queued_region_refs:Vec<String>,pub residual_region_refs:Vec<String>,
     pub uncovered_source_intervals:Vec<(usize,usize,usize)>,
     pub uncovered_region_intervals:Vec<(usize,usize,usize)>,
+    pub original_gap_paragraph_receipts:Vec<NativeGapParagraphReceipt>,
     pub original_parser_token_prefix_covered:bool,
     pub source_region_prefix_covered:bool,
     pub overlapping_region_residuals:Vec<String>,
     pub newly_enqueued_or_pending:usize,pub reused_products:usize,
     pub parser_scope_ready:bool,pub writes_database:bool,
+}
+#[derive(Debug,Clone,Serialize)]
+pub struct NativeGapParagraphReceipt{
+    pub region_ref:String,pub start_char:i64,pub end_char:i64,pub literal_sha256:String,
+    pub original_heading_exclusion_matches:bool,pub nonempty_line_count:usize,
+    pub covered_gap_intervals:Vec<(usize,usize,usize)>,
 }
 pub fn prepare_native_prefix_recovery(
     config:&DatabaseConfig,review_item:&str,parser_run:&str,commit:bool,
@@ -456,6 +474,34 @@ pub fn prepare_native_prefix_recovery(
     // sentence owner is an explicit residual, not permission to fabricate it.
     let uncovered=gaps(&token_covered);
     let uncovered_regions=gaps(&covered);
+    // Reopen the actual authored paragraph carrier and apply the ORIGINAL
+    // heading exclusion, not an invented gap segmentation. A multiline
+    // paragraph matching the heading predicate is a possible segmentation
+    // defect, not authority to mutate the established sentence ledger.
+    let mut original_gap_paragraph_receipts=Vec::new();
+    if !uncovered_regions.is_empty(){
+        let ps=db.query("SELECT region_ref,start_char,end_char
+            FROM ingest.long_document_region
+            WHERE source_revision_ref=$1 AND source_ref=$2 AND region_kind='paragraph'
+              AND start_char<$3 AND candidate_only AND NOT creates_semantic_authority AND NOT claim_truth_promoted
+            ORDER BY start_char,end_char,region_ref",
+            &[&review.source_revision_ref,&review.original_source_ref,&focus_i64]).map_err(|e|e.to_string())?;
+        for p in ps{
+            let a:i64=p.get(1);let b:i64=p.get(2);
+            if a<0||b<=a||b>chars.len() as i64{return Err("foreign paragraph coordinates".into());}
+            let intersect=uncovered_regions.iter().filter(|(x,y,_)|(*x as i64)<b&&(*y as i64)>a)
+                .copied().collect::<Vec<_>>();
+            if intersect.is_empty(){continue;}
+            let literal=chars[a as usize..b as usize].iter().collect::<String>();
+            original_gap_paragraph_receipts.push(NativeGapParagraphReceipt{
+                region_ref:p.get(0),start_char:a,end_char:b,
+                literal_sha256:format!("{:x}",Sha256::digest(literal.as_bytes())),
+                original_heading_exclusion_matches:crate::plain_text_document_adapter::chapter_heading(&literal),
+                nonempty_line_count:literal.lines().filter(|l|!l.trim().is_empty()).count(),
+                covered_gap_intervals:intersect,
+            });
+        }
+    }
     Ok(NativePrefixRecoveryReceipt{
         source_revision_ref:review.source_revision_ref,parser_run_ref:parser_run.into(),source_sha256:sha,
         focus_start_char:focus,original_prefix_regions:regions.len(),already_succeeded:succeeded,
@@ -463,7 +509,7 @@ pub fn prepare_native_prefix_recovery(
         queued_region_refs:queued.clone(),residual_region_refs:residual.clone(),
         original_parser_token_prefix_covered:uncovered.is_empty(),
         source_region_prefix_covered:uncovered_regions.is_empty(),
-        uncovered_source_intervals:uncovered,uncovered_region_intervals:uncovered_regions,
+        uncovered_source_intervals:uncovered,uncovered_region_intervals:uncovered_regions,original_gap_paragraph_receipts,
         overlapping_region_residuals:overlapping_region_residuals.clone(),
         newly_enqueued_or_pending:enqueued+queued.len(),
         reused_products:reused,parser_scope_ready:missing.is_empty()&&queued.is_empty()&&residual.is_empty()&&overlapping_region_residuals.is_empty(),

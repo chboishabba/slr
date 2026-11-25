@@ -121,9 +121,9 @@ pub fn run(args:&[String])->Result<(),String>{
                     "prefix_scope":scope,"numeric_publication":publication,"source_local_answer":answer,
                     "outcome":"source_local_policy_unresolved","governed_identity_paid":false,"level_three_paid":false}));
             }
-            let evidence=load_exact_native_numeric_evidence(&config,&scope.source_revision_ref,parser_run,
-                "slr-strict-numeric-pnf-v1").map_err(|e|e.to_string())?;
-            let numeric_run=deterministic_numeric_run_ref(&evidence.manifest);
+            // The original publication receipt already binds the immutable
+            // source/parser manifest. Do not reopen the full original tape.
+            let numeric_run=publication.last().ok_or("no scoped publication receipt")?.numeric_run_ref.clone();
             let mut passes=Vec::new();
             for _ in 0..8 {
                 let step=transport_original_numeric_candidates_for_source_answer(&url,&numeric_run,&answer,64)
