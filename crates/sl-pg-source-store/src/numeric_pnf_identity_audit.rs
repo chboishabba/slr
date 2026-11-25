@@ -1268,15 +1268,17 @@ pub struct NativeH6ValidityReceipt {
 }
 fn ensure_native_h6_current_authority(tx:&mut postgres::Transaction<'_>,demand:i64)
     ->Result<(),NativeNumericAuditError>{
-    let installed:bool=tx.query_one("SELECT EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='execution' AND p.proname='slr_wake_native_validity_delta' AND p.pronargs=0 AND position('slr_native_h3_authority_debt' in p.prosrc)>0) AND COALESCE(position('candidate_bins' in pg_get_viewdef(to_regclass('execution.semantic_pnf_candidate_evidence_horizon_v1'),true)),0)>0",&[])?.get(0);
+    let installed:bool=tx.query_one("SELECT EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='execution' AND p.proname='slr_wake_native_validity_delta' AND p.pronargs=0 AND position('slr_native_h3_authority_debt' in p.prosrc)>0) AND COALESCE(position('candidate_bins' in pg_get_viewdef(to_regclass('execution.semantic_pnf_candidate_evidence_horizon_v1'),true)),0)>0 AND to_regprocedure('execution.slr_produce_native_h6_for_demand(bigint,text,text,text)') IS NOT NULL",&[])?.get(0);
     if !installed{
         tx.query_one("SELECT pg_advisory_xact_lock(hashtext('slr-native-h6-current:v1'))",&[])?;
-        let ready:bool=tx.query_one("SELECT EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='execution' AND p.proname='slr_wake_native_validity_delta' AND p.pronargs=0 AND position('slr_native_h3_authority_debt' in p.prosrc)>0) AND COALESCE(position('candidate_bins' in pg_get_viewdef(to_regclass('execution.semantic_pnf_candidate_evidence_horizon_v1'),true)),0)>0",&[])?.get(0);
+        let ready:bool=tx.query_one("SELECT EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='execution' AND p.proname='slr_wake_native_validity_delta' AND p.pronargs=0 AND position('slr_native_h3_authority_debt' in p.prosrc)>0) AND COALESCE(position('candidate_bins' in pg_get_viewdef(to_regclass('execution.semantic_pnf_candidate_evidence_horizon_v1'),true)),0)>0 AND to_regprocedure('execution.slr_produce_native_h6_for_demand(bigint,text,text,text)') IS NOT NULL",&[])?.get(0);
         if !ready{tx.batch_execute(include_str!("numeric_pnf_h6_current_authority.sql"))?;}
     }
     let intact:bool=tx.query_one("SELECT EXISTS(SELECT 1 FROM execution.slr_native_h6_current_contract WHERE contract_ref='slr-native-h6-current:v1')
       AND EXISTS(SELECT 1 FROM execution.slr_native_h3_current_contract WHERE contract_ref='slr-native-h3-current:v1')
-      AND EXISTS(SELECT 1 FROM execution.slr_native_current_authority_contract WHERE contract_ref='slr-native-current-authority:v5')
+      AND EXISTS(SELECT 1 FROM execution.slr_native_current_authority_contract WHERE contract_ref='slr-native-current-authority:v6')
+      AND position('slr_current_m110_h6_atoms' in pg_get_functiondef(
+        'execution.slr_produce_native_h6_for_demand(bigint,text,text,text)'::regprocedure))>0
       AND position('candidate_bins' in pg_get_viewdef('execution.semantic_pnf_candidate_evidence_horizon_v1'::regclass))>0
       AND position('slr_native_h3_authority_debt' in pg_get_functiondef(
          'execution.slr_wake_native_validity_delta()'::regprocedure))>0
@@ -1529,7 +1531,7 @@ fn process_original_native_consumer_horizons(
             h6_validity.current_stale_admissibility_event_ids.is_empty()
             &&!h6_validity.original_proof_or_sufficiency_revalidation_required;
     }
-    let nonmonotone=(nonmonotone&&!debt_retired)||!h6_validity.original_consumer_authority_reconciled;
+    let mut nonmonotone=(nonmonotone&&!debt_retired)||!h6_validity.original_consumer_authority_reconciled;
     if h3_changed>0 {
         for horizon in [3i16,6,9]{
             tx.query_one("SELECT execution.slr_refresh_native_preference($1,$2)",&[&demand,&horizon])?;
@@ -1583,17 +1585,36 @@ fn process_original_native_consumer_horizons(
         // Use the actual scoped evidence owner and original scoped advance.
         // Existing H6 evidence remains append-only, preserving signed/zero H3.
         h6_invocations=1;
-        h6_evidence_inserted=tx.query_one("SELECT execution.refresh_numeric_pnf_h6_discourse_temporal_evidence_for_consumer($1,$2,$3,$4,$5,FALSE)",
-            &[&run,&doc,&consumer,query,policy])?.get(0);
+        h6_evidence_inserted=tx.query_one("SELECT execution.slr_produce_native_h6_for_demand($1,$2,$3,$4)",
+            &[&demand,&consumer,query,policy])?.get(0);
+        // Register exact H6 evidence coordinates after materialization.
+        // Existing lower-horizon dependencies retain their earlier minimum.
+        tx.execute("INSERT INTO execution.semantic_pnf_consumer_reverse_dependency
+            (source_kind,source_id,demand_id,consumer_ref,query_ref,policy_ref,minimum_horizon,dependency_kind)
+            SELECT c.kind,c.id,$1,$2,$3,$4,6,1 FROM (
+              SELECT 6::smallint AS kind,e.evidence_id AS id FROM execution.semantic_pnf_candidate_evidence e WHERE e.demand_id=$1 AND e.horizon=6
+              UNION SELECT 4::smallint,e.source_region_id FROM execution.semantic_pnf_candidate_evidence e WHERE e.demand_id=$1 AND e.horizon=6
+              UNION SELECT 5::smallint,e.source_interface_id FROM execution.semantic_pnf_candidate_evidence e WHERE e.demand_id=$1 AND e.horizon=6
+            ) c WHERE c.id IS NOT NULL ON CONFLICT DO NOTHING",&[&demand,&consumer,query,policy])?;
         h6_validity=reopen_native_h6_validity(tx,demand)?;
         h6_validity.native_h3_state_rows_changed=h3_changed;
-        if !h6_validity.original_consumer_authority_reconciled{return Err(NativeNumericAuditError::AdmissionProbeInvariant);}
         tx.query_one("SELECT execution.slr_refresh_native_preference($1,6::smallint)",&[&demand])?;
         tx.query_one("SELECT execution.slr_refresh_native_preference($1,9::smallint)",&[&demand])?;
-        tx.query_one("SELECT execution.advance_numeric_pnf_horizon_work_for_consumer($1,$2,6::smallint,$3,$4,$5)",
-            &[&run,&doc,&consumer,query,policy])?;
-        h6_processed=!ready(tx,6)?;
-        if !h6_processed{return Err(NativeNumericAuditError::AdmissionProbeInvariant);}
+        if !h6_validity.original_consumer_authority_reconciled {
+            // Commit the discovered journal debt and suspend consumption.
+            // Rolling back the whole pass here would erase the discovery.
+            // Do not acknowledge H6 or publish downstream proof authority.
+            nonmonotone=true;
+            for horizon in [3i16,6,9]{
+                tx.query_one("SELECT execution.refresh_numeric_pnf_consumer_horizon_outcome($1,$2,$3,$4,$5,$6)",
+                    &[&run,&doc,&horizon,&consumer,query,policy])?;
+            }
+        } else {
+            tx.query_one("SELECT execution.advance_numeric_pnf_horizon_work_for_consumer($1,$2,6::smallint,$3,$4,$5)",
+                &[&run,&doc,&consumer,query,policy])?;
+            h6_processed=!ready(tx,6)?;
+            if !h6_processed{return Err(NativeNumericAuditError::AdmissionProbeInvariant);}
+        }
     }
     // A newly inserted H6 atom may legitimately wake an H3 dependency via
     // the original trigger. Leave that work ready; never acknowledge a wake
