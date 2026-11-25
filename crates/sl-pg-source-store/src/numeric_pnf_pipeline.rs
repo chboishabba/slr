@@ -81,6 +81,8 @@ pub struct NumericPipelineReceipt {
     pub consumer_prefix_start_bound:Option<i64>,
     pub original_observations_loaded:usize,
     pub required_sentence_refs:Vec<String>,
+    pub lean_workset_checked:bool,
+    pub missing_required_sentence_refs:Vec<String>,
     pub already_published_required_refs:Vec<String>,
     pub newly_registered_sentence_refs:Vec<String>,
     pub closed_sentence_region_starts:Vec<i64>,
@@ -545,10 +547,16 @@ fn run_native_numeric_scoped_slice(
             let seq=next;next+=1;seq
         };
     }
+    let required_sentence_refs=plan.sentences.iter().filter(|s|required_prefix_region(s.start_char,focus))
+        .map(|s|s.sentence_ref.clone()).collect::<Vec<_>>();
+    let already_published_required=required_sentence_refs.iter().filter(|s|known.contains(*s)).cloned().collect::<Vec<_>>();
+    let (missing_required_sentence_refs,lean_workset_checked)=consumer_prefix_workset(
+        &plan.original_source_sha256,&run_ref,&required_sentence_refs,&already_published_required,focus.is_some())?;
+    let missing_required=missing_required_sentence_refs.iter().cloned().collect::<BTreeSet<_>>();
     let mut selected=Vec::new();
     let mut token_budget=0usize;
     for sentence in &plan.sentences{
-        if known.contains(&sentence.sentence_ref)||!required_prefix_region(sentence.start_char,focus){continue;}
+        if !missing_required.contains(&sentence.sentence_ref){continue;}
         if sentence.tokens.len()>12_000 {
             return Err(NumericPipelineError::Budget);
         }
@@ -560,8 +568,6 @@ fn run_native_numeric_scoped_slice(
         selected.push(sentence.clone());
     }
     let selected_sentence_refs=selected.iter().map(|s|s.sentence_ref.clone()).collect::<Vec<_>>();
-    let required_sentence_refs=plan.sentences.iter().map(|s|s.sentence_ref.clone()).collect::<Vec<_>>();
-    let already_published_required=required_sentence_refs.iter().filter(|s|known.contains(*s)).cloned().collect::<Vec<_>>();
     let just_inserted=if selected.is_empty(){
         0
     }else{
@@ -682,7 +688,8 @@ fn run_native_numeric_scoped_slice(
             &&pending_parser_sentences==0&&unrelated_pending_parser_sentences==0,
         consumer_prefix_start_bound:focus,
         original_observations_loaded:original.original_token_count,
-        required_sentence_refs,already_published_required_refs:already_published_required,
+        required_sentence_refs,lean_workset_checked,missing_required_sentence_refs,
+        already_published_required_refs:already_published_required,
         newly_registered_sentence_refs:selected_sentence_refs,closed_sentence_region_starts,
         sentence_jobs_completed:completed,sentence_jobs_remaining:remaining as usize,
         entity_occurrence_objects_inserted:entity_objects,
@@ -692,6 +699,47 @@ fn run_native_numeric_scoped_slice(
         unique_document_identity_paid:false,level_three_identity_substitution_paid:false,
         external_qid_paid:false,historical_truth_paid:false,residuals,
     })
+}
+
+/// The Lean executable is the reference producer of the actual requested
+/// workset; Rust independently checks the exact ordered output before any
+/// publication. No source/semantic authority is inferred from process exit.
+/// Legacy full-document publication remains unchanged.
+fn consumer_prefix_workset(
+    source_sha:&str,run:&str,required:&[String],published:&[String],scoped:bool,
+)->Result<(Vec<String>,bool),NumericPipelineError>{
+    use std::io::Write;
+    use std::process::{Command,Stdio};
+    let existing=published.iter().collect::<BTreeSet<_>>();
+    let reference=required.iter().filter(|s|!existing.contains(s)).cloned().collect::<Vec<_>>();
+    if !scoped{return Ok((reference,false));}
+    let executable=match std::env::var_os("SLR_NATIVE_LEAN_WORKSET_EXECUTABLE"){
+        Some(path)=>path,
+        None=>return Ok((reference,false)),
+    };
+    let input=serde_json::json!({
+        "schema":"slr-native-prefix-workset-input-v1","source_sha256":source_sha,
+        "numeric_run_ref":run,"required_sentence_refs":required,
+        "already_published_required_refs":published});
+    let expected=serde_json::json!({
+        "schema":"slr-native-prefix-workset-output-v1","source_sha256":source_sha,
+        "numeric_run_ref":run,"required_sentence_refs":required,
+        "already_published_required_refs":published,
+        "missing_required_sentence_refs":reference,
+        "semantic_admission_paid":false,"identity_paid":false});
+    let bytes=serde_json::to_vec(&input).map_err(|_|NumericPipelineError::ForeignRun)?;
+    let mut child=Command::new(executable).stdin(Stdio::piped()).stdout(Stdio::piped())
+        .stderr(Stdio::piped()).spawn().map_err(|e|NumericPipelineError::Database(format!("Lean workset start: {e}")))?;
+    child.stdin.take().ok_or(NumericPipelineError::ForeignRun)?.write_all(&bytes)
+        .map_err(|e|NumericPipelineError::Database(format!("Lean workset input: {e}")))?;
+    let output=child.wait_with_output().map_err(|e|NumericPipelineError::Database(format!("Lean workset process: {e}")))?;
+    if !output.status.success(){return Err(NumericPipelineError::Database(format!("Lean workset: {}",String::from_utf8_lossy(&output.stderr))));}
+    let got:serde_json::Value=serde_json::from_slice(&output.stdout)
+        .map_err(|_|NumericPipelineError::ForeignRun)?;
+    if got!=expected{return Err(NumericPipelineError::ForeignRun);}
+    let selected=serde_json::from_value::<Vec<String>>(got["missing_required_sentence_refs"].clone())
+        .map_err(|_|NumericPipelineError::ForeignRun)?;
+    Ok((selected,true))
 }
 
 // Golden: Lean NumericPnfRustPortContract.consumerRegionWork; physical
