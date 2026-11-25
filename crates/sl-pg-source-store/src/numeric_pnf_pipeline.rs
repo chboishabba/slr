@@ -235,6 +235,8 @@ pub struct DirectNumericCandidateSlice {
     pub first_sentence:usize,
     pub next_sentence:usize,
     pub represented_sentence_count:usize,
+    pub source_inventory_sha256:Option<String>,
+    pub source_observation_tokens_loaded:usize,
     pub source_full_document_coverage_paid:bool,
     pub sentences:Vec<DirectNumericSentenceCandidate>,
     pub sentence_local_database_crossings:usize,
@@ -353,7 +355,8 @@ pub fn compile_direct_numeric_candidates(
             original_source_sha256:source.manifest.canonical_content_sha256.clone(),
             original_parser_run_ref:source.manifest.parser_run_ref.clone(),numeric_run_ref:run,
             source_document_ref:source.manifest.document_ref.clone(),first_sentence:first,next_sentence:first,
-            represented_sentence_count:0,source_full_document_coverage_paid:false,sentences:vec![],
+            represented_sentence_count:0,source_inventory_sha256:None,source_observation_tokens_loaded:0,
+            source_full_document_coverage_paid:false,sentences:vec![],
             sentence_local_database_crossings:0,production_parser_token_writes:0,candidate_only:true,
             governed_identity_paid:false,level_three_paid:false,direct_production_activation_paid:false,
         });
@@ -373,6 +376,7 @@ pub fn compile_direct_numeric_candidates(
         original_source_sha256:plan.original_source_sha256,original_parser_run_ref:plan.original_parser_run_ref,
         numeric_run_ref:run,source_document_ref:plan.source_document_ref,
         first_sentence:first,next_sentence:first+rows.len(),represented_sentence_count:plan.sentences.len(),
+        source_inventory_sha256:None,source_observation_tokens_loaded:source.original_token_count,
         source_full_document_coverage_paid:false,sentences:rows,
         sentence_local_database_crossings:0,production_parser_token_writes:0,
         candidate_only:true,governed_identity_paid:false,level_three_paid:false,direct_production_activation_paid:false,
@@ -390,6 +394,11 @@ pub fn inspect_direct_numeric_source_slice(
     receipt.first_sentence=first;
     receipt.next_sentence=first+receipt.sentences.len();
     receipt.represented_sentence_count=inventory.len();
+    // Cursor callers must compare the inventory digest before resuming a
+    // different read snapshot; this is a scope observation, not a durable fence.
+    let encoded=serde_json::to_vec(&(&receipt.source_revision_ref,&receipt.original_parser_run_ref,&inventory))
+        .map_err(|_|NumericPipelineError::ForeignRun)?;
+    receipt.source_inventory_sha256=Some(format!("{:x}",Sha256::digest(encoded)));
     Ok(receipt)
 }
 
@@ -1046,6 +1055,95 @@ fn required_prefix_region(start:i64,focus:Option<i64>)->bool{focus.map_or(true,|
 #[cfg(test)]
 mod numeric_pnf_consumer_workset_golden{
     use super::*;
+
+    fn direct_fixture()->crate::OriginalNativeNumericEvidence{
+        let text="Bush shall act";
+        let token=|ordinal:i32,start:i64,end:i64,surface:&str,pos:&str,dep:&str,head:i32,tag:Option<&str>|
+            crate::OriginalNumericRawToken{
+                compilation_key:"job:1".into(),original_token_ordinal:ordinal,start_char:start,end_char:end,
+                surface:surface.into(),lemma:surface.into(),pos:pos.into(),morph_json:None,
+                head_ordinal:Some(head),dependency_ref:dep.into(),
+                original_tag:tag.map(str::to_owned),original_tag_unavailable:tag.is_none(),semantic_admission_paid:false,
+            };
+        crate::OriginalNativeNumericEvidence{
+            schema:"test",manifest:NativeManifest{
+                document_ref:"document:test".into(),source_revision_ref:"revision:test".into(),
+                canonical_content_sha256:format!("{:x}",Sha256::digest(text.as_bytes())),
+                source_byte_length:text.len(),source_codepoint_length:text.chars().count(),
+                coordinate_contract_ref:"unicode-codepoints:v1".into(),parser_run_ref:"parser:test".into(),
+                rule_set_revision:"v1".into(),
+            },original_source_ref:"source:test".into(),source_parser_family:"spacy".into(),
+            source_parser_version:"v1".into(),source_model_ref:"test".into(),
+            parser_regions:vec![crate::OriginalNumericSentenceFibre{
+                compilation_key:"job:1".into(),region_ref:"region:1".into(),start_char:0,end_char:14,
+                tokens:vec![token(0,0,4,"Bush","PROPN","nsubj",2,Some("NNP")),
+                    token(1,5,10,"shall","AUX","aux",2,None),
+                    token(2,11,14,"act","VERB","ROOT",2,Some("VB"))],
+                entities:vec![],full_numeric_tag_capability_available:false,
+            }],original_region_count:1,original_token_count:3,full_document_coverage_paid:true,
+            residuals:vec![],typed_identity_paid:false,external_qid_paid:false,
+        }
+    }
+
+    #[test]
+    fn direct_candidate_retains_inverse_and_missing_tag_without_promotion(){
+        let source=direct_fixture();
+        let packet=compile_direct_numeric_candidates(&source,0,1).unwrap();
+        let d=&packet.sentences[0];
+        assert_eq!(d.numeric_tokens.len(),3);
+        assert_eq!(d.numeric_tokens[1].tag_id,0);
+        assert_eq!(d.token_inverse[1].tag_origin_id,3);
+        assert_eq!(d.missing_original_tag_count,1);
+        assert_eq!(d.closure.factors.len(),1);
+        assert_eq!(d.closure.demands.len(),3);
+        assert_eq!(packet.sentence_local_database_crossings,0);
+        assert_eq!(packet.production_parser_token_writes,0);
+        assert!(!packet.direct_production_activation_paid);
+        assert!(!packet.governed_identity_paid);
+        assert_eq!(packet,compile_direct_numeric_candidates(&source,0,1).unwrap());
+        assert!(compile_direct_numeric_candidates(&source,1,1).unwrap().sentences.is_empty());
+        assert!(compile_direct_numeric_candidates(&source,2,1).is_err());
+        assert!(compile_direct_numeric_candidates(&source,0,65).is_err());
+        let mut changed=source;
+        changed.parser_regions[0].tokens[1].original_tag=Some("MD".into());
+        changed.parser_regions[0].tokens[1].original_tag_unavailable=false;
+        let corrected=compile_direct_numeric_candidates(&changed,0,1).unwrap();
+        assert_ne!(d.input_sha256,corrected.sentences[0].input_sha256);
+        assert_eq!(corrected.sentences[0].missing_original_tag_count,0);
+    }
+
+    #[test]
+    fn direct_inverse_transport_matches_relabelled_reference_and_rejects_bad_head(){
+        let source=direct_fixture();
+        let packet=compile_direct_numeric_candidates(&source,0,1).unwrap();
+        let d=&packet.sentences[0];
+        // Deliberately reverse the order of the numeric coordinates.
+        let symbol=|id:i64|if id==0{0}else{10000-id};
+        let token=|id:i64|100-id;
+        let symbols=d.symbol_inverse.iter().cloned().enumerate()
+            .map(|(i,k)|(k,symbol(i as i64+1))).collect::<BTreeMap<_,_>>();
+        let lex=direct_symbol_lexicon(&symbols).unwrap();
+        let mut tokens=d.numeric_tokens.iter().cloned().map(|mut t|{
+            t.token_id=token(t.token_id);t.head_token_id=token(t.head_token_id);
+            t.orth_id=symbol(t.orth_id);t.lemma_id=symbol(t.lemma_id);
+            t.pos_id=symbol(t.pos_id);t.tag_id=symbol(t.tag_id);t.dependency_id=symbol(t.dependency_id);
+            t
+        }).collect::<Vec<_>>();
+        let reference=compose_numeric_sentence_native(99,&tokens,&lex).unwrap();
+        checked_direct_codec_parity(d,&tokens,&lex,99,&reference).unwrap();
+        tokens[1].head_token_id=tokens[0].token_id;
+        assert!(checked_direct_codec_parity(d,&tokens,&lex,99,&reference).is_err());
+        let mut missing=d.closure.clone();
+        missing.demands.pop();
+        missing.measure.unresolved_count-=1;
+        missing.measure.boundary_demand_weight-=1.0;
+        missing.measure.interface_cardinality-=1;
+        let id_tokens=d.numeric_tokens.iter().map(|t|(t.token_id,t.token_id)).collect();
+        let id_symbols=(1..=d.symbol_inverse.len() as i64).map(|x|(x,x)).collect();
+        assert!(crate::numeric_pnf_operator::rekey_numeric_sentence_closure(
+            1,1,&missing,&id_tokens,&id_symbols).is_err());
+    }
+
     #[test] fn numeric_pnf_no_unrelated_publication(){
         let source=[0,230,2215,2660,3603,4530,4600,10000];
         let published=[0,230,2215,2660,3603,4530];
