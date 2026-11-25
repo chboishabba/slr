@@ -17,6 +17,7 @@ use sensiblaw_pg_source_store::{
     retract_original_numeric_identity_for_source_answer,
     transport_original_numeric_candidates_for_source_answer,
     prepare_native_prefix_recovery, complete_parser_run,
+    load_source_partition_changes, transport_original_numeric_candidates_for_source_answer_with_partition,
 };
 use serde::Serialize;
 use std::{env,path::PathBuf};
@@ -124,9 +125,12 @@ pub fn run(args:&[String])->Result<(),String>{
             // The original publication receipt already binds the immutable
             // source/parser manifest. Do not reopen the full original tape.
             let numeric_run=publication.last().ok_or("no scoped publication receipt")?.numeric_run_ref.clone();
+            let source_partition_changes=load_source_partition_changes(&config,&scope.source_revision_ref,
+                &format!("sha256:{}",scope.source_sha256)).map_err(|e|e.to_string())?;
             let mut passes=Vec::new();
             for _ in 0..8 {
-                let step=transport_original_numeric_candidates_for_source_answer(&url,&numeric_run,&answer,64)
+                let step=transport_original_numeric_candidates_for_source_answer_with_partition(
+                    &url,&numeric_run,&answer,64,&source_partition_changes)
                     .map_err(|e|e.to_string())?;
                 let done=step.governed_identity_rollback_probe.is_some();
                 let progress=!step.inserted_candidate_ids.is_empty()||step.nominal_head_objects_inserted>0
@@ -201,6 +205,7 @@ pub fn run(args:&[String])->Result<(),String>{
             print_json(&serde_json::json!({
                 "schema":"slr-native-antecedent-endpoint-v1","prefix_scope":scope,
                 "numeric_publication":publication,"binding_passes":passes,"original_owner_reuse":readback,
+                "source_partition_changes":source_partition_changes,
                 "source_local_answer":answer,"typed_consumer_dossier":typed_dossier,
                 "observed_prefix_token_coverage":prefix_complete,
                 "projected_vs_original_entity_membership_parity":cross_owner,"exact_entity_inverse_complete":inverse,
