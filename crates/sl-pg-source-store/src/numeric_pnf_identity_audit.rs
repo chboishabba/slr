@@ -617,6 +617,50 @@ pub fn retract_original_numeric_identity_for_source_answer(
 
 
 
+/// The original read-only audit intentionally never promotes observations
+/// into payment. This explicit operator campaign consumes ONLY an already
+/// current original focus witness and checks its real inverse, in rollback.
+#[derive(Debug,Clone,Serialize)]
+pub struct NativeFocusIdentityCertification {
+    pub original:NativeNumericIdentityAudit,
+    pub inverse:Option<NativeNumericRetractionReceipt>,
+    pub rollback_readback_exact:bool,
+    pub governed_identity_paid:bool,
+    pub level_three_paid:bool,
+    pub persisted:bool,
+}
+
+pub fn certify_original_focus_identity(
+    url:&str,run:&str,answer:&NativeSourceLocalAnswer,
+)->Result<NativeFocusIdentityCertification,NativeNumericAuditError>{
+    let original=audit_original_numeric_identity_for_source_answer(url,run,answer)?;
+    let mut receipt=NativeFocusIdentityCertification{
+        original,inverse:None,rollback_readback_exact:false,
+        governed_identity_paid:false,level_three_paid:false,persisted:false,
+    };
+    if !receipt.original.resolved_unique_target_from_original_sql
+        || !receipt.original.exact_numeric_focus_mention_found
+        || receipt.original.observed_accepted_document_witness_ids.len()!=1
+        || receipt.original.observed_witnessed_level_three_derivation_refs.is_empty(){
+        return Ok(receipt);
+    }
+    let witness=receipt.original.observed_accepted_document_witness_ids[0];
+    let inverse=retract_original_numeric_identity_for_source_answer(url,run,answer,witness,false)?;
+    let reopened=audit_original_numeric_identity_for_source_answer(url,run,answer)?;
+    let before=serde_json::to_value(&receipt.original).map_err(|_|NativeNumericAuditError::RetractionInvariant)?;
+    let after=serde_json::to_value(&reopened).map_err(|_|NativeNumericAuditError::RetractionInvariant)?;
+    let observed=receipt.original.observed_witnessed_level_three_derivation_refs.iter().collect::<BTreeSet<_>>();
+    let affected=inverse.affected_level_three_derivation_refs.iter().collect::<BTreeSet<_>>();
+    if before!=after||inverse.committed||!inverse.immutable_level_one_preserved
+       ||!inverse.unaffected_level_three_preserved||!inverse.revoked_witness_absent_from_current_projection
+       ||!inverse.revoked_witness_absent_from_current_derivations||!observed.is_subset(&affected){
+        return Err(NativeNumericAuditError::RetractionInvariant);
+    }
+    receipt.rollback_readback_exact=true;
+    receipt.governed_identity_paid=true;receipt.level_three_paid=true;receipt.inverse=Some(inverse);
+    Ok(receipt)
+}
+
 // Direct port of SensibLaw binding_candidate_sets.py:
 // binding-compatibility:pnf-kind-morphology:v0_3. Missing features retain
 // the candidate. Compare sets, never scalar similarity or spelling.
@@ -1211,6 +1255,8 @@ pub struct NativeConsumerHorizonWorkReceipt {
     pub h3_processed:bool,
     pub h6_ready_before:bool,
     pub h6_processed:bool,
+    pub h3_ready_after:bool,
+    pub h6_ready_after:bool,
     pub h6_producer_invocations:usize,
     pub h6_evidence_inserted:i64,
     pub h9_residual_ready:bool,
@@ -1311,6 +1357,7 @@ fn process_original_native_consumer_horizons(
     Ok(NativeConsumerHorizonWorkReceipt{
         consumer_ref:consumer.into(),query_ref:query.clone(),policy_ref:policy.clone(),
         h3_ready_before:h3_ready,h3_processed,h6_ready_before:h6_ready,h6_processed,
+        h3_ready_after:ready(tx,3)?,h6_ready_after:ready(tx,6)?,
         h6_producer_invocations:h6_invocations,h6_evidence_inserted,
         h9_residual_ready:ready(tx,9)?,represented_slice_drained,nonmonotone_input_residual:nonmonotone,
         h6_validity,typed_coverage_paid:false,external_execution_performed:false,
