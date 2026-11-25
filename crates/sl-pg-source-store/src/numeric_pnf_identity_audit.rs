@@ -846,6 +846,7 @@ fn refine_original_numeric_morphology(
 
 #[derive(Debug,Clone,Serialize)]
 pub struct OriginalParserIdentityCandidateObservation{
+    pub candidate_id:i64,
     pub source_object_id:i64,
     pub target_object_id:i64,
     pub witness_kind:i16,
@@ -863,6 +864,7 @@ pub struct OriginalParserIdentityProducerObservation{
     pub candidate_rows:Vec<OriginalParserIdentityCandidateObservation>,
     pub name_overflow_rows:i64,
     pub admission_executed:bool,
+    pub admitted_candidate_witnesses:Vec<OriginalParserCandidateWitnessObservation>,
 }
 fn observe_refreshed_parser_identity_producer(
     probe:&mut postgres::Transaction<'_>,run_id:i64,document_id:i64,demand:i64,
@@ -870,7 +872,7 @@ fn observe_refreshed_parser_identity_producer(
     let rows=probe.query(
         "SELECT c.source_object_id,c.target_object_id,c.witness_kind,
                 c.source_token_id,c.target_token_id,c.evidence_ref,
-                c.candidate_count,c.evidence_state
+                c.candidate_count,c.evidence_state,c.candidate_id
          FROM execution.semantic_pnf_identity_evidence_candidate c
          WHERE c.run_id=$1 AND c.document_id=$2 AND c.evidence_state=1
            AND (EXISTS(
@@ -882,7 +884,7 @@ fn observe_refreshed_parser_identity_producer(
          ORDER BY c.source_object_id,c.target_object_id,c.witness_kind,c.evidence_ref",
         &[&run_id,&document_id,&demand])?
         .iter().map(|r|OriginalParserIdentityCandidateObservation{
-            source_object_id:r.get(0),target_object_id:r.get(1),witness_kind:r.get(2),
+            candidate_id:r.get(8),source_object_id:r.get(0),target_object_id:r.get(1),witness_kind:r.get(2),
             source_token_id:r.get(3),target_token_id:r.get(4),evidence_ref:r.get(5),
             candidate_count:r.get(6),evidence_state:r.get(7),
         }).collect();
@@ -893,10 +895,91 @@ fn observe_refreshed_parser_identity_producer(
         producer_ref:"execution.refresh_numeric_pnf_parser_identity_evidence",
         scope:"current_numeric_document_candidate_projection_not_global_coverage",
         refreshed_in_rollback_probe:true,candidate_rows:rows,name_overflow_rows:overflow,
-        admission_executed:false,
+        admission_executed:false,admitted_candidate_witnesses:Vec::new(),
     })
 }
 
+
+/// Exact original m080 candidate -> witness -> admitted entity inverse.
+//// These are rollback-only observations in the caller; not a new authority.
+/// The independent corroboration IDs are retained, not merely a Boolean.
+#[derive(Debug,Clone,Serialize)]
+pub struct OriginalParserCandidateWitnessObservation {
+    pub candidate_id:i64,
+    pub witness_id:i64,
+    pub witness_role:i16,
+    pub source_object_id:i64,
+    pub entity_id:i64,
+    pub anchor_object_id:i64,
+    pub witness_kind:i16,
+    pub admission_revision:i64,
+    pub independent_corroboration_witness_ids:Vec<i64>,
+}
+
+fn observe_original_parser_candidate_witnesses(
+    tx:&mut postgres::Transaction<'_>,run:i64,document:i64,
+    producer:&mut OriginalParserIdentityProducerObservation,
+)->Result<(),NativeNumericAuditError>{
+    let candidates=producer.candidate_rows.iter().map(|c|(c.candidate_id,c))
+        .collect::<BTreeMap<_,_>>();
+    if candidates.len()!=producer.candidate_rows.len()||candidates.keys().any(|id|*id<=0) {
+        return Err(NativeNumericAuditError::ForeignSource);
+    }
+    let ids=candidates.keys().copied().collect::<Vec<_>>();
+    let rows=tx.query("SELECT c.candidate_id,p.witness_id,p.witness_role,
+        w.source_object_id,w.target_entity_id,e.anchor_object_id,w.witness_kind,a.revision,
+        w.authority_class,e.authority_class,w.candidate_count,c.evidence_state,c.candidate_count,
+        ARRAY(SELECT DISTINCT k.witness_id
+          FROM execution.semantic_pnf_identity_witness k
+          JOIN execution.semantic_pnf_identity_witness_admission ka
+            ON ka.witness_id=k.witness_id AND ka.admission_state=2
+          WHERE k.target_entity_id=w.target_entity_id AND k.witness_id<>w.witness_id
+            AND k.witness_kind IN (2,4,5,6,8)
+          ORDER BY k.witness_id)
+        FROM execution.semantic_pnf_identity_evidence_candidate c
+        JOIN execution.semantic_pnf_identity_evidence_witness p ON p.candidate_id=c.candidate_id
+        JOIN execution.semantic_pnf_identity_witness w ON w.witness_id=p.witness_id
+        JOIN execution.semantic_pnf_identity_witness_admission a
+          ON a.witness_id=w.witness_id AND a.admission_state=2
+        JOIN execution.semantic_pnf_canonical_entity e ON e.entity_id=w.target_entity_id
+        WHERE c.run_id=$1 AND c.document_id=$2 AND c.candidate_id=ANY($3::bigint[])
+        ORDER BY c.candidate_id,p.witness_role,p.witness_id",&[&run,&document,&ids])?;
+    let mut observed=Vec::with_capacity(rows.len());
+    for row in rows {
+        let candidate_id:i64=row.get(0);
+        let c=candidates.get(&candidate_id).ok_or(NativeNumericAuditError::ForeignSource)?;
+        let role:i16=row.get(2);
+        let source:i64=row.get(3);
+        let anchor:Option<i64>=row.get(5);
+        let witness_kind:i16=row.get(6);
+        let corroboration:Vec<i64>=row.get(13);
+        let direct=matches!(c.witness_kind,2|4|6);
+        // Mirror original Agda IdentityEvidenceProduction and m080:
+        // proper-name expansion cannot bootstrap; anchor/source provenance
+        // is proof-relevant and authority cannot cross the document boundary.
+        let licensed=match role {
+            1=>direct && source==c.target_object_id && witness_kind==1,
+            2=>source==c.source_object_id && witness_kind==c.witness_kind
+                && (direct || (c.witness_kind==3 && !corroboration.is_empty())),
+            _=>false,
+        };
+        if !licensed || anchor!=Some(c.target_object_id) || c.candidate_count!=1
+            || row.get::<_,i16>(10)!=1 || row.get::<_,i16>(12)!=1
+            || row.get::<_,i16>(8)!=2 || row.get::<_,i16>(9)!=2
+            || !matches!(row.get::<_,i16>(11),1|2) {
+            return Err(NativeNumericAuditError::AdmissionProbeInvariant);
+        }
+        observed.push(OriginalParserCandidateWitnessObservation{
+            candidate_id,witness_id:row.get(1),witness_role:role,
+            source_object_id:source,entity_id:row.get(4),
+            anchor_object_id:c.target_object_id,witness_kind,
+            admission_revision:row.get(7),independent_corroboration_witness_ids:corroboration,
+        });
+    }
+    producer.admitted_candidate_witnesses=observed;
+    producer.admission_executed=true;
+    Ok(())
+}
 
 #[derive(Debug,Clone,Serialize)]
 pub struct OriginalCrossResourceNeedObservation{
@@ -2492,12 +2575,13 @@ fn probe_original_governed_identity(
     probe.query_one("SELECT execution.refresh_numeric_pnf_parser_identity_evidence($1,$2)",
         &[&run,&document])?;
     let parser_refresh_elapsed_ms=started.elapsed().as_millis();
-    let original_parser_identity_producer=observe_refreshed_parser_identity_producer(&mut probe,run,document,demand)?;
+    let mut original_parser_identity_producer=observe_refreshed_parser_identity_producer(&mut probe,run,document,demand)?;
     let started=std::time::Instant::now();
     let admitted:i64=probe.query_one(
         "SELECT execution.admit_numeric_pnf_parser_identity_evidence($1,$2)",
         &[&run,&document])?.get(0);
     let parser_admission_elapsed_ms=started.elapsed().as_millis();
+    observe_original_parser_candidate_witnesses(&mut probe,run,document,&mut original_parser_identity_producer)?;
     let (horizons,classes)=observe_original_resolution_fibre(&mut probe,demand,run_ref,document_ref)?;
     let outside:bool=probe.query_one(
         "SELECT outside_model_possible FROM execution.semantic_pnf_demand_open_world_state WHERE demand_id=$1",
