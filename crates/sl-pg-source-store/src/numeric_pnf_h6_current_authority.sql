@@ -6,6 +6,26 @@
 CREATE TABLE IF NOT EXISTS execution.slr_native_h6_managed_demand(
     demand_id bigint PRIMARY KEY REFERENCES execution.semantic_pnf_demand(demand_id) ON DELETE CASCADE
 );
+-- Current native H3 support is reconstructed by the original native producer
+-- pass. Unknown/unowned original H3 evidence is not silently withdrawn.
+CREATE TABLE IF NOT EXISTS execution.slr_native_h3_validity_current(
+    evidence_id bigint PRIMARY KEY REFERENCES execution.semantic_pnf_candidate_evidence(evidence_id) ON DELETE CASCADE,
+    demand_id bigint NOT NULL REFERENCES execution.semantic_pnf_demand(demand_id) ON DELETE CASCADE,
+    supported boolean NOT NULL, revision bigint NOT NULL CHECK(revision>0)
+);
+CREATE INDEX IF NOT EXISTS slr_native_h3_validity_demand_idx
+    ON execution.slr_native_h3_validity_current(demand_id,supported,evidence_id);
+CREATE TABLE IF NOT EXISTS execution.slr_native_h3_validity_history(
+    evidence_id bigint NOT NULL,demand_id bigint NOT NULL,revision bigint NOT NULL,
+    supported boolean NOT NULL,original_atom jsonb NOT NULL,
+    PRIMARY KEY(evidence_id,revision)
+);
+-- A physical support journal delta alone cannot reconcile the original
+-- proof/coverage authority. This debt survives later empty passes.
+CREATE TABLE IF NOT EXISTS execution.slr_native_h3_authority_debt(
+    demand_id bigint PRIMARY KEY REFERENCES execution.semantic_pnf_demand(demand_id) ON DELETE CASCADE,
+    first_observed_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 -- Source: original SensibLaw m110 at f9c4670ef04b40e8153caa7dd00fa1eba7013ef4, blob 41bf2232b43a53fb8e0373559206e5fec430d629.
 -- Reopen the actual discourse/temporal signature relation independently of
 -- scheduling/stop or admissibility state. An already-completed horizon or later stop does not
@@ -96,7 +116,7 @@ $$;
 
 CREATE OR REPLACE VIEW execution.slr_native_current_candidate_evidence_v1 AS
 SELECT e.* FROM execution.semantic_pnf_candidate_evidence e
-WHERE NOT EXISTS(SELECT 1 FROM execution.slr_native_h6_managed_demand m WHERE m.demand_id=e.demand_id)
+WHERE (NOT EXISTS(SELECT 1 FROM execution.slr_native_h6_managed_demand m WHERE m.demand_id=e.demand_id)
    OR (e.horizon=6 AND e.evidence_family=2 AND
         ((e.evidence_kind='h6_discourse_factor_role_signature' AND e.provenance_ref='numeric-factor-signature')
         OR (e.evidence_kind='h6_temporal_factor_role_signature' AND e.provenance_ref='numeric-temporal-state'))) IS NOT TRUE
@@ -105,7 +125,10 @@ WHERE NOT EXISTS(SELECT 1 FROM execution.slr_native_h6_managed_demand m WHERE m.
           AND p.evidence_ref=e.evidence_ref AND p.signed_residual=e.signed_residual
           AND p.evidence_kind=e.evidence_kind AND p.provenance_ref IS NOT DISTINCT FROM e.provenance_ref
           AND p.source_interface_id IS NOT DISTINCT FROM e.source_interface_id
-          AND p.source_region_id IS NOT DISTINCT FROM e.source_region_id);
+          AND p.source_region_id IS NOT DISTINCT FROM e.source_region_id))
+  AND NOT EXISTS (SELECT 1 FROM execution.slr_native_h3_validity_current v
+      JOIN execution.slr_native_h6_managed_demand m ON m.demand_id=v.demand_id
+      WHERE v.evidence_id=e.evidence_id AND v.demand_id=e.demand_id AND NOT v.supported);
 
 -- Preserve the original public ABI, including neutral represented rows.
 CREATE OR REPLACE VIEW execution.semantic_pnf_candidate_evidence_horizon_v1 AS
@@ -306,3 +329,7 @@ $$;
 
 CREATE TABLE IF NOT EXISTS execution.slr_native_h6_current_contract(contract_ref text PRIMARY KEY);
 INSERT INTO execution.slr_native_h6_current_contract VALUES('slr-native-h6-current:v1') ON CONFLICT DO NOTHING;
+
+-- Version marker is written last, after all dependent views/functions.
+CREATE TABLE IF NOT EXISTS execution.slr_native_h3_current_contract(contract_ref text PRIMARY KEY);
+INSERT INTO execution.slr_native_h3_current_contract VALUES('slr-native-h3-current:v1') ON CONFLICT DO NOTHING;

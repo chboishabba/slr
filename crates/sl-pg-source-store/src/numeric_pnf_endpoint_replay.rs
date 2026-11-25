@@ -165,6 +165,8 @@ fn replayable_candidate(v:&Value)->bool{
                 &&p["identity_execution_replay"]["input_events_pending"].as_u64()==Some(0)
                 &&p["consumer_horizon_work"]["h3_ready_after"]==false_or_true(false)
                 &&p["consumer_horizon_work"]["h6_ready_after"]==false_or_true(false)
+                &&p["consumer_horizon_work"]["nonmonotone_input_residual"]==false_or_true(false)
+                &&p["consumer_horizon_work"]["h6_validity"]["durable_nonmonotone_authority_pending"]==false_or_true(false)
                 &&p["consumer_horizon_work"]["h6_validity"]["original_consumer_authority_reconciled"]==false_or_true(true)
                 &&p["outside_model_possible"]==false_or_true(true)
                 &&p["complete_typed_coverage_paid"]==false_or_true(false))

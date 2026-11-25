@@ -288,7 +288,7 @@ pub fn audit_original_numeric_identity_for_source_answer(
         }else{false};
         let historical_h6_proof_revalidation_required=if h6_managed{
             let stale:i64=tx.query_one("SELECT count(*)::bigint FROM execution.semantic_pnf_candidate_evidence e
-                WHERE e.demand_id=$1 AND e.horizon=6 AND NOT EXISTS(
+                WHERE e.demand_id=$1 AND e.horizon IN(3,6) AND NOT EXISTS(
                    SELECT 1 FROM execution.slr_native_current_candidate_evidence_v1 c WHERE c.evidence_id=e.evidence_id)",
                 &[demand_id])?.get(0);
             invalid_refutation+=tx.query_one("SELECT count(*)::bigint FROM execution.semantic_pnf_candidate_state_v1 s
@@ -296,13 +296,23 @@ pub fn audit_original_numeric_identity_for_source_answer(
                    SELECT 1 FROM execution.semantic_pnf_candidate_evidence e WHERE e.evidence_id=s.admissibility_evidence_id
                      AND NOT EXISTS(SELECT 1 FROM execution.slr_native_current_candidate_evidence_v1 c WHERE c.evidence_id=e.evidence_id))",
                 &[demand_id])?.get::<_,i64>(0);
-            stale>0
+            let debt_installed:bool=tx.query_one("SELECT to_regclass('execution.slr_native_h3_authority_debt') IS NOT NULL",&[])?.get(0);
+            let debt=if debt_installed{
+                tx.query_one("SELECT EXISTS(SELECT 1 FROM execution.slr_native_h3_authority_debt WHERE demand_id=$1)",&[demand_id])?.get::<_,bool>(0)
+            }else{
+                tx.query_one("SELECT EXISTS(SELECT 1 FROM execution.semantic_pnf_candidate_evidence WHERE demand_id=$1 AND horizon=3
+                    AND (evidence_ref LIKE 'native-occurrence-transport:v1:%' OR evidence_ref LIKE 'native-binding-morphology:%'
+                         OR evidence_ref LIKE 'native-binding-index-member:v2:%'))",&[demand_id])?.get::<_,bool>(0)
+            };
+            stale>0||debt
         }else{
             // Before installation, the legacy H6 carrier has no validity
             // proof. Never certify a closed world based on that absence.
             tx.query_one("SELECT EXISTS(SELECT 1 FROM execution.semantic_pnf_candidate_evidence
-                WHERE demand_id=$1 AND horizon=6 AND evidence_family=2
-                  AND evidence_kind IN('h6_discourse_factor_role_signature','h6_temporal_factor_role_signature'))",
+                WHERE demand_id=$1 AND ((horizon=6 AND evidence_family=2
+                  AND evidence_kind IN('h6_discourse_factor_role_signature','h6_temporal_factor_role_signature'))
+                  OR (horizon=3 AND (evidence_ref LIKE 'native-occurrence-transport:v1:%'
+                      OR evidence_ref LIKE 'native-binding-morphology:%' OR evidence_ref LIKE 'native-binding-index-member:v2:%'))))",
                 &[demand_id])?.get(0)
         };
         let live_object=if live.len()==1&&live[0].get::<_,i16>(0)==1{
@@ -852,13 +862,20 @@ fn refine_original_numeric_morphology(
              AND o.active
            GROUP BY u.target_id,r.region_id,i.interface_id
            HAVING count(DISTINCT t.token_id)=1
-         ), pending AS (
+         ), previous AS (
            SELECT c.* FROM candidate c
-           WHERE NOT EXISTS (
+           WHERE EXISTS (
              SELECT 1 FROM execution.semantic_pnf_candidate_evidence e
              WHERE e.demand_id=$1 AND e.target_kind=1 AND e.target_id=c.object_id
-               AND e.evidence_ref='native-binding-morphology:v0_3:'||$4::bigint::text||':'||c.token_id::text)
-           ORDER BY c.object_id LIMIT $5
+               AND e.horizon=3 AND e.provenance_ref='binding-compatibility:pnf-kind-morphology:v0_3'
+               AND (e.evidence_ref LIKE 'native-binding-morphology:v0_3:'||$4::bigint::text||':%'
+                 OR e.evidence_ref LIKE 'native-binding-morphology:v0_4:'||$4::bigint::text||':%'))
+         ), pending AS (
+           SELECT * FROM previous
+           UNION ALL
+           (SELECT c.* FROM candidate c WHERE NOT EXISTS(
+               SELECT 1 FROM previous p WHERE p.object_id=c.object_id)
+            ORDER BY c.object_id LIMIT $5)
          )
          SELECT p.object_id,p.region_id,p.interface_id,p.token_id,
                 COALESCE(array_agg(f.symbol_text||'='||v.symbol_text
@@ -878,9 +895,25 @@ fn refine_original_numeric_morphology(
         let features:Vec<String>=row.get(4);
         let mismatch=morphology_mismatches(&focus,&features);
         let residual:i64=if mismatch.is_empty(){0}else{-1};
-        let evidence_ref=format!("native-binding-morphology:v0_3:{focus_token}:{head}");
+        let legacy_ref=format!("native-binding-morphology:v0_3:{focus_token}:{head}");
         let evidence_kind=if mismatch.is_empty(){"morphology_no_observed_mismatch".to_owned()}
             else{format!("morphology_mismatch:{}",mismatch.join(","))};
+        // Preserve exact legacy atoms. A changed same-head assessment
+        // receives a distinct immutable key rather than overwriting history.
+        let legacy=tx.query_opt("SELECT signed_residual,evidence_kind,source_interface_id,source_region_id,
+               evidence_family,horizon,provenance_ref FROM execution.semantic_pnf_candidate_evidence
+               WHERE demand_id=$1 AND target_kind=1 AND target_id=$2 AND evidence_ref=$3",
+               &[&demand,&object,&legacy_ref])?;
+        let evidence_ref=if legacy.as_ref().map_or(true,|r|
+            r.get::<_,i64>(0)==residual&&r.get::<_,String>(1)==evidence_kind
+            &&r.get::<_,Option<i64>>(2)==Some(interface)&&r.get::<_,Option<i64>>(3)==Some(region)
+            &&r.get::<_,i16>(4)==1&&r.get::<_,i16>(5)==3
+            &&r.get::<_,Option<String>>(6).as_deref()==Some("binding-compatibility:pnf-kind-morphology:v0_3")){
+            legacy_ref
+        }else{
+            format!("native-binding-morphology:v0_4:{focus_token}:{head}:{}",
+                bridge_digest(&(residual,&evidence_kind,interface,region))?)
+        };
         inserted+=tx.execute(
             "INSERT INTO execution.semantic_pnf_candidate_evidence
               (demand_id,target_kind,target_id,evidence_ref,evidence_family,horizon,
@@ -889,6 +922,14 @@ fn refine_original_numeric_morphology(
                'binding-compatibility:pnf-kind-morphology:v0_3',$6,$7)
              ON CONFLICT(demand_id,target_kind,target_id,evidence_ref) DO NOTHING",
             &[&demand,&object,&evidence_ref,&residual,&evidence_kind,&interface,&region])? as usize;
+        let recorded=tx.execute("INSERT INTO slr_native_h3_desired(evidence_id)
+            SELECT evidence_id FROM execution.semantic_pnf_candidate_evidence
+            WHERE demand_id=$1 AND target_kind=1 AND target_id=$2 AND evidence_ref=$3
+              AND signed_residual=$4 AND evidence_kind=$5 AND source_interface_id=$6 AND source_region_id=$7
+              AND evidence_family=1 AND horizon=3
+              AND provenance_ref='binding-compatibility:pnf-kind-morphology:v0_3'",
+            &[&demand,&object,&evidence_ref,&residual,&evidence_kind,&interface,&region])?;
+        if recorded!=1{return Err(NativeNumericAuditError::AdmissionProbeInvariant);}
     }
     // A null/multiple head is a residual, not an endlessly retried job.
     let remaining:i64=tx.query_one(
@@ -905,8 +946,10 @@ fn refine_original_numeric_morphology(
            GROUP BY u.target_id HAVING count(DISTINCT t.token_id)=1
          ) SELECT count(*)::bigint FROM eligible c WHERE NOT EXISTS(
            SELECT 1 FROM execution.semantic_pnf_candidate_evidence e
+           JOIN slr_native_h3_desired x USING(evidence_id)
            WHERE e.demand_id=$1 AND e.target_kind=1 AND e.target_id=c.target_id
-             AND e.evidence_ref='native-binding-morphology:v0_3:'||$4::bigint::text||':'||c.token_id::text)",
+             AND (e.evidence_ref='native-binding-morphology:v0_3:'||$4::bigint::text||':'||c.token_id::text
+                 OR e.evidence_ref LIKE 'native-binding-morphology:v0_4:'||$4::bigint::text||':'||c.token_id::text||':%'))",
          &[&demand,&run_ref,&document_ref,&focus_token])?.get(0);
     Ok((inserted,remaining))
 }
@@ -1209,6 +1252,9 @@ pub struct NativeCurrentSignedHorizon {
 pub struct NativeH6ValidityReceipt {
     pub historical_atom_count:usize,
     pub currently_supported_atom_count:usize,
+    pub native_h3_stale_evidence_ids:Vec<i64>,
+    pub native_h3_state_rows_changed:u64,
+    pub durable_nonmonotone_authority_pending:bool,
     pub stale_evidence_ids:Vec<i64>,
     pub stale_admissibility_event_ids:Vec<i64>,
     pub current_stale_admissibility_event_ids:Vec<i64>,
@@ -1220,13 +1266,15 @@ pub struct NativeH6ValidityReceipt {
 }
 fn ensure_native_h6_current_authority(tx:&mut postgres::Transaction<'_>,demand:i64)
     ->Result<(),NativeNumericAuditError>{
-    let installed:bool=tx.query_one("SELECT to_regclass('execution.slr_native_h6_current_contract') IS NOT NULL",&[])?.get(0);
+    let installed:bool=tx.query_one("SELECT to_regclass('execution.slr_native_h3_current_contract') IS NOT NULL",&[])?.get(0);
     if !installed{
         tx.query_one("SELECT pg_advisory_xact_lock(hashtext('slr-native-h6-current:v1'))",&[])?;
-        let ready:bool=tx.query_one("SELECT to_regclass('execution.slr_native_h6_current_contract') IS NOT NULL",&[])?.get(0);
+        let ready:bool=tx.query_one("SELECT to_regclass('execution.slr_native_h3_current_contract') IS NOT NULL",&[])?.get(0);
         if !ready{tx.batch_execute(include_str!("numeric_pnf_h6_current_authority.sql"))?;}
     }
     let intact:bool=tx.query_one("SELECT EXISTS(SELECT 1 FROM execution.slr_native_h6_current_contract WHERE contract_ref='slr-native-h6-current:v1')
+      AND EXISTS(SELECT 1 FROM execution.slr_native_h3_current_contract WHERE contract_ref='slr-native-h3-current:v1')
+      AND position('slr_native_h3_validity_current' in pg_get_viewdef('execution.slr_native_current_candidate_evidence_v1'::regclass))>0
       AND position('slr_native_current_candidate_evidence_v1' in pg_get_viewdef('execution.semantic_pnf_candidate_evidence_horizon_v1'::regclass))>0
       AND position('slr_native_current_candidate_evidence_v1' in pg_get_viewdef('execution.semantic_pnf_candidate_evidence_classification_v1'::regclass))>0
       AND position('slr_native_current_candidate_evidence_v1' in pg_get_functiondef(
@@ -1234,6 +1282,34 @@ fn ensure_native_h6_current_authority(tx:&mut postgres::Transaction<'_>,demand:i
     if !intact{return Err(NativeNumericAuditError::AdmissionProbeInvariant);}
     tx.execute("INSERT INTO execution.slr_native_h6_managed_demand(demand_id) VALUES($1) ON CONFLICT DO NOTHING",&[&demand])?;
     Ok(())
+}
+
+// Scope is deliberately restricted to the three native producers above.
+// The exact desired ID relation is independently reconstructed from their
+// current carrier; no deletion, scoring compensation, or semantic event.
+fn reconcile_native_h3_validity(tx:&mut postgres::Transaction<'_>,demand:i64)
+    ->Result<u64,NativeNumericAuditError>{
+    let n:i64=tx.query_one("WITH observed AS MATERIALIZED(
+        SELECT e.evidence_id,e.demand_id,to_jsonb(e) atom,
+               EXISTS(SELECT 1 FROM slr_native_h3_desired d WHERE d.evidence_id=e.evidence_id) supported
+        FROM execution.semantic_pnf_candidate_evidence e
+        WHERE e.demand_id=$1 AND e.horizon=3 AND e.evidence_family=1
+        AND ((e.provenance_ref='native-occurrence-transport:v1' AND e.evidence_ref LIKE 'native-occurrence-transport:v1:%')
+          OR (e.provenance_ref='binding-compatibility:pnf-kind-morphology:v0_3'
+              AND (e.evidence_ref LIKE 'native-binding-morphology:v0_3:%' OR e.evidence_ref LIKE 'native-binding-morphology:v0_4:%'))
+          OR (e.evidence_kind LIKE 'original_binding_index_member:%' AND e.evidence_ref LIKE 'native-binding-index-member:v2:%'))
+      ), changed AS (
+        INSERT INTO execution.slr_native_h3_validity_current AS c(evidence_id,demand_id,supported,revision)
+        SELECT evidence_id,demand_id,supported,1 FROM observed
+        ON CONFLICT(evidence_id) DO UPDATE SET supported=EXCLUDED.supported,revision=c.revision+1
+        WHERE c.demand_id=EXCLUDED.demand_id AND c.supported IS DISTINCT FROM EXCLUDED.supported
+        RETURNING evidence_id,demand_id,supported,revision
+      ), history AS (
+        INSERT INTO execution.slr_native_h3_validity_history(evidence_id,demand_id,revision,supported,original_atom)
+        SELECT c.evidence_id,c.demand_id,c.revision,c.supported,o.atom FROM changed c JOIN observed o USING(evidence_id)
+        RETURNING evidence_id
+      ) SELECT count(*)::bigint FROM history",&[&demand])?.get(0);
+    u64::try_from(n).map_err(|_|NativeNumericAuditError::AdmissionProbeInvariant)
 }
 
 fn reopen_native_h6_validity(tx:&mut postgres::Transaction<'_>,demand:i64)
@@ -1289,6 +1365,10 @@ fn reopen_native_h6_validity(tx:&mut postgres::Transaction<'_>,demand:i64)
     if historical<0||supported<0||changed<0||historical!=supported+stale.len() as i64{
         return Err(NativeNumericAuditError::AdmissionProbeInvariant);
     }
+    let h3_stale:Vec<i64>=tx.query("SELECT evidence_id FROM execution.slr_native_h3_validity_current
+       WHERE demand_id=$1 AND NOT supported ORDER BY evidence_id",&[&demand])?.iter().map(|r|r.get(0)).collect();
+    let durable_pending:bool=tx.query_one("SELECT EXISTS(SELECT 1 FROM execution.slr_native_h3_authority_debt WHERE demand_id=$1)",&[&demand])?.get(0);
+    let all_stale=stale.iter().chain(h3_stale.iter()).copied().collect::<Vec<_>>();
     // Same original m086 cumulative carrier with only physically withdrawn
     // m110 atoms omitted. Do not subtract an arbitrary score or refute a
     // candidate; all other evidence and neutral/negative atoms survive.
@@ -1303,6 +1383,8 @@ fn reopen_native_h6_validity(tx:&mut postgres::Transaction<'_>,demand:i64)
          AND e.horizon<=h.horizon AND NOT EXISTS(
           SELECT 1 FROM execution.slr_native_h6_validity_current v
           WHERE v.evidence_id=e.evidence_id AND v.demand_id=e.demand_id AND NOT v.supported)
+         AND NOT EXISTS(SELECT 1 FROM execution.slr_native_h3_validity_current v
+           WHERE v.evidence_id=e.evidence_id AND v.demand_id=e.demand_id AND NOT v.supported)
         WHERE u.demand_id=$1
         GROUP BY u.target_kind,u.target_id,h.horizon ORDER BY u.target_kind,u.target_id,h.horizon",
       &[&demand])?.iter().map(|r|NativeCurrentSignedHorizon{
@@ -1326,15 +1408,16 @@ fn reopen_native_h6_validity(tx:&mut postgres::Transaction<'_>,demand:i64)
         FROM execution.semantic_pnf_candidate_admissibility_event WHERE demand_id=$1
         ORDER BY target_kind,target_id,event_id DESC)
       SELECT event_id FROM latest WHERE evidence_id=ANY($2::bigint[]) ORDER BY event_id",
-        &[&demand,&stale])?.iter().map(|r|r.get::<_,i64>(0)).collect::<Vec<_>>();
-    let proof_or_sufficiency= !stale.is_empty() && tx.query_one("SELECT
+        &[&demand,&all_stale])?.iter().map(|r|r.get::<_,i64>(0)).collect::<Vec<_>>();
+    let proof_or_sufficiency= !all_stale.is_empty() && tx.query_one("SELECT
         EXISTS(SELECT 1 FROM execution.semantic_pnf_frontier_resolution WHERE demand_id=$1 AND outcome_state=2)
         OR EXISTS(SELECT 1 FROM execution.semantic_pnf_demand_open_world_state WHERE demand_id=$1 AND NOT outside_model_possible)
         OR EXISTS(SELECT 1 FROM execution.semantic_pnf_consumer_sufficiency_current_v1 WHERE demand_id=$1 AND certificate_state=1)",
         &[&demand])?.get::<_,bool>(0);
     Ok(NativeH6ValidityReceipt{
         historical_atom_count:historical as usize,currently_supported_atom_count:supported as usize,
-        original_consumer_authority_reconciled:current_stale_events.is_empty()&&!proof_or_sufficiency,
+        original_consumer_authority_reconciled:current_stale_events.is_empty()&&!proof_or_sufficiency&&!durable_pending,
+        native_h3_stale_evidence_ids:h3_stale,native_h3_state_rows_changed:0,durable_nonmonotone_authority_pending:durable_pending,
         stale_evidence_ids:stale,stale_admissibility_event_ids:stale_events,
         current_stale_admissibility_event_ids:current_stale_events,original_proof_or_sufficiency_revalidation_required:proof_or_sufficiency,
         state_rows_changed:changed as u64,current_signed_horizons,current_projection_exact:true,
@@ -1420,8 +1503,22 @@ fn process_original_native_consumer_horizons(
           WHERE demand_id=$1 AND consumer_ref=$2 AND query_ref=$3 AND policy_ref=$4
             AND horizon=$5 AND work_state=1)",&[&demand,&consumer,query,policy,&horizon])?.get(0))
     };
+    if nonmonotone{
+        tx.execute("INSERT INTO execution.slr_native_h3_authority_debt(demand_id) VALUES($1) ON CONFLICT DO NOTHING",&[&demand])?;
+    }
+    let h3_changed=reconcile_native_h3_validity(tx,demand)?;
     let mut h6_validity=reopen_native_h6_validity(tx,demand)?;
+    h6_validity.native_h3_state_rows_changed=h3_changed;
     let nonmonotone=nonmonotone||!h6_validity.original_consumer_authority_reconciled;
+    if h3_changed>0 {
+        for horizon in [3i16,6,9]{
+            tx.query_one("SELECT execution.slr_refresh_native_preference($1,$2)",&[&demand,&horizon])?;
+        }
+        tx.execute("UPDATE execution.semantic_pnf_consumer_horizon_work_queue
+            SET work_state=1,completed_at=NULL WHERE demand_id=$1 AND consumer_ref=$2
+              AND query_ref=$3 AND policy_ref=$4 AND horizon IN(3,6,9) AND work_state<>1",
+            &[&demand,&consumer,query,policy])?;
+    }
     // A physical H6 validity change can arise without parser input changes.
     // Reopen the original consumer's H6 outcome (and downstream work) when
     // H6 had already been requested; H3 still owns its own readiness.
@@ -1457,6 +1554,7 @@ fn process_original_native_consumer_horizons(
         h6_evidence_inserted=tx.query_one("SELECT execution.refresh_numeric_pnf_h6_discourse_temporal_evidence_for_consumer($1,$2,$3,$4,$5,FALSE)",
             &[&run,&doc,&consumer,query,policy])?.get(0);
         h6_validity=reopen_native_h6_validity(tx,demand)?;
+        h6_validity.native_h3_state_rows_changed=h3_changed;
         if !h6_validity.original_consumer_authority_reconciled{return Err(NativeNumericAuditError::AdmissionProbeInvariant);}
         tx.query_one("SELECT execution.slr_refresh_native_preference($1,6::smallint)",&[&demand])?;
         tx.query_one("SELECT execution.slr_refresh_native_preference($1,9::smallint)",&[&demand])?;
@@ -2598,6 +2696,18 @@ fn persist_native_index_evidence(
                     WHERE o.object_id=$2 AND o.active
                     ON CONFLICT(demand_id,target_kind,target_id,evidence_ref) DO NOTHING",
                     &[&demand,&object,&evidence,&format!("original_binding_index_member:{path}"),&set.candidate_set_ref])?;
+                let actual=tx.query("SELECT e.evidence_id FROM execution.semantic_pnf_candidate_evidence e
+                    JOIN execution.semantic_pnf_object o ON o.object_id=e.target_id AND o.active
+                    JOIN execution.semantic_pnf_interface i ON i.region_id=o.region_id
+                    WHERE e.demand_id=$1 AND e.target_kind=1 AND e.target_id=$2 AND e.evidence_ref=$3
+                      AND e.evidence_kind=$4 AND e.provenance_ref=$5 AND e.horizon=3 AND e.evidence_family=1
+                      AND e.signed_residual=0 AND e.source_interface_id=i.interface_id AND e.source_region_id=o.region_id",
+                    &[&demand,&object,&evidence,&format!("original_binding_index_member:{path}"),&set.candidate_set_ref])?;
+                let active:bool=tx.query_one("SELECT EXISTS(SELECT 1 FROM execution.semantic_pnf_object WHERE object_id=$1 AND active)",&[&object])?.get(0);
+                if active!=(!actual.is_empty())||actual.len()>1{return Err(NativeNumericAuditError::AdmissionProbeInvariant);}
+                for row in actual{
+                    tx.execute("INSERT INTO slr_native_h3_desired VALUES($1) ON CONFLICT DO NOTHING",&[&row.get::<_,i64>(0)])?;
+                }
             }
         }
     }
@@ -4895,6 +5005,7 @@ pub fn transport_original_numeric_candidates_for_source_answer_with_partition(
     let source:i64=rows[0].get(1);
     let focus_token:i64=rows[0].get(2);
     ensure_native_h6_current_authority(&mut tx,demand)?;
+    tx.batch_execute("CREATE TEMP TABLE slr_native_h3_desired(evidence_id bigint PRIMARY KEY) ON COMMIT DROP")?;
     let source_partition_wake=sync_native_partition_consumer(&mut tx,numeric_run_ref,answer,demand,focus_token,changes)?;
     let (nominal_head_objects_inserted,nominal_head_token_supports_inserted,nominal_heads_remaining)=
         materialize_prior_nominal_heads(&mut tx,numeric_run_ref,&answer.source_document_ref,
@@ -4957,6 +5068,14 @@ pub fn transport_original_numeric_candidates_for_source_answer_with_partition(
          FROM native_numeric_transport_delta
          ON CONFLICT(demand_id,target_kind,target_id,evidence_ref) DO NOTHING",
         &[&demand])?;
+    tx.execute("INSERT INTO slr_native_h3_desired(evidence_id)
+        SELECT e.evidence_id FROM execution.semantic_pnf_candidate_evidence e
+        JOIN native_numeric_transport_possible p ON p.object_id=e.target_id
+        WHERE e.demand_id=$1 AND e.target_kind=1 AND e.horizon=3 AND e.evidence_family=1
+          AND e.evidence_ref='native-occurrence-transport:v1:'||p.object_id::text
+          AND e.provenance_ref='native-occurrence-transport:v1' AND e.evidence_kind='candidate_generation'
+          AND e.signed_residual=0 AND e.source_interface_id=p.interface_id AND e.source_region_id=p.region_id
+        ON CONFLICT DO NOTHING",&[&demand])?;
     let ids=tx.query("SELECT object_id FROM native_numeric_transport_delta ORDER BY object_id",&[])?
         .iter().map(|r|r.get::<_,i64>(0)).collect::<Vec<_>>();
     let remaining:i64=tx.query_one(
@@ -5007,6 +5126,7 @@ pub fn transport_original_numeric_candidates_for_source_answer_with_partition(
         answer,represented_slice_drained,inputs_changed,nonmonotone)?;
     let original_h6_evidence_inserted=consumer_horizon_work.h6_evidence_inserted;
     let document_identity_publication=if std::env::var("SLR_NATIVE_DOCUMENT_IDENTITY_PUBLISH").as_deref()==Ok("1")
+        &&!consumer_horizon_work.nonmonotone_input_residual
         &&consumer_horizon_work.h6_validity.original_consumer_authority_reconciled {
         if let (Some(producer),Some(probe))=(&original_parser_identity_producer,&governed_identity_rollback_probe){
             Some(publish_checked_document_identity(&mut tx,numeric_run_ref,answer,producer,probe)?)
@@ -5018,7 +5138,8 @@ pub fn transport_original_numeric_candidates_for_source_answer_with_partition(
     // Original cumulative views still include historical H6 atoms. Until
     // the authority owner consumes the current validity projection, never
     // submit those stale observations as a golden current-evidence packet.
-    let lean_typed_evidence=if consumer_horizon_work.h6_validity.original_consumer_authority_reconciled {
+    let lean_typed_evidence=if !consumer_horizon_work.nonmonotone_input_residual
+        &&consumer_horizon_work.h6_validity.original_consumer_authority_reconciled {
         produce_lean_typed_evidence(&mut tx,answer,numeric_run_ref,demand,source,
             &native_binding_bridge.snapshot_ref,open,&original_horizon_observations)?
     }else{None};
