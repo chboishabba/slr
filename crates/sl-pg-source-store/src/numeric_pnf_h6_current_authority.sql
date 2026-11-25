@@ -186,7 +186,7 @@ SELECT evidence.evidence_id,
 -- withdrawal does not fabricate a replacement certificate or restore a
 -- refuted candidate. It only suspends consumption until the owner checks it.
 CREATE OR REPLACE FUNCTION execution.slr_native_current_authority_usable(selected_demand_id bigint)
-RETURNS boolean LANGUAGE sql STABLE AS $
+RETURNS boolean LANGUAGE sql STABLE AS $$
 SELECT NOT EXISTS(SELECT 1 FROM execution.slr_native_h6_managed_demand WHERE demand_id=selected_demand_id)
  OR (
     NOT EXISTS(SELECT 1 FROM execution.slr_native_h3_authority_debt WHERE demand_id=selected_demand_id)
@@ -204,14 +204,14 @@ SELECT NOT EXISTS(SELECT 1 FROM execution.slr_native_h6_managed_demand WHERE dem
         OR EXISTS(SELECT 1 FROM execution.semantic_pnf_demand_open_world_state WHERE demand_id=selected_demand_id AND NOT outside_model_possible)
         OR EXISTS(SELECT 1 FROM execution.semantic_pnf_consumer_sufficiency_current_v1 WHERE demand_id=selected_demand_id AND certificate_state=1)))
  );
-$;
+$$;
 
 -- Preserve the m095 public stop ABI and all query/policy certificate rules.
 -- The additional conjunction is a consumption guard, not new authority.
 CREATE OR REPLACE FUNCTION execution.numeric_pnf_consumer_stop_at_horizon(
     selected_demand_id bigint, selected_consumer_ref text, selected_query_ref text,
     selected_policy_ref text, selected_horizon smallint
-) RETURNS boolean LANGUAGE sql STABLE AS $
+) RETURNS boolean LANGUAGE sql STABLE AS $$
 SELECT execution.slr_native_current_authority_usable(selected_demand_id) AND EXISTS(
     SELECT 1 FROM execution.semantic_pnf_consumer_sufficiency_current_v1 certificate
     WHERE certificate.demand_id=selected_demand_id
@@ -221,7 +221,7 @@ SELECT execution.slr_native_current_authority_usable(selected_demand_id) AND EXI
       AND ((selected_policy_ref='' AND certificate.certificate_kind IN(1,3))
         OR (selected_policy_ref<>'' AND certificate.certificate_kind IN(2,3)))
 );
-$;
+$$;
 
 CREATE OR REPLACE FUNCTION execution.refresh_numeric_pnf_consumer_horizon_outcome(
     selected_run_id BIGINT,
