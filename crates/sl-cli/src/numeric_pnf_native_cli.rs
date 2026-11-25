@@ -181,6 +181,24 @@ pub fn run(args:&[String])->Result<(),String>{
                 if done||!progress{break;}
             }
             let readback=reuse_original_binding_and_identity_owners(&url,&numeric_run,&answer).map_err(|e|e.to_string())?;
+            // A governed owner can close the original focus while the
+            // candidate campaign runs. Route that state through the same
+            // independent current-owner proof and inverse, not the
+            // read-only audit's intentionally unpaid observation flags.
+            if readback.original_numeric_audits.iter().any(|a|a.numeric_run_ref==numeric_run
+                &&a.numeric_demand_open_world.iter().any(|w|!w.outside_model_possible)){
+                let certificate=certify_original_focus_identity(&url,&numeric_run,&answer).map_err(|e|e.to_string())?;
+                return print_json(&serde_json::json!({
+                    "schema":"slr-native-antecedent-endpoint-v1","prefix_scope":scope,
+                    "numeric_publication":publication,"source_local_answer":answer,
+                    "original_focus_certificate":certificate,
+                    "outcome":"original_focus_authority_readback_separate_from_full_relation_parity",
+                    "governed_identity_paid":certificate.governed_identity_paid,
+                    "level_three_paid":certificate.level_three_paid,
+                    "full_relation_parity_paid":false,
+                    "external_qid_paid":false,"historical_truth_paid":false
+                }));
+            }
             let last=passes.last().ok_or("no native binding pass")?;
             let prefix_complete=last.original_mention_binding_campaign.prefix_uncovered_nonwhitespace==0;
             let cross_owner=last.native_binding_bridge.indexed_entity_spans_missing_from_projected.is_empty()
@@ -238,14 +256,10 @@ pub fn run(args:&[String])->Result<(),String>{
                 "prospective_identity_classes_not_admitted":projected,
                 "blockers":blockers,"automatic_semantic_refutation_from_index_absence":false
             });
-            let identity=readback.original_numeric_audits.iter().any(|a|a.numeric_run_ref==numeric_run&&a.original_accepted_document_identity_paid);
-            let l3=readback.original_numeric_audits.iter().any(|a|a.numeric_run_ref==numeric_run&&a.original_level_three_substitution_paid);
-            let endpoint=if identity&&l3&&prefix_complete&&cross_owner&&inverse
-                &&last.complete_typed_coverage_paid&&!last.outside_model_possible
-                &&last.native_binding_bridge.structural_relation_parity_paid
-                &&last.consumer_horizon_work.h6_validity.original_consumer_authority_reconciled{
-                "governed_source_answer"
-            }else{"source_local_answer_with_governed_identity_unresolved"};
+            // The original read-only audit cannot pay governed identity
+            // or L3. Those payments have exactly one current owner above.
+            // Candidate execution remains a separate, replayable lane.
+            let endpoint="source_local_answer_with_governed_identity_unresolved";
             let mut payload=serde_json::json!({
                 "schema":"slr-native-antecedent-endpoint-v1","prefix_scope":scope,
                 "numeric_publication":publication,"binding_passes":passes,"original_owner_reuse":readback,
@@ -253,7 +267,7 @@ pub fn run(args:&[String])->Result<(),String>{
                 "source_local_answer":answer,"typed_consumer_dossier":typed_dossier,
                 "observed_prefix_token_coverage":prefix_complete,
                 "projected_vs_original_entity_membership_parity":cross_owner,"exact_entity_inverse_complete":inverse,
-                "outcome":endpoint,"governed_identity_paid":identity,"level_three_paid":l3,
+                "outcome":endpoint,"governed_identity_paid":false,"level_three_paid":false,
                 "external_qid_paid":false,"historical_truth_paid":false
             });
             if let Some(session)=&replay_session {
