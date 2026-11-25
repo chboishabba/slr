@@ -187,7 +187,7 @@ fn lexicon(database_url:&str)->Result<NumericOperatorLexicon,NumericPipelineErro
     Ok(lex)
 }
 
-fn lease_one(database_url:&str,run_ref:&str,document_ref:&str)
+fn lease_one(database_url:&str,run_ref:&str,document_ref:&str,focus:Option<i64>)
     ->Result<Option<(NumericSentenceLease,i64)>,NumericPipelineError>{
     let mut db=Client::connect(database_url,NoTls)?;
     let mut tx=db.transaction()?;
@@ -202,11 +202,12 @@ fn lease_one(database_url:&str,run_ref:&str,document_ref:&str)
            ON link.region_id=work.region_id
          WHERE work.run_ref=$1 AND work.document_ref=$2
            AND work.operation_id=1 AND region.region_kind=1
+           AND ($3::bigint IS NULL OR region.start_char<=$3)
            AND (work.state_id=1 OR
                  (work.state_id=2 AND work.lease_expires_at<CURRENT_TIMESTAMP))
          ORDER BY work.priority,work.work_id
          LIMIT 1 FOR UPDATE OF work SKIP LOCKED",
-        &[&run_ref,&document_ref])?;
+        &[&run_ref,&document_ref,&focus])?;
     let Some(job)=job else{return Ok(None)};
     let work_id:i64=job.get(0);
     let region_id:i64=job.get(1);
@@ -282,7 +283,7 @@ fn numeric_sentence_tokens(
 // rebuilding its interface either both commit or both roll back. The source
 // parser and all sentence work must be complete before this stage is entered.
 fn reduce_original_frontier_slice(
-    db:&mut Client, run_ref:&str, document_ref:&str, budget:usize,
+    db:&mut Client, run_ref:&str, document_ref:&str, budget:usize,focus:Option<i64>,
 )->Result<(usize,i64),NumericPipelineError>{
     let started=std::time::Instant::now();
     let mut completed=0usize;
@@ -384,6 +385,7 @@ fn materialize_numeric_entity_occurrences(
            WHERE e.run_ref=$1 AND e.document_ref=$2 AND e.representation_version=2
              AND r.run_ref=$1 AND r.document_ref=$2 AND r.region_kind=1
              AND r.closure_state IN (2,3)
+             AND ($4::bigint IS NULL OR r.start_char<=$4)
          ), supported AS MATERIALIZED (
            SELECT s.*,t.token_id,t.lemma_symbol_id,t.head_token_id,
                   t.start_char AS token_start,t.end_char AS token_end
@@ -423,7 +425,7 @@ fn materialize_numeric_entity_occurrences(
                 (row_number() OVER(PARTITION BY m.region_id,m.entity_id
                     ORDER BY t.token_start,t.token_id)-1)::smallint AS ordinal
          FROM missing m JOIN supported t USING(entity_id,region_id)",
-        &[&run_ref,&document_ref,&(budget as i64)])?;
+        &[&run_ref,&document_ref,&(budget as i64),&focus])?;
     // No identity witness, demand closure, external alignment or promotion.
     let objects=tx.execute(
         "INSERT INTO execution.semantic_pnf_object
@@ -457,12 +459,27 @@ fn materialize_numeric_entity_occurrences(
 }
 
 pub fn run_native_numeric_exact_source_slice(
+    slr:&DatabaseConfig,numeric_database_url:&str,source_revision_ref:&str,
+    original_parser_run_ref:&str,source_root:&Path,max_sentences:usize,
+)->Result<NumericPipelineReceipt,NumericPipelineError>{
+    run_native_numeric_scoped_slice(slr,numeric_database_url,source_revision_ref,
+        original_parser_run_ref,source_root,max_sentences,None)
+}
+pub fn run_native_numeric_prefix_slice(
+    slr:&DatabaseConfig,numeric_database_url:&str,source_revision_ref:&str,
+    original_parser_run_ref:&str,source_root:&Path,max_sentences:usize,focus_start:i64,
+)->Result<NumericPipelineReceipt,NumericPipelineError>{
+    if focus_start<0{return Err(NumericPipelineError::ForeignRun);}
+    run_native_numeric_scoped_slice(slr,numeric_database_url,source_revision_ref,
+        original_parser_run_ref,source_root,max_sentences,Some(focus_start))
+}
+fn run_native_numeric_scoped_slice(
     slr:&DatabaseConfig,
     numeric_database_url:&str,
     source_revision_ref:&str,
     original_parser_run_ref:&str,
     source_root:&Path,
-    max_sentences:usize,
+    max_sentences:usize,focus:Option<i64>,
 )->Result<NumericPipelineReceipt,NumericPipelineError>{
     if max_sentences==0||max_sentences>64{
         return Err(NumericPipelineError::Budget);
@@ -518,7 +535,7 @@ pub fn run_native_numeric_exact_source_slice(
     let mut selected=Vec::new();
     let mut token_budget=0usize;
     for sentence in &plan.sentences{
-        if known.contains(&sentence.sentence_ref){continue;}
+        if known.contains(&sentence.sentence_ref)||!required_prefix_region(sentence.start_char,focus){continue;}
         if sentence.tokens.len()>12_000 {
             return Err(NumericPipelineError::Budget);
         }
@@ -561,7 +578,8 @@ pub fn run_native_numeric_exact_source_slice(
     if !current.is_subset(&expected) ||current.len()>expected.len(){
         return Err(NumericPipelineError::ForeignRun);
     }
-    let pending_parser_sentences=expected.len()-current.len();
+    let pending_parser_sentences=plan.sentences.iter().filter(|s|required_prefix_region(s.start_char,focus)&&!current.contains(&s.sentence_ref)).count();
+    let unrelated_pending_parser_sentences=expected.len()-current.len()-pending_parser_sentences;
     let lex=lexicon(numeric_database_url)?;
     // The number staged in this invocation is a receipt fact, not a
     // claim about global source coverage or completed numeric work.
@@ -570,7 +588,7 @@ pub fn run_native_numeric_exact_source_slice(
     let mdl=NumericMdlWeights::default();
     while completed<max_sentences{
         let Some((lease,sentence_id))=lease_one(
-            numeric_database_url,&run_ref,&original.manifest.document_ref
+            numeric_database_url,&run_ref,&original.manifest.document_ref,focus
         )? else {break};
         let tokens=numeric_sentence_tokens(
             numeric_database_url,&run_ref,
@@ -587,13 +605,14 @@ pub fn run_native_numeric_exact_source_slice(
     let mut db=Client::connect(numeric_database_url,NoTls)?;
     let remaining:i64=db.query_one(
         "SELECT count(*)::bigint
-         FROM execution.semantic_pnf_work_item
-         WHERE run_ref=$1 AND document_ref=$2 AND operation_id=1
-           AND state_id<>3",
-        &[&run_ref,&original.manifest.document_ref])?.get(0);
+         FROM execution.semantic_pnf_work_item w
+         JOIN execution.semantic_pnf_region r ON r.region_id=w.region_id
+         WHERE w.run_ref=$1 AND w.document_ref=$2 AND w.operation_id=1
+           AND w.state_id<>3 AND ($3::bigint IS NULL OR r.start_char<=$3)",
+        &[&run_ref,&original.manifest.document_ref,&focus])?.get(0);
     let (entity_objects,entity_supports)=materialize_numeric_entity_occurrences(
-        &mut db,&run_ref,&original.manifest.document_ref,max_sentences)?;
-    let (frontier_completed,frontier_remaining)=if pending_parser_sentences==0
+        &mut db,&run_ref,&original.manifest.document_ref,max_sentences,focus)?;
+    let (frontier_completed,frontier_remaining)=if focus.is_none()&&pending_parser_sentences==0
         &&remaining==0&&plan.full_document_coverage_paid {
         let (done,pending)=reduce_original_frontier_slice(
             &mut db,&run_ref,&original.manifest.document_ref,max_sentences)?;
@@ -604,6 +623,7 @@ pub fn run_native_numeric_exact_source_slice(
     if frontier_remaining!=Some(0){
         residuals.push("original_parent_frontier_reduction_pending".into());
     }
+    if unrelated_pending_parser_sentences>0 {residuals.push(format!("unrelated_parser_sentences_deferred:{}",unrelated_pending_parser_sentences));}
     if pending_parser_sentences>0 {
         residuals.push(format!(
             "original_numeric_parser_sentence_bootstrap_pending:{}",
@@ -637,7 +657,7 @@ pub fn run_native_numeric_exact_source_slice(
             &[&plan.numeric_run_ref,&plan.source_document_ref]
         )?.get::<_,i64>(0) as usize,
         source_full_document_coverage_paid:plan.full_document_coverage_paid
-            &&pending_parser_sentences==0,
+            &&pending_parser_sentences==0&&unrelated_pending_parser_sentences==0,
         sentence_jobs_completed:completed,sentence_jobs_remaining:remaining as usize,
         entity_occurrence_objects_inserted:entity_objects,
         entity_occurrence_token_supports_inserted:entity_supports,
@@ -646,4 +666,21 @@ pub fn run_native_numeric_exact_source_slice(
         unique_document_identity_paid:false,level_three_identity_substitution_paid:false,
         external_qid_paid:false,historical_truth_paid:false,residuals,
     })
+}
+
+// Golden: Lean NumericPnfRustPortContract.consumerRegionWork; physical
+// prefix scope includes the full containing focus sentence. No source omission
+// becomes a semantic exclusion.
+fn required_prefix_region(start:i64,focus:Option<i64>)->bool{focus.map_or(true,|end|start<=end)}
+#[cfg(test)]
+mod numeric_pnf_consumer_workset_golden{
+    use super::*;
+    #[test] fn numeric_pnf_no_unrelated_publication(){
+        let source=[0,230,2215,2660,3603,4530,4600,10000];
+        let published=[0,230,2215,2660,3603,4530];
+        let work=source.iter().filter(|s|required_prefix_region(**s,Some(4534))&&!published.contains(s)).count();
+        assert_eq!(work,0);
+        assert!(required_prefix_region(4530,Some(4534)));
+        assert!(!required_prefix_region(4600,Some(4534)));
+    }
 }

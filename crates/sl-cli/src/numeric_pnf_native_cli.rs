@@ -9,7 +9,7 @@
 use sensiblaw_pg_source_store::{
     load_database_config, load_exact_native_numeric_evidence,
     plan_original_native_numeric_parser, deterministic_numeric_run_ref,
-    run_native_numeric_exact_source_slice, OriginalNativeNumericEvidence,
+    run_native_numeric_exact_source_slice, run_native_numeric_prefix_slice, OriginalNativeNumericEvidence,
     inspect_native_antecedent_review, native_antecedent_frontier,
     compile_native_source_local_answer,
     audit_original_numeric_identity_for_source_answer,
@@ -105,7 +105,8 @@ pub fn run(args:&[String])->Result<(),String>{
                 .map_err(|_|"SLR_NATIVE_NUMERIC_SOURCE_ROOT required")?;
             let mut publication=Vec::new();
             for _ in 0..8 {
-                let step=run_native_numeric_exact_source_slice(&config,&url,&scope.source_revision_ref,parser_run,&root,64)
+                let step=run_native_numeric_prefix_slice(&config,&url,&scope.source_revision_ref,parser_run,&root,64,
+                    i64::try_from(scope.focus_start_char).map_err(|e|e.to_string())?)
                     .map_err(|e|e.to_string())?;
                 let done=step.sentence_jobs_remaining==0&&
                     !step.residuals.iter().any(|r|r.starts_with("original_numeric_parser_sentence_bootstrap_pending:"));

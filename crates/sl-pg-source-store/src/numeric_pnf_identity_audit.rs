@@ -864,24 +864,9 @@ pub struct OriginalParserIdentityProducerObservation{
     pub name_overflow_rows:i64,
     pub admission_executed:bool,
 }
-fn original_parser_identity_producer_probe(
-    tx:&mut postgres::Transaction<'_>,run_ref:&str,document_ref:&str,
-    demand:i64,
+fn observe_refreshed_parser_identity_producer(
+    probe:&mut postgres::Transaction<'_>,run_id:i64,document_id:i64,demand:i64,
 )->Result<OriginalParserIdentityProducerObservation,NativeNumericAuditError>{
-    let row=tx.query_one(
-        "SELECT DISTINCT r.run_id,r.document_id
-         FROM execution.semantic_pnf_demand d
-         JOIN execution.semantic_pnf_region r ON r.region_id=d.source_region_id
-         WHERE d.demand_id=$1 AND r.run_ref=$2 AND r.document_ref=$3",
-        &[&demand,&run_ref,&document_ref])?;
-    let run_id:i64=row.get(0);let document_id:i64=row.get(1);
-    // m090 refresh supersedes current candidate rows. Never leave its writes
-    // behind when the native parser coverage and m080 admission lifecycle are
-    // not yet certified. Execute the original producer in a nested transaction
-    // and retain only the candidate observation, not a live witness or ID.
-    let mut probe=tx.transaction()?;
-    probe.query_one("SELECT execution.refresh_numeric_pnf_parser_identity_evidence($1,$2)",
-        &[&run_id,&document_id])?;
     let rows=probe.query(
         "SELECT c.source_object_id,c.target_object_id,c.witness_kind,
                 c.source_token_id,c.target_token_id,c.evidence_ref,
@@ -904,7 +889,6 @@ fn original_parser_identity_producer_probe(
     let overflow:i64=probe.query_one(
         "SELECT count(*)::bigint FROM execution.semantic_pnf_proper_name_evidence_overflow
          WHERE run_id=$1 AND document_id=$2",&[&run_id,&document_id])?.get(0);
-    probe.rollback()?;
     Ok(OriginalParserIdentityProducerObservation{
         producer_ref:"execution.refresh_numeric_pnf_parser_identity_evidence",
         scope:"current_numeric_document_candidate_projection_not_global_coverage",
@@ -1683,7 +1667,8 @@ fn materialize_native_binding_bridge(
          JOIN execution.semantic_symbol dep ON dep.symbol_id=t.dependency_symbol_id
          WHERE t.run_ref=$1 AND t.document_ref=$2 AND t.representation_version=2
            AND r.run_ref=$1 AND r.document_ref=$2 AND r.region_kind=1 AND r.closure_state IN (2,3)
-         ORDER BY t.start_char,t.end_char,t.token_id",&[&run_ref,&doc])?;
+           AND r.start_char <= (SELECT start_char FROM execution.semantic_parser_token WHERE token_id=$3)
+         ORDER BY t.start_char,t.end_char,t.token_id",&[&run_ref,&doc,&focus_token])?;
     let mut tokens=BTreeMap::new();
     let mut seen_sentences=BTreeMap::new();
     let mut prior_end=0usize;
@@ -1757,7 +1742,7 @@ fn materialize_native_binding_bridge(
     // anchor metadata, exact source and inverse object IDs; never a count key.
     let tape=tokens.values().map(|t|(t.id,t.sentence_id,t.ordinal,t.start,t.end,t.head,
         &t.pos,&t.dep,&t.morphology)).collect::<Vec<_>>();
-    let snapshot=format!("slr-native-binding-index:v2:{}",bridge_digest(&(run_ref,doc,sha,tape,&anchors))?);
+    let snapshot=format!("slr-native-binding-index:v2:{}",bridge_digest(&("consumer-prefix:v1",run_ref,doc,sha,tape,&anchors))?);
     // Explicit projection/history tables on the existing numeric DB. Old
     // immutable factor/revision/member/span rows are never deleted. Only
     // mutable anchor index rows are retired, after saving their exact JSON.
@@ -1920,7 +1905,7 @@ fn materialize_native_binding_bridge(
         projected_entity_spans_missing_from_index,
         multihead_or_headless_spans:campaign.represented_spans.iter().filter(|s|s.unique_dependency_head.is_none()).count(),
         unresolved_structural_metadata:vec!["canonical_tokenizer_parity","full_original_mention_factor_parity",
-            "original_relation_id_and_bundle_parity","nonprojected_coordination_and_other_relation_families"],
+            "original_relation_id_and_bundle_parity","nonprojected_coordination_and_other_relation_families","consumer_prefix_only_later_source_relations_unvisited"],
         mention_spans_without_objects:campaign.spans_without_exact_objects,
         mention_spans_with_multiple_objects:campaign.represented_spans.iter().filter(|s|s.exact_object_ids.len()>1).count(),
         observed_document_order_verified:true,canonical_tokenizer_parity_paid:false,
@@ -2305,8 +2290,11 @@ fn projected_relation_probe(
          JOIN execution.semantic_symbol dep ON dep.symbol_id=t.dependency_symbol_id
          WHERE t.run_ref=$1 AND t.document_ref=$2 AND t.representation_version=2
            AND r.run_ref=$1 AND r.document_ref=$2 AND r.region_kind=1 AND r.closure_state IN (2,3)
+           AND r.start_char <= (SELECT min(t0.start_char)
+               FROM execution.semantic_pnf_demand d JOIN execution.semantic_pnf_object_token_support s ON s.object_id=d.source_object_id
+               JOIN execution.semantic_parser_token t0 ON t0.token_id=s.token_id WHERE d.demand_id=$3)
          ORDER BY t.start_char,t.end_char,t.token_id",
-        &[&run_ref,&document_ref])?;
+        &[&run_ref,&document_ref,&demand])?;
     let mut tokens=Vec::new();let mut ids=BTreeSet::new();
     for row in rows{
         let t=NativeRelationToken{id:row.get(0),region:row.get(1),lemma_id:row.get(2),head:row.get(3),
@@ -2462,6 +2450,8 @@ fn projected_relation_probe(
 #[derive(Debug,Clone,Serialize)]
 pub struct NativeGovernedIdentityProbe{
     pub admission_owner:&'static str,
+    pub parser_refresh_elapsed_ms:u128,
+    pub parser_admission_elapsed_ms:u128,
     pub level_three_owner:&'static str,
     pub admitted_source_witness_count:i64,
     pub candidate_class_projection:NativeNumericIdentityFibreProjection,
@@ -2487,7 +2477,7 @@ pub struct NativeGovernedIdentityProbe{
 // observed because the source/typed binding coverage is not yet certified.
 fn probe_original_governed_identity(
     tx:&mut postgres::Transaction<'_>,run_ref:&str,document_ref:&str,demand:i64,
-)->Result<NativeGovernedIdentityProbe,NativeNumericAuditError>{
+)->Result<(OriginalParserIdentityProducerObservation,NativeGovernedIdentityProbe),NativeNumericAuditError>{
     let row=tx.query_one(
         "SELECT r.run_id,r.document_id FROM execution.semantic_pnf_demand d
          JOIN execution.semantic_pnf_region r ON r.region_id=d.source_region_id
@@ -2498,11 +2488,16 @@ fn probe_original_governed_identity(
     let prior=level_three_snapshot(tx,run,document)?;
     let (_,prior_classes)=observe_original_resolution_fibre(tx,demand,run_ref,document_ref)?;
     let mut probe=tx.transaction()?;
+    let started=std::time::Instant::now();
     probe.query_one("SELECT execution.refresh_numeric_pnf_parser_identity_evidence($1,$2)",
         &[&run,&document])?;
+    let parser_refresh_elapsed_ms=started.elapsed().as_millis();
+    let original_parser_identity_producer=observe_refreshed_parser_identity_producer(&mut probe,run,document,demand)?;
+    let started=std::time::Instant::now();
     let admitted:i64=probe.query_one(
         "SELECT execution.admit_numeric_pnf_parser_identity_evidence($1,$2)",
         &[&run,&document])?.get(0);
+    let parser_admission_elapsed_ms=started.elapsed().as_millis();
     let (horizons,classes)=observe_original_resolution_fibre(&mut probe,demand,run_ref,document_ref)?;
     let outside:bool=probe.query_one(
         "SELECT outside_model_possible FROM execution.semantic_pnf_demand_open_world_state WHERE demand_id=$1",
@@ -2542,7 +2537,8 @@ fn probe_original_governed_identity(
         ||level_one!=level_one_snapshot(tx,run,document)?{
         return Err(NativeNumericAuditError::AdmissionProbeInvariant);
     }
-    Ok(NativeGovernedIdentityProbe{
+    Ok((original_parser_identity_producer,NativeGovernedIdentityProbe{
+        parser_refresh_elapsed_ms,parser_admission_elapsed_ms,
         admission_owner:"execution.admit_numeric_pnf_parser_identity_evidence",
         level_three_owner:"m070 direct + m086 supported substitution",
         admitted_source_witness_count:admitted,
@@ -2556,7 +2552,7 @@ fn probe_original_governed_identity(
         rollback_preserved_prior_level_three:rollback_level_three,
         rollback_preserved_prior_candidate_classes:rollback_classes,
         persisted:false,focus_identity_paid:false,
-    })
+    }))
 }
 
 /// Candidate-only, exact-source consumer transport. This extends the represented
@@ -2584,7 +2580,8 @@ pub struct NativeNumericCandidateTransportReceipt {
     pub morphology_head_unobservable_count:usize,
     pub original_horizon_observations:Vec<NativeNumericHorizonObservation>,
     pub original_document_identity_observations:Vec<NativeNumericDocumentIdentityObservation>,
-    pub original_parser_identity_producer:OriginalParserIdentityProducerObservation,
+    pub original_parser_identity_producer:Option<OriginalParserIdentityProducerObservation>,
+    pub parser_identity_refresh_invocations:usize,
     pub document_identity_fibre:NativeNumericIdentityFibreProjection,
     pub original_cross_resource_needs:Vec<OriginalCrossResourceNeedObservation>,
     pub structural_binding:NativeBindingStructuralReceipt,
@@ -2726,8 +2723,6 @@ pub fn transport_original_numeric_candidates_for_source_answer(
         observe_original_resolution_fibre(&mut tx,demand,numeric_run_ref,&answer.source_document_ref)?;
     let document_identity_fibre=project_original_identity_fibre(&original_horizon_observations,&original_document_identity_observations,open);
     let original_cross_resource_needs=observe_original_cross_resource_needs(&mut tx,demand,numeric_run_ref,&answer.source_document_ref)?;
-    let original_parser_identity_producer=original_parser_identity_producer_probe(
-        &mut tx,numeric_run_ref,&answer.source_document_ref,demand)?;
     let original_h9_readiness=observe_native_h9_readiness(&mut tx,demand,numeric_run_ref,&answer.source_document_ref)?;
     let structural_binding=observe_native_binding_structure(&mut tx,demand,focus_token,
         numeric_run_ref,&answer.source_document_ref,&answer.source_content_sha256)?;
@@ -2735,11 +2730,13 @@ pub fn transport_original_numeric_candidates_for_source_answer(
     // occurrence/morphology work is drained. This is still not typed coverage.
     let morphology_head_unobservable_count=structural_binding.observations.iter()
         .filter(|o|o.target_kind==1&&o.exact_head_token_id.is_none()).count();
-    let governed_identity_rollback_probe=if remaining==0&&nominal_heads_remaining==0
+    let (original_parser_identity_producer,governed_identity_rollback_probe)=if remaining==0&&nominal_heads_remaining==0
         &&candidates_without_morphology_observation==0
         &&original_mention_binding_campaign.spans_without_exact_objects==0{
-        Some(probe_original_governed_identity(&mut tx,numeric_run_ref,&answer.source_document_ref,demand)?)
-    }else{None};
+        let (observed,governed)=probe_original_governed_identity(&mut tx,numeric_run_ref,&answer.source_document_ref,demand)?;
+        (Some(observed),Some(governed))
+    }else{(None,None)};
+    let parser_identity_refresh_invocations=usize::from(governed_identity_rollback_probe.is_some());
     tx.commit()?;
     Ok(NativeNumericCandidateTransportReceipt{
         schema:"slr-native-candidate-only-transport-v6",
@@ -2750,7 +2747,7 @@ pub fn transport_original_numeric_candidates_for_source_answer(
         nominal_head_objects_inserted,nominal_head_token_supports_inserted,nominal_heads_remaining,original_h6_evidence_inserted,
         morphology_observations_inserted,candidates_without_morphology_observation,morphology_head_unobservable_count,
         original_horizon_observations,original_document_identity_observations,
-        original_parser_identity_producer,document_identity_fibre,original_cross_resource_needs,
+        original_parser_identity_producer,parser_identity_refresh_invocations,document_identity_fibre,original_cross_resource_needs,
         structural_binding,native_binding_bridge,original_mention_binding_campaign,original_h9_readiness,governed_identity_rollback_probe,
     })
 }
