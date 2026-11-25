@@ -465,6 +465,9 @@ mod tests {
     #[test]
     fn incomplete_or_wrong_commit_command_never_runs() {
         assert!(run(&["compile".into()]).is_err());
+        assert!(run(&["direct-stage".into(),"source".into(),"run".into(),"0".into(),"1".into()]).is_err());
+        assert!(run(&["direct-stage".into(),"source".into(),"run".into(),"0".into(),"65".into(),"--commit".into()]).is_err());
+        assert!(run(&["direct-inspect".into(),"source".into(),"run".into(),"0".into(),"0".into()]).is_err());
         assert!(run(&["bind".into(),"a".into(),"b".into(),"65".into(),"--commit".into()]).is_err());
         assert!(run(&["bind-campaign".into(),"a".into(),"b".into(),"65".into(),"--commit".into()]).is_err());
         assert!(run(&["bind-campaign".into(),"a".into(),"b".into(),"1".into(),"--rollback-probe".into()]).is_err());
