@@ -3204,6 +3204,20 @@ struct NativeRelationReductionRow {
     // role occurrence, not role-name map: repeated item or subject survives.
     role_factors:Vec<serde_json::Value>,
 }
+// Named receipt coordinates prevent the raw parser ABI (TAG, lemma, POS,
+// dependency and span) from being shifted when a field is added.
+struct NativeRelationParserReceipt {
+    morph_json: Option<String>,
+    tag_origin_id: i16,
+    tag: Option<String>,
+    lemma: String,
+    pos: String,
+    dependency: String,
+    orth: String,
+    start: i64,
+    end: i64,
+}
+
 fn native_relation_reductions(
     tx:&mut postgres::Transaction<'_>,run:&str,doc:&str,tokens:&[NativeRelationToken],
     relations:&[ProjectedRelation],
@@ -3216,13 +3230,15 @@ fn native_relation_reductions(
         JOIN execution.semantic_parser_token t ON t.token_ref=p.token_ref AND t.sentence_ref=r.sentence_ref
         WHERE r.run_ref=$1 AND r.document_ref=$2 AND t.token_id=ANY($3::bigint[])",
         &[&run,&doc,&wanted])?;
-    let raw=rows.iter().map(|r|(r.get::<_,i64>(0),(r.get::<_,Option<String>>(1),r.get::<_,i16>(2),r.get::<_,Option<String>>(3),
-        r.get::<_,String>(4),r.get::<_,String>(5),r.get::<_,String>(6),r.get::<_,String>(7),r.get::<_,i64>(8),r.get::<_,i64>(9)))).collect::<BTreeMap<_,_>>();
+    let raw=rows.iter().map(|r|(r.get::<_,i64>(0),NativeRelationParserReceipt{
+        morph_json:r.get(1),tag_origin_id:r.get(2),tag:r.get(3),lemma:r.get(4),
+        pos:r.get(5),dependency:r.get(6),orth:r.get(7),start:r.get(8),end:r.get(9),
+    })).collect::<BTreeMap<_,_>>();
     if raw.len()!=rows.len()||raw.len()!=wanted.len(){return Err(NativeNumericAuditError::ForeignSource);}
     let by_id=tokens.iter().map(|t|(t.id,t)).collect::<BTreeMap<_,_>>();
     for t in tokens{
         let p=&raw[&t.id];
-        if p.4!=t.pos||!p.5.eq_ignore_ascii_case(&t.dep)||p.6!=t.orth||p.7!=t.start||p.8!=t.end{
+        if p.pos!=t.pos||!p.dependency.eq_ignore_ascii_case(&t.dep)||p.orth!=t.orth||p.start!=t.start||p.end!=t.end{
             return Err(NativeNumericAuditError::ForeignSource);
         }
     }
@@ -3234,7 +3250,7 @@ fn native_relation_reductions(
         let relation_ref=format!("native-projected-relation:{}",bridge_digest(&(run,doc,relation))?);
         let head=by_id.get(&relation.head_token_id).ok_or(NativeNumericAuditError::ForeignSource)?;
         let action_meta=if relation.relation_type=="predicate"{
-            Some(original_relation_action_metadata(raw[&head.id].0.as_deref(),&head.orth,&head.dep)?)
+            Some(original_relation_action_metadata(raw[&head.id].morph_json.as_deref(),&head.orth,&head.dep)?)
         }else{None};
         let atom_roles=original_relation_atom_ids(relation,&mut original_atoms);
         let inverse=atom_roles.iter().map(|(atom,id,_)|(atom.clone(),*id)).collect::<BTreeMap<_,_>>();
@@ -3243,7 +3259,7 @@ fn native_relation_reductions(
         let mut original_reference_crosswalk=original_relation_reference(doc,grammar_ref,index+1,relation.relation_type,original_roles,inverse)?;
         for (atom_id,id,_) in &atom_roles {
             let p=&raw[id];
-            let atom=original_relation_atom_payload(atom_id,&p.6,p.7,p.8,&p.3,&p.4,&p.5,p.0.as_deref())?;
+            let atom=original_relation_atom_payload(atom_id,&p.orth,p.start,p.end,&p.lemma,&p.pos,&p.dependency,p.morph_json.as_deref())?;
             let span_ref=original_atom_span_ref(doc,&atom)?;
             original_reference_crosswalk.atom_span_refs.insert(atom_id.clone(),span_ref);
             original_reference_crosswalk.atom_payloads.insert(atom_id.clone(),atom);
@@ -3272,7 +3288,7 @@ fn native_relation_reductions(
                 "reconstructed_original_role_factor_ref":original_role_ref,"reconstructed_original_constraint_ref":original_role_constraint_ref,
                 "original_binding":binding,
                 "constraint":constraint,"residuals":residuals,"original_span":[atom.start,atom.end],
-                "parser_pos":atom.pos,"parser_dependency":atom.dep,"parser_morph_json":raw[id].0,
+                "parser_pos":atom.pos,"parser_dependency":atom.dep,"parser_morph_json":raw[id].morph_json,
                 "reference_alternatives":if pronoun{vec!["entity_reference","eventuality_reference","proposition_reference","expletive_realisation"]}else{vec![]}}));
         }
         out.push(NativeRelationReductionRow{relation_ref,projected_relation_ordinal:index+1,original_reference_crosswalk,relation:relation.clone(),grammar_ref,factor_type,candidate_type,
@@ -3282,7 +3298,7 @@ fn native_relation_reductions(
     // sentence and then tag/preposed auxiliary. Original SLR did not retain
     // TAG, so a known punctuation/auxiliary mode is an observation, not a
     // complete first-question witness. Do not assign it a fake atom role.
-    let missing_tags=raw.values().filter(|p|p.1!=1||p.2.as_deref().map_or(true,str::is_empty)).count();
+    let missing_tags=raw.values().filter(|p|p.tag_origin_id!=1||p.tag.as_deref().map_or(true,str::is_empty)).count();
     let mut sentences=BTreeMap::<i64,Vec<&NativeRelationToken>>::new();
     for t in tokens{sentences.entry(t.region).or_default().push(t);}
     let mut ordered=sentences.into_values().collect::<Vec<_>>();
@@ -3292,7 +3308,7 @@ fn native_relation_reductions(
         let hit=sentence.iter().copied().find(|t|t.orth=="?").map(|t|(t,"question_mark"))
           .or_else(||sentence.iter().copied().find_map(|t|{
             let p=&raw[&t.id];
-            if p.1==1&&matches!(p.2.as_deref(),Some("WP"|"WRB"|"WDT")){
+            if p.tag_origin_id==1&&matches!(p.tag.as_deref(),Some("WP"|"WRB"|"WDT")){
                 Some((t,"original_wh_tag"))
             }else if t.dep=="aux"&&by_id.get(&t.head)
                 .is_some_and(|head|matches!(head.pos.as_str(),"VERB"|"AUX")&&t.start<head.start){
