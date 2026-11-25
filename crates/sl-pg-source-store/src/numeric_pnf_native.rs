@@ -589,6 +589,15 @@ impl CandidateFibre {
     pub fn represented_count(&self) -> usize { self.represented.len() }
     pub fn deferred_count(&self) -> usize { self.deferred.len() }
     pub fn refuted_count(&self) -> usize { self.refuted_by_evidence.len() }
+    pub fn represented_ids(&self) -> impl Iterator<Item=u64> + '_ {
+        self.represented.iter().copied()
+    }
+    pub fn refuted_ids(&self) -> impl Iterator<Item=u64> + '_ {
+        self.refuted_by_evidence.keys().copied()
+    }
+    pub fn live_ids(&self) -> impl Iterator<Item=u64> + '_ {
+        self.represented.iter().copied().filter(|id| !self.refuted_by_evidence.contains_key(id))
+    }
     pub fn open_world(&self) -> bool { self.outside_model_possible }
     pub fn original_demand(&self) -> (u64,i16) {
         (self.demand_id,self.target_kind)
