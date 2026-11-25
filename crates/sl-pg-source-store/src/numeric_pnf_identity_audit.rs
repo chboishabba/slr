@@ -2211,6 +2211,7 @@ pub struct NativeBindingBridgeReceipt {
     pub native_relation_reductions:usize,pub native_role_reductions:usize,
     pub native_action_metadata_reductions:usize,
     pub native_relation_algebra_rows:usize,
+    pub original_relation_packet:NativeOriginalRelationPacketReceipt,
     pub question_mode_observation:Option<serde_json::Value>,pub original_tag_capability_missing_count:usize,
     pub focus_reference_anchors:usize,pub retired_index_anchors:u64,
     pub candidate_sets:Vec<NativeBindingSetBridgeReceipt>,
@@ -2360,6 +2361,39 @@ fn materialize_native_binding_bridge(
     }
     let relations=native_relation_grammar(&relation_tokens);
     let (relation_reductions,question_mode,missing_original_tags)=native_relation_reductions(tx,run_ref,doc,&relation_tokens,&relations)?;
+    // The selected region includes the full containing sentence. Bind
+    // the comparison to that exact supplied parser prefix, not the whole
+    // document or the shorter antecedent candidate horizon.
+    let prefix_end:i64=tx.query_one("SELECT r.end_char FROM execution.semantic_parser_token t
+        JOIN execution.semantic_pnf_sentence_region l ON l.sentence_id=t.sentence_id
+        JOIN execution.semantic_pnf_region r ON r.region_id=l.region_id
+        WHERE t.token_id=$1 AND t.run_ref=$2 AND t.document_ref=$3
+          AND r.run_ref=$2 AND r.document_ref=$3 AND r.region_kind=1",&[&focus_token,&run_ref,&doc])?.get(0);
+    let prefix_end_usize=usize::try_from(prefix_end).map_err(|_|NativeNumericAuditError::ForeignSource)?;
+    if prefix_end_usize>chars.len()||relation_tokens.iter().any(|t|t.end>prefix_end){
+        return Err(NativeNumericAuditError::ForeignSource);
+    }
+    let parser_rows=tx.query("SELECT DISTINCT source_revision_ref,parser_run_ref,source_sha256
+        FROM execution.slr_native_parser_sentence_receipt
+        WHERE run_ref=$1 AND document_ref=$2",&[&run_ref,&doc])?;
+    if parser_rows.len()!=1||parser_rows[0].get::<_,String>(2)!=sha{
+        return Err(NativeNumericAuditError::ForeignSource);
+    }
+    let parser_run:String=parser_rows[0].get(1);
+    let source_revision:String=parser_rows[0].get(0);
+    let mut coverage=vec![false;prefix_end_usize];
+    for token in &relation_tokens {
+        let a=usize::try_from(token.start).map_err(|_|NativeNumericAuditError::ForeignSource)?;
+        let b=usize::try_from(token.end).map_err(|_|NativeNumericAuditError::ForeignSource)?;
+        if a>=b||b>coverage.len(){return Err(NativeNumericAuditError::ForeignSource);}
+        coverage[a..b].fill(true);
+    }
+    let uncovered=chars[..prefix_end_usize].iter().zip(&coverage)
+        .filter(|(c,seen)|!c.is_whitespace()&&!**seen).count();
+    let prefix=chars[..prefix_end_usize].iter().collect::<String>();
+    let (original_relation_packet,original_relation_payload)=assemble_original_relation_packet(
+        doc,sha,&source_revision,&parser_run,&prefix,missing_original_tags,uncovered,
+        &relation_reductions,question_mode.as_ref())?;
     let mut anchors=Vec::new();
     for span in &campaign.represented_spans{
         let anchor=bridge_anchor(span.original_mention_ref.clone(),"semantic.mention_identity",
@@ -2405,7 +2439,7 @@ fn materialize_native_binding_bridge(
     // anchor metadata, exact source and inverse object IDs; never a count key.
     let tape=tokens.values().map(|t|(t.id,t.sentence_id,t.ordinal,t.start,t.end,t.head,
         &t.pos,&t.dep,&t.morphology)).collect::<Vec<_>>();
-    let snapshot=format!("slr-native-binding-index:v2:{}",bridge_digest(&("consumer-prefix:v4",run_ref,doc,sha,tape,&anchors,&relation_reductions,&question_mode,missing_original_tags))?);
+    let snapshot=format!("slr-native-binding-index:v2:{}",bridge_digest(&("consumer-prefix:v5",run_ref,doc,sha,tape,&anchors,&relation_reductions,&question_mode,missing_original_tags,&original_relation_packet.packet_sha256))?);
     // Explicit projection/history tables on the existing numeric DB. Old
     // immutable factor/revision/member/span rows are never deleted. Only
     // mutable anchor index rows are retired, after saving their exact JSON.
@@ -2493,6 +2527,17 @@ fn materialize_native_binding_bridge(
             &[&run_ref,&doc,&snapshot,&name])?.get(0);
         if &stored!=q{return Err(NativeNumericAuditError::ForeignSource);}
     }
+    // Store the canonical bundle and reduction projection once per
+    // immutable snapshot in the existing relation-reduction owner.
+    // This is a detached crosswalk, not another semantic factor store.
+    let packet_ref=format!("native-original-relation-packet:{}",original_relation_packet.packet_sha256);
+    tx.execute("INSERT INTO execution.slr_native_relation_reduction(run_ref,document_ref,snapshot_ref,relation_ref,payload)
+        VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING",
+        &[&run_ref,&doc,&snapshot,&packet_ref,&original_relation_payload])?;
+    let stored:serde_json::Value=tx.query_one("SELECT payload FROM execution.slr_native_relation_reduction
+        WHERE run_ref=$1 AND document_ref=$2 AND snapshot_ref=$3 AND relation_ref=$4",
+        &[&run_ref,&doc,&snapshot,&packet_ref])?.get(0);
+    if stored!=original_relation_payload{return Err(NativeNumericAuditError::ForeignSource);}
     let mut local_relation_keys=BTreeSet::new();
     for row in &relation_reductions{
         if row.residuals.is_empty(){local_relation_keys.insert(row.relation_ref.clone());}
@@ -2607,18 +2652,25 @@ fn materialize_native_binding_bridge(
     let has_subject=anchors.iter().any(|a|focus_keys.contains(&a.key)&&a.kind=="semantic.argument.subject");
     let mut alternatives=vec!["entity_reference","eventuality_reference","proposition_reference"];
     if has_subject{alternatives.push("expletive_realisation");}
+    let mut unresolved=vec!["canonical_tokenizer_parity","full_original_mention_factor_parity",
+        "consumer_prefix_only_later_source_relations_unvisited"];
+    if !original_relation_packet.independent_reference_exact{
+        unresolved.push("original_relation_bundle_and_reduction_not_independently_compared");
+    }
+    if missing_original_tags>0{unresolved.push("question_mode_original_tag_unavailable");}
+    if uncovered>0{unresolved.push("relation_prefix_parser_coverage_incomplete");}
     Ok(NativeBindingBridgeReceipt{
         snapshot_ref:snapshot,source_parser_tokens:tokens.len(),anchors:anchors.len(),mention_anchors,
         relation_anchors,native_relation_reductions:relation_reductions.len(),
         native_role_reductions:relation_reductions.iter().map(|r|r.role_factors.len()).sum(),
         native_action_metadata_reductions:relation_reductions.iter().filter(|r|r.action_meta.is_some()).count(),native_relation_algebra_rows:relation_algebra_rows,
+        original_relation_packet,
         question_mode_observation:question_mode,original_tag_capability_missing_count:missing_original_tags,focus_reference_anchors:focus_keys.len(),retired_index_anchors:retired,candidate_sets:sets,
         focus_reference_alternatives:alternatives,original_index_candidate_evidence_inserted,
         exact_index_entity_objects_outside_transport,indexed_entity_spans_missing_from_projected,
         projected_entity_spans_missing_from_index,
         multihead_or_headless_spans:campaign.represented_spans.iter().filter(|s|s.unique_dependency_head.is_none()).count(),
-        unresolved_structural_metadata:vec!["canonical_tokenizer_parity","full_original_mention_factor_parity",
-            "original_relation_root_reference_crosswalk_reconstructed_not_independently_compared","original_role_factor_span_references_reconstructed_not_independently_compared","question_mode_original_tag_unavailable","consumer_prefix_only_later_source_relations_unvisited"],
+        unresolved_structural_metadata:unresolved,
         mention_spans_without_objects:campaign.spans_without_exact_objects,
         mention_spans_with_multiple_objects:campaign.represented_spans.iter().filter(|s|s.exact_object_ids.len()>1).count(),
         observed_document_order_verified:true,canonical_tokenizer_parity_paid:false,
@@ -3301,6 +3353,199 @@ struct NativeRelationParserReceipt {
     orth: String,
     start: i64,
     end: i64,
+}
+
+/// Exact detached original producer packet. The original source is
+/// canonical text of the *supplied parser prefix*. The original relation IDs,
+/// atom IDs, root/role/feature factor references and constraint references
+/// are not identified with the production numeric or algebra surrogate keys.
+/// A reference comparison is differential evidence only, not admission.
+#[derive(Debug,Clone,Serialize)]
+pub struct NativeOriginalRelationPacketReceipt{
+    pub scope:&'static str,
+    pub prefix_end_char:usize,
+    pub prefix_uncovered_nonwhitespace:usize,
+    pub missing_original_tags:usize,
+    pub atom_count:usize,
+    pub relation_count:usize,
+    pub factor_count:usize,
+    pub explicit_constraint_count:usize,
+    pub packet_sha256:String,
+    pub independent_reference_supplied:bool,
+    pub independent_reference_exact:bool,
+    pub complete_supplied_prefix_relation_parity:bool,
+    pub whole_document_parity_paid:bool,
+}
+fn original_factor_alternative(factor:&str,suffix:&str,typ:&str,value:serde_json::Value,
+    declaration:&str,relation:&str)->serde_json::Value{
+    serde_json::json!({"alternative_ref":format!("{factor}:{suffix}"),"type_ref":typ,"value":value,
+        "derivation_refs":[declaration,relation]})
+}
+fn original_factor_constraint(cref:&str,kind:&str,role:&str,relation_type:&str,source:&str,target:&str,
+    atom_ref:serde_json::Value,declaration:&str,relation:&str,residual:Option<&str>)->serde_json::Value{
+    serde_json::json!({"constraint_ref":cref,"constraint_type":kind,"payload":{
+        "source_factor_ref":source,"target_factor_ref":target,"role":role,"relation_type":relation_type,
+        "atom_span_ref":atom_ref},"provenance_refs":[declaration,relation],"source_factor_refs":[source],
+        "target_factor_refs":[target],"residual_on_failure":residual})
+}
+fn original_reduction_projection(doc:&str,cross:&NativeOriginalRelationReference,grammar:&str,
+    factor_type:&str,candidate_type:&str,residuals:&[&str],factors:&mut Vec<serde_json::Value>,
+    constraints:&mut BTreeMap<String,serde_json::Value>)->Result<(),NativeNumericAuditError>{
+    let relation=&cross.original_relation_payload;
+    let kind=relation["type"].as_str().ok_or(NativeNumericAuditError::ForeignSource)?;
+    let rref=&cross.reconstructed_relation_ref;
+    let root=&cross.reconstructed_root_factor_ref;
+    let closure=if residuals.is_empty(){"locally_closed"}else{"requires_external_resolution"};
+    let mut bindings=Vec::new();
+    for role in relation["roles"].as_array().ok_or(NativeNumericAuditError::ForeignSource)?{
+        let name=role["role"].as_str().ok_or(NativeNumericAuditError::ForeignSource)?;
+        // Donor composition declarations contain host/content, not mode.
+        if kind=="composition"&&name=="mode"{continue;}
+        let atom=role.get("atom").and_then(|v|v.as_str());
+        let span=atom.map(|a|cross.atom_span_refs.get(a).ok_or(NativeNumericAuditError::ForeignSource)).transpose()?;
+        bindings.push(serde_json::json!({"role":name,"atom_id":atom,"atom_ref":span,"value":role.get("value")}));
+    }
+    let root_constraint=serde_json::json!({"constraint_ref":format!("constraint:{root}"),
+        "constraint_type":"relation_observation","payload":{"relation_type":kind,"bindings":bindings},
+        "provenance_refs":[grammar,rref]});
+    factors.push(serde_json::json!({"factor_ref":root,"factor_type":factor_type,
+        "alternatives":[original_factor_alternative(root,"candidate",candidate_type,
+          serde_json::json!({"relation_ref":rref,"bindings":bindings}),grammar,rref)],
+        "constraints":[root_constraint],"residuals":residuals,"closure_state":closure,
+        "metadata":{"declaration_ref":grammar,"relation_ref":rref,"relation_type":kind,"bindings":bindings}}));
+    let mut last_by_role=BTreeMap::<String,(String,String,serde_json::Value)>::new();
+    for b in &bindings{
+        let name=b["role"].as_str().ok_or(NativeNumericAuditError::ForeignSource)?;
+        if kind=="predicate"&&name=="action_meta"{
+            let f=original_binding_factor_ref(doc,&cross.relation_id,name,b,true)?;
+            factors.push(serde_json::json!({"factor_ref":f,"factor_type":"semantic.predicate_inflection",
+                "alternatives":[original_factor_alternative(&f,"candidate","semantic.predicate_inflection_candidate",
+                    serde_json::json!({"role":name,"value":b["value"]}),grammar,rref)],
+                "constraints":[],"residuals":[],"closure_state":"locally_closed",
+                "metadata":{"relation_ref":rref,"role":name}}));
+        }
+        let Some(ctype)=relation_role_constraint(kind,name)else{continue;};
+        let f=original_binding_factor_ref(doc,&cross.relation_id,name,b,false)?;
+        let atom=b["atom_id"].as_str().and_then(|a|cross.atom_payloads.get(a))
+            .ok_or(NativeNumericAuditError::ForeignSource)?;
+        let pronoun=kind=="predicate"&&name=="subject"&&atom["pos"]=="PRON";
+        let morph=atom.get("morph").cloned().unwrap_or_else(||serde_json::json!({}));
+        let mut alternatives=vec![original_factor_alternative(&f,"candidate","semantic.argument_candidate",
+            serde_json::json!({"role":name,"binding":b,"relation_ref":rref}),grammar,rref)];
+        if pronoun{
+            for typ in ["entity_reference","eventuality_reference","proposition_reference","expletive_realisation"]{
+                alternatives.push(original_factor_alternative(&f,typ,"semantic.reference_candidate",
+                    serde_json::json!({"role":name,"referential_type":typ,"parser_morphology":morph,"relation_ref":rref}),
+                    grammar,rref));
+            }
+        }
+        let role_residuals:Vec<&str>=if pronoun{vec!["syntactic_argument_structure_unchecked","antecedent_unresolved",
+            "grammatical_subject_semantic_status_unresolved","referential_type_unresolved"]}
+            else if kind=="predicate"{vec!["syntactic_argument_structure_unchecked","argument_identity_unresolved"]}else{vec![]};
+        let role_closure=if role_residuals.is_empty(){"locally_closed"}else{"requires_external_resolution"};
+        let role_factor_type=if kind=="predicate"{format!("semantic.argument.{name}")}else{format!("semantic.relation_role.{kind}.{name}")};
+        let cref=format!("constraint:{f}");
+        let constraint=original_factor_constraint(&cref,ctype,name,kind,&f,root,b["atom_ref"].clone(),grammar,rref,residuals.first().copied());
+        constraints.insert(cref,constraint.clone());
+        factors.push(serde_json::json!({"factor_ref":f,"factor_type":role_factor_type,
+            "alternatives":alternatives,"constraints":[constraint],"residuals":role_residuals,
+            "closure_state":role_closure,"metadata":{"relation_ref":rref,"relation_type":kind,
+            "role":name,"atom_id":b["atom_id"],"atom_span_ref":b["atom_ref"],
+            "parser_pos":atom.get("pos"),"parser_dependency":atom.get("dependency"),"parser_morphology":morph}}));
+        // The original extra root-role constraint is keyed by role name
+        // and uses the last occurrence. Ordered role factors above retain
+        // every occurrence (including repeated conjunction items).
+        last_by_role.insert(name.to_owned(),(f,ctype.to_owned(),b["atom_ref"].clone()));
+    }
+    for (role,(f,ctype,atom_ref)) in last_by_role{
+        let cref=format!("constraint:{root}:{role}");
+        let c=original_factor_constraint(&cref,&ctype,&role,kind,&f,root,atom_ref,grammar,rref,residuals.first().copied());
+        constraints.insert(cref,c);
+    }
+    Ok(())
+}
+fn assemble_original_relation_packet(doc:&str,sha:&str,revision:&str,parser_run:&str,prefix:&str,
+    missing_tags:usize,uncovered:usize,rows:&[NativeRelationReductionRow],question:Option<&serde_json::Value>)
+    ->Result<(NativeOriginalRelationPacketReceipt,serde_json::Value),NativeNumericAuditError>{
+    let mut atoms=BTreeMap::<String,serde_json::Value>::new();
+    let mut inverse=BTreeMap::<String,i64>::new();
+    let mut relations=Vec::new();let mut factors=Vec::new();
+    let mut constraints=BTreeMap::<String,serde_json::Value>::new();
+    let mut relation_refs=BTreeSet::new();let mut declarations=BTreeSet::new();
+    for row in rows{
+        let cross=&row.original_reference_crosswalk;
+        for (id,atom) in &cross.atom_payloads{
+            if atoms.insert(id.clone(),atom.clone()).is_some_and(|previous|previous!=*atom){
+                return Err(NativeNumericAuditError::ForeignSource);
+            }
+        }
+        for (id,token) in &cross.atom_token_inverse{
+            if inverse.insert(id.clone(),*token).is_some_and(|previous|previous!=*token){
+                return Err(NativeNumericAuditError::ForeignSource);
+            }
+        }
+        relations.push(cross.original_relation_payload.clone());
+        relation_refs.insert(cross.reconstructed_relation_ref.clone());
+        declarations.insert(row.grammar_ref);
+        original_reduction_projection(doc,cross,row.grammar_ref,row.factor_type,row.candidate_type,&row.residuals,&mut factors,&mut constraints)?;
+    }
+    if let Some(question)=question{
+        let relation=question["original_reference_crosswalk"]["original_relation_payload"].clone();
+        let modes=relation["roles"].as_array().ok_or(NativeNumericAuditError::ForeignSource)?;
+        let cross=original_relation_reference(doc,"grammar:semantic:composition:v0_4",rows.len()+1,"composition",modes.clone(),BTreeMap::new())?;
+        if cross.original_relation_payload!=relation{return Err(NativeNumericAuditError::ForeignSource);}
+        relations.push(relation);
+        relation_refs.insert(cross.reconstructed_relation_ref.clone());declarations.insert("grammar:semantic:composition:v0_4");
+        original_reduction_projection(doc,&cross,"grammar:semantic:composition:v0_4","semantic.embedded_proposition",
+            "semantic.composition_candidate",&["composition_scope_unresolved","proposition_truth_not_evaluated"],&mut factors,&mut constraints)?;
+    }
+    // Check both directions of the atom carrier, not just relation counts.
+    if atoms.len()!=inverse.len()||atoms.keys().ne(inverse.keys())
+        ||inverse.values().copied().collect::<BTreeSet<_>>().len()!=inverse.len(){
+        return Err(NativeNumericAuditError::ForeignSource);
+    }
+    for (i,relation) in relations.iter().enumerate(){
+        if relation["id"]!=format!("e{}",i+1){return Err(NativeNumericAuditError::ForeignSource);}
+        for role in relation["roles"].as_array().ok_or(NativeNumericAuditError::ForeignSource)?{
+            if role.get("atom").and_then(|v|v.as_str()).is_some_and(|id|!atoms.contains_key(id)){
+                return Err(NativeNumericAuditError::ForeignSource);
+            }
+        }
+    }
+    let mut atoms=atoms.into_values().collect::<Vec<_>>();
+    atoms.sort_by(|a,b|(a["span"][0].as_i64(),a["span"][1].as_i64(),a["id"].as_str())
+        .cmp(&(b["span"][0].as_i64(),b["span"][1].as_i64(),b["id"].as_str())));
+    factors.sort_by(|a,b|a["factor_ref"].as_str().cmp(&b["factor_ref"].as_str()));
+    let counts=(atoms.len(),relations.len(),factors.len(),constraints.len());
+    // Use one original parser supplied batch, with the actual canonical
+    // prefix; raw original document source identity remains separately bound.
+    let comparison=serde_json::json!({"schema":"slr-original-relation-reference-projection:v1",
+        "producer_revision":"SensibLaw:f9c4670ef04b40e8153caa7dd00fa1eba7013ef4",
+        "document_ref":doc,"source_sha256":sha,"source_revision_ref":revision,"parser_run_ref":parser_run,
+        "prefix_end_char":prefix.chars().count(),"scope":"supplied_parser_prefix",
+        "bundle":{"version":"relational_bundle_v1","canonical_text":prefix,"atoms":atoms,"relations":relations},
+        "reduction_projection":{"factors":factors,"constraints":constraints.into_values().collect::<Vec<_>>(),
+            "relation_refs":relation_refs,"declaration_refs":declarations}});
+    let packet=serde_json::json!({"comparison":comparison,"atom_token_inverse":inverse,
+        "missing_original_tags":missing_tags,"prefix_uncovered_nonwhitespace":uncovered,"candidate_only":true});
+    let digest=original_relation_digest(&packet)?;
+    // Optional independent original producer export. Never make a
+    // prototype call in the production path. The fixture is a parity
+    // input only and cannot authorize an identity or a closed world.
+    let reference=std::env::var_os("SLR_NATIVE_ORIGINAL_RELATION_REFERENCE");
+    let supplied=reference.is_some();
+    let exact=if let Some(path)=reference{
+        let data=std::fs::read(path).map_err(|_|NativeNumericAuditError::ForeignSource)?;
+        let reference:serde_json::Value=serde_json::from_slice(&data).map_err(|_|NativeNumericAuditError::ForeignSource)?;
+        reference==comparison
+    }else{false};
+    Ok((NativeOriginalRelationPacketReceipt{scope:"supplied_parser_prefix",
+        prefix_end_char:prefix.chars().count(),prefix_uncovered_nonwhitespace:uncovered,
+        missing_original_tags:missing_tags,atom_count:counts.0,relation_count:counts.1,
+        factor_count:counts.2,explicit_constraint_count:counts.3,packet_sha256:digest,
+        independent_reference_supplied:supplied,independent_reference_exact:exact,
+        complete_supplied_prefix_relation_parity:exact&&missing_tags==0&&uncovered==0,
+        whole_document_parity_paid:false},packet))
 }
 
 fn native_relation_reductions(

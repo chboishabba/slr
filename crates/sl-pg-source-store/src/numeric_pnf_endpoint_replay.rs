@@ -46,7 +46,12 @@ fn implementation_fingerprint()->Result<Option<Value>>{
     }
     let source_root=std::env::var_os("SLR_NATIVE_NUMERIC_SOURCE_ROOT")
         .map(PathBuf::from).map(|p|p.canonicalize()).transpose()?;
+    // Independent reference data is an input to parity, not a mutable
+    // hidden dependency of a warm receipt. Pin its bytes when supplied.
+    let relation_reference=std::env::var_os("SLR_NATIVE_ORIGINAL_RELATION_REFERENCE")
+        .map(PathBuf::from).map(|p|file_digest(&p)).transpose()?;
     Ok(Some(serde_json::json!({
+        "original_relation_reference_sha256":relation_reference,
         "schema":"slr-native-endpoint-replay-implementation:v1",
         "native_binary":file_digest(&std::env::current_exe()?)?,
         "golden_files":pinned,"golden_script":file_digest(&script)?,
