@@ -555,6 +555,108 @@ pub fn publish_original_numeric_sentence(
 }
 
 
+/// One original m086/m089 typed state row, with exact m201 current
+/// admissibility projection reopened against its immutable event and evidence.
+/// Shared by native CandidateFibre and the Lean executable; no per-candidate
+/// history query or new semantic state owner.
+#[derive(Debug, Clone, serde::Serialize)]
+pub(crate) struct OriginalTypedCandidateRow {
+    pub target_kind:i16,
+    pub target_id:i64,
+    pub active:bool,
+    pub execution_residual:bool,
+    pub refuted:bool,
+    pub event_kind:i16,
+    pub event_id:i64,
+    pub evidence_id:i64,
+    pub evidence_demand:i64,
+    pub evidence_target_kind:i16,
+    pub evidence_target_id:i64,
+    pub evidence_ref:String,
+}
+
+pub(crate) fn read_original_typed_candidate_rows(
+    tx:&mut impl postgres::GenericClient, demand_id:i64,
+    target_kind:Option<i16>,
+)->Result<Vec<OriginalTypedCandidateRow>,NumericSqlError>{
+    if demand_id<=0 || target_kind.is_some_and(|k|k<=0) {
+        return Err(NumericSqlError::InvalidCandidateEvidence);
+    }
+    let rows=tx.query(
+        "SELECT s.target_kind,s.target_id,s.active,s.execution_residual,s.refuted,s.admissible,
+                s.represented_possible,s.admissibility_evidence_id,
+                COALESCE(a.event_kind,0)::smallint,COALESCE(a.event_id,0)::bigint,
+                COALESCE(e.evidence_id,0)::bigint,COALESCE(e.demand_id,0)::bigint,
+                COALESCE(e.target_kind,0)::smallint,COALESCE(e.target_id,0)::bigint,
+                COALESCE(e.evidence_ref,''),
+                (a.event_id IS NULL OR h.event_id IS NOT NULL) AS exact_event
+         FROM execution.semantic_pnf_candidate_state_v1 s
+         LEFT JOIN execution.semantic_pnf_candidate_current_admissibility a
+           ON a.demand_id=s.demand_id AND a.target_kind=s.target_kind AND a.target_id=s.target_id
+         LEFT JOIN execution.semantic_pnf_candidate_admissibility_event h
+           ON h.event_id=a.event_id AND h.demand_id=a.demand_id
+          AND h.target_kind=a.target_kind AND h.target_id=a.target_id
+          AND h.event_kind=a.event_kind AND h.evidence_id=a.evidence_id
+         LEFT JOIN execution.semantic_pnf_candidate_evidence e ON e.evidence_id=a.evidence_id
+         WHERE s.demand_id=$1 AND ($2::smallint IS NULL OR s.target_kind=$2)
+         ORDER BY s.target_kind,s.target_id",
+        &[&demand_id,&target_kind])?;
+    let mut out=Vec::with_capacity(rows.len());
+    let mut seen=BTreeSet::new();
+    for row in rows {
+        let r=OriginalTypedCandidateRow {
+            target_kind:row.get(0),target_id:row.get(1),active:row.get(2),
+            execution_residual:row.get(3),refuted:row.get(4),
+            event_kind:row.get(8),event_id:row.get(9),evidence_id:row.get(10),
+            evidence_demand:row.get(11),evidence_target_kind:row.get(12),
+            evidence_target_id:row.get(13),evidence_ref:row.get(14),
+        };
+        let admissible:bool=row.get(5);
+        let represented:bool=row.get(6);
+        let state_evidence:Option<i64>=row.get(7);
+        let exact_event:bool=row.get(15);
+        if r.target_kind<=0 || r.target_id<=0 || !represented || !exact_event
+            || !seen.insert((r.target_kind,r.target_id))
+            || r.refuted==admissible || !(0..=2).contains(&r.event_kind)
+            || r.refuted!=(r.event_kind==1)
+            || (r.event_kind==0 && (r.event_id!=0 || state_evidence.is_some()))
+            || (r.event_kind!=0 && (r.event_id<=0 || r.evidence_id<=0
+                 || state_evidence!=Some(r.evidence_id) || r.evidence_demand!=demand_id
+                 || r.evidence_target_kind!=r.target_kind || r.evidence_target_id!=r.target_id
+                 || r.evidence_ref.is_empty()))
+        {
+            return Err(NumericSqlError::InvalidCandidateEvidence);
+        }
+        out.push(r);
+    }
+    Ok(out)
+}
+
+/// Preserve original typed keys and evidence in the existing native fibre.
+/// Execution state is independent from semantic admissibility.
+pub(crate) fn candidate_fibre_from_original_rows(
+    demand_id:i64,target_kind:i16,rows:&[OriginalTypedCandidateRow],
+)->Result<CandidateFibre,NumericSqlError>{
+    if demand_id<=0 || target_kind<=0 {return Err(NumericSqlError::InvalidCandidateEvidence);}
+    let mut fibre=CandidateFibre::fresh_for_original_demand(demand_id as u64,target_kind);
+    for r in rows.iter().filter(|r|r.target_kind==target_kind) {
+        let id=u64::try_from(r.target_id).map_err(|_|NumericSqlError::InvalidCandidateEvidence)?;
+        fibre.represent(id);
+        if r.execution_residual || !r.active { fibre.budget_prune(id); }
+        if r.refuted {
+            if r.evidence_demand!=demand_id || r.evidence_target_kind!=target_kind
+                || r.evidence_target_id!=r.target_id || r.event_kind!=1 || r.evidence_id<=0 {
+                return Err(NumericSqlError::InvalidCandidateEvidence);
+            }
+            fibre.refute_with_original_sql_evidence(&VerifiedSqlCandidateRefutation{
+                demand_id:demand_id as u64,candidate_id:id,evidence_id:r.evidence_id as u64,
+                evidence_ref:r.evidence_ref.clone(),
+            }).map_err(|_|NumericSqlError::InvalidCandidateEvidence)?;
+        }
+    }
+    Ok(fibre)
+}
+
 /// Read-only, original-DB-authorized candidate fibre. Neither this loader nor
 /// CandidateFibre may insert a witness, close H9, or infer an external QID.
 /// Original migration 086 is the sole semantic admissibility owner.
@@ -571,7 +673,7 @@ pub fn read_original_numeric_candidate_fibre(
     }
     let mut db=Client::connect(database_url,NoTls)?;
     let mut tx=db.transaction()?;
-    tx.batch_execute("SET TRANSACTION READ ONLY; SET LOCAL statement_timeout='90000ms'")?;
+    tx.batch_execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY; SET LOCAL statement_timeout='90000ms'")?;
     let demand=tx.query(
         "SELECT demand.demand_id,demand.expected_target_kind
          FROM execution.semantic_pnf_demand AS demand
@@ -585,65 +687,8 @@ pub fn read_original_numeric_candidate_fibre(
     if expected_kind!=target_kind{
         return Err(NumericSqlError::InvalidCandidateEvidence);
     }
-    let mut fibre=CandidateFibre::fresh_for_original_demand(
-        demand_id as u64,target_kind
-    );
-    let candidates=tx.query(
-        "SELECT demand_id,target_kind,target_id,
-                represented_possible,active,execution_residual,
-                refuted,admissible,admissibility_evidence_id
-         FROM execution.semantic_pnf_candidate_state_v1
-         WHERE demand_id=$1 AND target_kind=$2
-         ORDER BY target_id",
-        &[&demand_id,&target_kind])?;
-    for row in candidates{
-        let source_id:i64=row.get(2);
-        if row.get::<_,i64>(0)!=demand_id
-            ||row.get::<_,i16>(1)!=target_kind||source_id<=0
-            ||!row.get::<_,bool>(3) {
-            return Err(NumericSqlError::InvalidCandidateEvidence);
-        }
-        let candidate=source_id as u64;
-        fibre.represent(candidate);
-        let active:bool=row.get(4);
-        let execution_residual:bool=row.get(5);
-        let refuted:bool=row.get(6);
-        let admissible:bool=row.get(7);
-        let evidence_id:Option<i64>=row.get(8);
-        if execution_residual||!active{
-            fibre.budget_prune(candidate);
-        }
-        if refuted{
-            if admissible{return Err(NumericSqlError::InvalidCandidateEvidence);}
-            let id=evidence_id.ok_or(NumericSqlError::InvalidCandidateEvidence)?;
-            if id<=0{return Err(NumericSqlError::InvalidCandidateEvidence);}
-            let verified=tx.query(
-                "SELECT evidence.evidence_id,evidence.evidence_ref
-                 FROM execution.semantic_pnf_candidate_latest_admissibility AS last
-                 JOIN execution.semantic_pnf_candidate_evidence AS evidence
-                   ON evidence.evidence_id=last.evidence_id
-                  AND evidence.demand_id=last.demand_id
-                  AND evidence.target_kind=last.target_kind
-                  AND evidence.target_id=last.target_id
-                 WHERE last.demand_id=$1 AND last.target_kind=$2
-                   AND last.target_id=$3 AND last.event_kind=1
-                   AND last.evidence_id=$4",
-                &[&demand_id,&target_kind,&source_id,&id])?;
-            if verified.len()!=1 {
-                return Err(NumericSqlError::InvalidCandidateEvidence);
-            }
-            let proof=VerifiedSqlCandidateRefutation{
-                demand_id:demand_id as u64,
-                candidate_id:candidate,
-                evidence_id:id as u64,
-                evidence_ref:verified[0].get(1),
-            };
-            fibre.refute_with_original_sql_evidence(&proof)
-                .map_err(|_|NumericSqlError::InvalidCandidateEvidence)?;
-        }else if !admissible{
-            return Err(NumericSqlError::InvalidCandidateEvidence);
-        }
-    }
+    let candidates=read_original_typed_candidate_rows(&mut tx,demand_id,Some(target_kind))?;
+    let mut fibre=candidate_fibre_from_original_rows(demand_id,target_kind,&candidates)?;
     let horizons=tx.query(
         "SELECT target_id,horizon,signed_residual
          FROM execution.semantic_pnf_candidate_evidence_horizon_v1
