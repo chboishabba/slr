@@ -20,6 +20,75 @@ CREATE TABLE IF NOT EXISTS execution.slr_native_h3_validity_history(
     supported boolean NOT NULL,original_atom jsonb NOT NULL,
     PRIMARY KEY(evidence_id,revision)
 );
+-- H6 validity shares the same append-only journal shape. Install once
+-- here, not on every audit pass.
+CREATE TABLE IF NOT EXISTS execution.slr_native_h6_validity_current(
+    evidence_id bigint PRIMARY KEY REFERENCES execution.semantic_pnf_candidate_evidence(evidence_id) ON DELETE CASCADE,
+    demand_id bigint NOT NULL REFERENCES execution.semantic_pnf_demand(demand_id) ON DELETE CASCADE,
+    supported boolean NOT NULL, revision bigint NOT NULL CHECK(revision>0)
+);
+CREATE INDEX IF NOT EXISTS slr_native_h6_validity_demand_idx
+    ON execution.slr_native_h6_validity_current(demand_id,supported,evidence_id);
+CREATE TABLE IF NOT EXISTS execution.slr_native_h6_validity_history(
+    evidence_id bigint NOT NULL,demand_id bigint NOT NULL,revision bigint NOT NULL,
+    supported boolean NOT NULL,original_atom jsonb NOT NULL,
+    PRIMARY KEY(evidence_id,revision)
+);
+
+-- Reuse original m094/m139 reverse-dependency and consumer work queue.
+-- Like m163, consume only the statement-local inserted delta. Initial
+-- supported observation is not a validity change (m139 owns insertion).
+-- First observed withdrawal and later true/false revisions are changes.
+-- No new dependency graph, authority event or semantic refutation.
+CREATE OR REPLACE FUNCTION execution.slr_wake_native_validity_delta()
+RETURNS trigger LANGUAGE plpgsql AS $
+BEGIN
+    WITH atoms AS MATERIALIZED (
+        SELECT e.evidence_id,e.source_region_id,e.source_interface_id
+        FROM inserted_validity v
+        JOIN execution.semantic_pnf_candidate_evidence e
+          ON e.evidence_id=v.evidence_id AND e.demand_id=v.demand_id
+        WHERE v.revision>1 OR NOT v.supported
+    ), changed_source AS MATERIALIZED (
+        SELECT 6::smallint AS source_kind,evidence_id AS source_id FROM atoms
+        UNION SELECT 4::smallint,source_region_id FROM atoms WHERE source_region_id IS NOT NULL
+        UNION SELECT 5::smallint,source_interface_id FROM atoms WHERE source_interface_id IS NOT NULL
+    ), affected AS MATERIALIZED (
+        SELECT d.demand_id,d.consumer_ref,d.query_ref,d.policy_ref,min(d.minimum_horizon) AS minimum_horizon
+        FROM changed_source c
+        JOIN execution.semantic_pnf_consumer_reverse_dependency d
+          ON d.source_kind=c.source_kind AND d.source_id=c.source_id
+        GROUP BY d.demand_id,d.consumer_ref,d.query_ref,d.policy_ref
+    ), work AS (
+        SELECT demand_id,consumer_ref,query_ref,policy_ref,minimum_horizon AS horizon FROM affected
+        UNION
+        SELECT q.demand_id,q.consumer_ref,q.query_ref,q.policy_ref,q.horizon
+        FROM affected a
+        JOIN execution.semantic_pnf_consumer_horizon_work_queue q
+          ON q.demand_id=a.demand_id AND q.consumer_ref=a.consumer_ref
+         AND q.query_ref=a.query_ref AND q.policy_ref=a.policy_ref AND q.horizon>=a.minimum_horizon
+    )
+    INSERT INTO execution.semantic_pnf_consumer_horizon_work_queue AS q
+        (demand_id,consumer_ref,query_ref,policy_ref,horizon,work_state,completed_at)
+    SELECT demand_id,consumer_ref,query_ref,policy_ref,horizon,1::smallint,NULL FROM work
+    ON CONFLICT(demand_id,consumer_ref,query_ref,policy_ref,horizon)
+    DO UPDATE SET work_state=1,completed_at=NULL
+    WHERE q.work_state<>1 OR q.completed_at IS NOT NULL;
+    RETURN NULL;
+END;
+$;
+
+DROP TRIGGER IF EXISTS slr_native_h3_validity_delta_wake ON execution.slr_native_h3_validity_history;
+CREATE TRIGGER slr_native_h3_validity_delta_wake
+AFTER INSERT ON execution.slr_native_h3_validity_history
+REFERENCING NEW TABLE AS inserted_validity
+FOR EACH STATEMENT EXECUTE FUNCTION execution.slr_wake_native_validity_delta();
+DROP TRIGGER IF EXISTS slr_native_h6_validity_delta_wake ON execution.slr_native_h6_validity_history;
+CREATE TRIGGER slr_native_h6_validity_delta_wake
+AFTER INSERT ON execution.slr_native_h6_validity_history
+REFERENCING NEW TABLE AS inserted_validity
+FOR EACH STATEMENT EXECUTE FUNCTION execution.slr_wake_native_validity_delta();
+
 -- A physical support journal delta alone cannot reconcile the original
 -- proof/coverage authority. This debt survives later empty passes.
 CREATE TABLE IF NOT EXISTS execution.slr_native_h3_authority_debt(
@@ -428,4 +497,4 @@ CREATE TABLE IF NOT EXISTS execution.slr_native_h3_current_contract(contract_ref
 INSERT INTO execution.slr_native_h3_current_contract VALUES('slr-native-h3-current:v1') ON CONFLICT DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS execution.slr_native_current_authority_contract(contract_ref text PRIMARY KEY);
-INSERT INTO execution.slr_native_current_authority_contract VALUES('slr-native-current-authority:v2') ON CONFLICT DO NOTHING;
+INSERT INTO execution.slr_native_current_authority_contract VALUES('slr-native-current-authority:v3') ON CONFLICT DO NOTHING;
