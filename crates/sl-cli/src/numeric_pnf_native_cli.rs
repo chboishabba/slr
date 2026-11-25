@@ -115,6 +115,11 @@ pub fn run(args:&[String])->Result<(),String>{
             let inspection=inspect_native_antecedent_review(&config,review).map_err(|e|e.to_string())?;
             let frontier=native_antecedent_frontier(&config,review,parser_run).map_err(|e|e.to_string())?;
             let answer=compile_native_source_local_answer(&inspection,&frontier).map_err(|e|e.to_string())?;
+            if !answer.source_local_policy_inference_paid{
+                return print_json(&serde_json::json!({"schema":"slr-native-antecedent-endpoint-v1",
+                    "prefix_scope":scope,"numeric_publication":publication,"source_local_answer":answer,
+                    "outcome":"source_local_policy_unresolved","governed_identity_paid":false,"level_three_paid":false}));
+            }
             let evidence=load_exact_native_numeric_evidence(&config,&scope.source_revision_ref,parser_run,
                 "slr-strict-numeric-pnf-v1").map_err(|e|e.to_string())?;
             let numeric_run=deterministic_numeric_run_ref(&evidence.manifest);
@@ -134,8 +139,59 @@ pub fn run(args:&[String])->Result<(),String>{
             let prefix_complete=last.original_mention_binding_campaign.prefix_uncovered_nonwhitespace==0;
             let cross_owner=last.native_binding_bridge.indexed_entity_spans_missing_from_projected.is_empty()
                 &&last.native_binding_bridge.projected_entity_spans_missing_from_index.is_empty();
-            let inverse=readback.original_binding_sets.iter().any(|s|s.referential_type_ref=="entity_reference"
-                &&s.exact_entity_inverse_complete&&s.native_projection_verified&&s.original_index_matches_persisted_members);
+            let entity_sets=readback.original_binding_sets.iter().filter(|s|s.same_manifestation
+                &&s.referential_type_ref=="entity_reference"&&s.reference_factor_revision_ref.starts_with("factor-revision:native-binding-v2:"))
+                .collect::<Vec<_>>();
+            let inverse=!entity_sets.is_empty()&&entity_sets.iter().all(|s|s.exact_entity_inverse_complete
+                &&s.native_projection_verified&&s.original_index_matches_persisted_members
+                &&s.original_index_prefix_matches_full_query);
+            let projected=last.governed_identity_rollback_probe.as_ref().map(|p|&p.candidate_class_projection);
+            let mut rivals=Vec::new();
+            let mut typed_objects=std::collections::BTreeSet::new();
+            for set in &entity_sets{
+                for member in &set.original_members{
+                    let objects=&member.exact_same_manifestation_numeric_object_ids;
+                    typed_objects.extend(objects.iter().copied());
+                    let original_person_support=answer.original_person_support.iter().filter(|support|
+                        member.original_span_coordinates.iter().any(|(a,b)|
+                            i64::from(*a)<=support.start_char as i64&&i64::from(*b)>=support.end_char as i64))
+                        .collect::<Vec<_>>();
+                    let prospective_classes=projected.map(|p|p.admitted_classes.iter()
+                        .filter(|(_,ids)|ids.iter().any(|id|objects.contains(id)))
+                        .map(|(id,_)|*id).collect::<Vec<_>>()).unwrap_or_default();
+                    let persistent_classes=last.original_document_identity_observations.iter()
+                        .filter(|o|objects.contains(&o.object_id)).collect::<Vec<_>>();
+                    let signed_horizons=last.original_horizon_observations.iter()
+                        .filter(|o|o.target_kind==1&&objects.contains(&o.target_id)).collect::<Vec<_>>();
+                    rivals.push(serde_json::json!({"binding_set_ref":set.candidate_set_ref,
+                        "factor_revision_ref":member.candidate_factor_revision_ref,
+                        "spans":member.original_span_coordinates,"object_ids":objects,
+                        "exact_token_ids":member.exact_projection_token_ids,
+                        "original_person_support_contained_not_identity":original_person_support,
+                        "actual_document_identity_observations":persistent_classes,
+                        "rollback_only_entity_class_ids":prospective_classes,"signed_horizons":signed_horizons,
+                        "accessibility_path":member.accessibility_path_ref,
+                        "distance_tokens":member.distance_tokens}));
+                }
+            }
+            let transported_not_indexed=last.original_document_identity_observations.iter()
+                .filter(|o|!typed_objects.contains(&o.object_id)).map(|o|o.object_id).collect::<Vec<_>>();
+            let mut blockers=Vec::new();
+            if !prefix_complete{blockers.push("exact_numeric_prefix_token_coverage_unpaid");}
+            if !cross_owner{blockers.push("original_projected_typed_membership_disagreement");}
+            if !inverse{blockers.push("typed_entity_inverse_unpaid");}
+            if !last.complete_typed_coverage_paid{blockers.push("original_typed_coverage_witness_unpaid");}
+            if last.outside_model_possible{blockers.push("outside_model_possible");}
+            if !last.native_binding_bridge.structural_relation_parity_paid{blockers.push("full_original_relation_parity_unpaid");}
+            if last.morphology_head_unobservable_count>0{blockers.push("scalar_morphology_head_residual");}
+            if !transported_not_indexed.is_empty(){blockers.push("transported_objects_outside_typed_index_not_refuted");}
+            let typed_dossier=serde_json::json!({
+                "full_index_entity_rivals":rivals,"typed_entity_object_count":typed_objects.len(),
+                "transported_objects_outside_index":transported_not_indexed,
+                "focus_reference_alternatives":last.native_binding_bridge.focus_reference_alternatives,
+                "prospective_identity_classes_not_admitted":projected,
+                "blockers":blockers,"automatic_semantic_refutation_from_index_absence":false
+            });
             let identity=readback.original_numeric_audits.iter().any(|a|a.numeric_run_ref==numeric_run&&a.original_accepted_document_identity_paid);
             let l3=readback.original_numeric_audits.iter().any(|a|a.numeric_run_ref==numeric_run&&a.original_level_three_substitution_paid);
             let endpoint=if identity&&l3&&prefix_complete&&cross_owner&&inverse{
@@ -144,7 +200,8 @@ pub fn run(args:&[String])->Result<(),String>{
             print_json(&serde_json::json!({
                 "schema":"slr-native-antecedent-endpoint-v1","prefix_scope":scope,
                 "numeric_publication":publication,"binding_passes":passes,"original_owner_reuse":readback,
-                "source_local_answer":answer,"observed_prefix_token_coverage":prefix_complete,
+                "source_local_answer":answer,"typed_consumer_dossier":typed_dossier,
+                "observed_prefix_token_coverage":prefix_complete,
                 "projected_vs_original_entity_membership_parity":cross_owner,"exact_entity_inverse_complete":inverse,
                 "outcome":endpoint,"governed_identity_paid":identity,"level_three_paid":l3,
                 "external_qid_paid":false,"historical_truth_paid":false

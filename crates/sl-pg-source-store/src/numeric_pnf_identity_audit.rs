@@ -808,12 +808,24 @@ fn refine_original_numeric_morphology(
              ON CONFLICT(demand_id,target_kind,target_id,evidence_ref) DO NOTHING",
             &[&demand,&object,&evidence_ref,&residual,&evidence_kind,&interface,&region])? as usize;
     }
+    // A null/multiple head is a residual, not an endlessly retried job.
     let remaining:i64=tx.query_one(
-        "SELECT count(*)::bigint FROM execution.semantic_pnf_candidate_universe u
-         WHERE u.demand_id=$1 AND NOT EXISTS(
+        "WITH eligible AS (
+           SELECT u.target_id,min(t.token_id) AS token_id
+           FROM execution.semantic_pnf_candidate_universe u
+           JOIN execution.semantic_pnf_object o ON o.object_id=u.target_id AND o.active
+           JOIN execution.semantic_pnf_region r ON r.region_id=o.region_id
+           JOIN execution.semantic_pnf_object_token_support s ON s.object_id=o.object_id
+           JOIN execution.semantic_parser_token t ON t.token_id=s.token_id
+             AND t.run_ref=r.run_ref AND t.document_ref=r.document_ref
+             AND t.representation_version=2 AND t.lemma_symbol_id=o.head_symbol_id
+           WHERE u.demand_id=$1 AND u.target_kind=1 AND r.run_ref=$2 AND r.document_ref=$3
+           GROUP BY u.target_id HAVING count(DISTINCT t.token_id)=1
+         ) SELECT count(*)::bigint FROM eligible c WHERE NOT EXISTS(
            SELECT 1 FROM execution.semantic_pnf_candidate_evidence e
-           WHERE e.demand_id=u.demand_id AND e.target_kind=u.target_kind AND e.target_id=u.target_id
-             AND e.evidence_ref LIKE 'native-binding-morphology:v0_3:%')",&[&demand])?.get(0);
+           WHERE e.demand_id=$1 AND e.target_kind=1 AND e.target_id=c.target_id
+             AND e.evidence_ref='native-binding-morphology:v0_3:'||$4::bigint::text||':'||c.token_id::text)",
+         &[&demand,&run_ref,&document_ref,&focus_token])?.get(0);
     Ok((inserted,remaining))
 }
 
@@ -2555,6 +2567,7 @@ pub struct NativeNumericCandidateTransportReceipt {
     pub original_h6_evidence_inserted:i64,
     pub morphology_observations_inserted:usize,
     pub candidates_without_morphology_observation:i64,
+    pub morphology_head_unobservable_count:usize,
     pub original_horizon_observations:Vec<NativeNumericHorizonObservation>,
     pub original_document_identity_observations:Vec<NativeNumericDocumentIdentityObservation>,
     pub original_parser_identity_producer:OriginalParserIdentityProducerObservation,
@@ -2706,9 +2719,11 @@ pub fn transport_original_numeric_candidates_for_source_answer(
         numeric_run_ref,&answer.source_document_ref,&answer.source_content_sha256)?;
     // Only run the document-scoped original admission probe after bounded
     // occurrence/morphology work is drained. This is still not typed coverage.
+    let morphology_head_unobservable_count=structural_binding.observations.iter()
+        .filter(|o|o.target_kind==1&&o.exact_head_token_id.is_none()).count();
     let governed_identity_rollback_probe=if remaining==0&&nominal_heads_remaining==0
         &&candidates_without_morphology_observation==0
-        &&original_mention_binding_campaign.newly_materialized_span_objects<budget{
+        &&original_mention_binding_campaign.spans_without_exact_objects==0{
         Some(probe_original_governed_identity(&mut tx,numeric_run_ref,&answer.source_document_ref,demand)?)
     }else{None};
     tx.commit()?;
@@ -2719,7 +2734,7 @@ pub fn transport_original_numeric_candidates_for_source_answer(
         represented_candidate_count:count,outside_model_possible:open,
         complete_typed_coverage_paid:false,
         nominal_head_objects_inserted,nominal_head_token_supports_inserted,nominal_heads_remaining,original_h6_evidence_inserted,
-        morphology_observations_inserted,candidates_without_morphology_observation,
+        morphology_observations_inserted,candidates_without_morphology_observation,morphology_head_unobservable_count,
         original_horizon_observations,original_document_identity_observations,
         original_parser_identity_producer,document_identity_fibre,original_cross_resource_needs,
         structural_binding,native_binding_bridge,original_mention_binding_campaign,original_h9_readiness,governed_identity_rollback_probe,
