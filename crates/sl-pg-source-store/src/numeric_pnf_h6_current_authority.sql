@@ -97,9 +97,9 @@ $$;
 CREATE OR REPLACE VIEW execution.slr_native_current_candidate_evidence_v1 AS
 SELECT e.* FROM execution.semantic_pnf_candidate_evidence e
 WHERE NOT EXISTS(SELECT 1 FROM execution.slr_native_h6_managed_demand m WHERE m.demand_id=e.demand_id)
-   OR NOT (e.horizon=6 AND e.evidence_family=2 AND
+   OR (e.horizon=6 AND e.evidence_family=2 AND
         ((e.evidence_kind='h6_discourse_factor_role_signature' AND e.provenance_ref='numeric-factor-signature')
-        OR (e.evidence_kind='h6_temporal_factor_role_signature' AND e.provenance_ref='numeric-temporal-state')))
+        OR (e.evidence_kind='h6_temporal_factor_role_signature' AND e.provenance_ref='numeric-temporal-state'))) IS NOT TRUE
    OR EXISTS(SELECT 1 FROM execution.slr_current_m110_h6_atoms(e.demand_id) p
         WHERE p.target_kind=e.target_kind AND p.target_id=e.target_id
           AND p.evidence_ref=e.evidence_ref AND p.signed_residual=e.signed_residual
