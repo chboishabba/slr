@@ -137,12 +137,12 @@ CREATE OR REPLACE FUNCTION execution.slr_current_m110_h6_atoms(
            AND (ready.role_symbol_id IS NULL
                 OR edge.role_symbol_id=ready.role_symbol_id)
     ), candidate AS MATERIALIZED (
-        SELECT DISTINCT state.demand_id,state.target_kind,state.target_id
-          FROM execution.semantic_pnf_candidate_state_v1 AS state
-          JOIN ready ON ready.demand_id=state.demand_id
-         WHERE state.target_kind=1
-           AND state.represented_possible
-           AND state.target_id<>ready.source_object_id
+        -- m086 represented_possible is TRUE for every universe row.
+        -- Physical support must not join execution/admissibility history.
+        SELECT u.demand_id,u.target_kind,u.target_id
+          FROM execution.semantic_pnf_candidate_universe u
+          JOIN ready ON ready.demand_id=u.demand_id
+         WHERE u.target_kind=1 AND u.target_id<>ready.source_object_id
     ), matched AS MATERIALIZED (
         SELECT DISTINCT candidate.demand_id,candidate.target_kind,candidate.target_id,
                source_signature.source_interface_id,source_signature.source_region_id,
@@ -357,6 +357,48 @@ SELECT execution.slr_native_current_authority_usable(selected_demand_id) AND EXI
 );
 $$;
 
+-- Production SLR H6 producer. Reuse the single physical signature
+-- relation above, but intersect it with original m110 execution permission:
+-- ready consumer/query/policy, no prior stop/proof, admissible target.
+-- Physical support and permission remain different relations.
+CREATE OR REPLACE FUNCTION execution.slr_produce_native_h6_for_demand(
+    selected_demand_id bigint, selected_consumer_ref text,
+    selected_query_ref text, selected_policy_ref text
+) RETURNS bigint LANGUAGE plpgsql AS $slr_h6$
+DECLARE inserted bigint;
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM execution.slr_native_h6_managed_demand
+                  WHERE demand_id=selected_demand_id) THEN
+        RAISE EXCEPTION 'unmanaged native H6 producer scope';
+    END IF;
+    IF NOT execution.slr_native_current_authority_usable(selected_demand_id) THEN
+        RETURN 0;
+    END IF;
+    IF NOT EXISTS(SELECT 1 FROM execution.semantic_pnf_consumer_horizon_work_queue w
+        WHERE w.demand_id=selected_demand_id AND w.consumer_ref=selected_consumer_ref
+          AND w.query_ref=selected_query_ref AND w.policy_ref=selected_policy_ref
+          AND w.horizon=6 AND w.work_state=1)
+        OR execution.numeric_pnf_consumer_stop_at_horizon(
+           selected_demand_id,selected_consumer_ref,selected_query_ref,selected_policy_ref,3::smallint)
+        OR EXISTS(SELECT 1 FROM execution.semantic_pnf_frontier_resolution proof
+          WHERE proof.demand_id=selected_demand_id AND proof.outcome_state=2 AND proof.candidate_count=1)
+    THEN RETURN 0; END IF;
+
+    INSERT INTO execution.semantic_pnf_candidate_evidence
+      (demand_id,target_kind,target_id,evidence_ref,evidence_family,horizon,
+       signed_residual,evidence_kind,provenance_ref,source_interface_id,source_region_id)
+    SELECT p.demand_id,p.target_kind,p.target_id,p.evidence_ref,2,6,
+           p.signed_residual,p.evidence_kind,p.provenance_ref,p.source_interface_id,p.source_region_id
+    FROM execution.slr_current_m110_h6_atoms(selected_demand_id) p
+    WHERE NOT EXISTS(SELECT 1 FROM execution.semantic_pnf_candidate_latest_admissibility a
+        WHERE a.demand_id=p.demand_id AND a.target_kind=p.target_kind
+          AND a.target_id=p.target_id AND a.event_kind=1)
+    ON CONFLICT(demand_id,target_kind,target_id,evidence_ref) DO NOTHING;
+    GET DIAGNOSTICS inserted=ROW_COUNT;
+    RETURN inserted;
+END;
+$slr_h6$;
+
 CREATE OR REPLACE FUNCTION execution.refresh_numeric_pnf_consumer_horizon_outcome(
     selected_run_id BIGINT,
     selected_document_id BIGINT,
@@ -531,3 +573,4 @@ WHERE NOT EXISTS(SELECT 1 FROM execution.slr_native_current_authority_contract
 ON CONFLICT DO NOTHING;
 INSERT INTO execution.slr_native_current_authority_contract VALUES('slr-native-current-authority:v4') ON CONFLICT DO NOTHING;
 INSERT INTO execution.slr_native_current_authority_contract VALUES('slr-native-current-authority:v5') ON CONFLICT DO NOTHING;
+INSERT INTO execution.slr_native_current_authority_contract VALUES('slr-native-current-authority:v6') ON CONFLICT DO NOTHING;
