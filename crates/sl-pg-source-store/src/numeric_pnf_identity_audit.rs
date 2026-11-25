@@ -2975,7 +2975,7 @@ pub fn reuse_original_binding_and_identity_owners(
                 for (member_revision,factor,path,distance) in &full{
                     let native=member_revision.starts_with("factor-revision:native-binding-v2:");
                     let mut projection_ids=Vec::new();
-                    let mut snapshot_objects=Vec::new();
+                    let mut snapshot_objects:Vec<i64>=Vec::new();
                     let mut native_inverse=false;
                     let spans=if native&&has_native_projection{
                         let link=tx.query_one(
