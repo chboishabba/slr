@@ -1,5 +1,19 @@
 # C4.11: source-native antecedent review on original SLR S29
 
+## 26 November — candidate-only authority reconciliation and original role references (source-written)
+
+Production remains SLR Rust/PostgreSQL, SensibLaw Python donor only, Agda/Lean golden and lead development. This is a continuation of the integrated v8 cut, not a fresh prototype.
+
+- Lean [9f5bc5b](https://github.com/chboishabba/dashi_lean4/commit/9f5bc5bc43bf5f3c7902d940ea47c6a9f4032a81): candidate-only reconciliation requires drained represented execution, exact projection, and absence of all four original authority lanes; no proof or coverage inferred.
+- SLR [88412ce](https://github.com/chboishabba/slr/commit/88412ce10f7e18d8700f08493c51cc7bf561c96e): repair two invalid PostgreSQL dollar-quote delimiters in the previously source-written authority migration.
+- SLR [aaeb431](https://github.com/chboishabba/slr/commit/aaeb43151811991558785caf143b29a76f24b7c9), [36a6367](https://github.com/chboishabba/slr/commit/36a6367f71107b0bdccd2ab58efa808e7d2e3398): upgrade current-authority contract to v2, reconcile drained candidate-only debt under original m086/m075/m095 authority readback in the serializable producer transaction, journal retirement and resume H3/H6 only when the existing guard agrees. No deletion of evidence/admissibility history and no active proof, coverage or sufficiency certificate retired. A live original authority is deliberately still a residual.
+- SLR [43d7b4d](https://github.com/chboishabba/slr/commit/43d7b4ded650f49bb3a1142281ac778e0ad94bb0), [5985ac0](https://github.com/chboishabba/slr/commit/5985ac0e8968484d83e87765e4f010ffed48e86d): original shared_reducer / corpus_compilation / semantic_reductions atom payload, exact typed span, role-factor, role-constraint and feature-factor reference reconstruction from stored source parser plan. Preserve native token inverse and ordered role occurrences. New snapshot version retains prior immutable rows; no original full-bundle or independent reference comparison claimed. Two typed digest vectors independently reproduced with Node from donor encoding; Rust tests not executed.
+- Existing v8 rollback test now checks undrained/unchecked refusal, candidate-only discharge or live-authority refusal, idempotent journal and preserved original history. PostgreSQL acceptance unexecuted.
+
+**Still unpaid:** all original H3 owners beyond native-owned atoms; live original proof/coverage/certificate revalidation (requires authenticated owner evidence, not candidate-only discharge); full original relation/bundle parity and original TAG capability; complete typed coverage and governed focus identity; minimal dependency-local invalidation and cold/warm/relevant/withdrawal executable acceptance. Do not mark these as closed, run a new Python prototype, or issue a workstation handoff before source/golden ready. Existing v7 accepted baseline unchanged.
+
+---
+
 ## 25 November — current evidence, original authority and relation reference cut (source-written)
 
 Production remains SLR Rust/PostgreSQL; original SensibLaw is the prototype/donor, never a competing implementation; Agda and Lean are the golden/lead development boundary. The current cut supersedes the earlier H3 transient guard, not the accepted v7 baseline.
