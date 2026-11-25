@@ -2318,7 +2318,7 @@ fn exact_original_binding_members(
 fn original_index_member_parity(
     stored:&[(String,String)],indexed:&[(String,String,String,i32)],
 )->bool{
-    let expected=stored.iter().map(|(f,p)|(f.as_str(),p.as_str())).collect::<BTreeSet<_>>();
+    let expected=stored.iter().map(|(f,p)|(f.as_str(),p.strip_prefix("accessibility:").unwrap_or(p.as_str()))).collect::<BTreeSet<_>>();
     let actual=indexed.iter().map(|(_,f,p,_)|(f.as_str(),p.as_str())).collect::<BTreeSet<_>>();
     expected.len()==stored.len()&&actual.len()==indexed.len()&&expected==actual
 }
@@ -2407,6 +2407,9 @@ pub fn reuse_original_binding_and_identity_owners(
                      AND b.build_state_ref='completed'
                  WHERE s.document_ref=$1 AND sp.start_char=$2 AND sp.end_char=$3
                    AND a.parser_pos_ref='PRON' AND a.pnf_kind_ref LIKE 'semantic.argument%'
+                   AND NOT EXISTS (SELECT 1 FROM corpus.span other WHERE other.document_ref=a.document_ref
+                       AND other.start_token=a.start_token AND other.end_token=a.end_token
+                       AND (other.start_char<>sp.start_char OR other.end_char<>sp.end_char))
                  ORDER BY s.reference_factor_ref,s.reference_factor_revision_ref,s.candidate_set_ref",
                 &[doc,&start,&end])?;
             for row in rows{
@@ -2508,7 +2511,7 @@ pub fn reuse_original_binding_and_identity_owners(
 #[cfg(test)]
 #[test]
 fn original_owner_reuse_parity_never_collapses_factor_or_path(){
-    let a=vec![("a".to_owned(),"same_sentence".to_owned())];
+    let a=vec![("a".to_owned(),"accessibility:same_sentence".to_owned())];
     let mut b=vec![("ra".to_owned(),"a".to_owned(),"same_sentence".to_owned(),1)];
     assert!(original_index_member_parity(&a,&b));
     b[0].2="preceding_paragraph".into();
