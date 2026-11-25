@@ -13,6 +13,7 @@ use sensiblaw_pg_source_store::{
     inspect_native_antecedent_review, native_antecedent_frontier,
     compile_native_source_local_answer,
     audit_original_numeric_identity_for_source_answer,
+    reuse_original_binding_and_identity_owners,
     retract_original_numeric_identity_for_source_answer,
     transport_original_numeric_candidates_for_source_answer,
 };
@@ -108,7 +109,7 @@ pub fn run(args:&[String])->Result<(),String>{
         }
         [subcommand,review_item_ref,original_parser_run]
         | [subcommand,review_item_ref,original_parser_run,_,_]
-            if (subcommand=="audit" && args.len()==3)
+            if (matches!(subcommand.as_str(),"audit"|"reuse-original") && args.len()==3)
                 || (subcommand=="retract" && args.len()==5)
                 || (matches!(subcommand.as_str(),"bind"|"bind-campaign") && args.len()==5) => {
             let transport_budget=if matches!(subcommand.as_str(),"bind"|"bind-campaign"){
@@ -147,6 +148,11 @@ pub fn run(args:&[String])->Result<(),String>{
             let numeric_url=env::var("SENSIBLAW_DATABASE_URL")
                 .map_err(|_|"numeric audit requires SENSIBLAW_DATABASE_URL")?;
             let numeric_run=deterministic_numeric_run_ref(&evidence.manifest);
+            if subcommand=="reuse-original" {
+                let receipt=reuse_original_binding_and_identity_owners(&numeric_url,&numeric_run,&answer)
+                    .map_err(|e|e.to_string())?;
+                return print_json(&receipt);
+            }
             if let Some(budget)=transport_budget {
                 if subcommand=="bind-campaign" {
                     let mut passes=Vec::new();
@@ -229,7 +235,7 @@ pub fn run(args:&[String])->Result<(),String>{
             print_json(&receipt)
         }
         _=>Err(
-            "numeric-pnf-native usage: inspect SOURCE_REV PARSER_RUN | plan SOURCE_REV PARSER_RUN | audit S29_REVIEW_ITEM_REF PARSER_RUN | bind S29_REVIEW_ITEM_REF PARSER_RUN MAX_CANDIDATES --commit | bind-campaign S29_REVIEW_ITEM_REF PARSER_RUN MAX_CANDIDATES --commit | retract S29_REVIEW_ITEM_REF PARSER_RUN WITNESS_ID --rollback-probe|--commit | compile SOURCE_REV PARSER_RUN MAX_SENTENCES --commit [--allow-partial-source] (numeric DB URL required for audit/compile, durable source root for compile)".into()
+            "numeric-pnf-native usage: inspect SOURCE_REV PARSER_RUN | plan SOURCE_REV PARSER_RUN | audit S29_REVIEW_ITEM_REF PARSER_RUN | reuse-original S29_REVIEW_ITEM_REF PARSER_RUN | bind S29_REVIEW_ITEM_REF PARSER_RUN MAX_CANDIDATES --commit | bind-campaign S29_REVIEW_ITEM_REF PARSER_RUN MAX_CANDIDATES --commit | retract S29_REVIEW_ITEM_REF PARSER_RUN WITNESS_ID --rollback-probe|--commit | compile SOURCE_REV PARSER_RUN MAX_SENTENCES --commit [--allow-partial-source] (numeric DB URL required for audit/compile, durable source root for compile)".into()
         )
     }
 }

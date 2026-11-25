@@ -2256,3 +2256,263 @@ mod tests{
         assert_eq!(hex(&[0u8,255u8]),"00ff");
     }
 }
+
+// Native consumer of the ALREADY IMPLEMENTED SensibLaw #439 indexed binding
+// authority. Do not construct another mention lattice, structural path
+// evaluator, parser or identity admission. The original stored revision,
+// declaration and member coordinates are the output authority.
+#[derive(Debug,Clone,Serialize)]
+pub struct OriginalBindingMemberReuse {
+    pub candidate_factor_ref:String,
+    pub candidate_factor_revision_ref:String,
+    pub accessibility_path_ref:String,
+    pub distance_tokens:i32,
+    pub original_span_coordinates:Vec<(i32,i32)>,
+    pub exact_same_manifestation_numeric_object_ids:Vec<i64>,
+}
+#[derive(Debug,Clone,Serialize)]
+pub struct OriginalBindingSetReuse {
+    pub document_ref:String,
+    pub same_manifestation:bool,
+    pub reference_factor_ref:String,
+    pub reference_factor_revision_ref:String,
+    pub candidate_set_ref:String,
+    pub generator_build_ref:String,
+    pub referential_type_ref:String,
+    pub accessibility_declaration_ref:String,
+    pub compatibility_declaration_ref:String,
+    pub original_persisted_member_count:i32,
+    pub original_index_matches_persisted_members:bool,
+    pub original_index_prefix_matches_full_query:bool,
+    pub original_index_query_complete:bool,
+    pub original_index_member_count:usize,
+    pub original_cap_deferred_count:usize,
+    pub original_exclusion_summaries:Vec<(String,i32)>,
+    pub original_members:Vec<OriginalBindingMemberReuse>,
+}
+#[derive(Debug,Clone,Serialize)]
+pub struct OriginalOwnerReuseReceipt {
+    pub schema:&'static str,
+    pub source_revision_ref:String,
+    pub source_sha256:String,
+    pub same_manifestation_document_ref:String,
+    pub source_content_equal_compiler_documents:Vec<String>,
+    pub original_binding_owner_available:bool,
+    pub original_binding_sets:Vec<OriginalBindingSetReuse>,
+    pub original_numeric_run_refs:Vec<String>,
+    pub original_numeric_audits:Vec<NativeNumericIdentityAudit>,
+    pub reusable_binding_set_refs:Vec<String>,
+    pub original_index_complete_is_not_semantic_coverage:bool,
+    pub writes_database:bool,
+    pub residuals:Vec<String>,
+}
+fn exact_original_binding_members(
+    tx:&mut postgres::Transaction<'_>,revision:&str,typ:&str,access:&str,compat:&str,limit:i32,
+)->Result<Vec<(String,String,String,i32)>,NativeNumericAuditError>{
+    Ok(tx.query(
+        "SELECT candidate_factor_revision_ref,candidate_factor_ref,accessibility_path_ref,distance_tokens
+         FROM resolution.query_binding_candidates($1,$2,$3,$4,$5)",
+        &[&revision,&typ,&access,&compat,&limit])?.iter()
+        .map(|r|(r.get(0),r.get(1),r.get(2),r.get(3))).collect())
+}
+fn original_index_member_parity(
+    stored:&[(String,String)],indexed:&[(String,String,String,i32)],
+)->bool{
+    let expected=stored.iter().map(|(f,p)|(f.as_str(),p.as_str())).collect::<BTreeSet<_>>();
+    let actual=indexed.iter().map(|(_,f,p,_)|(f.as_str(),p.as_str())).collect::<BTreeSet<_>>();
+    expected.len()==stored.len()&&actual.len()==indexed.len()&&expected==actual
+}
+pub fn reuse_original_binding_and_identity_owners(
+    url:&str,numeric_run:&str,answer:&NativeSourceLocalAnswer,
+)->Result<OriginalOwnerReuseReceipt,NativeNumericAuditError>{
+    original_receipt_policy(answer)?;
+    let mut db=Client::connect(url,NoTls)?;
+    let mut tx=db.transaction()?;
+    tx.batch_execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY;
+                     SET LOCAL statement_timeout='90000ms'")?;
+    let src=tx.query_one(
+        "SELECT locator,encode(content_sha256,'hex') FROM execution.semantic_parser_source
+          WHERE run_ref=$1 AND document_ref=$2",
+        &[&numeric_run,&answer.source_document_ref])?;
+    let path:String=src.get(0);
+    let bytes=std::fs::read(path).map_err(|_|NativeNumericAuditError::ForeignSource)?;
+    let sha=hex(&Sha256::digest(&bytes));
+    if sha!=answer.source_content_sha256||sha!=src.get::<_,String>(1){
+        return Err(NativeNumericAuditError::ForeignSource);
+    }
+    let source=String::from_utf8(bytes).map_err(|_|NativeNumericAuditError::ForeignSource)?;
+    let start=i32::try_from(answer.original_focus_span[0]).map_err(|_|NativeNumericAuditError::ForeignSource)?;
+    let end=i32::try_from(answer.original_focus_span[1]).map_err(|_|NativeNumericAuditError::ForeignSource)?;
+    let chars=source.chars().collect::<Vec<_>>();
+    if start<0||start>=end||end as usize>chars.len()
+        ||chars[start as usize..end as usize].iter().collect::<String>()!=answer.original_focus_surface {
+        return Err(NativeNumericAuditError::ForeignSource);
+    }
+    let owner_available:bool=tx.query_one(
+        "SELECT to_regprocedure('resolution.query_binding_candidates(text,text,text,text,integer)') IS NOT NULL
+         AND to_regclass('pnf.factor_anchor') IS NOT NULL
+         AND to_regclass('resolution.binding_candidate_set') IS NOT NULL
+         AND to_regclass('resolution.binding_candidate_member') IS NOT NULL
+         AND to_regclass('resolution.binding_exclusion_summary') IS NOT NULL
+         AND to_regclass('execution.binding_candidate_set_build') IS NOT NULL
+         AND to_regclass('corpus.span') IS NOT NULL
+         AND to_regclass('algebra.factor_revision') IS NOT NULL",&[])?.get(0);
+    let mut docs=BTreeSet::new();let mut residuals=Vec::new();
+    // Same raw bytes are necessary but not sufficient for manifestation
+    // identity. Legacy JSON-string digest is only a retrieval key. Verify
+    // actual text; do not relabel any historic immutable IDs.
+    let legacy=hex(&Sha256::digest(serde_json::to_string(&source)
+        .map_err(|_|NativeNumericAuditError::ForeignSource)?.as_bytes()));
+    if tx.query_one("SELECT to_regclass('public.compiler_document') IS NOT NULL",&[])?.get::<_,bool>(0){
+        for row in tx.query("SELECT document_ref,canonical_text FROM public.compiler_document
+            WHERE document_ref=$1 OR content_sha256=ANY($2::text[])",
+            &[&answer.source_document_ref,&vec![sha.clone(),legacy.clone()]])?{
+            let text:String=row.get(1);
+            if text.as_bytes()==source.as_bytes(){docs.insert(row.get::<_,String>(0));}
+        }
+    }
+    // Normalized compiler owner; only uncompressed exact UTF-8 bytes qualify.
+    if tx.query_one("SELECT to_regclass('corpus.document') IS NOT NULL
+        AND to_regclass('corpus.canonical_content') IS NOT NULL",&[])?.get::<_,bool>(0){
+        for row in tx.query("SELECT d.document_ref,c.payload FROM corpus.document d
+            JOIN corpus.canonical_content c ON c.canonical_ref=d.canonical_ref
+            WHERE (d.document_ref=$1 OR encode(c.content_sha256,'hex')=ANY($2::text[]))
+              AND (c.compression_ref IS NULL OR c.compression_ref IN ('none','identity'))",
+            &[&answer.source_document_ref,&vec![sha.clone(),legacy]])?{
+            let payload:Vec<u8>=row.get(1);
+            if payload==source.as_bytes(){docs.insert(row.get::<_,String>(0));}
+        }
+    }
+    let mut sets=Vec::new();let mut reusable=Vec::new();
+    if owner_available{
+        for doc in &docs{
+            let same=doc==&answer.source_document_ref;
+            // Use original canonical span index, not a numeric parser-token
+            // ordinal guess. Distinct factor revisions remain distinct.
+            let rows=tx.query(
+                "SELECT DISTINCT s.reference_factor_ref,s.reference_factor_revision_ref,
+                    s.candidate_set_ref,s.generator_build_ref,s.referential_type_ref,
+                    s.accessibility_declaration_ref,s.compatibility_declaration_ref,s.member_count
+                 FROM resolution.binding_candidate_set s
+                 JOIN pnf.factor_anchor a ON a.factor_revision_ref=s.reference_factor_revision_ref
+                     AND a.document_ref=s.document_ref
+                 JOIN corpus.span sp ON sp.document_ref=a.document_ref
+                     AND sp.start_token=a.start_token AND sp.end_token=a.end_token
+                 JOIN execution.binding_candidate_set_build b ON b.candidate_set_ref=s.candidate_set_ref
+                     AND b.generator_build_ref=s.generator_build_ref
+                     AND b.reference_factor_revision_ref=s.reference_factor_revision_ref
+                     AND b.referential_type_ref=s.referential_type_ref
+                     AND b.accessibility_declaration_ref=s.accessibility_declaration_ref
+                     AND b.compatibility_declaration_ref=s.compatibility_declaration_ref
+                     AND b.build_state_ref='completed'
+                 WHERE s.document_ref=$1 AND sp.start_char=$2 AND sp.end_char=$3
+                   AND a.parser_pos_ref='PRON' AND a.pnf_kind_ref LIKE 'semantic.argument%'
+                 ORDER BY s.reference_factor_ref,s.reference_factor_revision_ref,s.candidate_set_ref",
+                &[doc,&start,&end])?;
+            for row in rows{
+                let reference:String=row.get(0);let revision:String=row.get(1);
+                let set:String=row.get(2);let build:String=row.get(3);
+                let typ:String=row.get(4);let access:String=row.get(5);let compat:String=row.get(6);
+                let count:i32=row.get(7);
+                let stored=tx.query(
+                    "SELECT candidate_factor_ref,accessibility_path_ref
+                     FROM resolution.binding_candidate_member WHERE candidate_set_ref=$1 ORDER BY ordinal",
+                    &[&set])?.iter().map(|r|(r.get::<_,String>(0),r.get::<_,String>(1))).collect::<Vec<_>>();
+                let capped=exact_original_binding_members(&mut tx,&revision,&typ,&access,&compat,64)?;
+                // Upper bound by actual factor anchors, not arbitrary guessed
+                // candidate cap. Keep original query semantics and ordering.
+                let n:i64=tx.query_one("SELECT count(*)::bigint FROM pnf.factor_anchor WHERE document_ref=$1",&[doc])?.get(0);
+                let limit=i32::try_from(n.max(1)).map_err(|_|NativeNumericAuditError::ForeignSource)?;
+                let full=exact_original_binding_members(&mut tx,&revision,&typ,&access,&compat,limit)?;
+                let parity=count>=0&&count as usize==stored.len()&&original_index_member_parity(&stored,&capped);
+                let prefix=full.iter().take(64).eq(capped.iter());
+                let exclusions=tx.query("SELECT reason_ref,excluded_count FROM resolution.binding_exclusion_summary
+                    WHERE candidate_set_ref=$1 ORDER BY reason_ref",&[&set])?
+                    .iter().map(|r|(r.get(0),r.get(1))).collect();
+                let mut members=Vec::new();
+                for (member_revision,factor,path,distance) in &full{
+                    let spans=tx.query(
+                        "SELECT DISTINCT sp.start_char,sp.end_char FROM pnf.factor_anchor a
+                         JOIN corpus.span sp ON sp.document_ref=a.document_ref
+                             AND sp.start_token=a.start_token AND sp.end_token=a.end_token
+                         WHERE a.factor_revision_ref=$1 AND a.document_ref=$2
+                         ORDER BY sp.start_char,sp.end_char",&[member_revision,doc])?
+                        .iter().map(|r|(r.get::<_,i32>(0),r.get::<_,i32>(1))).collect::<Vec<_>>();
+                    let mut objects=Vec::new();
+                    // Only same original manifestation + unique canonical span.
+                    // Exact support is a correspondence, not identity admission.
+                    if same&&typ=="entity_reference"&&spans.len()==1{
+                        let (a,b)=spans[0];
+                        objects=tx.query(
+                            "WITH expected AS (
+                                SELECT array_agg(token_id ORDER BY token_id) AS ids,min(start_char) AS a,max(end_char) AS b
+                                FROM execution.semantic_parser_token WHERE run_ref=$1 AND document_ref=$2
+                                  AND representation_version=2 AND start_char >= $3 AND end_char <= $4
+                             ), actual AS (
+                                SELECT o.object_id,array_agg(DISTINCT s.token_id ORDER BY s.token_id) AS ids
+                                FROM execution.semantic_pnf_object o JOIN execution.semantic_pnf_region r ON r.region_id=o.region_id
+                                JOIN execution.semantic_pnf_object_token_support s ON s.object_id=o.object_id
+                                WHERE r.run_ref=$1 AND r.document_ref=$2 AND o.active GROUP BY o.object_id
+                             )
+                             SELECT actual.object_id FROM actual,expected WHERE actual.ids=expected.ids
+                               AND expected.a=$3 AND expected.b=$4 ORDER BY actual.object_id",
+                            &[&numeric_run,doc,&i64::from(a),&i64::from(b)])?
+                            .iter().map(|r|r.get(0)).collect();
+                    }
+                    members.push(OriginalBindingMemberReuse{
+                        candidate_factor_ref:factor.clone(),candidate_factor_revision_ref:member_revision.clone(),
+                        accessibility_path_ref:path.clone(),distance_tokens:*distance,
+                        original_span_coordinates:spans,exact_same_manifestation_numeric_object_ids:objects,
+                    });
+                }
+                if same&&parity&&prefix{reusable.push(set.clone());}
+                sets.push(OriginalBindingSetReuse{
+                    document_ref:doc.clone(),same_manifestation:same,reference_factor_ref:reference,
+                    reference_factor_revision_ref:revision,candidate_set_ref:set,generator_build_ref:build,
+                    referential_type_ref:typ,accessibility_declaration_ref:access,compatibility_declaration_ref:compat,
+                    original_persisted_member_count:count,original_index_matches_persisted_members:parity,
+                    original_index_prefix_matches_full_query:prefix,original_index_query_complete:true,
+                    original_index_member_count:full.len(),original_cap_deferred_count:full.len().saturating_sub(64),
+                    original_exclusion_summaries:exclusions,original_members:members,
+                });
+            }
+        }
+    }else{residuals.push("original_structural_binding_owner_not_installed".into());}
+    if sets.is_empty(){residuals.push("no_persisted_exact_focus_binding_set_in_original_compiler".into());}
+    if reusable.is_empty(){residuals.push("no_same_manifestation_binding_set_with_original_index_parity".into());}
+    let runs=tx.query("SELECT DISTINCT run_ref FROM execution.semantic_parser_source
+        WHERE document_ref=$1 AND encode(content_sha256,'hex')=$2 ORDER BY run_ref",
+        &[&answer.source_document_ref,&sha])?.iter().map(|r|r.get::<_,String>(0)).collect::<Vec<_>>();
+    tx.commit()?;
+    // Use the original already-written native audit over each exact original
+    // run, without compiling or replaying the approximate v3 projection.
+    let mut audits=Vec::new();
+    for run in &runs {
+        audits.push(audit_original_numeric_identity_for_source_answer(url,run,answer)?);
+    }
+    if !audits.iter().any(|a|a.original_accepted_document_identity_paid){
+        residuals.push("no_current_accepted_focus_identity_on_exact_manifestation_runs".into());
+    }
+    if !audits.iter().any(|a|a.original_level_three_substitution_paid){
+        residuals.push("no_current_witnessed_focus_level_three_on_exact_manifestation_runs".into());
+    }
+    Ok(OriginalOwnerReuseReceipt{
+        schema:"slr-native-original-binding-owner-reuse-v1",source_revision_ref:answer.source_revision_ref.clone(),
+        source_sha256:sha,same_manifestation_document_ref:answer.source_document_ref.clone(),
+        source_content_equal_compiler_documents:docs.into_iter().collect(),
+        original_binding_owner_available:owner_available,original_binding_sets:sets,
+        original_numeric_run_refs:runs,original_numeric_audits:audits,reusable_binding_set_refs:reusable,
+        original_index_complete_is_not_semantic_coverage:true,writes_database:false,residuals,
+    })
+}
+#[cfg(test)]
+#[test]
+fn original_owner_reuse_parity_never_collapses_factor_or_path(){
+    let a=vec![("a".to_owned(),"same_sentence".to_owned())];
+    let mut b=vec![("ra".to_owned(),"a".to_owned(),"same_sentence".to_owned(),1)];
+    assert!(original_index_member_parity(&a,&b));
+    b[0].2="preceding_paragraph".into();
+    assert!(!original_index_member_parity(&a,&b));
+    b[0].2="same_sentence".into();b.push(b[0].clone());
+    assert!(!original_index_member_parity(&a,&b));
+}

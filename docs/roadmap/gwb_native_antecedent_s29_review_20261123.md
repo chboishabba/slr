@@ -1,5 +1,21 @@
 # C4.11: source-native antecedent review on original SLR S29
 
+## 25 November — prior-art recovery supersedes approximation-first campaign
+
+User correction: already implemented original semantic machinery is not an open mathematical problem merely because the Rust port has not wired it. SensibLaw [#439](https://github.com/chboishabba/SensibLaw/pull/439) merged the original typed binding and PostgreSQL index (m008/m009/m012) with persisted membership parity; [#436](https://github.com/chboishabba/SensibLaw/pull/436) merged typed resolution evidence and GWB/AU proofs; [#485](https://github.com/chboishabba/SensibLaw/pull/485) merged numeric-first production and residual-only progressive reopening. Original [identity acceptance](https://github.com/chboishabba/SensibLaw/blob/f9c4670ef04b40e8153caa7dd00fa1eba7013ef4/tests/storage/test_proof_relevant_identity_acceptance.py) already implements unique admission, Level-3, immutable Level-1, retraction and ambiguous/plural/generic controls. Original [identity optimisation](https://github.com/chboishabba/SensibLaw/blob/f9c4670ef04b40e8153caa7dd00fa1eba7013ef4/docs/architecture/IDENTITY_EVIDENCE_EXECUTION_OPTIMISATION.md) already distinguishes proof yield from factor coverage. Earlier tests are not an acceptance receipt for this exact book manifestation; #439's six public bios are separate sources.
+
+Do **not** run v3 as a prerequisite to recover already-produced authority. New native `reuse-original` consumes the installed original `resolution.query_binding_candidates` over completed original binding set builds and persisted anchor/morphology coordinates, verifies capped membership/path parity and full-query prefix, retains original factor revisions, exclusions and all uncapped indexed candidates, maps only exact same-manifestation token support to numeric occurrence objects, and reopens original numeric identity/Level-3 audits for existing same-manifestation runs. Raw-byte matches under other document refs are comparison only. No original compiler, parser, registry calls, graph writes or new resolver. If no matching original persisted carrier exists, the residual is **missing prior output for this manifestation or missing bridge**, not a reason to reimplement m009. Source-written only; no Cargo/DB receipt yet. Do not infer complete semantic coverage from complete indexed rows, or treat a content-equal manifestation as identity.
+
+One native reuse command:
+
+```sh
+cargo run -p sensiblaw-cli -- numeric-pnf-native reuse-original \
+  review-item:native-antecedent-candidate:sha256:25e927f12a0092fbed143669f6a0621fa004636d728074d576275b361da8f7d1 \
+  parser-run:sha256:56ea4c0a05c3beb97f05dfe447570c7d753f15d8b8bf76cb86145ca41f8f2d63 \
+  | tee native-original-owner-reuse.json
+```
+
+
 ## 25 November — consolidated P0-C/D source projection and inverse campaign
 
 Committed v2 [receipt b64fb07](https://github.com/chboishabba/slr/blob/b64fb074ec591174d2d29c8c8a40f2021d554ef3/native-numeric-binding-v2.json): 27 Rust + 1 CLI reported PASS; 98/98 transported, 294 horizon observations, no nominal head or transport remainder; 13 governed probe witnesses, seven classes covering 15 objects, 83 unresolved; zero Level-3, no H9 ready work across nine related demands, all rollback preservation checks true. The 98 occurrence objects contain 52 PROPN, 30 NOUN, 8 PRON, 6 NUM, 1 VERB, 1 ADV; this is not a typed mention-factor universe. WELD-01–05 remain the single P0-C/D cut; P0-A/B accepted in their declared scope.
