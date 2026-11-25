@@ -225,7 +225,7 @@ BEGIN
     CREATE INDEX ON slr_identity_token(sentence_ref,start_char,end_char,token_id);
     CREATE INDEX ON slr_identity_token(lemma_symbol_id,pos_symbol_id);
     CREATE TEMP TABLE slr_identity_sentence ON COMMIT DROP AS
-        SELECT sentence_id,sentence_ref FROM execution.semantic_parser_sentence
+        SELECT sentence_id,sentence_ref,start_char,end_char FROM execution.semantic_parser_sentence
          WHERE run_ref=selected_run_ref AND document_ref=selected_document_ref;
     CREATE UNIQUE INDEX ON slr_identity_sentence(sentence_ref);
     CREATE TEMP TABLE slr_identity_person ON COMMIT DROP AS
