@@ -101,15 +101,19 @@ jq -s '
         and .native_binding_bridge.structural_relation_parity_paid);
   {schema:"slr-native-antecedent-endpoint-v8",
    cold:.[0], replay:.[1],
-   candidate_reference_parity_paid:(.[0]|candidate_gate),
-   replay_candidate_reference_parity_observed:(.[1]|candidate_gate),
-   exact_replayed_source_answer:(.[0].source_local_answer==.[1].source_local_answer),
-   warm_zero_semantic_work_paid:(.[1]|warm_gate),
-   semantic_endpoint_paid:(.[1]|semantic_gate),
+   candidate_reference_parity_paid:(try (.[0]|candidate_gate) catch false),
+   replay_candidate_reference_parity_observed:(try (.[1]|candidate_gate) catch false),
+   exact_replayed_source_answer:(.[0].source_local_answer!=null and
+      .[0].source_local_answer==.[1].source_local_answer),
+   exact_replayed_persisted_fibre:(.[0].binding_passes[-1].original_horizon_observations!=null and
+      .[0].binding_passes[-1].original_horizon_observations==.[1].binding_passes[-1].original_horizon_observations and
+      .[0].binding_passes[-1].original_document_identity_observations==.[1].binding_passes[-1].original_document_identity_observations),
+   warm_zero_semantic_work_paid:(try (.[1]|warm_gate) catch false),
+   semantic_endpoint_paid:(try (.[1]|semantic_gate) catch false),
    external_qid_paid:false,historical_truth_paid:false}
   | . + {integrated_acceptance_paid:(.candidate_reference_parity_paid and
-      .exact_replayed_source_answer and .warm_zero_semantic_work_paid and .semantic_endpoint_paid)}
+      .exact_replayed_source_answer and .exact_replayed_persisted_fibre and .warm_zero_semantic_work_paid and .semantic_endpoint_paid)}
 ' "$checkpoint/cold.json" "$checkpoint/replay.json" > "$checkpoint/acceptance.json.tmp"
 mv "$checkpoint/acceptance.json.tmp" "$checkpoint/acceptance.json"
-jq '{schema,candidate_reference_parity_paid,replay_candidate_reference_parity_observed,exact_replayed_source_answer,warm_zero_semantic_work_paid,semantic_endpoint_paid,integrated_acceptance_paid}' "$checkpoint/acceptance.json"
+jq '{schema,candidate_reference_parity_paid,replay_candidate_reference_parity_observed,exact_replayed_source_answer,exact_replayed_persisted_fibre,warm_zero_semantic_work_paid,semantic_endpoint_paid,integrated_acceptance_paid}' "$checkpoint/acceptance.json"
 jq -e '.integrated_acceptance_paid==true' "$checkpoint/acceptance.json" >/dev/null
