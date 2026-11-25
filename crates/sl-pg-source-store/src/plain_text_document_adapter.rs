@@ -27,6 +27,8 @@ pub enum PlainTextDocumentAdapterError {
     EmptyText,
     #[error("source family is not eligible for generic long-text compilation")]
     UnsupportedLongTextFamily,
+    #[error("heading repair rejected: {0}")]
+    InvalidHeadingRepair(&'static str),
     #[error("generated source structure failed validation: {0:?}")]
     InvalidSource(sensiblaw_core::source_ingest::SourceIngestError),
 }
@@ -171,6 +173,122 @@ fn sentence_ranges(text: &str, paragraph_start: usize, paragraph_end: usize) -> 
     }
 
     out
+}
+
+/// Versioned additive repair of one *original* heading-excluded paragraph.
+/// The caller supplies the exact paragraph literal, not a guessed gap.
+/// Heading-shaped first lines become a separate candidate region, not a
+/// semantic assertion; prose is segmented by the original sentence owner.
+/// Standalone headings retain the original structural-only policy.
+pub(crate) fn heading_exclusion_repair_regions(
+    paragraph: &DocumentRegion,
+    literal: &str,
+) -> Result<Vec<DocumentRegion>, PlainTextDocumentAdapterError> {
+    use PlainTextDocumentAdapterError::InvalidHeadingRepair;
+    let chars = literal.chars().collect::<Vec<_>>();
+    if paragraph.kind != DocumentRegionKind::Paragraph
+        || paragraph.end_char.checked_sub(paragraph.start_char)
+            != Some(chars.len() as u64)
+        || paragraph.region_ref.is_empty()
+        || paragraph.source_revision_ref.is_empty()
+    {
+        return Err(InvalidHeadingRepair("foreign paragraph coordinates"));
+    }
+    let mut lines = char_line_ranges(literal).into_iter();
+    let Some((first_start, first_end, first_line)) = lines.next() else {
+        return Ok(Vec::new());
+    };
+    if !chapter_heading(literal) || !chapter_heading(first_line)
+        || !lines.any(|(_, _, line)| !line.trim().is_empty())
+    {
+        return Ok(Vec::new());
+    }
+    let mut heading_start = first_start;
+    let mut heading_end = first_end;
+    while heading_start < heading_end && chars[heading_start].is_whitespace() {
+        heading_start += 1;
+    }
+    while heading_end > heading_start && chars[heading_end - 1].is_whitespace() {
+        heading_end -= 1;
+    }
+    let mut spans = vec![(heading_start, heading_end)];
+    spans.extend(sentence_ranges(literal, first_end, chars.len()));
+    let mut cursor = 0usize;
+    let mut added = Vec::new();
+    for (a, b) in spans {
+        if a < cursor || a >= b || b > chars.len()
+            || chars[cursor..a].iter().any(|c| !c.is_whitespace())
+        {
+            return Err(InvalidHeadingRepair("non-exact local partition"));
+        }
+        cursor = b;
+        let start = paragraph.start_char + a as u64;
+        let end = paragraph.start_char + b as u64;
+        added.push(DocumentRegion {
+            region_ref: format!(
+                "document-region:{}:sentence:heading-repair-v1:{start}-{end}",
+                paragraph.source_revision_ref
+            ),
+            source_revision_ref: paragraph.source_revision_ref.clone(),
+            parent_region_ref: Some(paragraph.region_ref.clone()),
+            kind: DocumentRegionKind::Sentence,
+            start_char: start,
+            end_char: end,
+        });
+    }
+    if chars[cursor..].iter().any(|c| !c.is_whitespace()) {
+        return Err(InvalidHeadingRepair("uncovered paragraph suffix"));
+    }
+    Ok(added)
+}
+
+/// Prepare an exact additive structural delta for selected original paragraphs.
+/// Existing refs and source bytes remain unchanged, even on repeat calls.
+/// This does not persist, schedule a parser or pay typed identity coverage.
+pub fn extend_plain_text_heading_exclusions(
+    original: &LongDocumentSource,
+    text: &str,
+    paragraph_refs: &[String],
+) -> Result<(LongDocumentSource, Vec<DocumentRegion>), PlainTextDocumentAdapterError> {
+    use PlainTextDocumentAdapterError::InvalidHeadingRepair;
+    original.validate().map_err(PlainTextDocumentAdapterError::InvalidSource)?;
+    if original.ingest.content_digest_ref != sha256_ref(text) {
+        return Err(InvalidHeadingRepair("source digest mismatch"));
+    }
+    let chars = text.chars().collect::<Vec<_>>();
+    let mut extended = original.clone();
+    let mut added = Vec::new();
+    for parent_ref in paragraph_refs {
+        let paragraph = original.regions.iter()
+            .find(|r| &r.region_ref == parent_ref && r.kind == DocumentRegionKind::Paragraph)
+            .ok_or(InvalidHeadingRepair("original paragraph missing"))?;
+        let a = usize::try_from(paragraph.start_char)
+            .map_err(|_| InvalidHeadingRepair("paragraph start overflow"))?;
+        let b = usize::try_from(paragraph.end_char)
+            .map_err(|_| InvalidHeadingRepair("paragraph end overflow"))?;
+        let literal = chars.get(a..b)
+            .ok_or(InvalidHeadingRepair("paragraph outside canonical source"))?
+            .iter().collect::<String>();
+        for region in heading_exclusion_repair_regions(paragraph, &literal)? {
+            if let Some(existing) = extended.regions.iter()
+                .find(|r| r.region_ref == region.region_ref)
+            {
+                if existing != &region {
+                    return Err(InvalidHeadingRepair("repair ref collision"));
+                }
+                continue;
+            }
+            if extended.regions.iter().any(|r| r.kind == DocumentRegionKind::Sentence
+                && r.start_char < region.end_char && region.start_char < r.end_char)
+            {
+                return Err(InvalidHeadingRepair("repair overlaps original sentence"));
+            }
+            extended.regions.push(region.clone());
+            added.push(region);
+        }
+    }
+    extended.validate().map_err(PlainTextDocumentAdapterError::InvalidSource)?;
+    Ok((extended, added))
 }
 
 fn chapter_ranges(text: &str) -> Vec<(usize, usize)> {
@@ -429,6 +547,50 @@ mod tests {
             .unwrap();
         assert_eq!(first_sentence.start_char, 0);
         assert_eq!(first_sentence.end_char, 4);
+    }
+
+    #[test]
+    fn heading_repair_recovers_body_and_heading_without_renumbering() {
+        let text = "Opening.\r\n\r\nChapter One\r\nαβ called Bob.\r\nHe replied!\r\n\r\nLater sentence.";
+        let (old, _) = build_plain_text_long_document_source(
+            "book:repair", "revision:repair", "plain", "receipt:repair",
+            None, None, text,
+        ).unwrap();
+        let parent = old.regions.iter()
+            .find(|r| r.kind == DocumentRegionKind::Paragraph
+                && r.region_ref.contains(":paragraph:1:")).unwrap();
+        let refs = vec![parent.region_ref.clone()];
+        let (new, delta) = extend_plain_text_heading_exclusions(&old, text, &refs).unwrap();
+        assert_eq!(delta.len(), 3);
+        assert_eq!(&new.regions[..old.regions.len()], old.regions.as_slice());
+        let chars = text.chars().collect::<Vec<_>>();
+        let literals = delta.iter().map(|r|
+            chars[r.start_char as usize..r.end_char as usize].iter().collect::<String>()
+        ).collect::<Vec<_>>();
+        assert_eq!(literals, vec!["Chapter One", "αβ called Bob.", "He replied!"]);
+        assert!(delta.iter().all(|r| r.parent_region_ref.as_ref() == Some(&parent.region_ref)));
+        let (again, replay) = extend_plain_text_heading_exclusions(&new, text, &refs).unwrap();
+        assert!(replay.is_empty());
+        assert_eq!(again, new);
+        assert!(extend_plain_text_heading_exclusions(&old, "different", &refs).is_err());
+    }
+
+    #[test]
+    fn heading_repair_preserves_standalone_and_unrelated_paragraphs() {
+        let text = "# Standalone\n\nPart of the story.\nThis is prose.\n\nOrdinary paragraph.";
+        let (old, _) = build_plain_text_long_document_source(
+            "book:repair", "revision:repair", "plain", "receipt:repair",
+            None, None, text,
+        ).unwrap();
+        let paragraphs = old.regions.iter().filter(|r| r.kind == DocumentRegionKind::Paragraph)
+            .map(|r| r.region_ref.clone()).collect::<Vec<_>>();
+        let (_, standalone) = extend_plain_text_heading_exclusions(&old, text, &paragraphs[..1]).unwrap();
+        assert!(standalone.is_empty());
+        let (_, prose) = extend_plain_text_heading_exclusions(&old, text, &paragraphs[1..2]).unwrap();
+        assert_eq!(prose.len(), 2);
+        let (same, unrelated) = extend_plain_text_heading_exclusions(&old, text, &paragraphs[2..]).unwrap();
+        assert!(unrelated.is_empty());
+        assert_eq!(same, old);
     }
 
     #[test]
