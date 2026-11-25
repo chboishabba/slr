@@ -68,10 +68,19 @@ fn install(url:&str)->Result<bool>{
     // the local DDL owner. Do not attempt privileged installation as a
     // normal application role or silently weaken the proof.
     let ddl_owner:bool=tx.query_one("SELECT rolsuper FROM pg_roles WHERE rolname=current_user",&[])?.get(0);
-    if !ddl_owner{return Ok(false);}
+    if !ddl_owner{
+        // Runtime roles may consume an administrator-installed intact
+        // fence. They must not install or repair DDL. Grant only required
+        // read/execute privileges; do not require superuser for replay.
+        let intact=stamp_on(&mut tx)?.is_some();
+        tx.commit()?;
+        return Ok(intact);
+    }
     tx.query_one("SELECT pg_advisory_xact_lock(hashtext('slr-native-endpoint-replay:v1'))",&[])?;
     let installed:bool=tx.query_one("SELECT to_regprocedure('slr_native_replay.current_stamp()') IS NOT NULL",&[])?.get(0);
     if !installed{tx.batch_execute(include_str!("numeric_pnf_endpoint_replay.sql"))?;}
+    let scoped:bool=tx.query_one("SELECT to_regprocedure('slr_native_replay.current_source_stamp(text)') IS NOT NULL",&[])?.get(0);
+    if !scoped{tx.batch_execute(include_str!("numeric_pnf_endpoint_replay_source_scope.sql"))?;}
     let ready:bool=tx.query_one("SELECT slr_native_replay.fence_intact()",&[])?.get(0);
     let ready=if ready{true}else{tx.query_one("SELECT slr_native_replay.install_fence()",&[])?.get(0)};
     if ready && stamp_on(&mut tx)?.is_none(){
@@ -90,20 +99,31 @@ fn install(url:&str)->Result<bool>{
     Ok(intact)
 }
 fn stamp_on(db:&mut impl postgres::GenericClient)->Result<Option<String>>{
+    stamp_on_scope(db,None)
+}
+fn stamp_on_scope(db:&mut impl postgres::GenericClient,parser_run:Option<&str>)->Result<Option<String>>{
     let installed:bool=db.query_one("SELECT to_regprocedure('slr_native_replay.current_stamp()') IS NOT NULL",&[])?.get(0);
     if !installed{return Ok(None);}
-    let row=db.query_one("SELECT slr_native_replay.current_stamp(),current_setting('search_path'),
-        current_setting('TimeZone'),current_setting('DateStyle'),current_setting('extra_float_digits'),
-        current_setting('session_replication_role')",&[])?;
+    let row=if let Some(parser_run)=parser_run{
+        let supported:bool=db.query_one("SELECT to_regprocedure('slr_native_replay.current_source_stamp(text)') IS NOT NULL",&[])?.get(0);
+        if !supported{return Ok(None);}
+        db.query_one("SELECT slr_native_replay.current_source_stamp($1),current_setting('search_path'),
+           current_setting('TimeZone'),current_setting('DateStyle'),current_setting('extra_float_digits'),
+           current_setting('session_replication_role')",&[&parser_run])?
+    }else{
+        db.query_one("SELECT slr_native_replay.current_stamp(),current_setting('search_path'),
+           current_setting('TimeZone'),current_setting('DateStyle'),current_setting('extra_float_digits'),
+           current_setting('session_replication_role')",&[])?
+    };
     let raw:Option<String>=row.get(0);
     Ok(raw.map(|s|digest(&serde_json::to_vec(&(s,row.get::<_,String>(1),row.get::<_,String>(2),
         row.get::<_,String>(3),row.get::<_,String>(4),row.get::<_,String>(5))).expect("string tuple serializes"))))
 }
-fn stamp(url:&str)->Result<Option<String>>{
+fn stamp(url:&str,parser_run:Option<&str>)->Result<Option<String>>{
     let mut db=Client::connect(url,NoTls)?;
     let mut tx=db.transaction()?;
     tx.batch_execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY; SET LOCAL statement_timeout='90000ms'")?;
-    let value=stamp_on(&mut tx)?;
+    let value=stamp_on_scope(&mut tx,parser_run)?;
     tx.commit()?;
     Ok(value)
 }
@@ -111,10 +131,10 @@ fn stamp(url:&str)->Result<Option<String>>{
 #[derive(Debug,Clone,PartialEq,Eq)]
 struct DualStamp { source:String,numeric:String }
 
-fn same_instant(source:&str,numeric:&str)->Result<Option<DualStamp>>{
-    let a=stamp(source)?;
-    let b=stamp(numeric)?;
-    let c=stamp(source)?;
+fn same_instant(source:&str,numeric:&str,source_parser_scope:Option<&str>)->Result<Option<DualStamp>>{
+    let a=stamp(source,source_parser_scope)?;
+    let b=stamp(numeric,None)?;
+    let c=stamp(source,source_parser_scope)?;
     match (a,b,c){
         (Some(source),Some(numeric),Some(after)) if source==after=>Ok(Some(DualStamp{source,numeric})),
         _=>Ok(None),
@@ -125,6 +145,7 @@ fn same_instant(source:&str,numeric:&str)->Result<Option<DualStamp>>{
 /// connection string enters a durable receipt or the output.
 pub struct NativeEndpointReplaySession {
     source_url:String,
+    source_parser_scope:Option<String>,
     numeric_url:String,
     key:String,
     implementation:Value,
@@ -141,12 +162,15 @@ pub fn prepare_native_endpoint_replay(config:&DatabaseConfig,numeric_url:&str,re
     let Some(implementation)=implementation_fingerprint()? else{return Ok(None)};
     let source_url=config.database_url().to_owned();
     if !install(&source_url)?||!install(numeric_url)?{return Ok(None);}
-    let before=same_instant(&source_url,numeric_url)?;
+    // Scope only supported source parser leaf tables. Numeric and all
+    // unproved source relations keep the conservative global fence.
+    let source_parser_scope=if stamp(&source_url,Some(parser_run))?.is_some(){Some(parser_run.to_owned())}else{None};
+    let before=same_instant(&source_url,numeric_url,source_parser_scope.as_deref())?;
     let key=digest(&serde_json::to_vec(&serde_json::json!({
         "review":review,"parser_run":parser_run,"implementation":implementation,
         "contract":"slr-native-endpoint-replay:v1"
     }))?);
-    Ok(Some(NativeEndpointReplaySession{source_url,numeric_url:numeric_url.into(),key,implementation,before}))
+    Ok(Some(NativeEndpointReplaySession{source_url,source_parser_scope,numeric_url:numeric_url.into(),key,implementation,before}))
 }
 
 fn replayable_candidate(v:&Value)->bool{
@@ -204,7 +228,7 @@ impl NativeEndpointReplaySession {
     /// committed source mutation cannot make a stale cache hit.
     pub fn reopen(&self)->Result<Option<Value>>{
         let Some(before)=&self.before else{return Ok(None)};
-        let a=stamp(&self.source_url)?;
+        let a=stamp(&self.source_url,self.source_parser_scope.as_deref())?;
         let mut db=Client::connect(&self.numeric_url,NoTls)?;
         let mut tx=db.transaction()?;
         tx.batch_execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY; SET LOCAL statement_timeout='90000ms'")?;
@@ -216,7 +240,7 @@ impl NativeEndpointReplaySession {
             canonical_source_matches(&mut tx,&payload,&self.implementation)?
         }else{false};
         tx.commit()?;
-        let c=stamp(&self.source_url)?;
+        let c=stamp(&self.source_url,self.source_parser_scope.as_deref())?;
         if !source_bytes_verified||a.as_deref()!=Some(before.source.as_str())||c!=a||n.as_deref()!=Some(before.numeric.as_str()){
             return Ok(None);
         }
@@ -237,7 +261,12 @@ impl NativeEndpointReplaySession {
             "external_canonical_source_bytes_verified":true,
             "parser_identity_refresh_invocations":0,"semantic_recomputation_performed":false,
             "writes_semantic_state":false,"new_golden_kernel_execution":false,
-            "current_authority_reused":false,"conservative_database_wide_invalidation":true
+            "current_authority_reused":false,
+            "source_parser_leaf_scope_used":self.source_parser_scope.is_some(),
+            "source_parser_leaf_scope_ref":self.source_parser_scope,
+            "numeric_conservative_database_wide_invalidation":true,
+            "other_source_relations_conservative_global_invalidation":true,
+            "conservative_database_wide_invalidation":true
         });
         Ok(Some(value))
     }
@@ -249,7 +278,7 @@ impl NativeEndpointReplaySession {
         if !replayable_candidate(value)||implementation_fingerprint()?.as_ref()!=Some(&self.implementation){
             return Ok(false);
         }
-        if same_instant(&self.source_url,&self.numeric_url)?.as_ref()!=Some(before){return Ok(false);}
+        if same_instant(&self.source_url,&self.numeric_url,self.source_parser_scope.as_deref())?.as_ref()!=Some(before){return Ok(false);}
         let payload_sha=digest(&serde_json::to_vec(value)?);
         let mut db=Client::connect(&self.numeric_url,NoTls)?;
         let mut tx=db.transaction()?;
