@@ -2993,6 +2993,7 @@ pub struct NativeScopedAdmissionParity {
     pub changed_level_three_refs:Vec<String>,
     pub reference_admission_exact:bool,
     pub reference_level_three_exact:bool,
+    pub golden_producer_exact:Option<bool>,
     pub unrelated_admission_revisions_preserved:bool,
     pub unrelated_derivation_ids_preserved:bool,
     pub immutable_level_one_preserved:bool,
@@ -3146,6 +3147,36 @@ fn probe_identity_admission_scenario(
         p.rollback()?;
         (keys,projection,l3,changed,factors,preserved,unaffected,immutable)
     };
+    // The golden source rule is exercised by the actual bounded writer,
+    // not only by deleting a reference candidate. Reuse the exact support
+    // stage in a third savepoint, then compare its full semantic output.
+    let golden_producer_exact=if scenario=="agda-standalone-source-correction" {
+        let embedded=tx.query("SELECT token_id FROM pg_temp.slr_identity_mention_scope WHERE embedded_in_person",&[])?
+            .iter().map(|r|r.get::<_,i64>(0)).collect::<BTreeSet<_>>();
+        let expected=parser_evidence_keys_in_states(tx,run,doc,&[1,2,3])?.into_iter()
+            .filter(|k|k.2!=3||!k.3.is_some_and(|id|embedded.contains(&id))).collect::<BTreeSet<_>>();
+        let overflow_sql="SELECT source_object_id,source_token_id,family_lemma_symbol_id,possible_target_count,retained_target_limit
+            FROM execution.semantic_pnf_proper_name_evidence_overflow
+            WHERE run_id=$1 AND document_id=$2 ORDER BY source_object_id,source_token_id,family_lemma_symbol_id";
+        let read_overflow=|p:&mut postgres::Transaction<'_>|->Result<BTreeSet<(i64,i64,i64,i64,i16)>,NativeNumericAuditError>{
+            Ok(p.query(overflow_sql,&[&run,&doc])?.iter().map(|r|(r.get(0),r.get(1),r.get(2),r.get(3),r.get(4))).collect())
+        };
+        let expected_overflow=read_overflow(tx)?.into_iter().filter(|k|!embedded.contains(&k.1)).collect::<BTreeSet<_>>();
+        let mut p=tx.transaction()?;
+        p.query_one("SELECT pg_temp.slr_write_numeric_pnf_parser_identity_bounded($1,$2,TRUE)",&[&run,&doc])?;
+        if parser_evidence_keys(&mut p,run,doc)?!=expected||read_overflow(&mut p)?!=expected_overflow {
+            return Err(NativeNumericAuditError::AdmissionProbeInvariant);
+        }
+        p.query_one("SELECT execution.admit_numeric_pnf_parser_identity_evidence($1,$2)",&[&run,&doc])?;
+        let keys=parser_admitted_witness_keys(&mut p,run,doc)?;
+        let projection=identity_projection_snapshot(&mut p,run,doc)?;
+        rebuild_reference_identity_level_three(&mut p,run,doc)?;
+        let exact=keys==reference&&projection==ref_projection&&level_three_snapshot(&mut p,run,doc)?==ref_l3
+            &&level_one==level_one_snapshot(&mut p,run,doc)?;
+        p.rollback()?;
+        if !exact{return Err(NativeNumericAuditError::AdmissionProbeInvariant);}
+        Some(true)
+    }else{None};
     let restored=before==parser_admitted_witness_keys(tx,run,doc)?
         &&projections==identity_projection_snapshot(tx,run,doc)?
         &&before_l3==level_three_snapshot(tx,run,doc)?
@@ -3162,7 +3193,7 @@ fn probe_identity_admission_scenario(
         withdrawn_direct_candidates:if scenario=="direct-withdrawal"{withdrawn}else{0},
         withdrawn_candidate_rows:withdrawn,changed_witness_keys:before.symmetric_difference(&scoped).count(),
         changed_projection_source_ids:sources,affected_factor_ids:factors,changed_level_three_refs,
-        reference_admission_exact:true,reference_level_three_exact:true,
+        reference_admission_exact:true,reference_level_three_exact:true,golden_producer_exact,
         unrelated_admission_revisions_preserved:unrelated_preserved,unrelated_derivation_ids_preserved:unrelated_ids,
         immutable_level_one_preserved:immutable,rollback_restored:restored,persisted:false})
 }
@@ -3188,9 +3219,7 @@ fn probe_scoped_parser_admission(
         ORDER BY c.candidate_id",&[&run,&doc])?;
     let ids=embedded.iter().map(|r|r.get::<_,i64>(0)).collect::<Vec<_>>();
     let targets=embedded.iter().map(|r|r.get::<_,i64>(1)).collect::<BTreeSet<_>>().into_iter().collect::<Vec<_>>();
-    if !ids.is_empty(){
-        results.push(probe_identity_admission_scenario(&mut baseline,run,doc,"agda-standalone-source-correction",&targets,&ids)?);
-    }
+    results.push(probe_identity_admission_scenario(&mut baseline,run,doc,"agda-standalone-source-correction",&targets,&ids)?);
     let selected=baseline.query_opt("SELECT c.target_object_id
         FROM execution.semantic_pnf_identity_evidence_candidate c
         WHERE c.run_id=$1 AND c.document_id=$2 AND c.evidence_state=2 AND c.witness_kind IN (2,4,6)
@@ -3784,7 +3813,7 @@ pub fn transport_original_numeric_candidates_for_source_answer_with_partition(
         (Some(observed),Some(governed))
     }else{(None,None)};
     let parser_identity_refresh_invocations=original_parser_identity_producer.as_ref()
-        .map_or(0,|p|if p.bounded_identity_parity.is_some(){2}else{1});
+        .map_or(0,|p|if p.bounded_identity_parity.is_some(){3}else{1});
     tx.commit()?;
     Ok(NativeNumericCandidateTransportReceipt{
         schema:"slr-native-candidate-only-transport-v6",
