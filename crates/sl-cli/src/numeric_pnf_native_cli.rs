@@ -170,10 +170,12 @@ pub fn run(args:&[String])->Result<(),String>{
                         if done{stop_reason="bounded_execution_drained_governed_probe_completed";break;}
                         if !progress{stop_reason="unresolved_without_execution_progress";break;}
                     }
+                    let owner_reuse=reuse_original_binding_and_identity_owners(&numeric_url,&numeric_run,&answer)
+                        .map_err(|e|e.to_string())?;
                     return print_json(&serde_json::json!({
-                        "schema":"slr-native-binding-campaign-v1",
+                        "schema":"slr-native-binding-campaign-v2",
                         "stop_reason":stop_reason,"committed_passes":passes.len(),
-                        "passes":passes,"focus_identity_paid":false,"typed_coverage_paid":false
+                        "passes":passes,"original_owner_reuse":owner_reuse,"focus_identity_paid":false,"typed_coverage_paid":false
                     }));
                 }
                 let receipt=transport_original_numeric_candidates_for_source_answer(

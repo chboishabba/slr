@@ -1722,6 +1722,8 @@ fn materialize_native_binding_bridge(
             ON execution.slr_native_binding_anchor_projection(document_ref,active,snapshot_ref);")?;
     // A genuine legacy producer's index is not ours to retire or mix with a
     // different token coordinate chart. Reject instead of contaminating it.
+    // The old binder scopes its index by document, not parser run.
+    tx.query_one("SELECT pg_advisory_xact_lock(hashtext('slr-native-binding-document:v2'),hashtext($1))",&[&doc])?;
     let foreign:bool=tx.query_one(
         "SELECT EXISTS(SELECT 1 FROM pnf.factor_anchor a WHERE a.document_ref=$1
           AND a.factor_revision_ref NOT LIKE 'factor-revision:native-binding:%'
@@ -1730,8 +1732,6 @@ fn materialize_native_binding_bridge(
                     WHERE document_ref=$1 AND active AND run_ref<>$2)",
         &[&doc,&run_ref])?.get(0);
     if foreign{return Err(NativeNumericAuditError::ForeignSource);}
-    // The old binder scopes its index by document, not parser run.
-    tx.query_one("SELECT pg_advisory_xact_lock(hashtext('slr-native-binding-document:v2'),hashtext($1))",&[&doc])?;
     let legacy:bool=tx.query_one("SELECT EXISTS(SELECT 1 FROM pnf.factor_anchor
         WHERE document_ref=$1 AND factor_revision_ref LIKE 'factor-revision:native-binding:%')",&[&doc])?.get(0);
     if legacy && tx.query_one("SELECT count(DISTINCT run_ref)::bigint FROM execution.semantic_parser_source WHERE document_ref=$1",&[&doc])?.get::<_,i64>(0)!=1{
@@ -1921,36 +1921,9 @@ fn persist_native_index_evidence(
     Ok((inserted,outside.len()))
 }
 
-// Record candidate-only source-derived assessments in original m086 evidence.
-// Never use cap exclusion or an incomplete graph to refute an occurrence.
-fn persist_original_mention_assessments(
-    tx:&mut postgres::Transaction<'_>,demand:i64,focus:i64,
-    campaign:&mut NativeMentionBindingCampaign,
-)->Result<(),NativeNumericAuditError>{
-    for span in &mut campaign.represented_spans{
-        for object in &span.exact_object_ids{
-            let evidence=format!("native-mention-binding:v1:{focus}:{}:{}:{object}",span.start_char,span.end_char);
-            let kind=format!("projected_mention_binding:{}:{}",span.accessibility_path,
-                if span.morphology_mismatches.is_empty(){"no_observed_mismatch"}else{"morphology_mismatch"});
-            // Morphology is already a separate signed evidence coordinate.
-            // Do not double-charge it or fabricate structural exclusion.
-            span.persisted_candidate_evidence+=tx.execute(
-                "INSERT INTO execution.semantic_pnf_candidate_evidence
-                  (demand_id,target_kind,target_id,evidence_ref,evidence_family,horizon,
-                   signed_residual,evidence_kind,provenance_ref,source_interface_id,source_region_id)
-                 SELECT $1,1,o.object_id,$3,1,3,0,$4,
-                   'binding-accessibility:document-structural:v0_3:projected-parser-mention',
-                   i.interface_id,o.region_id
-                 FROM execution.semantic_pnf_candidate_universe u
-                 JOIN execution.semantic_pnf_object o ON o.object_id=u.target_id
-                 JOIN execution.semantic_pnf_interface i ON i.region_id=o.region_id
-                 WHERE u.demand_id=$1 AND u.target_kind=1 AND u.target_id=$2
-                 ON CONFLICT(demand_id,target_kind,target_id,evidence_ref) DO NOTHING",
-                &[&demand,object,&evidence,&kind])? as usize;
-        }
-    }
-    Ok(())
-}
+// The v1 projected mention assessments remain immutable historical zero-sign
+// observations. New evidence is emitted only by persist_native_index_evidence
+// from the actual original SQL index.
 
 // Class-level uniqueness is not occurrence uniqueness. This helper is only
 // a consumer gate; coverage must be independently paid by the original owner.
@@ -1966,6 +1939,7 @@ pub struct NativeParserWitnessWithdrawalProbe{
     pub witness_id:i64,
     pub affected_level_three_refs:Vec<String>,
     pub nonvacuous_dependency:bool,
+    pub original_derivation_replay_verified:bool,
     pub witness_history_preserved:bool,
     pub projection_removed:bool,
     pub dependent_rows_removed:bool,
@@ -2059,11 +2033,25 @@ fn probe_parser_witness_withdrawals(
         let restored=before==level_three_snapshot(tx,run,doc)?
             &&level_one==level_one_snapshot(tx,run,doc)?
             &&tx.query_one("SELECT admission_state=2 FROM execution.semantic_pnf_identity_witness_admission WHERE witness_id=$1",&[&id])?.get::<_,bool>(0);
-        if !changed||!history||!removed||!dependent||!immutable||!unaffected||!restored{
+        // A rollback alone does not exercise the forward producer again.
+        // Restore the admitted witness, then invoke the original derivation
+        // owners in a new savepoint and compare exact proof-bearing content.
+        let replay_verified=if !affected.is_empty()&&restored{
+            let mut replay=tx.transaction()?;
+            replay.query_one("SELECT execution.refresh_numeric_pnf_identity_substitution_derivations($1,$2)",&[&run,&doc])?;
+            replay.query_one("SELECT execution.refresh_numeric_pnf_supported_identity_substitution_derivations($1,$2)",&[&run,&doc])?;
+            let verified=before==level_three_snapshot(&mut replay,run,doc)?
+                &&level_one==level_one_snapshot(&mut replay,run,doc)?;
+            replay.rollback()?;
+            verified
+        }else{false};
+        if !changed||!history||!removed||!dependent||!immutable||!unaffected||!restored
+            ||(!affected.is_empty()&&!replay_verified){
             return Err(NativeNumericAuditError::RetractionInvariant);
         }
         receipts.push(NativeParserWitnessWithdrawalProbe{
-            witness_id:id,nonvacuous_dependency:!affected.is_empty(),affected_level_three_refs:affected,witness_history_preserved:changed&&history,
+            witness_id:id,nonvacuous_dependency:!affected.is_empty(),original_derivation_replay_verified:replay_verified,
+            affected_level_three_refs:affected,witness_history_preserved:changed&&history,
             projection_removed:removed,dependent_rows_removed:dependent,immutable_level_one_preserved:immutable,
             unaffected_level_three_preserved:unaffected,rollback_restored:restored,
         });
@@ -2486,7 +2474,7 @@ pub fn transport_original_numeric_candidates_for_source_answer(
     let (nominal_head_objects_inserted,nominal_head_token_supports_inserted,nominal_heads_remaining)=
         materialize_prior_nominal_heads(&mut tx,numeric_run_ref,&answer.source_document_ref,
             answer.original_focus_span[0] as i64,budget)?;
-    let mut original_mention_binding_campaign=original_mention_binding_campaign(
+    let original_mention_binding_campaign=original_mention_binding_campaign(
         &mut tx,numeric_run_ref,&answer.source_document_ref,&answer.source_content_sha256,focus_token,budget)?;
     // Materialize the exact existing occurrence relation. Recency is the only
     // exclusion here: morphology/quotation/type refinement is not proved yet.
@@ -2563,7 +2551,8 @@ pub fn transport_original_numeric_candidates_for_source_answer(
     if !open{return Err(NativeNumericAuditError::SourcePolicy);}
     let (morphology_observations_inserted,candidates_without_morphology_observation)=
         refine_original_numeric_morphology(&mut tx,demand,focus_token,numeric_run_ref,&answer.source_document_ref,budget)?;
-    persist_original_mention_assessments(&mut tx,demand,focus_token,&mut original_mention_binding_campaign)?;
+    let native_binding_bridge=materialize_native_binding_bridge(&mut tx,numeric_run_ref,
+        &answer.source_document_ref,&answer.source_content_sha256,focus_token,demand,&original_mention_binding_campaign)?;
     let original_h6_evidence_inserted=run_original_h6_producer(&mut tx,demand,numeric_run_ref,&answer.source_document_ref)?;
     let (original_horizon_observations,original_document_identity_observations)=
         observe_original_resolution_fibre(&mut tx,demand,numeric_run_ref,&answer.source_document_ref)?;
@@ -2572,8 +2561,6 @@ pub fn transport_original_numeric_candidates_for_source_answer(
     let original_parser_identity_producer=original_parser_identity_producer_probe(
         &mut tx,numeric_run_ref,&answer.source_document_ref,demand)?;
     let original_h9_readiness=observe_native_h9_readiness(&mut tx,demand,numeric_run_ref,&answer.source_document_ref)?;
-    let native_binding_bridge=materialize_native_binding_bridge(&mut tx,numeric_run_ref,
-        &answer.source_document_ref,&answer.source_content_sha256,focus_token,demand,&original_mention_binding_campaign)?;
     let structural_binding=observe_native_binding_structure(&mut tx,demand,focus_token,
         numeric_run_ref,&answer.source_document_ref,&answer.source_content_sha256)?;
     // Only run the document-scoped original admission probe after bounded
@@ -3111,7 +3098,7 @@ mod native_binding_bridge_regression {
         let tokens=BTreeMap::from([(7,t)]);
         let a=bridge_anchor("x".into(),"semantic.argument.subject",&[7],vec![],&tokens,source,Some(("p","predicate"))).unwrap();
         assert_eq!(a.clause.as_deref(),Some("clause:p"));assert_eq!(a.reporting,None);
-        assert_eq!(a.morphology,vec![("Gender".into(),"Masc".into()),("Number".into(),"Plur".into()),("Number".into(),"Sing".into())]);
+        assert_eq!(a.morphology,vec![("Gender".to_owned(),"Masc".to_owned()),("Number".to_owned(),"Plur".to_owned()),("Number".to_owned(),"Sing".to_owned())]);
         let c=bridge_anchor("y".into(),"semantic.embedded_proposition",&[7],vec![],&tokens,source,Some(("c","composition"))).unwrap();
         assert_eq!(c.reporting.as_deref(),Some("c"));assert_eq!(c.coordination,None);
     }
