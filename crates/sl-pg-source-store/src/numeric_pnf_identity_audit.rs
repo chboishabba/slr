@@ -2605,37 +2605,29 @@ fn produce_lean_typed_evidence(
     let Some(executable) = std::env::var_os("SLR_NATIVE_LEAN_WORKSET_EXECUTABLE") else {
         return Ok(None);
     };
-    let rows = tx.query("SELECT s.target_kind,s.target_id,s.refuted,
-        COALESCE(a.event_kind,0)::smallint,COALESCE(a.event_id,0)::bigint,
-        COALESCE(e.evidence_id,0)::bigint,COALESCE(e.demand_id,0)::bigint,
-        COALESCE(e.target_kind,0)::smallint,COALESCE(e.target_id,0)::bigint,
-        COALESCE(e.evidence_ref,'')
-        FROM execution.semantic_pnf_candidate_state_v1 s
-        LEFT JOIN execution.semantic_pnf_candidate_latest_admissibility a
-          ON a.demand_id=s.demand_id AND a.target_kind=s.target_kind AND a.target_id=s.target_id
-        LEFT JOIN execution.semantic_pnf_candidate_evidence e ON e.evidence_id=a.evidence_id
-        WHERE s.demand_id=$1 ORDER BY s.target_kind,s.target_id", &[&demand])?;
-    let mut candidates = Vec::new();
-    let mut represented = Vec::new();
-    let mut refuted = Vec::new();
-    let mut live = Vec::new();
-    for row in rows {
-        let kind:i16=row.get(0); let id:i64=row.get(1); let rejected:bool=row.get(2);
-        let event:i16=row.get(3); let event_id:i64=row.get(4); let evidence_id:i64=row.get(5);
-        let ed:i64=row.get(6); let ek:i16=row.get(7); let et:i64=row.get(8);
-        let evidence_ref:String=row.get(9);
-        if kind<=0 || id<=0 || event<0 || event>2 || rejected!=(event==1)
-            || (event!=0 && (event_id<=0 || evidence_id<=0 || ed!=demand || ek!=kind || et!=id || evidence_ref.is_empty()))
-            || (event==0 && event_id!=0) {
-            return Err(NativeNumericAuditError::ForeignSource);
+    use crate::numeric_pnf_sql::{read_original_typed_candidate_rows,candidate_fibre_from_original_rows};
+    let rows=read_original_typed_candidate_rows(tx,demand,None)
+        .map_err(|e|NativeNumericAuditError::Database(e.to_string()))?;
+    let kinds=rows.iter().map(|r|r.target_kind).collect::<BTreeSet<_>>();
+    let mut represented=Vec::new();
+    let mut refuted=Vec::new();
+    let mut live=Vec::new();
+    // Rust parity uses the already existing CandidateFibre, not a second
+    // ad hoc semantic resolver. Candidate keys remain kind-sensitive.
+    for kind in kinds {
+        let mut fibre=candidate_fibre_from_original_rows(demand,kind,&rows)
+            .map_err(|e|NativeNumericAuditError::Database(e.to_string()))?;
+        for h in horizons.iter().filter(|h|h.target_kind==kind) {
+            fibre.record_original_signed_residual(
+                u64::try_from(h.target_id).map_err(|_|NativeNumericAuditError::ForeignSource)?,
+                h.horizon,h.signed_residual,
+            ).map_err(|_|NativeNumericAuditError::ForeignSource)?;
         }
-        let key=serde_json::json!({"target_kind":kind,"target_id":id});
-        represented.push(key.clone());
-        if rejected { refuted.push(key); } else { live.push(key); }
-        candidates.push(serde_json::json!({"target_kind":kind,"target_id":id,
-            "refuted":rejected,"event_kind":event,"event_id":event_id,"evidence_id":evidence_id,
-            "evidence_demand":ed,"evidence_target_kind":ek,"evidence_target_id":et,"evidence_ref":evidence_ref}));
+        represented.extend(fibre.represented_ids().map(|id|serde_json::json!({"target_kind":kind,"target_id":id})));
+        refuted.extend(fibre.refuted_ids().map(|id|serde_json::json!({"target_kind":kind,"target_id":id})));
+        live.extend(fibre.live_ids().map(|id|serde_json::json!({"target_kind":kind,"target_id":id})));
     }
+    let candidates=rows;
     let horizon_keys=horizons.iter().filter(|h|h.horizon==3)
         .map(|h|serde_json::json!({"target_kind":h.target_kind,"target_id":h.target_id}))
         .collect::<Vec<_>>();
