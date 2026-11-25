@@ -429,6 +429,85 @@ pub fn validate_native_numeric_sentence_closure(
     Ok(())
 }
 
+
+/// Inverse transport from a sentence-local numeric codec into another
+/// coordinate presentation. No second semantic solve. Reconstruct digests
+/// in the target presentation, and reject non-injective or incomplete maps.
+/// This is candidate parity, not admission.
+pub(crate) fn rekey_numeric_sentence_closure(
+    source_region:i64,target_region:i64,source:&NativeSentenceClosure,
+    tokens:&BTreeMap<i64,i64>,symbols:&BTreeMap<i64,i64>,
+)->Result<NativeSentenceClosure,NumericOperatorError>{
+    validate_native_numeric_sentence_closure(source_region,source)?;
+    for map in [tokens,symbols]{
+        if map.iter().any(|(a,b)|*a<=0||*b<=0)
+            ||map.values().collect::<BTreeSet<_>>().len()!=map.len(){
+            return Err(NumericOperatorError::InconsistentClosure);
+        }
+    }
+    let tok=|id:i64|tokens.get(&id).copied().ok_or(NumericOperatorError::InconsistentClosure);
+    let sym=|id:i64|symbols.get(&id).copied().ok_or(NumericOperatorError::InconsistentClosure);
+    let mut objects=Vec::new();
+    for old in &source.objects{
+        let mut o=old.clone();
+        o.source_token_id=tok(o.source_token_id)?;
+        o.object_kind_symbol_id=sym(o.object_kind_symbol_id)?;
+        o.head_symbol_id=sym(o.head_symbol_id)?;
+        o.object_digest=strict_numeric_digest(vec![num(target_region),num(o.source_token_id),num(o.object_kind_symbol_id)]);
+        objects.push(o);
+    }
+    objects.sort_by_key(|o|o.object_digest);
+    let mut factor_inverse=BTreeMap::new();
+    let mut factors=Vec::new();
+    for old in &source.factors{
+        let slots=old.slots.iter().map(|s|Ok(NativeSlot{
+            role_symbol_id:sym(s.role_symbol_id)?,source_token_id:tok(s.source_token_id)?,
+            resolution_state:s.resolution_state,required:s.required,
+        })).collect::<Result<Vec<_>,NumericOperatorError>>()?;
+        let support=old.support_token_ids.iter().map(|id|tok(*id)).collect::<Result<Vec<_>,_>>()?;
+        let residuals=old.residual_symbol_ids.iter().map(|id|sym(*id)).collect::<Result<Vec<_>,_>>()?;
+        let new=factor(target_region,sym(old.factor_type_symbol_id)?,sym(old.predicate_symbol_id)?,
+            old.modal_state,old.temporal_state,slots,support,residuals);
+        factor_inverse.insert(old.factor_digest,new.clone());
+        factors.push(new);
+    }
+    factors.sort_by_key(|f|f.factor_digest);
+    // Every original residual owns precisely one demand for its factor.
+    // Identify the association by the existing exact digest contract, not
+    // by nearest factor, ordinal or residual spelling.
+    let mut seen=BTreeSet::new();
+    let mut out_demands=Vec::new();
+    for d in &source.demands{
+        let lemma=d.lexical_symbol_id.ok_or(NumericOperatorError::InconsistentClosure)?;
+        let mut owners=source.factors.iter().filter(|f|
+            d.expected_factor_type_symbol_id==Some(f.factor_type_symbol_id)
+            && f.residual_symbol_ids.contains(&d.residual_type_symbol_id)
+            && d.demand_digest==strict_numeric_digest(vec![
+                num(source_region),NumericDigestValue::Bytes(f.factor_digest.to_vec()),
+                num(d.residual_type_symbol_id),num(lemma)]));
+        let owner=owners.next().ok_or(NumericOperatorError::InconsistentClosure)?;
+        if owners.next().is_some()||!seen.insert((owner.factor_digest,d.residual_type_symbol_id)){
+            return Err(NumericOperatorError::InconsistentClosure);
+        }
+        let target=factor_inverse.get(&owner.factor_digest).ok_or(NumericOperatorError::InconsistentClosure)?;
+        let mut new=d.clone();
+        new.expected_factor_type_symbol_id=Some(target.factor_type_symbol_id);
+        new.residual_type_symbol_id=sym(d.residual_type_symbol_id)?;
+        new.lexical_symbol_id=Some(sym(lemma)?);
+        new.demand_digest=strict_numeric_digest(vec![num(target_region),
+            NumericDigestValue::Bytes(target.factor_digest.to_vec()),num(new.residual_type_symbol_id),
+            num(new.lexical_symbol_id.ok_or(NumericOperatorError::InconsistentClosure)?)]);
+        out_demands.push(new);
+    }
+    if source.factors.iter().any(|f|f.residual_symbol_ids.iter().any(|r|!seen.contains(&(f.factor_digest,*r)))){
+        return Err(NumericOperatorError::InconsistentClosure);
+    }
+    out_demands.sort_by_key(|d|d.demand_digest);
+    let out=NativeSentenceClosure{objects,factors,demands:out_demands,measure:source.measure.clone()};
+    validate_native_numeric_sentence_closure(target_region,&out)?;
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests{
     use super::*;

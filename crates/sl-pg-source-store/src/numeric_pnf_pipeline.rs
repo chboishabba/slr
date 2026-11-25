@@ -78,6 +78,8 @@ pub struct NumericPipelineReceipt {
     pub numeric_source_entity_count:usize,
     pub source_full_document_coverage_paid:bool,
     pub sentence_jobs_completed:usize,
+    #[serde(skip_serializing_if="Option::is_none")]
+    pub direct_codec_compatibility_parity_sentences:Option<usize>,
     pub consumer_prefix_start_bound:Option<i64>,
     pub original_observations_loaded:usize,
     pub required_sentence_refs:Vec<String>,
@@ -364,6 +366,48 @@ pub fn compile_direct_numeric_candidates(
         sentence_local_database_crossings:0,production_parser_token_writes:0,
         candidate_only:true,governed_identity_paid:false,level_three_paid:false,direct_production_activation_paid:false,
     })
+}
+
+
+fn checked_direct_codec_parity(
+    direct:&DirectNumericSentenceCandidate,reference_tokens:&[NumericToken],
+    reference_lex:&NumericOperatorLexicon,region:i64,reference:&NativeSentenceClosure,
+)->Result<(),NumericPipelineError>{
+    if direct.numeric_tokens.len()!=reference_tokens.len(){return Err(NumericPipelineError::InvalidSentence);}
+    fn bind(map:&mut BTreeMap<i64,i64>,a:i64,b:i64)->Result<(),NumericPipelineError>{
+        if a<=0||b<=0||map.insert(a,b).is_some_and(|old|old!=b){
+            return Err(NumericPipelineError::InvalidSentence);
+        }
+        Ok(())
+    }
+    let mut token_map=BTreeMap::new();let mut symbol_map=BTreeMap::new();
+    // The caller checked the exact persisted original parser product
+    // (including token ordinals and source coordinates) before comparing.
+    for (a,b) in direct.numeric_tokens.iter().zip(reference_tokens){
+        if (a.start_char,a.end_char)!=(b.start_char,b.end_char){
+            return Err(NumericPipelineError::InvalidSentence);
+        }
+        bind(&mut token_map,a.token_id,b.token_id)?;
+        for (x,y) in [(a.orth_id,b.orth_id),(a.lemma_id,b.lemma_id),(a.pos_id,b.pos_id),
+                     (a.dependency_id,b.dependency_id)]{bind(&mut symbol_map,x,y)?;}
+        if a.tag_id!=0{bind(&mut symbol_map,a.tag_id,b.tag_id)?;}
+    }
+    for (a,b) in direct.numeric_tokens.iter().zip(reference_tokens){
+        if token_map.get(&a.head_token_id)!=Some(&b.head_token_id){
+            return Err(NumericPipelineError::InvalidSentence);
+        }
+    }
+    for (i,(kind,name)) in direct.symbol_inverse.iter().enumerate(){
+        let family=match *kind{2=>"lemma",3=>"pos",5=>"dep",10=>"factor",11=>"predicate",
+            12=>"role",13=>"residual",14=>"object",_=>continue};
+        if let Ok(id)=reference_lex.symbol(family,name){
+            bind(&mut symbol_map,i as i64+1,id)?;
+        }
+    }
+    let mapped=crate::numeric_pnf_operator::rekey_numeric_sentence_closure(
+        1,region,&direct.closure,&token_map,&symbol_map)?;
+    if &mapped!=reference{return Err(NumericPipelineError::InvalidSentence);}
+    Ok(())
 }
 
 fn lease_one(database_url:&str,run_ref:&str,document_ref:&str,focus:Option<i64>)
@@ -823,6 +867,12 @@ fn run_native_numeric_scoped_slice(
     let mut completed=0usize;
     let mut closed_sentence_region_starts=Vec::new();
     let mdl=NumericMdlWeights::default();
+    // Explicit compatibility campaign only; the direct inspect path
+    // never opens the legacy database. Do not pay whole relation parity
+    // from this same-composer coordinate correspondence.
+    let compare_direct=std::env::var("SLR_NATIVE_DIRECT_CODEC_PARITY").as_deref()==Ok("1");
+    let mut direct_parity=0usize;
+    let plan_by_start=plan.sentences.iter().map(|s|(s.start_char,s)).collect::<BTreeMap<_,_>>();
     while completed<max_sentences{
         let Some((lease,sentence_id))=lease_one(
             numeric_database_url,&run_ref,&original.manifest.document_ref,focus
@@ -837,6 +887,13 @@ fn run_native_numeric_scoped_slice(
             "SELECT start_char FROM execution.semantic_pnf_region WHERE region_id=$1",
             &[&lease.region_id])?.get(0);
         if !required_prefix_region(region_start,focus){return Err(NumericPipelineError::ForeignRun);}
+        if compare_direct{
+            let sentence=plan_by_start.get(&region_start).ok_or(NumericPipelineError::InvalidSentence)?;
+            if !verified_after.contains(&sentence.sentence_ref){return Err(NumericPipelineError::InvalidSentence);}
+            let direct=direct_sentence_candidate(sentence)?;
+            checked_direct_codec_parity(&direct,&tokens,&lex,lease.region_id,&closure)?;
+            direct_parity+=1;
+        }
         publish_original_numeric_sentence(
             numeric_database_url,&original.manifest,&run_ref,
             &canonical,&lease,&closure,&mdl
@@ -905,7 +962,8 @@ fn run_native_numeric_scoped_slice(
         required_sentence_refs,lean_workset_checked,missing_required_sentence_refs,
         already_published_required_refs:already_published_required,
         newly_registered_sentence_refs,closed_sentence_region_starts,
-        sentence_jobs_completed:completed,sentence_jobs_remaining:remaining as usize,
+        sentence_jobs_completed:completed,
+        direct_codec_compatibility_parity_sentences:compare_direct.then_some(direct_parity),sentence_jobs_remaining:remaining as usize,
         entity_occurrence_objects_inserted:entity_objects,
         entity_occurrence_token_supports_inserted:entity_supports,
         frontier_jobs_completed:frontier_completed,frontier_jobs_remaining:frontier_remaining,
