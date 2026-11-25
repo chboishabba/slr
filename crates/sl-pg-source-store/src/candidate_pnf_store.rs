@@ -103,6 +103,10 @@ CREATE TABLE IF NOT EXISTS pnf.candidate_persistence_stage_receipt (
 );
 
 
+"#;
+
+const DIRECT_NUMERIC_CANDIDATE_SCHEMA_SQL: &str = r#"
+CREATE SCHEMA IF NOT EXISTS pnf;
 -- Rich numeric-PNF candidate products are a sibling encoding of the
 -- existing M12 candidate product, NOT another reviewed semantic store.
 -- Immutable source-bound staging is never an authority/current pointer.
@@ -357,6 +361,7 @@ pub(crate) fn persist_candidate_persistence_stage_receipt_with_client(
 pub fn install_candidate_pnf_schema(config: &DatabaseConfig) -> Result<(), CandidatePnfStoreError> {
     let mut client = Client::connect(config.database_url(), NoTls)?;
     client.batch_execute(CANDIDATE_PNF_SCHEMA_SQL)?;
+    client.batch_execute(DIRECT_NUMERIC_CANDIDATE_SCHEMA_SQL)?;
     Ok(())
 }
 
@@ -413,7 +418,7 @@ pub(crate) fn stage_direct_numeric_candidate_products(
     let ready:bool=tx.query_one("SELECT to_regclass('pnf.direct_numeric_candidate_product') IS NOT NULL",&[])?.get(0);
     if !ready{
         // Install through the existing candidate product schema owner.
-        tx.batch_execute(CANDIDATE_PNF_SCHEMA_SQL)?;
+        tx.batch_execute(DIRECT_NUMERIC_CANDIDATE_SCHEMA_SQL)?;
     }
     let mut desired=BTreeMap::<(String,String),(String,String)>::new();
     for sentence in &candidate.sentences{
