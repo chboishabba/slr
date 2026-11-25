@@ -59,19 +59,29 @@ fn install(url:&str)->Result<bool>{
     let mut db=Client::connect(url,NoTls)?;
     let mut tx=db.transaction()?;
     tx.batch_execute("SET LOCAL statement_timeout='90000ms'; SET LOCAL lock_timeout='5000ms'")?;
+    // The event-trigger continuity fence is deliberately opt-in and needs
+    // the local DDL owner. Do not attempt privileged installation as a
+    // normal application role or silently weaken the proof.
+    let ddl_owner:bool=tx.query_one("SELECT rolsuper FROM pg_roles WHERE rolname=current_user",&[])?.get(0);
+    if !ddl_owner{return Ok(false);}
     tx.query_one("SELECT pg_advisory_xact_lock(hashtext('slr-native-endpoint-replay:v1'))",&[])?;
     let installed:bool=tx.query_one("SELECT to_regprocedure('slr_native_replay.current_stamp()') IS NOT NULL",&[])?.get(0);
     if !installed{tx.batch_execute(include_str!("numeric_pnf_endpoint_replay.sql"))?;}
     let ready:bool=tx.query_one("SELECT slr_native_replay.fence_intact()",&[])?.get(0);
     let ready=if ready{true}else{tx.query_one("SELECT slr_native_replay.install_fence()",&[])?.get(0)};
+    let intact=ready && stamp_on(&mut tx)?.is_some();
     tx.commit()?;
-    Ok(ready)
+    Ok(intact)
 }
 fn stamp_on(db:&mut impl postgres::GenericClient)->Result<Option<String>>{
     let installed:bool=db.query_one("SELECT to_regprocedure('slr_native_replay.current_stamp()') IS NOT NULL",&[])?.get(0);
     if !installed{return Ok(None);}
-    let raw:Option<String>=db.query_one("SELECT slr_native_replay.current_stamp()",&[])?.get(0);
-    Ok(raw.map(|s|digest(s.as_bytes())))
+    let row=db.query_one("SELECT slr_native_replay.current_stamp(),current_setting('search_path'),
+        current_setting('TimeZone'),current_setting('DateStyle'),current_setting('extra_float_digits'),
+        current_setting('session_replication_role')",&[])?;
+    let raw:Option<String>=row.get(0);
+    Ok(raw.map(|s|digest(&serde_json::to_vec(&(s,row.get::<_,String>(1),row.get::<_,String>(2),
+        row.get::<_,String>(3),row.get::<_,String>(4),row.get::<_,String>(5))).expect("string tuple serializes"))))
 }
 fn stamp(url:&str)->Result<Option<String>>{
     let mut db=Client::connect(url,NoTls)?;
