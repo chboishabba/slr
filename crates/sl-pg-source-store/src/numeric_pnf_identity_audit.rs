@@ -1318,6 +1318,7 @@ pub struct NativeMentionBindingCampaign{
     pub original_policy_ref:&'static str,
     pub canonical_source_verified:bool,
     pub prefix_uncovered_nonwhitespace:usize,
+    pub prefix_uncovered_ranges:Vec<(usize,usize,usize)>,
     pub parser_token_count:usize,
     pub projected_nominal_span_count:usize,
     pub newly_materialized_span_objects:usize,
@@ -1427,6 +1428,15 @@ fn original_mention_binding_campaign(
     }
     let uncovered=chars.iter().take(covered.len()).zip(&covered)
         .filter(|(ch,seen)|!**seen&&!ch.is_whitespace()).count();
+    let mut prefix_uncovered_ranges=Vec::new();
+    let mut offset=0usize;
+    while offset<covered.len(){
+        if covered[offset]{offset+=1;continue;}
+        let a=offset;
+        while offset<covered.len()&&!covered[offset]{offset+=1;}
+        let n=chars[a..offset].iter().filter(|ch|!ch.is_whitespace()).count();
+        if n>0{prefix_uncovered_ranges.push((a,offset,n));}
+    }
     let spans=nominal_span_indices(&tokens);
     let mut support=exact_mention_support_index(tx,run_ref,doc)?;
     let noun:i64=tx.query_one("SELECT execution.ensure_semantic_symbol(14::smallint,'mention.noun')",&[])?.get(0);
@@ -1502,7 +1512,7 @@ fn original_mention_binding_campaign(
     }}
     Ok(NativeMentionBindingCampaign{
         original_policy_ref:"SensibLaw:f9c4670e:mention-licensing+binding-candidate-sets:v0_3",
-        canonical_source_verified:true,prefix_uncovered_nonwhitespace:uncovered,parser_token_count:tokens.len(),
+        canonical_source_verified:true,prefix_uncovered_nonwhitespace:uncovered,prefix_uncovered_ranges,parser_token_count:tokens.len(),
         projected_nominal_span_count:observations.len(),newly_materialized_span_objects:created,
         spans_without_exact_objects:observations.iter().filter(|r|r.exact_object_ids.is_empty()).count(),
         compatible_before_cap:compatible,compatible_deferred_by_cap:compatible.saturating_sub(64),
@@ -1728,6 +1738,10 @@ fn materialize_native_binding_bridge(
         "SELECT EXISTS(SELECT 1 FROM pnf.factor_anchor a WHERE a.document_ref=$1
           AND a.factor_revision_ref NOT LIKE 'factor-revision:native-binding:%'
           AND a.factor_revision_ref NOT LIKE 'factor-revision:native-binding-v2:%')
+          OR EXISTS(SELECT 1 FROM pnf.factor_anchor a WHERE a.document_ref=$1
+                    AND a.factor_revision_ref LIKE 'factor-revision:native-binding-v2:%'
+                    AND NOT EXISTS(SELECT 1 FROM execution.slr_native_binding_anchor_projection p
+                        WHERE p.factor_revision_ref=a.factor_revision_ref AND p.active))
           OR EXISTS(SELECT 1 FROM execution.slr_native_binding_anchor_projection
                     WHERE document_ref=$1 AND active AND run_ref<>$2)",
         &[&doc,&run_ref])?.get(0);
@@ -1805,8 +1819,23 @@ fn materialize_native_binding_bridge(
                 AND s.document_ref=$3 AND s.start_char=$7 AND s.end_char=$8
                 AND s.start_token=$9 AND s.end_token=$10 AND a.start_token=$9 AND a.end_token=$11)",
             &[&revision,&run_ref,&doc,&snapshot,&a.token_ids,&a.object_ids,&start,&end,&a.ordinal,&a.end_ordinal,&next])?.get(0);
-        if !valid{return Err(NativeNumericAuditError::ForeignSource);}
-        if focus_keys.contains(&a.key){references.push((factor,revision));}
+        let metadata:bool=tx.query_one("SELECT EXISTS(SELECT 1 FROM pnf.factor_anchor
+            WHERE factor_revision_ref=$1 AND sentence_index=$2 AND paragraph_index=$3 AND quotation_depth=$4
+              AND clause_ref IS NOT DISTINCT FROM $5 AND reporting_scope_ref IS NOT DISTINCT FROM $6
+              AND coordination_group_ref IS NOT DISTINCT FROM $7 AND pnf_kind_ref=$8
+              AND parser_pos_ref=$9 AND parser_dependency_ref=$10 AND morphology_sha256=$11)",
+            &[&revision,&a.sentence,&a.paragraph,&a.quotation,&a.clause,&a.reporting,&a.coordination,
+              &a.kind,&a.pos,&a.dependency,&morph])?.get(0);
+        let stored_morph=tx.query("SELECT feature_ref,value_ref FROM pnf.factor_morphology
+            WHERE factor_revision_ref=$1 ORDER BY feature_ref,value_ref",&[&revision])?
+            .iter().map(|r|(r.get::<_,String>(0),r.get::<_,String>(1))).collect::<BTreeSet<_>>();
+        if !valid||!metadata||stored_morph!=a.morphology.iter().cloned().collect::<BTreeSet<_>>(){
+            return Err(NativeNumericAuditError::ForeignSource);
+        }
+        if focus_keys.contains(&a.key){
+            persist_native_reference_alternatives(tx,&factor,&revision,a.kind=="semantic.argument.subject")?;
+            references.push((factor,revision));
+        }
     }
     let mut sets=Vec::new();
     for (factor,revision) in references{
@@ -1831,6 +1860,30 @@ fn materialize_native_binding_bridge(
         observed_document_order_verified:true,canonical_tokenizer_parity_paid:false,
         structural_relation_parity_paid:false,typed_coverage_paid:false,
     })
+}
+fn persist_native_reference_alternatives(
+    tx:&mut postgres::Transaction<'_>,factor:&str,revision:&str,subject:bool,
+)->Result<(),NativeNumericAuditError>{
+    let mut types=vec!["entity_reference","eventuality_reference","proposition_reference"];
+    if subject{types.push("expletive_realisation");}
+    for typ in types{
+        let alternative=format!("{factor}:{typ}");
+        let digest=Sha256::digest(format!("slr-native-reference-alternative:v2:{alternative}").as_bytes()).to_vec();
+        tx.execute("INSERT INTO algebra.alternative(alternative_ref,type_ref,authority_state_ref,alternative_sha256)
+            VALUES($1,'semantic.reference_candidate','candidate_only',$2) ON CONFLICT DO NOTHING",
+            &[&alternative,&digest])?;
+        tx.execute("INSERT INTO algebra.factor_revision_alternative(factor_revision_ref,alternative_ref,alternative_state_ref)
+            VALUES($1,$2,'alternative') ON CONFLICT DO NOTHING",&[&revision,&alternative])?;
+    }
+    let mut residuals=vec!["antecedent_unresolved","referential_type_unresolved"];
+    if subject{residuals.push("grammatical_subject_semantic_status_unresolved");}
+    for residual in residuals{
+        let key=format!("{revision}:residual:{residual}");
+        let digest=Sha256::digest(format!("slr-native-reference-residual:v2:{key}").as_bytes()).to_vec();
+        tx.execute("INSERT INTO algebra.residual(residual_ref,target_ref,residual_type_ref,residual_state_ref,residual_sha256)
+            VALUES($1,$2,$3,'open',$4) ON CONFLICT DO NOTHING",&[&key,&revision,&residual,&digest])?;
+    }
+    Ok(())
 }
 fn materialize_native_binding_set_v2(
     tx:&mut postgres::Transaction<'_>,snapshot:&str,doc:&str,factor:&str,revision:&str,typ:&str,
@@ -2857,6 +2910,21 @@ pub fn reuse_original_binding_and_identity_owners(
             }else{Vec::new()};
             // Do not use the known-bad v1 native chart. Genuine non-native
             // original factors remain visible through the historical owner.
+            let mut native_object_inverse=BTreeMap::<Vec<i64>,Vec<i64>>::new();
+            if same&&has_native_projection{
+                let inverse=tx.query("SELECT o.object_id,array_agg(DISTINCT t.token_id ORDER BY t.token_id)
+                    FROM execution.semantic_pnf_object o
+                    JOIN execution.semantic_pnf_region r ON r.region_id=o.region_id
+                    JOIN execution.semantic_pnf_object_token_support s ON s.object_id=o.object_id
+                    JOIN execution.semantic_parser_token t ON t.token_id=s.token_id
+                    WHERE r.run_ref=$1 AND r.document_ref=$2 AND r.region_kind=1 AND o.active
+                    GROUP BY o.object_id
+                    HAVING bool_and(t.run_ref=$1 AND t.document_ref=$2 AND t.representation_version=2)
+                    ORDER BY o.object_id",&[&numeric_run,doc])?;
+                for row in inverse{
+                    native_object_inverse.entry(row.get(1)).or_default().push(row.get(0));
+                }
+            }
             let mut rows=rows;
             rows.extend(tx.query(
                 "SELECT DISTINCT s.reference_factor_ref,s.reference_factor_revision_ref,
@@ -2945,17 +3013,7 @@ pub fn reuse_original_binding_and_identity_owners(
                                 &&actual.last().map(|r|r.get::<_,i64>(2))==Some(i64::from(b));
                             if typ=="entity_reference"{
                                 let mut sorted=projection_ids.clone();sorted.sort_unstable();
-                                objects=tx.query(
-                                    "SELECT o.object_id FROM execution.semantic_pnf_object o
-                                     JOIN execution.semantic_pnf_region r ON r.region_id=o.region_id
-                                     JOIN execution.semantic_pnf_object_token_support s ON s.object_id=o.object_id
-                                     JOIN execution.semantic_parser_token t ON t.token_id=s.token_id
-                                     WHERE r.run_ref=$1 AND r.document_ref=$2 AND r.region_kind=1 AND o.active
-                                     GROUP BY o.object_id
-                                     HAVING bool_and(t.run_ref=$1 AND t.document_ref=$2 AND t.representation_version=2)
-                                       AND array_agg(DISTINCT t.token_id ORDER BY t.token_id)=$3::bigint[]
-                                     ORDER BY o.object_id",&[&numeric_run,doc,&sorted])?
-                                    .iter().map(|r|r.get(0)).collect();
+                                objects=native_object_inverse.get(&sorted).cloned().unwrap_or_default();
                                 snapshot_objects.sort_unstable();snapshot_objects.dedup();
                                 native_inverse &= objects==snapshot_objects;
                             }
