@@ -1187,13 +1187,34 @@ pub struct NativeH6ValidityReceipt {
     pub currently_supported_atom_count:usize,
     pub stale_evidence_ids:Vec<i64>,
     pub stale_admissibility_event_ids:Vec<i64>,
+    pub current_stale_admissibility_event_ids:Vec<i64>,
+    pub original_proof_or_sufficiency_revalidation_required:bool,
     pub state_rows_changed:u64,
     pub current_signed_horizons:Vec<NativeCurrentSignedHorizon>,
     pub current_projection_exact:bool,
     pub original_consumer_authority_reconciled:bool,
 }
+fn ensure_native_h6_current_authority(tx:&mut postgres::Transaction<'_>,demand:i64)
+    ->Result<(),NativeNumericAuditError>{
+    let installed:bool=tx.query_one("SELECT to_regclass('execution.slr_native_h6_current_contract') IS NOT NULL",&[])?.get(0);
+    if !installed{
+        tx.query_one("SELECT pg_advisory_xact_lock(hashtext('slr-native-h6-current:v1'))",&[])?;
+        let ready:bool=tx.query_one("SELECT to_regclass('execution.slr_native_h6_current_contract') IS NOT NULL",&[])?.get(0);
+        if !ready{tx.batch_execute(include_str!("numeric_pnf_h6_current_authority.sql"))?;}
+    }
+    let intact:bool=tx.query_one("SELECT EXISTS(SELECT 1 FROM execution.slr_native_h6_current_contract WHERE contract_ref='slr-native-h6-current:v1')
+      AND position('slr_native_current_candidate_evidence_v1' in pg_get_viewdef('execution.semantic_pnf_candidate_evidence_horizon_v1'::regclass))>0
+      AND position('slr_native_current_candidate_evidence_v1' in pg_get_viewdef('execution.semantic_pnf_candidate_evidence_classification_v1'::regclass))>0
+      AND position('slr_native_current_candidate_evidence_v1' in pg_get_functiondef(
+         'execution.refresh_numeric_pnf_consumer_horizon_outcome(bigint,bigint,smallint,text,text,text)'::regprocedure))>0",&[])?.get(0);
+    if !intact{return Err(NativeNumericAuditError::AdmissionProbeInvariant);}
+    tx.execute("INSERT INTO execution.slr_native_h6_managed_demand(demand_id) VALUES($1) ON CONFLICT DO NOTHING",&[&demand])?;
+    Ok(())
+}
+
 fn reopen_native_h6_validity(tx:&mut postgres::Transaction<'_>,demand:i64)
     ->Result<NativeH6ValidityReceipt,NativeNumericAuditError>{
+    ensure_native_h6_current_authority(tx,demand)?;
     tx.batch_execute("CREATE TEMP TABLE IF NOT EXISTS slr_h6_validity_probe(singleton bool) ON COMMIT DROP;
         CREATE TABLE IF NOT EXISTS execution.slr_native_h6_validity_current (
           evidence_id bigint PRIMARY KEY REFERENCES execution.semantic_pnf_candidate_evidence(evidence_id) ON DELETE CASCADE,
@@ -1207,9 +1228,8 @@ fn reopen_native_h6_validity(tx:&mut postgres::Transaction<'_>,demand:i64)
           supported boolean NOT NULL,original_atom jsonb NOT NULL,
           PRIMARY KEY(evidence_id,revision)
         );")?;
-    tx.batch_execute(include_str!("numeric_pnf_h6_validity.sql"))?;
     let row=tx.query_one("WITH physical AS MATERIALIZED (
-        SELECT * FROM pg_temp.slr_current_m110_h6_atoms($1)
+        SELECT * FROM execution.slr_current_m110_h6_atoms($1)
       ), observed AS MATERIALIZED (
         SELECT e.evidence_id,e.demand_id,to_jsonb(e) AS atom,
           EXISTS(SELECT 1 FROM physical p WHERE p.demand_id=e.demand_id AND p.target_kind=e.target_kind
@@ -1248,7 +1268,7 @@ fn reopen_native_h6_validity(tx:&mut postgres::Transaction<'_>,demand:i64)
     // Same original m086 cumulative carrier with only physically withdrawn
     // m110 atoms omitted. Do not subtract an arbitrary score or refute a
     // candidate; all other evidence and neutral/negative atoms survive.
-    let current_signed_horizons=tx.query("WITH horizon(horizon) AS
+    let current_signed_horizons:Vec<NativeCurrentSignedHorizon>=tx.query("WITH horizon(horizon) AS
         (VALUES(3::smallint),(6::smallint),(9::smallint))
       SELECT u.target_kind,u.target_id,h.horizon,
           COALESCE(sum(e.signed_residual),0)::bigint,
@@ -1265,10 +1285,34 @@ fn reopen_native_h6_validity(tx:&mut postgres::Transaction<'_>,demand:i64)
           target_kind:r.get(0),target_id:r.get(1),horizon:r.get(2),
           signed_residual:r.get(3),phase:r.get(4),evidence_count:r.get(5),
       }).collect();
+    let projected=tx.query("SELECT target_kind,target_id,horizon,signed_residual,phase,evidence_count
+        FROM execution.semantic_pnf_candidate_evidence_horizon_v1 WHERE demand_id=$1 ORDER BY target_kind,target_id,horizon",
+        &[&demand])?;
+    if projected.len()!=current_signed_horizons.len() || projected.iter().zip(&current_signed_horizons).any(|(r,h)|
+        r.get::<_,i16>(0)!=h.target_kind||r.get::<_,i64>(1)!=h.target_id||r.get::<_,i16>(2)!=h.horizon
+        ||r.get::<_,i64>(3)!=h.signed_residual||r.get::<_,i16>(4)!=h.phase||r.get::<_,i64>(5)!=h.evidence_count){
+        return Err(NativeNumericAuditError::AdmissionProbeInvariant);
+    }
+    // Historical invalid atoms can be retained without blocking a current
+    // candidate-only outcome. A live admissibility event, closed-world proof,
+    // or sufficiency certificate referencing the old carrier needs its own
+    // original authority; do not issue a synthetic restoration/refutation.
+    let current_stale_events=tx.query("WITH latest AS (
+        SELECT DISTINCT ON(target_kind,target_id) event_id,evidence_id
+        FROM execution.semantic_pnf_candidate_admissibility_event WHERE demand_id=$1
+        ORDER BY target_kind,target_id,event_id DESC)
+      SELECT event_id FROM latest WHERE evidence_id=ANY($2::bigint[]) ORDER BY event_id",
+        &[&demand,&stale])?.iter().map(|r|r.get::<_,i64>(0)).collect::<Vec<_>>();
+    let proof_or_sufficiency= !stale.is_empty() && tx.query_one("SELECT
+        EXISTS(SELECT 1 FROM execution.semantic_pnf_frontier_resolution WHERE demand_id=$1 AND outcome_state=2)
+        OR EXISTS(SELECT 1 FROM execution.semantic_pnf_demand_open_world_state WHERE demand_id=$1 AND NOT outside_model_possible)
+        OR EXISTS(SELECT 1 FROM execution.semantic_pnf_consumer_sufficiency_current_v1 WHERE demand_id=$1 AND certificate_state=1)",
+        &[&demand])?.get::<_,bool>(0);
     Ok(NativeH6ValidityReceipt{
         historical_atom_count:historical as usize,currently_supported_atom_count:supported as usize,
-        original_consumer_authority_reconciled:stale.is_empty(),
+        original_consumer_authority_reconciled:current_stale_events.is_empty()&&!proof_or_sufficiency,
         stale_evidence_ids:stale,stale_admissibility_event_ids:stale_events,
+        current_stale_admissibility_event_ids:current_stale_events,original_proof_or_sufficiency_revalidation_required:proof_or_sufficiency,
         state_rows_changed:changed as u64,current_signed_horizons,current_projection_exact:true,
     })
 }
@@ -1354,12 +1398,22 @@ fn process_original_native_consumer_horizons(
     };
     let mut h6_validity=reopen_native_h6_validity(tx,demand)?;
     let nonmonotone=nonmonotone||!h6_validity.original_consumer_authority_reconciled;
+    // A physical H6 validity change can arise without parser input changes.
+    // Reopen the original consumer's H6 outcome (and downstream work) when
+    // H6 had already been requested; H3 still owns its own readiness.
+    if h6_validity.state_rows_changed>0 {
+        tx.execute("UPDATE execution.semantic_pnf_consumer_horizon_work_queue
+            SET work_state=1,completed_at=NULL WHERE demand_id=$1 AND consumer_ref=$2
+              AND query_ref=$3 AND policy_ref=$4 AND horizon IN(6,9) AND work_state<>1",
+            &[&demand,&consumer,query,policy])?;
+    }
     let h3_ready=ready(tx,3)?;
     let mut h3_processed=false;
     // H3 owner work is the already materialized bounded represented slice.
     // Nonmonotone support changes need original evidence withdrawal first;
     // m110's insert-only H6 cannot silently retire old positive evidence.
     if represented_slice_drained && !nonmonotone && h3_ready {
+        tx.query_one("SELECT execution.slr_refresh_native_preference($1,3::smallint)",&[&demand])?;
         tx.query_one("SELECT execution.advance_numeric_pnf_horizon_work_for_consumer($1,$2,3::smallint,$3,$4,$5)",
             &[&run,&doc,&consumer,query,policy])?;
         h3_processed=!ready(tx,3)?;
@@ -1376,6 +1430,8 @@ fn process_original_native_consumer_horizons(
             &[&run,&doc,&consumer,query,policy])?.get(0);
         h6_validity=reopen_native_h6_validity(tx,demand)?;
         if !h6_validity.original_consumer_authority_reconciled{return Err(NativeNumericAuditError::AdmissionProbeInvariant);}
+        tx.query_one("SELECT execution.slr_refresh_native_preference($1,6::smallint)",&[&demand])?;
+        tx.query_one("SELECT execution.slr_refresh_native_preference($1,9::smallint)",&[&demand])?;
         tx.query_one("SELECT execution.advance_numeric_pnf_horizon_work_for_consumer($1,$2,6::smallint,$3,$4,$5)",
             &[&run,&doc,&consumer,query,policy])?;
         h6_processed=!ready(tx,6)?;
