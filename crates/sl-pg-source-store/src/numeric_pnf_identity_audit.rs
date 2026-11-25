@@ -1142,7 +1142,7 @@ fn reopen_native_h6_validity(tx:&mut postgres::Transaction<'_>,demand:i64)
     ->Result<NativeH6ValidityReceipt,NativeNumericAuditError>{
     tx.batch_execute("CREATE TEMP TABLE IF NOT EXISTS slr_h6_validity_probe(singleton bool) ON COMMIT DROP;
         CREATE TABLE IF NOT EXISTS execution.slr_native_h6_validity_current (
-          evidence_id bigint PRIMARY KEY REFERENCES execution.semantic_pnf_candidate_evidence(evidence_id) ON DELETE RESTRICT,
+          evidence_id bigint PRIMARY KEY REFERENCES execution.semantic_pnf_candidate_evidence(evidence_id) ON DELETE CASCADE,
           demand_id bigint NOT NULL REFERENCES execution.semantic_pnf_demand(demand_id) ON DELETE CASCADE,
           supported boolean NOT NULL, revision bigint NOT NULL CHECK(revision>0)
         );
@@ -2086,7 +2086,8 @@ fn materialize_native_binding_bridge(
         tx.execute("INSERT INTO execution.slr_native_binding_anchor_projection
             (factor_revision_ref,run_ref,document_ref,snapshot_ref,span_ref,token_ids,object_ids,active,source_key)
             VALUES($1,$2,$3,$4,$5,$6,$7,true,$8) ON CONFLICT(factor_revision_ref) DO UPDATE
-            SET active=true,source_key=COALESCE(execution.slr_native_binding_anchor_projection.source_key,EXCLUDED.source_key)",
+            SET active=true,source_key=COALESCE(execution.slr_native_binding_anchor_projection.source_key,EXCLUDED.source_key)
+            WHERE NOT execution.slr_native_binding_anchor_projection.active OR execution.slr_native_binding_anchor_projection.source_key IS NULL",
             &[&revision,&run_ref,&doc,&snapshot,&span,&a.token_ids,&a.object_ids,&a.key])?;
         // Verify inverse on the stored projection, not just insertion count.
         let valid:bool=tx.query_one(
@@ -2218,7 +2219,8 @@ fn materialize_native_binding_set_v2(
         reference_factor_revision_ref,document_pnf_index_ref,accessibility_declaration_ref,
         compatibility_declaration_ref,referential_type_ref,build_key_sha256,build_state_ref)
         VALUES($1,$2,$3,$4,$5,$6,$7,$8,'completed')
-        ON CONFLICT(generator_build_ref) DO UPDATE SET build_state_ref='completed'",
+        ON CONFLICT(generator_build_ref) DO UPDATE SET build_state_ref='completed'
+        WHERE execution.binding_candidate_set_build.build_state_ref<>'completed'",
         &[&build,&set,&revision,&snapshot,&access,&compat,&typ,&suffix])?;
     let stored=tx.query("SELECT candidate_factor_ref,accessibility_path_ref FROM resolution.binding_candidate_member
         WHERE candidate_set_ref=$1 ORDER BY ordinal",&[&set])?
@@ -2912,6 +2914,42 @@ fn identity_input_frontier(tx:&mut postgres::Transaction<'_>,run_ref:&str,answer
           &[&run_ref,&answer.source_document_ref,&scope_ref,&event_ids])?.iter().map(|r|r.get(0)).collect();
     }
     Ok(NativeIdentityInputFrontier{scope_ref,event_ids,dirty_sentence_refs,checked_baseline,whole_scope})
+}
+
+/// Reuse only the checked execution baseline, not a previous semantic proof.
+//// No current identity/witness/Level-3 result is inferred from this receipt.
+#[derive(Debug,Clone,Serialize)]
+pub struct NativeIdentityExecutionReplay {
+    pub scope_ref:String,
+    pub input_events_pending:usize,
+    pub reference_baseline_present:bool,
+    pub support_revision:i64,
+    pub support_rows_reopened:usize,
+    pub source_support_scan_performed:bool,
+    pub parser_identity_refresh_invocations:usize,
+    pub current_authority_reused:bool,
+}
+fn try_native_identity_execution_replay(
+    tx:&mut postgres::Transaction<'_>,run:&str,answer:&NativeSourceLocalAnswer,
+)->Result<Option<NativeIdentityExecutionReplay>,NativeNumericAuditError>{
+    // Audit mode is the cold/reference acceptance campaign. Explicit replay
+    // can bypass that diagnostic only when the installed input journal is
+    // continuous and all visible input events have already been acknowledged.
+    if std::env::var("SLR_NATIVE_BOUNDED_IDENTITY_PROBE").as_deref()!=Ok("1")
+      ||std::env::var("SLR_NATIVE_IDENTITY_REPLAY_MODE").as_deref()!=Ok("1")
+      ||std::env::var("SLR_NATIVE_DOCUMENT_IDENTITY_PUBLISH").as_deref()==Ok("1"){
+        return Ok(None);
+    }
+    let f=identity_input_frontier(tx,run,answer)?;
+    if !f.checked_baseline||!f.event_ids.is_empty(){return Ok(None);}
+    let revision:i64=tx.query_one("SELECT COALESCE(max(revision),0) FROM execution.slr_native_identity_support_revision
+        WHERE scope_ref=$1",&[&f.scope_ref])?.get(0);
+    if revision<=0{return Ok(None);}
+    Ok(Some(NativeIdentityExecutionReplay{
+        scope_ref:f.scope_ref,input_events_pending:0,reference_baseline_present:true,support_revision:revision,
+        support_rows_reopened:0,source_support_scan_performed:false,parser_identity_refresh_invocations:0,
+        current_authority_reused:false,
+    }))
 }
 
 fn read_cached_identity_support(tx:&mut postgres::Transaction<'_>,scope:&str)
@@ -3746,7 +3784,15 @@ fn publish_checked_document_identity(
     let desired_overflow=read_overflow(&mut stage)?;
     stage.rollback()?;
     let delta=identity_evidence_delta(&before,&desired)?;
-    let targets=delta.affected_target_object_ids;
+    let mut targets=delta.affected_target_object_ids;
+    // Include previously unprocessed direct evidence and accepted stale
+    // provenance, even if the natural evidence row itself did not change.
+    targets.extend(tx.query("SELECT DISTINCT c.target_object_id FROM execution.semantic_pnf_identity_evidence_candidate c
+        WHERE c.run_id=$1 AND c.document_id=$2 AND ((c.evidence_state=1 AND c.candidate_count=1 AND c.witness_kind IN(2,4,6))
+        OR (c.evidence_state=4 AND EXISTS(SELECT 1 FROM execution.semantic_pnf_identity_evidence_witness p
+            JOIN execution.semantic_pnf_identity_witness_admission a ON a.witness_id=p.witness_id AND a.admission_state=2
+            WHERE p.candidate_id=c.candidate_id)))",&[&run,&doc])?.iter().map(|r|r.get::<_,i64>(0)));
+    targets.sort_unstable();targets.dedup();
     // No write on identical current evidence unless the complete reference
     // below discovers unpaid original admission/derivation work.
     let packet=serde_json::Value::Array(desired.iter().map(|k|serde_json::json!({
@@ -3995,6 +4041,7 @@ pub struct NativeNumericCandidateTransportReceipt {
     pub original_document_identity_observations:Vec<NativeNumericDocumentIdentityObservation>,
     pub original_parser_identity_producer:Option<OriginalParserIdentityProducerObservation>,
     pub parser_identity_refresh_invocations:usize,
+    pub identity_execution_replay:Option<NativeIdentityExecutionReplay>,
     pub lean_typed_evidence:Option<serde_json::Value>,
     pub source_partition_wake:NativePartitionWakeReceipt,
     pub document_identity_fibre:NativeNumericIdentityFibreProjection,
@@ -4429,16 +4476,18 @@ pub fn transport_original_numeric_candidates_for_source_answer_with_partition(
     // occurrence/morphology work is drained. This is still not typed coverage.
     let morphology_head_unobservable_count=structural_binding.observations.iter()
         .filter(|o|o.target_kind==1&&o.exact_head_token_id.is_none()).count();
-    let (original_parser_identity_producer,governed_identity_rollback_probe)=if remaining==0&&nominal_heads_remaining==0
-        &&candidates_without_morphology_observation==0
-        &&original_mention_binding_campaign.spans_without_exact_objects==0{
-        let (observed,governed)=probe_original_governed_identity(&mut tx,numeric_run_ref,&answer.source_document_ref,demand,answer)?;
-        (Some(observed),Some(governed))
-    }else{(None,None)};
     let represented_slice_drained=remaining==0&&nominal_heads_remaining==0
         &&candidates_without_morphology_observation==0
         &&original_mention_binding_campaign.spans_without_exact_objects==0
         &&original_mention_binding_campaign.prefix_uncovered_nonwhitespace==0;
+    let identity_execution_replay=if represented_slice_drained{
+        try_native_identity_execution_replay(&mut tx,numeric_run_ref,answer)?
+    }else{None};
+    let (original_parser_identity_producer,governed_identity_rollback_probe)=if represented_slice_drained
+        &&identity_execution_replay.is_none(){
+        let (observed,governed)=probe_original_governed_identity(&mut tx,numeric_run_ref,&answer.source_document_ref,demand,answer)?;
+        (Some(observed),Some(governed))
+    }else{(None,None)};
     let support_delta=original_parser_identity_producer.as_ref().and_then(|p|p.support_index.as_ref());
     let nonmonotone=support_delta.is_some_and(|p|p.withdrawn_rows>0||p.changed_rows>0&&p.hot_symbol_scope_changed);
     let inputs_changed=source_partition_wake.affected_queue_rows>0
@@ -4479,7 +4528,7 @@ pub fn transport_original_numeric_candidates_for_source_answer_with_partition(
         nominal_head_objects_inserted,nominal_head_token_supports_inserted,nominal_heads_remaining,original_h6_evidence_inserted,consumer_horizon_work,
         morphology_observations_inserted,candidates_without_morphology_observation,morphology_head_unobservable_count,
         original_horizon_observations,original_document_identity_observations,
-        original_parser_identity_producer,parser_identity_refresh_invocations,lean_typed_evidence,source_partition_wake,document_identity_fibre,original_cross_resource_needs,
+        original_parser_identity_producer,parser_identity_refresh_invocations,identity_execution_replay,lean_typed_evidence,source_partition_wake,document_identity_fibre,original_cross_resource_needs,
         structural_binding,native_binding_bridge,original_mention_binding_campaign,original_h9_readiness,governed_identity_rollback_probe,document_identity_publication,
     })
 }
