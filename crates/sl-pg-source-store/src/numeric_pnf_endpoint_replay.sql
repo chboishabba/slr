@@ -6,9 +6,10 @@ CREATE SCHEMA IF NOT EXISTS slr_native_replay;
 CREATE TABLE IF NOT EXISTS slr_native_replay.fence(
     singleton boolean PRIMARY KEY CHECK(singleton),
     instance_ref text NOT NULL,
-    generation bigint NOT NULL CHECK(generation>0)
+    generation bigint NOT NULL CHECK(generation>0),
+    last_catalog_snapshot text
 );
-INSERT INTO slr_native_replay.fence VALUES(true,
+INSERT INTO slr_native_replay.fence(singleton,instance_ref,generation) VALUES(true,
     md5(clock_timestamp()::text||random()::text||current_database()),1)
 ON CONFLICT DO NOTHING;
 CREATE TABLE IF NOT EXISTS slr_native_replay.relation_revision(
@@ -21,8 +22,8 @@ CREATE TABLE IF NOT EXISTS slr_native_replay.endpoint_receipt(
 );
 
 -- Actual changed transition rows, not statement counts or wall-clock times.
--- Equal UPDATE rows need not invalidate. Use row JSON text so nullable and
--- JSON-typed columns compare without assuming every SQL type has equality.
+-- Equal UPDATE rows need not invalidate. Use composite type output under binary collation so array bounds, nullable
+-- and JSON-typed columns compare without assuming every SQL type has equality.
 CREATE OR REPLACE FUNCTION slr_native_replay.capture_relation_change()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER
 SET search_path=pg_catalog,slr_native_replay AS $$
@@ -34,11 +35,11 @@ BEGIN
         SELECT EXISTS(SELECT 1 FROM slr_old_rows) INTO changed;
     ELSIF TG_OP='UPDATE' THEN
         SELECT EXISTS(
-            (SELECT row_to_json(o)::text FROM slr_old_rows o
-             EXCEPT ALL SELECT row_to_json(n)::text FROM slr_new_rows n)
+            (SELECT (o::text COLLATE "C") FROM slr_old_rows o
+             EXCEPT ALL SELECT (n::text COLLATE "C") FROM slr_new_rows n)
             UNION ALL
-            (SELECT row_to_json(n)::text FROM slr_new_rows n
-             EXCEPT ALL SELECT row_to_json(o)::text FROM slr_old_rows o)
+            (SELECT (n::text COLLATE "C") FROM slr_new_rows n
+             EXCEPT ALL SELECT (o::text COLLATE "C") FROM slr_old_rows o)
         ) INTO changed;
     ELSE
         changed:=true;
@@ -126,19 +127,15 @@ BEGIN
 END;
 $$;
 
--- Catalog and revision stamp is metadata only; it does not read parser
--- observations, candidate rows, source bytes or semantic factor payloads.
--- Include restart epoch for unlogged-relation truncation after crash.
-CREATE OR REPLACE FUNCTION slr_native_replay.current_stamp()
-RETURNS text LANGUAGE sql STABLE AS $$
-SELECT CASE WHEN slr_native_replay.fence_intact() THEN jsonb_build_object(
-    'instance',f.instance_ref,'generation',f.generation,'database',current_database(),
-    'server_version',current_setting('server_version_num'),
-    'postmaster',pg_postmaster_start_time(),
-    'tables',(SELECT jsonb_agg(jsonb_build_array(r.relation_oid,r.nspname,r.relname,r.relkind,r.relpersistence,v.revision)
-                    ORDER BY r.relation_oid)
-              FROM slr_native_replay.application_relations r
-              JOIN slr_native_replay.relation_revision v USING(relation_oid)),
+-- Catalog continuity is separate from DML versions. In particular,
+-- disabling a capture trigger, mutating, and enabling it again cannot
+-- silently return to the same stamp. Require the database DDL owner to
+-- support an event trigger; a normal unprivileged installation is denied
+-- rather than pretending that continuity is proven.
+CREATE OR REPLACE FUNCTION slr_native_replay.catalog_snapshot()
+RETURNS text LANGUAGE sql STABLE SET search_path=pg_catalog AS $$
+SELECT jsonb_build_object(
+    'tables',(SELECT jsonb_agg(to_jsonb(r) ORDER BY r.relation_oid) FROM slr_native_replay.application_relations r),
     'columns',(SELECT jsonb_agg(jsonb_build_array(a.attrelid,a.attnum,a.attname,a.atttypid,a.atttypmod,a.attnotnull,a.attgenerated,a.attidentity,
                       pg_get_expr(d.adbin,d.adrelid)) ORDER BY a.attrelid,a.attnum)
                FROM slr_native_replay.application_relations r JOIN pg_attribute a ON a.attrelid=r.relation_oid
@@ -146,16 +143,61 @@ SELECT CASE WHEN slr_native_replay.fence_intact() THEN jsonb_build_object(
                WHERE a.attnum>0 AND NOT a.attisdropped),
     'views',(SELECT jsonb_agg(jsonb_build_array(c.oid,n.nspname,c.relname,pg_get_viewdef(c.oid)) ORDER BY c.oid)
              FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
-             WHERE c.relkind='v' AND n.nspname NOT LIKE 'pg_%' AND n.nspname<>'information_schema'),
-    'functions',(SELECT jsonb_agg(jsonb_build_array(p.oid,n.nspname,pg_get_functiondef(p.oid)) ORDER BY p.oid)
+             WHERE c.relkind='v' AND n.nspname NOT LIKE 'pg_%' AND n.nspname NOT IN('information_schema','slr_native_replay')),
+    'functions',(SELECT jsonb_agg(jsonb_build_array(p.oid,n.nspname,p.proowner,p.proacl,pg_get_functiondef(p.oid)) ORDER BY p.oid)
                  FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
-                 WHERE p.prokind IN('f','p') AND n.nspname NOT LIKE 'pg_%' AND n.nspname<>'information_schema'),
+                 WHERE p.prokind IN('f','p') AND n.nspname NOT LIKE 'pg_%' AND n.nspname NOT IN('information_schema','slr_native_replay')),
     'triggers',(SELECT jsonb_agg(jsonb_build_array(t.oid,t.tgenabled,pg_get_triggerdef(t.oid)) ORDER BY t.oid)
                 FROM pg_trigger t JOIN slr_native_replay.application_relations r ON r.relation_oid=t.tgrelid),
     'constraints',(SELECT jsonb_agg(jsonb_build_array(c.oid,pg_get_constraintdef(c.oid)) ORDER BY c.oid)
                    FROM pg_constraint c JOIN slr_native_replay.application_relations r ON r.relation_oid=c.conrelid),
-    'user',current_user,'search_path',current_setting('search_path'),
-    'row_security',current_setting('row_security')
-)::text ELSE NULL END
+    'relation_definitions',(SELECT jsonb_agg(jsonb_build_array(c.oid,c.relfilenode,c.relowner,c.relacl,c.relrowsecurity,c.relforcerowsecurity,c.relispartition,
+                               CASE WHEN c.relispartition THEN pg_get_expr(c.relpartbound,c.oid) ELSE NULL END) ORDER BY c.oid)
+                             FROM pg_class c JOIN slr_native_replay.application_relations r ON r.relation_oid=c.oid),
+    'policies',(SELECT jsonb_agg(jsonb_build_array(p.oid,p.polname,p.polcmd,p.polpermissive,p.polroles,pg_get_expr(p.polqual,p.polrelid),
+                               pg_get_expr(p.polwithcheck,p.polrelid)) ORDER BY p.oid)
+                 FROM pg_policy p JOIN slr_native_replay.application_relations r ON r.relation_oid=p.polrelid),
+    'schemas',(SELECT jsonb_agg(jsonb_build_array(n.oid,n.nspname,n.nspowner,n.nspacl) ORDER BY n.oid)
+               FROM pg_namespace n WHERE n.nspname NOT LIKE 'pg_%' AND n.nspname NOT IN('information_schema','slr_native_replay')),
+    'roles',(SELECT jsonb_agg(jsonb_build_array(oid,rolname,rolsuper,rolinherit,rolbypassrls,rolconfig) ORDER BY oid) FROM pg_roles),
+    'memberships',(SELECT jsonb_agg(to_jsonb(m) ORDER BY m.roleid,m.member,m.grantor) FROM pg_auth_members)
+
+)::text;
+$$;
+CREATE OR REPLACE FUNCTION slr_native_replay.capture_catalog_change()
+RETURNS event_trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+DECLARE observed text;
+BEGIN
+    observed:=slr_native_replay.catalog_snapshot();
+    UPDATE slr_native_replay.fence SET generation=generation+1,last_catalog_snapshot=observed
+    WHERE singleton AND last_catalog_snapshot IS DISTINCT FROM observed;
+END;
+$$;
+CREATE EVENT TRIGGER slr_endpoint_replay_catalog_change ON ddl_command_end
+EXECUTE FUNCTION slr_native_replay.capture_catalog_change();
+ALTER EVENT TRIGGER slr_endpoint_replay_catalog_change ENABLE ALWAYS;
+UPDATE slr_native_replay.fence SET last_catalog_snapshot=slr_native_replay.catalog_snapshot() WHERE singleton;
+
+-- Catalog and revision stamp is metadata only; no application data scan.
+-- Requiring event trigger continuity also rejects silently altered DDL
+-- configuration. A superuser capable of altering the fence is trusted,
+-- just as the original database authority is trusted.
+CREATE OR REPLACE FUNCTION slr_native_replay.current_stamp()
+RETURNS text LANGUAGE sql STABLE SET search_path=pg_catalog AS $$
+SELECT CASE WHEN slr_native_replay.fence_intact()
+ AND EXISTS(SELECT 1 FROM pg_event_trigger e WHERE e.evtname='slr_endpoint_replay_catalog_change'
+    AND e.evtevent='ddl_command_end' AND e.evtenabled='A'
+    AND e.evtfoid='slr_native_replay.capture_catalog_change()'::regprocedure)
+ AND f.last_catalog_snapshot=slr_native_replay.catalog_snapshot()
+ THEN jsonb_build_object(
+    'instance',f.instance_ref,'generation',f.generation,'database',current_database(),
+    'server_version',current_setting('server_version_num'),'postmaster',pg_postmaster_start_time(),
+    'catalog',f.last_catalog_snapshot,
+    'tables',(SELECT jsonb_agg(jsonb_build_array(r.relation_oid,v.revision) ORDER BY r.relation_oid)
+              FROM slr_native_replay.application_relations r
+              JOIN slr_native_replay.relation_revision v USING(relation_oid)),
+    'user',current_user,'row_security',current_setting('row_security'),
+    'session_authorization',session_user
+ )::text ELSE NULL END
 FROM slr_native_replay.fence f WHERE f.singleton;
 $$;
