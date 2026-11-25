@@ -1745,8 +1745,9 @@ fn materialize_native_binding_bridge(
             run_ref text NOT NULL,document_ref text NOT NULL,snapshot_ref text NOT NULL,
             span_ref text NOT NULL REFERENCES corpus.span(span_ref),
             token_ids bigint[] NOT NULL,object_ids bigint[] NOT NULL,
-            active boolean NOT NULL
+            active boolean NOT NULL,source_key text
          );
+         ALTER TABLE execution.slr_native_binding_anchor_projection ADD COLUMN IF NOT EXISTS source_key text;
          CREATE INDEX IF NOT EXISTS slr_native_binding_projection_doc_idx
             ON execution.slr_native_binding_anchor_projection(document_ref,active,snapshot_ref);")?;
     // A genuine legacy producer's index is not ours to retire or mix with a
@@ -1825,9 +1826,10 @@ fn materialize_native_binding_bridge(
                 VALUES($1,$2,$3) ON CONFLICT DO NOTHING",&[&revision,feature,value])?;
         }
         tx.execute("INSERT INTO execution.slr_native_binding_anchor_projection
-            (factor_revision_ref,run_ref,document_ref,snapshot_ref,span_ref,token_ids,object_ids,active)
-            VALUES($1,$2,$3,$4,$5,$6,$7,true) ON CONFLICT(factor_revision_ref) DO UPDATE SET active=true",
-            &[&revision,&run_ref,&doc,&snapshot,&span,&a.token_ids,&a.object_ids])?;
+            (factor_revision_ref,run_ref,document_ref,snapshot_ref,span_ref,token_ids,object_ids,active,source_key)
+            VALUES($1,$2,$3,$4,$5,$6,$7,true,$8) ON CONFLICT(factor_revision_ref) DO UPDATE
+            SET active=true,source_key=COALESCE(execution.slr_native_binding_anchor_projection.source_key,EXCLUDED.source_key)",
+            &[&revision,&run_ref,&doc,&snapshot,&span,&a.token_ids,&a.object_ids,&a.key])?;
         // Verify inverse on the stored projection, not just insertion count.
         let valid:bool=tx.query_one(
             "SELECT EXISTS(SELECT 1 FROM execution.slr_native_binding_anchor_projection p
@@ -1836,8 +1838,8 @@ fn materialize_native_binding_bridge(
               WHERE p.factor_revision_ref=$1 AND p.run_ref=$2 AND p.document_ref=$3
                 AND p.snapshot_ref=$4 AND p.active AND p.token_ids=$5 AND p.object_ids=$6
                 AND s.document_ref=$3 AND s.start_char=$7 AND s.end_char=$8
-                AND s.start_token=$9 AND s.end_token=$10 AND a.start_token=$9 AND a.end_token=$11)",
-            &[&revision,&run_ref,&doc,&snapshot,&a.token_ids,&a.object_ids,&start,&end,&a.ordinal,&a.end_ordinal,&next])?.get(0);
+                AND s.start_token=$9 AND s.end_token=$10 AND a.start_token=$9 AND a.end_token=$11 AND p.source_key=$12)",
+            &[&revision,&run_ref,&doc,&snapshot,&a.token_ids,&a.object_ids,&start,&end,&a.ordinal,&a.end_ordinal,&next,&a.key])?.get(0);
         let metadata:bool=tx.query_one("SELECT EXISTS(SELECT 1 FROM pnf.factor_anchor
             WHERE factor_revision_ref=$1 AND sentence_index=$2 AND paragraph_index=$3 AND quotation_depth=$4
               AND clause_ref IS NOT DISTINCT FROM $5 AND reporting_scope_ref IS NOT DISTINCT FROM $6
@@ -2219,6 +2221,12 @@ fn projected_predicate_relations(tokens:&[NativeRelationToken])->Vec<ProjectedRe
     out
 }
 #[derive(Debug,Clone,Serialize)]
+pub struct NativeTypedRelationProofBridge{
+    pub source_relation_ref:String,pub numeric_factor_id:i64,pub exact_source_token_ids:Vec<i64>,
+    pub indexed_factor_revision_refs:Vec<String>,pub indexed_support_matches:bool,
+    pub focus_argument_roles:Vec<&'static str>,pub level_three_derivation_refs:Vec<String>,
+}
+#[derive(Debug,Clone,Serialize)]
 pub struct NativeProjectedRelationProbe{
     pub original_producer_refs:Vec<&'static str>,
     pub source_parser_tokens:usize,
@@ -2227,6 +2235,8 @@ pub struct NativeProjectedRelationProbe{
     pub relation_budget_deferred:usize,
     pub projected_factor_ids:Vec<i64>,
     pub projected_focus_subject_factor_ids:Vec<i64>,
+    pub typed_relation_proof_bridge:Vec<NativeTypedRelationProofBridge>,
+    pub typed_relation_index_members_not_projected:Vec<String>,
     pub focus_reference_alternatives:Vec<&'static str>,
     pub original_direct_substitutions:i64,
     pub original_supported_substitutions:i64,
@@ -2296,7 +2306,14 @@ fn projected_relation_probe(
     let compositions=relations.len()-predicates;
     // First preserve the consumer's actual source predicate, then canonical
     // document order. The bound is execution only, never semantic exclusion.
-    relations.sort_by_key(|r|(!r.roles.iter().any(|(role,id)|*role=="subject"&&focus_ids.contains(id)),r.region,r.head_token_id,r.relation_type,r.roles.clone()));
+    let focus_start=focus_ids.iter().filter_map(|id|by_id.get(id).map(|t|t.start)).min()
+        .ok_or(NativeNumericAuditError::SourcePolicy)?;
+    // Focus roles first, then the actual preceding source chart, not
+    // database allocation/region IDs. Remaining budget can replay other
+    // previously accepted source relations.
+    relations.sort_by_key(|r|(!r.roles.iter().any(|(_,id)|focus_ids.contains(id)),
+        r.roles.iter().map(|(_,id)|by_id[id].start).min().unwrap_or(i64::MAX)>=focus_start,
+        by_id[&r.head_token_id].start,r.relation_type,r.roles.clone()));
     let deferred=relations.len().saturating_sub(256);
     relations.truncate(256);
     let mut probe=tx.transaction()?;
@@ -2306,7 +2323,9 @@ fn projected_relation_probe(
     let mut role_ids=BTreeMap::new();
     let mut role_objects=BTreeMap::<i64,i64>::new();
     let mut factor_ids=Vec::new();let mut focus_factor_ids=Vec::new();
+    let mut typed_relation_proof_bridge=Vec::new();
     for relation in relations{
+        let source_relation_ref=format!("native-projected-relation:{}",bridge_digest(&(run_ref,document_ref,&relation))?);
         let mut hash=Sha256::new();hash.update(b"slr:projected-source-relation-probe:v1");
         hash.update(relation.region.to_be_bytes());hash.update(relation.relation_type.as_bytes());
         for (role,id) in &relation.roles{
@@ -2326,6 +2345,20 @@ fn projected_relation_probe(
             focus_factor_ids.push(factor);
         }
         let support=relation.roles.iter().map(|(_,id)|*id).collect::<BTreeSet<_>>();
+        let mut source_order=support.iter().copied().collect::<Vec<_>>();
+        source_order.sort_by_key(|id|(by_id[id].start,by_id[id].end,*id));
+        let links=probe.query("SELECT factor_revision_ref,token_ids
+            FROM execution.slr_native_binding_anchor_projection
+            WHERE run_ref=$1 AND document_ref=$2 AND active AND source_key=$3
+            ORDER BY factor_revision_ref",&[&run_ref,&document_ref,&source_relation_ref])?;
+        let matching=!links.is_empty()&&links.iter().all(|r|r.get::<_,Vec<i64>>(1)==source_order);
+        let revisions=links.iter().map(|r|r.get::<_,String>(0)).collect::<Vec<_>>();
+        typed_relation_proof_bridge.push(NativeTypedRelationProofBridge{
+            source_relation_ref,numeric_factor_id:factor,exact_source_token_ids:source_order,
+            indexed_factor_revision_refs:revisions,indexed_support_matches:matching,
+            focus_argument_roles:relation.roles.iter().filter(|(_,id)|focus_ids.contains(id)).map(|(role,_)|*role).collect(),
+            level_three_derivation_refs:Vec::new(),
+        });
         for (ordinal,id) in support.iter().enumerate(){
             probe.execute("INSERT INTO execution.semantic_pnf_factor_token_support(factor_id,token_id,ordinal)
                 VALUES($1,$2,$3)",&[&factor,id,&i16::try_from(ordinal).map_err(|_|NativeNumericAuditError::ForeignSource)?])?;
@@ -2361,6 +2394,22 @@ fn projected_relation_probe(
     let supported:i64=probe.query_one("SELECT execution.refresh_numeric_pnf_supported_identity_substitution_derivations($1,$2)",&[&run,&doc])?.get(0);
     let after_three=level_three_snapshot(&mut probe,run,doc)?;
     let new_refs=after_three.keys().filter(|k|!before_three.contains_key(*k)).cloned().collect();
+    let mut projected_refs=BTreeSet::new();
+    for relation in &mut typed_relation_proof_bridge{
+        projected_refs.extend(relation.indexed_factor_revision_refs.iter().cloned());
+        relation.level_three_derivation_refs=probe.query(
+            "SELECT DISTINCT d.derivation_ref FROM execution.semantic_pnf_factor_derivation d
+             JOIN execution.semantic_pnf_factor_derivation_premise p ON p.derivation_id=d.derivation_id
+             WHERE p.factor_id=$1 AND d.epistemic_level=3 ORDER BY d.derivation_ref",
+            &[&relation.numeric_factor_id])?.iter().map(|r|r.get::<_,String>(0)).collect();
+    }
+    let indexed=probe.query("SELECT p.factor_revision_ref FROM execution.slr_native_binding_anchor_projection p
+        JOIN pnf.factor_anchor a ON a.factor_revision_ref=p.factor_revision_ref
+        WHERE p.run_ref=$1 AND p.document_ref=$2 AND p.active
+          AND a.pnf_kind_ref IN ('semantic.eventuality','semantic.embedded_proposition')
+        ORDER BY p.factor_revision_ref",&[&run_ref,&document_ref])?;
+    let typed_relation_index_members_not_projected=indexed.iter().map(|r|r.get::<_,String>(0))
+        .filter(|r|!projected_refs.contains(r)).collect::<Vec<_>>();
     let withdrawal_probes=probe_parser_witness_withdrawals(&mut probe,run,doc,classes)?;
     let preserved=projected_one==level_one_snapshot(&mut probe,run,doc)?;
     probe.rollback()?;
@@ -2376,6 +2425,7 @@ fn projected_relation_probe(
         focus_reference_alternatives:if focus_factor_ids.is_empty(){vec![]}else{
             vec!["entity_reference","eventuality_reference","proposition_reference","expletive_realisation"]},
         projected_focus_subject_factor_ids:focus_factor_ids,
+        typed_relation_proof_bridge,typed_relation_index_members_not_projected,
         original_direct_substitutions:direct,original_supported_substitutions:supported,new_level_three_refs:new_refs,
         nonvacuous_withdrawal_count:withdrawal_probes.iter().filter(|p|p.nonvacuous_dependency).count(),
         withdrawal_probes,projected_level_one_preserved:preserved,outer_level_one_restored:one_restored,

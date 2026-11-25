@@ -314,6 +314,10 @@ pub struct NativePrefixRecoveryReceipt{
     pub already_succeeded:usize,pub missing_region_refs:Vec<String>,
     pub queued_region_refs:Vec<String>,pub residual_region_refs:Vec<String>,
     pub uncovered_source_intervals:Vec<(usize,usize,usize)>,
+    pub uncovered_region_intervals:Vec<(usize,usize,usize)>,
+    pub original_parser_token_prefix_covered:bool,
+    pub source_region_prefix_covered:bool,
+    pub overlapping_region_residuals:Vec<String>,
     pub newly_enqueued_or_pending:usize,pub reused_products:usize,
     pub parser_scope_ready:bool,pub writes_database:bool,
 }
@@ -354,13 +358,11 @@ pub fn prepare_native_prefix_recovery(
         creates_semantic_authority:false,applicability_promoted:false,claim_truth_promoted:false};
     let focus_i64=i64::try_from(focus).map_err(|e|e.to_string())?;
     let regions=db.query("SELECT DISTINCT r.region_ref,r.start_char,r.end_char
-        FROM ingest.long_document_region r JOIN corpus.source_statement s
-          ON s.source_revision_ref=r.source_revision_ref AND s.exact_span_ref=r.region_ref AND s.document_ref=$3
+        FROM ingest.long_document_region r
         WHERE r.source_revision_ref=$1 AND r.source_ref=$2 AND r.region_kind='sentence'
-          AND r.start_char<$4 AND r.candidate_only AND NOT r.creates_semantic_authority AND NOT r.claim_truth_promoted
-          AND s.candidate_only AND NOT s.creates_semantic_authority AND NOT s.applicability_promoted AND NOT s.claim_truth_promoted
+          AND r.start_char<$3 AND r.candidate_only AND NOT r.creates_semantic_authority AND NOT r.claim_truth_promoted
         ORDER BY r.start_char,r.end_char,r.region_ref",
-        &[&review.source_revision_ref,&review.original_source_ref,&review.document_ref,&focus_i64]).map_err(|e|e.to_string())?;
+        &[&review.source_revision_ref,&review.original_source_ref,&focus_i64]).map_err(|e|e.to_string())?;
     let jobs=db.query("SELECT region_ref,region_start_char,region_end_char,status,source_revision_ref,
         candidate_only,creates_semantic_authority,applicability_promoted,claim_truth_promoted
         FROM ingest.parser_job WHERE parser_run_ref=$1 ORDER BY region_start_char,region_end_char",
@@ -376,6 +378,7 @@ pub fn prepare_native_prefix_recovery(
         existing.insert(j.get::<_,String>(0),(a,b,j.get::<_,String>(3)));
     }
     let mut missing=Vec::new();let mut queued=Vec::new();let mut residual=Vec::new();
+    let mut overlapping_region_residuals=Vec::new();
     let mut succeeded=0;let mut covered=vec![false;stop];let mut prior=0i64;
     for region in &regions{
         let key:String=region.get(0);let a:i64=region.get(1);let b:i64=region.get(2);
@@ -394,10 +397,19 @@ pub fn prepare_native_prefix_recovery(
             None=>{
                 // Never add a sentence overlapping a larger pre-existing job.
                 // Such an interval must be recovered from that job's own tape.
-                if existing.values().any(|(x,y,_)|a<*y&&*x<b){
-                    return Err(format!("prefix region overlaps a different original parser job: {key}"));
+                if let Some((owner,(x,y,state)))=existing.iter().find(|(_, (x,y,_))|*x<=a&&*y>=b){
+                    match state.as_str(){
+                        "succeeded"=>{succeeded+=1;covered[a as usize..(b as usize).min(stop)].fill(true);},
+                        "queued"|"leased"=>queued.push(owner.clone()),
+                        "residual"=>residual.push(owner.clone()),
+                        _=>return Err("unknown containing job state".into()),
+                    }
+                    let _=(x,y);
+                }else if existing.values().any(|(x,y,_)|a<*y&&*x<b){
+                    overlapping_region_residuals.push(key);
+                }else{
+                    missing.push(ParserRegionJobSpec{region_ref:key,start_char:a as u64,end_char:b as u64});
                 }
-                missing.push(ParserRegionJobSpec{region_ref:key,start_char:a as u64,end_char:b as u64});
             }
         }
     }
@@ -414,26 +426,47 @@ pub fn prepare_native_prefix_recovery(
         }
         out
     };
+    queued.sort();queued.dedup();residual.sort();residual.dedup();
+    // The reused worker drains this parser run. Do not accidentally release
+    // an unrelated pending corpus job through a prefix-only campaign.
+    if existing.iter().any(|(key,(_,_,state))|matches!(state.as_str(),"queued"|"leased")&&!queued.contains(key)){
+        return Err("original parser run contains pending work outside the prefix scope".into());
+    }
+    let mut token_covered=vec![false;stop];
+    let token_rows=db.query("SELECT t.start_char,t.end_char,t.surface FROM ingest.parser_token t
+        JOIN ingest.parser_job j ON j.compilation_key=t.compilation_key
+        WHERE j.parser_run_ref=$1 AND j.status='succeeded' AND t.start_char<$2
+        ORDER BY t.start_char,t.end_char,t.token_ordinal",&[&parser_run,&focus_i64]).map_err(|e|e.to_string())?;
+    for t in token_rows{
+        let a=usize::try_from(t.get::<_,i64>(0)).map_err(|e|e.to_string())?;
+        let b=usize::try_from(t.get::<_,i64>(1)).map_err(|e|e.to_string())?;
+        if a>=b||b>chars.len()||chars[a..b].iter().collect::<String>()!=t.get::<_,String>(2)
+            ||token_covered[a..b.min(stop)].iter().any(|x|*x){
+            return Err("original prefix parser token coordinate mismatch".into());
+        }
+        token_covered[a..b.min(stop)].fill(true);
+    }
     let mut enqueued=0;let mut reused=0;
     if commit&&!missing.is_empty(){
-        // Reopen the same deterministic parser run. Original success rows
-        // remain immutable; only the run's completion status is reopened.
-        db.execute("UPDATE ingest.parser_run SET status='active',completed_at=NULL
-            WHERE parser_run_ref=$1 AND source_revision_ref=$2",
-            &[&parser_run,&review.source_revision_ref]).map_err(|e|e.to_string())?;
         let e=enqueue_parser_regions_with_content_reuse(config,&receipt,&missing,text).map_err(|e|e.to_string())?;
         enqueued=e.queued_new_job_count;reused=e.reused_job_count();
     }
-    // The readiness receipt is deliberately the PRE-enqueue scope; a fresh
-    // read after the parser-only worker is required before numeric publication.
-    let uncovered=gaps(&covered);
+    // Pre-enqueue readback, deliberately separate region scope and actual
+    // non-whitespace token coverage. A source interval without an original
+    // sentence owner is an explicit residual, not permission to fabricate it.
+    let uncovered=gaps(&token_covered);
+    let uncovered_regions=gaps(&covered);
     Ok(NativePrefixRecoveryReceipt{
         source_revision_ref:review.source_revision_ref,parser_run_ref:parser_run.into(),source_sha256:sha,
         focus_start_char:focus,original_prefix_regions:regions.len(),already_succeeded:succeeded,
         missing_region_refs:missing.iter().map(|r|r.region_ref.clone()).collect(),
         queued_region_refs:queued.clone(),residual_region_refs:residual.clone(),
-        uncovered_source_intervals:uncovered.clone(),newly_enqueued_or_pending:enqueued+queued.len(),
-        reused_products:reused,parser_scope_ready:missing.is_empty()&&queued.is_empty()&&residual.is_empty()&&uncovered.is_empty(),
+        original_parser_token_prefix_covered:uncovered.is_empty(),
+        source_region_prefix_covered:uncovered_regions.is_empty(),
+        uncovered_source_intervals:uncovered,uncovered_region_intervals:uncovered_regions,
+        overlapping_region_residuals:overlapping_region_residuals.clone(),
+        newly_enqueued_or_pending:enqueued+queued.len(),
+        reused_products:reused,parser_scope_ready:missing.is_empty()&&queued.is_empty()&&residual.is_empty()&&overlapping_region_residuals.is_empty(),
         writes_database:commit&&!missing.is_empty(),
     })
 }

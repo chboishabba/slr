@@ -775,6 +775,13 @@ pub fn enqueue_parser_regions_with_content_reuse(
         }
     }
 
+    // Adding source regions changes completion scope, never parser identity.
+    // Reopen in the same transaction as the original content-reuse writes.
+    if queued_new_job_count>0||cross_revision_reused_job_count>0{
+        tx.execute("UPDATE ingest.parser_run SET status='active',completed_at=NULL
+            WHERE parser_run_ref=$1 AND source_revision_ref=$2",
+            &[&run.parser_run_ref,&run.source_revision_ref])?;
+    }
     tx.commit()?;
     Ok(ParserEnqueueReceipt {
         semantic_region_count: regions.len(),
