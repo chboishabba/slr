@@ -214,4 +214,77 @@ BEGIN
 END;
 $slr_noop_test$;
 
+-- Actual admitted witness fibres only: do not insert a synthetic witness
+-- or close the open world to make this test nonvacuous. An absent focus
+-- witness is reported as zero, never as live identity acceptance.
+DO $slr_l3_test$
+DECLARE d bigint := current_setting('slr.test_demand')::bigint;
+        run_value bigint;
+        doc_value bigint;
+        before_admissions jsonb;
+        after_admissions jsonb;
+        blocked_groups bigint;
+        blocked_slots bigint;
+        removed_l3 bigint;
+BEGIN
+    SELECT r.run_id,r.document_id INTO STRICT run_value,doc_value
+    FROM execution.semantic_pnf_demand demand
+    JOIN execution.semantic_pnf_region r ON r.region_id=demand.source_region_id
+    WHERE demand.demand_id=d;
+
+    DELETE FROM execution.slr_native_h3_authority_debt WHERE demand_id=d;
+    CREATE TEMP TABLE slr_l3_before ON COMMIT DROP AS
+    SELECT x.derivation_id,x.authority_class,p.factor_id,x.rule_ref,x.epistemic_level
+    FROM execution.semantic_pnf_factor_derivation x
+    JOIN execution.semantic_pnf_factor_derivation_premise p ON p.derivation_id=x.derivation_id AND p.premise_ordinal=0
+    JOIN execution.semantic_pnf_factor f ON f.factor_id=p.factor_id
+    JOIN execution.semantic_pnf_region r ON r.region_id=f.region_id
+    WHERE r.run_id=run_value AND r.document_id=doc_value;
+    SELECT jsonb_agg(to_jsonb(a) ORDER BY a.witness_id) INTO before_admissions
+    FROM execution.semantic_pnf_identity_witness_admission a
+    JOIN execution.semantic_pnf_identity_witness w USING(witness_id)
+    JOIN execution.semantic_pnf_object o ON o.object_id=w.source_object_id
+    JOIN execution.semantic_pnf_region r ON r.region_id=o.region_id
+    WHERE r.run_id=run_value AND r.document_id=doc_value;
+
+    INSERT INTO execution.slr_native_h3_authority_debt(demand_id) VALUES(d);
+    SELECT count(*) INTO blocked_groups FROM execution.slr_native_blocked_identity_fibre_v1 WHERE demand_id=d;
+    SELECT count(*) INTO blocked_slots FROM execution.slr_native_blocked_identity_slot_v1 WHERE demand_id=d;
+    IF EXISTS(SELECT 1 FROM execution.slr_native_blocked_identity_fibre_v1 b
+        JOIN execution.semantic_pnf_identity_projection p USING(source_object_id,authority_class)
+        WHERE b.demand_id=d)
+       OR EXISTS(SELECT 1 FROM execution.slr_native_blocked_identity_slot_v1 b
+        JOIN execution.semantic_pnf_factor_identity_support_unique_v1 p USING(factor_id,slot_ordinal,authority_class)
+        WHERE b.demand_id=d) THEN
+        RAISE EXCEPTION 'blocked identity or shared-token fibre still projects';
+    END IF;
+    -- Compare every prior derivation ID to the exact reverse cone.
+    IF EXISTS(SELECT 1 FROM slr_l3_before old
+      WHERE (NOT EXISTS(SELECT 1 FROM execution.semantic_pnf_factor_derivation current_row
+                          WHERE current_row.derivation_id=old.derivation_id))
+      IS DISTINCT FROM
+        (old.epistemic_level=3 AND old.rule_ref IN('identity-substitution:v1','identity-supported-substitution:v1')
+         AND EXISTS(SELECT 1 FROM execution.slr_native_blocked_identity_slot_v1 b
+            WHERE b.demand_id=d AND b.factor_id=old.factor_id AND b.authority_class=old.authority_class)))
+    THEN RAISE EXCEPTION 'Level-3 retirement was not the exact reverse cone'; END IF;
+
+    SELECT jsonb_agg(to_jsonb(a) ORDER BY a.witness_id) INTO after_admissions
+    FROM execution.semantic_pnf_identity_witness_admission a
+    JOIN execution.semantic_pnf_identity_witness w USING(witness_id)
+    JOIN execution.semantic_pnf_object o ON o.object_id=w.source_object_id
+    JOIN execution.semantic_pnf_region r ON r.region_id=o.region_id
+    WHERE r.run_id=run_value AND r.document_id=doc_value;
+    IF before_admissions IS DISTINCT FROM after_admissions THEN
+        RAISE EXCEPTION 'execution suspension modified original admission authority';
+    END IF;
+    SELECT count(*) INTO removed_l3 FROM slr_l3_before old
+    WHERE NOT EXISTS(SELECT 1 FROM execution.semantic_pnf_factor_derivation x WHERE x.derivation_id=old.derivation_id);
+    IF execution.slr_suspend_native_identity_derivations(ARRAY[d])<>0 THEN
+        RAISE EXCEPTION 'repeat Level-3 suspension was not a no-op';
+    END IF;
+    RAISE NOTICE 'actual blocked identity groups %, slots %, retired L3 %; zero counts do not pay live identity acceptance',
+        blocked_groups,blocked_slots,removed_l3;
+END;
+$slr_l3_test$;
+
 ROLLBACK;
