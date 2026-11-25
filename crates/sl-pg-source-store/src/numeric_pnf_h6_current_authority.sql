@@ -42,6 +42,53 @@ CREATE TABLE IF NOT EXISTS execution.slr_native_h3_authority_debt(
     first_observed_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Demand-wide proof/sufficiency authority is not consumer-local. Remove
+-- only rebuildable authority-bearing outcome projections and reopen their
+-- exact queue coordinates. Preserve original proof, certificate, evidence,
+-- admission and validity history. Candidate-only rows retain sparse wake
+-- semantics; unrelated demands are untouched.
+CREATE OR REPLACE FUNCTION execution.slr_suspend_native_debt_outcomes(selected_demands bigint[])
+RETURNS bigint LANGUAGE plpgsql AS $slr_suspend$
+DECLARE retired bigint;
+BEGIN
+    WITH affected AS MATERIALIZED (
+        SELECT o.demand_id,o.consumer_ref,o.query_ref,o.policy_ref,o.horizon
+        FROM execution.semantic_pnf_consumer_horizon_outcome o
+        JOIN execution.slr_native_h3_authority_debt d USING(demand_id)
+        WHERE o.demand_id=ANY(selected_demands)
+          AND (o.proof_unique OR o.consumer_sufficient OR o.outcome_state IN(3,4))
+    ), requeued AS (
+        INSERT INTO execution.semantic_pnf_consumer_horizon_work_queue AS q
+            (demand_id,consumer_ref,query_ref,policy_ref,horizon,work_state,completed_at)
+        SELECT demand_id,consumer_ref,query_ref,policy_ref,horizon,1::smallint,NULL FROM affected
+        ON CONFLICT(demand_id,consumer_ref,query_ref,policy_ref,horizon)
+        DO UPDATE SET work_state=1,completed_at=NULL
+        WHERE q.work_state<>1 OR q.completed_at IS NOT NULL
+        RETURNING demand_id
+    )
+    DELETE FROM execution.semantic_pnf_consumer_horizon_outcome o
+    USING affected a
+    WHERE (o.demand_id,o.consumer_ref,o.query_ref,o.policy_ref,o.horizon)
+        =(a.demand_id,a.consumer_ref,a.query_ref,a.policy_ref,a.horizon);
+    GET DIAGNOSTICS retired=ROW_COUNT;
+    RETURN retired;
+END;
+$slr_suspend$;
+
+CREATE OR REPLACE FUNCTION execution.slr_suspend_native_authority_on_debt()
+RETURNS trigger LANGUAGE plpgsql AS $slr_debt$
+BEGIN
+    PERFORM execution.slr_suspend_native_debt_outcomes(
+      ARRAY(SELECT demand_id FROM inserted_debt));
+    RETURN NULL;
+END;
+$slr_debt$;
+DROP TRIGGER IF EXISTS slr_native_authority_debt_suspend ON execution.slr_native_h3_authority_debt;
+CREATE TRIGGER slr_native_authority_debt_suspend
+AFTER INSERT ON execution.slr_native_h3_authority_debt
+REFERENCING NEW TABLE AS inserted_debt
+FOR EACH STATEMENT EXECUTE FUNCTION execution.slr_suspend_native_authority_on_debt();
+
 -- Reuse original m094/m139 reverse-dependency and consumer work queue.
 -- Like m163, consume only the statement-local inserted delta. Initial
 -- supported observation is not a validity change (m139 owns insertion).
@@ -574,3 +621,9 @@ ON CONFLICT DO NOTHING;
 INSERT INTO execution.slr_native_current_authority_contract VALUES('slr-native-current-authority:v4') ON CONFLICT DO NOTHING;
 INSERT INTO execution.slr_native_current_authority_contract VALUES('slr-native-current-authority:v5') ON CONFLICT DO NOTHING;
 INSERT INTO execution.slr_native_current_authority_contract VALUES('slr-native-current-authority:v6') ON CONFLICT DO NOTHING;
+-- Repair stale derived projections from earlier versions only once.
+SELECT execution.slr_suspend_native_debt_outcomes(
+    ARRAY(SELECT demand_id FROM execution.slr_native_h3_authority_debt))
+WHERE NOT EXISTS(SELECT 1 FROM execution.slr_native_current_authority_contract
+    WHERE contract_ref='slr-native-current-authority:v7');
+INSERT INTO execution.slr_native_current_authority_contract VALUES('slr-native-current-authority:v7') ON CONFLICT DO NOTHING;
