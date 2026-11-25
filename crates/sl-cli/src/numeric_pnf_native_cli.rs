@@ -16,7 +16,7 @@ use sensiblaw_pg_source_store::{
     reuse_original_binding_and_identity_owners,
     retract_original_numeric_identity_for_source_answer,
     transport_original_numeric_candidates_for_source_answer,
-    prepare_native_prefix_recovery, complete_parser_run,
+    prepare_native_prefix_recovery, publish_native_prefix_heading_repair, complete_parser_run,
     load_source_partition_changes, transport_original_numeric_candidates_for_source_answer_with_partition,
 };
 use serde::Serialize;
@@ -88,12 +88,17 @@ pub fn run(args:&[String])->Result<(),String>{
             let receipt=prepare_native_prefix_recovery(&config,review,parser_run,flag=="--commit")?;
             print_json(&receipt)
         }
+        [subcommand,review,parser_run,flag] if subcommand=="prefix-repair"&&flag=="--commit"=>{
+            let config=load_database_config(None).map_err(|e|e.to_string())?;
+            let publication=publish_native_prefix_heading_repair(&config,review,parser_run)?;
+            print_json(&publication)
+        }
         [subcommand,review,parser_run,flag] if subcommand=="endpoint"&&flag=="--commit"=>{
             let config=load_database_config(None).map_err(|e|e.to_string())?;
             // Existing parser-only worker may already have completed queued
             // jobs. Finalize just this original run, never source compilation.
             let scope=prepare_native_prefix_recovery(&config,review,parser_run,false)?;
-            if !scope.parser_scope_ready{
+            if !scope.parser_scope_ready || !scope.source_region_prefix_covered || !scope.original_parser_token_prefix_covered{
                 return print_json(&serde_json::json!({
                     "schema":"slr-native-antecedent-endpoint-v1","prefix_scope":scope,
                     "outcome":"unresolved_original_prefix_parser_scope",
@@ -369,7 +374,7 @@ pub fn run(args:&[String])->Result<(),String>{
             print_json(&receipt)
         }
         _=>Err(
-            "numeric-pnf-native usage: prefix-prepare REVIEW PARSER_RUN --inspect|--commit | endpoint REVIEW PARSER_RUN --commit | inspect SOURCE_REV PARSER_RUN | plan SOURCE_REV PARSER_RUN | audit S29_REVIEW_ITEM_REF PARSER_RUN | reuse-original S29_REVIEW_ITEM_REF PARSER_RUN | bind S29_REVIEW_ITEM_REF PARSER_RUN MAX_CANDIDATES --commit | bind-campaign S29_REVIEW_ITEM_REF PARSER_RUN MAX_CANDIDATES --commit | retract S29_REVIEW_ITEM_REF PARSER_RUN WITNESS_ID --rollback-probe|--commit | compile SOURCE_REV PARSER_RUN MAX_SENTENCES --commit [--allow-partial-source] (numeric DB URL required for audit/compile, durable source root for compile)".into()
+            "numeric-pnf-native usage: prefix-prepare REVIEW PARSER_RUN --inspect|--commit | prefix-repair REVIEW PARSER_RUN --commit | endpoint REVIEW PARSER_RUN --commit | inspect SOURCE_REV PARSER_RUN | plan SOURCE_REV PARSER_RUN | audit S29_REVIEW_ITEM_REF PARSER_RUN | reuse-original S29_REVIEW_ITEM_REF PARSER_RUN | bind S29_REVIEW_ITEM_REF PARSER_RUN MAX_CANDIDATES --commit | bind-campaign S29_REVIEW_ITEM_REF PARSER_RUN MAX_CANDIDATES --commit | retract S29_REVIEW_ITEM_REF PARSER_RUN WITNESS_ID --rollback-probe|--commit | compile SOURCE_REV PARSER_RUN MAX_SENTENCES --commit [--allow-partial-source] (numeric DB URL required for audit/compile, durable source root for compile)".into()
         )
     }
 }
