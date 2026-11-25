@@ -1518,17 +1518,26 @@ fn original_mention_binding_campaign(
 #[derive(Debug,Clone,Serialize)]
 struct NativeBindingAnchorV2 {
     key:String,kind:String,token_ids:Vec<i64>,object_ids:Vec<i64>,
-    start_char:i64,end_char:i64,ordinal:i32,sentence:i32,
+    start_char:i64,end_char:i64,ordinal:i32,end_ordinal:i32,sentence:i32,
     pos:String,dependency:String,paragraph:i32,quotation:i32,
     clause:Option<String>,reporting:Option<String>,coordination:Option<String>,
     morphology:Vec<(String,String)>,
+}
+#[derive(Debug,Clone,Serialize)]
+pub struct NativeBindingSetBridgeReceipt{
+    pub referential_type:String,pub candidate_set_ref:String,
+    pub persisted_member_count:usize,pub full_index_member_count:usize,pub cap_deferred_count:usize,
 }
 #[derive(Debug,Clone,Serialize)]
 pub struct NativeBindingBridgeReceipt {
     pub snapshot_ref:String,pub source_parser_tokens:usize,
     pub anchors:usize,pub mention_anchors:usize,pub relation_anchors:usize,
     pub focus_reference_anchors:usize,pub retired_index_anchors:u64,
-    pub candidate_sets:Vec<(String,String,usize,usize)>,
+    pub candidate_sets:Vec<NativeBindingSetBridgeReceipt>,
+    pub focus_reference_alternatives:Vec<&'static str>,
+    pub original_index_candidate_evidence_inserted:u64,
+    pub exact_index_entity_objects_outside_transport:usize,
+    pub unresolved_structural_metadata:Vec<&'static str>,
     pub mention_spans_without_objects:usize,
     pub mention_spans_with_multiple_objects:usize,
     pub observed_document_order_verified:bool,
@@ -1576,6 +1585,7 @@ fn bridge_anchor(
     Ok(NativeBindingAnchorV2{
         key,kind:kind.into(),token_ids:support.iter().map(|t|t.id).collect(),
         object_ids:objects,start_char:first.start,end_char:last.end,ordinal:first.ordinal,
+        end_ordinal:last.ordinal.checked_add(1).ok_or(NativeNumericAuditError::ForeignSource)?,
         sentence:first.sentence,pos:first.pos.clone(),dependency:first.dep.clone(),
         paragraph:i32::try_from(paragraph).map_err(|_|NativeNumericAuditError::ForeignSource)?,
         quotation:i32::try_from(quotation).map_err(|_|NativeNumericAuditError::ForeignSource)?,
@@ -1588,7 +1598,7 @@ fn bridge_digest<T:Serialize>(value:&T)->Result<String,NativeNumericAuditError>{
 }
 fn materialize_native_binding_bridge(
     tx:&mut postgres::Transaction<'_>,run_ref:&str,doc:&str,sha:&str,
-    focus_token:i64,campaign:&NativeMentionBindingCampaign,
+    focus_token:i64,demand:i64,campaign:&NativeMentionBindingCampaign,
 )->Result<NativeBindingBridgeReceipt,NativeNumericAuditError>{
     let locator:String=tx.query_one(
         "SELECT locator FROM execution.semantic_parser_source
@@ -1720,6 +1730,8 @@ fn materialize_native_binding_bridge(
                     WHERE document_ref=$1 AND active AND run_ref<>$2)",
         &[&doc,&run_ref])?.get(0);
     if foreign{return Err(NativeNumericAuditError::ForeignSource);}
+    // The old binder scopes its index by document, not parser run.
+    tx.query_one("SELECT pg_advisory_xact_lock(hashtext('slr-native-binding-document:v2'),hashtext($1))",&[&doc])?;
     let legacy:bool=tx.query_one("SELECT EXISTS(SELECT 1 FROM pnf.factor_anchor
         WHERE document_ref=$1 AND factor_revision_ref LIKE 'factor-revision:native-binding:%')",&[&doc])?.get(0);
     if legacy && tx.query_one("SELECT count(DISTINCT run_ref)::bigint FROM execution.semantic_parser_source WHERE document_ref=$1",&[&doc])?.get::<_,i64>(0)!=1{
@@ -1761,7 +1773,7 @@ fn materialize_native_binding_bridge(
         let morph=bridge_digest(&a.morphology)?;
         tx.execute("INSERT INTO corpus.span(span_ref,document_ref,start_char,end_char,start_token,end_token,span_type_ref)
             VALUES($1,$2,$3,$4,$5,$6,'native-binding-factor:v2') ON CONFLICT DO NOTHING",
-            &[&span,&doc,&start,&end,&a.ordinal,&next])?;
+            &[&span,&doc,&start,&end,&a.ordinal,&a.end_ordinal])?;
         tx.execute("INSERT INTO algebra.factor(factor_ref,document_ref,factor_type_ref,closure_state_ref,factor_sha256)
             VALUES($1,$2,$3,'requires_external_resolution',$4) ON CONFLICT DO NOTHING",
             &[&factor,&doc,&a.kind,&dg])?;
@@ -1791,8 +1803,8 @@ fn materialize_native_binding_bridge(
               WHERE p.factor_revision_ref=$1 AND p.run_ref=$2 AND p.document_ref=$3
                 AND p.snapshot_ref=$4 AND p.active AND p.token_ids=$5 AND p.object_ids=$6
                 AND s.document_ref=$3 AND s.start_char=$7 AND s.end_char=$8
-                AND s.start_token=$9 AND s.end_token=$10 AND a.start_token=$9 AND a.end_token=$10)",
-            &[&revision,&run_ref,&doc,&snapshot,&a.token_ids,&a.object_ids,&start,&end,&a.ordinal,&next])?.get(0);
+                AND s.start_token=$9 AND s.end_token=$10 AND a.start_token=$9 AND a.end_token=$11)",
+            &[&revision,&run_ref,&doc,&snapshot,&a.token_ids,&a.object_ids,&start,&end,&a.ordinal,&a.end_ordinal,&next])?.get(0);
         if !valid{return Err(NativeNumericAuditError::ForeignSource);}
         if focus_keys.contains(&a.key){references.push((factor,revision));}
     }
@@ -1802,9 +1814,18 @@ fn materialize_native_binding_bridge(
             sets.push(materialize_native_binding_set_v2(tx,&snapshot,&doc,&factor,&revision,typ)?);
         }
     }
+    let (original_index_candidate_evidence_inserted,exact_index_entity_objects_outside_transport)=
+        persist_native_index_evidence(tx,demand,&snapshot,&doc,&sets)?;
+    let has_subject=anchors.iter().any(|a|focus_keys.contains(&a.key)&&a.kind=="semantic.argument.subject");
+    let mut alternatives=vec!["entity_reference","eventuality_reference","proposition_reference"];
+    if has_subject{alternatives.push("expletive_realisation");}
     Ok(NativeBindingBridgeReceipt{
         snapshot_ref:snapshot,source_parser_tokens:tokens.len(),anchors:anchors.len(),mention_anchors,
         relation_anchors,focus_reference_anchors:focus_keys.len(),retired_index_anchors:retired,candidate_sets:sets,
+        focus_reference_alternatives:alternatives,original_index_candidate_evidence_inserted,
+        exact_index_entity_objects_outside_transport,
+        unresolved_structural_metadata:vec!["canonical_tokenizer_parity","full_original_mention_factor_parity",
+            "original_relation_id_and_bundle_parity","nonprojected_coordination_and_other_relation_families"],
         mention_spans_without_objects:campaign.spans_without_exact_objects,
         mention_spans_with_multiple_objects:campaign.represented_spans.iter().filter(|s|s.exact_object_ids.len()>1).count(),
         observed_document_order_verified:true,canonical_tokenizer_parity_paid:false,
@@ -1813,7 +1834,7 @@ fn materialize_native_binding_bridge(
 }
 fn materialize_native_binding_set_v2(
     tx:&mut postgres::Transaction<'_>,snapshot:&str,doc:&str,factor:&str,revision:&str,typ:&str,
-)->Result<(String,String,usize,usize),NativeNumericAuditError>{
+)->Result<NativeBindingSetBridgeReceipt,NativeNumericAuditError>{
     let access="binding-accessibility:document-structural:v0_3";
     let compat="binding-compatibility:pnf-kind-morphology:v0_3";
     let n:i64=tx.query_one("SELECT count(*)::bigint FROM pnf.factor_anchor WHERE document_ref=$1",&[&doc])?.get(0);
@@ -1852,7 +1873,52 @@ fn materialize_native_binding_set_v2(
         WHERE candidate_set_ref=$1 ORDER BY ordinal",&[&set])?
         .iter().map(|r|(r.get::<_,String>(0),r.get::<_,String>(1))).collect::<Vec<_>>();
     if !original_index_member_parity(&stored,&members){return Err(NativeNumericAuditError::ForeignSource);}
-    Ok((typ.into(),set,members.len(),full.len()))
+    Ok(NativeBindingSetBridgeReceipt{referential_type:typ.into(),candidate_set_ref:set,
+        persisted_member_count:members.len(),full_index_member_count:full.len(),
+        cap_deferred_count:full.len().saturating_sub(64)})
+}
+// Bind actual original SQL candidate membership to the native demand's
+// append-only evidence fibre. The full indexed population is retained,
+// including cap-deferred members. No sign, preference or refutation is
+// inferred from membership, absence, a missing object or an incomplete index.
+fn persist_native_index_evidence(
+    tx:&mut postgres::Transaction<'_>,demand:i64,snapshot:&str,doc:&str,
+    sets:&[NativeBindingSetBridgeReceipt],
+)->Result<(u64,usize),NativeNumericAuditError>{
+    let mut inserted=0u64;let mut outside=BTreeSet::new();
+    let n:i64=tx.query_one("SELECT count(*)::bigint FROM pnf.factor_anchor WHERE document_ref=$1",&[&doc])?.get(0);
+    let limit=i32::try_from(n.max(1)).map_err(|_|NativeNumericAuditError::ForeignSource)?;
+    for set in sets.iter().filter(|s|s.referential_type=="entity_reference"){
+        let rows=tx.query(
+            "SELECT p.factor_revision_ref,p.object_ids,m.accessibility_path_ref
+             FROM resolution.binding_candidate_set s
+             JOIN execution.binding_candidate_set_build b ON b.candidate_set_ref=s.candidate_set_ref
+             CROSS JOIN LATERAL resolution.query_binding_candidates(s.reference_factor_revision_ref,
+                s.referential_type_ref,s.accessibility_declaration_ref,s.compatibility_declaration_ref,$3) m
+             JOIN execution.slr_native_binding_anchor_projection p
+               ON p.factor_revision_ref=m.candidate_factor_revision_ref AND p.active AND p.snapshot_ref=$2
+             WHERE s.candidate_set_ref=$1 AND b.document_pnf_index_ref=$2 AND b.build_state_ref='completed'",
+            &[&set.candidate_set_ref,&snapshot,&limit])?;
+        if rows.len()!=set.full_index_member_count{return Err(NativeNumericAuditError::ForeignSource);}
+        for row in rows{
+            let revision:String=row.get(0);let objects:Vec<i64>=row.get(1);let path:String=row.get(2);
+            for object in objects{
+                let present:bool=tx.query_one("SELECT EXISTS(SELECT 1 FROM execution.semantic_pnf_candidate_universe
+                    WHERE demand_id=$1 AND target_kind=1 AND target_id=$2)",&[&demand,&object])?.get(0);
+                if !present{outside.insert(object);continue;}
+                let evidence=format!("native-binding-index-member:v2:{}",bridge_digest(&(&set.candidate_set_ref,&revision,object,&path))?);
+                inserted+=tx.execute("INSERT INTO execution.semantic_pnf_candidate_evidence
+                    (demand_id,target_kind,target_id,evidence_ref,evidence_family,horizon,signed_residual,
+                     evidence_kind,provenance_ref,source_interface_id,source_region_id)
+                    SELECT $1,1,o.object_id,$3,1,3,0,$4,$5,i.interface_id,o.region_id
+                    FROM execution.semantic_pnf_object o JOIN execution.semantic_pnf_interface i ON i.region_id=o.region_id
+                    WHERE o.object_id=$2 AND o.active
+                    ON CONFLICT(demand_id,target_kind,target_id,evidence_ref) DO NOTHING",
+                    &[&demand,&object,&evidence,&format!("original_binding_index_member:{path}"),&set.candidate_set_ref])?;
+            }
+        }
+    }
+    Ok((inserted,outside.len()))
 }
 
 // Record candidate-only source-derived assessments in original m086 evidence.
@@ -2507,7 +2573,7 @@ pub fn transport_original_numeric_candidates_for_source_answer(
         &mut tx,numeric_run_ref,&answer.source_document_ref,demand)?;
     let original_h9_readiness=observe_native_h9_readiness(&mut tx,demand,numeric_run_ref,&answer.source_document_ref)?;
     let native_binding_bridge=materialize_native_binding_bridge(&mut tx,numeric_run_ref,
-        &answer.source_document_ref,&answer.source_content_sha256,focus_token,&original_mention_binding_campaign)?;
+        &answer.source_document_ref,&answer.source_content_sha256,focus_token,demand,&original_mention_binding_campaign)?;
     let structural_binding=observe_native_binding_structure(&mut tx,demand,focus_token,
         numeric_run_ref,&answer.source_document_ref,&answer.source_content_sha256)?;
     // Only run the document-scoped original admission probe after bounded
@@ -2932,12 +2998,24 @@ pub fn reuse_original_binding_and_identity_owners(
                     });
                 }
                 let native_reference=revision.starts_with("factor-revision:native-binding-v2:");
-                let native_projection_verified=native_reference&&members.iter().all(|m|m.native_inverse_matches_snapshot);
-                let exact_entity_inverse_complete=typ=="entity_reference"&&members.iter().all(|m|
+                let native_reference_verified=if native_reference&&has_native_projection&&same{
+                    tx.query_one("SELECT EXISTS(SELECT 1 FROM execution.slr_native_binding_anchor_projection p
+                        JOIN corpus.span s ON s.span_ref=p.span_ref AND s.document_ref=p.document_ref
+                        JOIN execution.semantic_parser_token t ON t.token_id=p.token_ids[1]
+                        JOIN execution.binding_candidate_set_build b ON b.document_pnf_index_ref=p.snapshot_ref
+                        WHERE p.factor_revision_ref=$1 AND p.active AND p.run_ref=$2 AND p.document_ref=$3
+                          AND cardinality(p.token_ids)=1 AND t.run_ref=$2 AND t.document_ref=$3
+                          AND t.representation_version=2 AND t.start_char=$4 AND t.end_char=$5
+                          AND s.start_char=$6 AND s.end_char=$7 AND b.generator_build_ref=$8)",
+                        &[&revision,&numeric_run,doc,&i64::from(start),&i64::from(end),&start,&end,&build])?.get::<_,bool>(0)
+                }else{false};
+                let native_projection_verified=native_reference_verified&&members.iter().all(|m|m.native_inverse_matches_snapshot);
+                let exact_entity_inverse_complete=typ=="entity_reference"&&!members.is_empty()&&members.iter().all(|m|
                     m.original_span_coordinates.len()==1&&!m.exact_same_manifestation_numeric_object_ids.is_empty()
+                    &&!m.candidate_factor_revision_ref.starts_with("factor-revision:native-binding:")
                     &&(!native_reference||m.native_inverse_matches_snapshot));
                 // Index self-consistency alone is not reusable correspondence.
-                if same&&parity&&prefix&&exact_entity_inverse_complete{reusable.push(set.clone());}
+                if same&&parity&&prefix&&exact_entity_inverse_complete&&(!native_reference||native_projection_verified){reusable.push(set.clone());}
                 if native_reference&&!native_projection_verified{
                     residuals.push(format!("native_binding_projection_inverse_mismatch:{set}"));
                 }
@@ -2994,4 +3072,47 @@ fn original_owner_reuse_parity_never_collapses_factor_or_path(){
     assert!(!original_index_member_parity(&a,&b));
     b[0].2="same_sentence".into();b.push(b[0].clone());
     assert!(!original_index_member_parity(&a,&b));
+}
+
+#[cfg(test)]
+mod native_binding_bridge_regression {
+    use super::*;
+    fn token(id:i64,sentence:i32,ordinal:i32,start:i64,end:i64,pos:&str,orth:&str)->BridgeToken{
+        BridgeToken{id,sentence_id:i64::from(sentence)+1,sentence,ordinal,start,end,
+            region:i64::from(sentence)+1,head:id,lemma_id:id,orth:orth.into(),lemma:orth.into(),
+            pos:pos.into(),dep:"root".into(),morphology:vec![]}
+    }
+    #[test]
+    fn numeric_pnf_binding_global_chart_retains_source_and_distinct_occurrences(){
+        // Local ordinal zero in both sentences must not become a common
+        // anchor. The multi-token named span also has a distinct inverse.
+        let source="A B.\n\n“C D.”";
+        let tokens=BTreeMap::from([
+            (30,token(30,0,0,0,1,"PROPN","A")),
+            (10,token(10,0,1,2,3,"PROPN","B")),
+            (20,token(20,1,3,7,8,"PROPN","C")),
+            (40,token(40,1,4,9,10,"PROPN","D")),
+        ]);
+        let a=bridge_anchor("a".into(),"semantic.mention_identity",&[10,30],vec![99],&tokens,source,None).unwrap();
+        let b=bridge_anchor("b".into(),"semantic.mention_identity",&[20],vec![],&tokens,source,None).unwrap();
+        assert_eq!((a.ordinal,a.end_ordinal,a.start_char,a.end_char),(0,2,0,3));
+        assert_eq!(a.token_ids,vec![30,10]);assert_eq!(a.object_ids,vec![99]);
+        assert_eq!((b.ordinal,b.paragraph,b.quotation),(3,1,1));
+        assert_ne!(a.clause,b.clause);
+        assert_ne!(bridge_digest(&a).unwrap(),bridge_digest(&b).unwrap());
+        let mut a2=a.clone();a2.object_ids.push(100);
+        assert_ne!(bridge_digest(&a).unwrap(),bridge_digest(&a2).unwrap());
+    }
+    #[test]
+    fn numeric_pnf_binding_structural_metadata_and_morphology_are_not_guessed(){
+        let source="he";
+        let mut t=token(7,0,0,0,2,"PRON","he");
+        t.morphology=bridge_morphology(&["Number=Sing,Plur".into(),"Gender=Masc".into(),"Number=Sing".into()]);
+        let tokens=BTreeMap::from([(7,t)]);
+        let a=bridge_anchor("x".into(),"semantic.argument.subject",&[7],vec![],&tokens,source,Some(("p","predicate"))).unwrap();
+        assert_eq!(a.clause.as_deref(),Some("clause:p"));assert_eq!(a.reporting,None);
+        assert_eq!(a.morphology,vec![("Gender".into(),"Masc".into()),("Number".into(),"Plur".into()),("Number".into(),"Sing".into())]);
+        let c=bridge_anchor("y".into(),"semantic.embedded_proposition",&[7],vec![],&tokens,source,Some(("c","composition"))).unwrap();
+        assert_eq!(c.reporting.as_deref(),Some("c"));assert_eq!(c.coordination,None);
+    }
 }
