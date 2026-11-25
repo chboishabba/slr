@@ -1,6 +1,6 @@
 -- Source: original SensibLaw m110 at f9c4670ef04b40e8153caa7dd00fa1eba7013ef4, blob 41bf2232b43a53fb8e0373559206e5fec430d629.
 -- Reopen the actual discourse/temporal signature relation independently of
--- scheduling/stop state. An already-completed horizon or later stop does not
+-- scheduling/stop or admissibility state. An already-completed horizon or later stop does not
 -- withdraw its physical support. This relation is evidence validity only.
 -- Never use absence from this relation as semantic candidate refutation.
 CREATE OR REPLACE FUNCTION pg_temp.slr_current_m110_h6_atoms(
@@ -35,7 +35,6 @@ CREATE OR REPLACE FUNCTION pg_temp.slr_current_m110_h6_atoms(
           JOIN ready ON ready.demand_id=state.demand_id
          WHERE state.target_kind=1
            AND state.represented_possible
-           AND state.admissible
            AND state.target_id<>ready.source_object_id
     ), matched AS MATERIALIZED (
         SELECT DISTINCT candidate.demand_id,candidate.target_kind,candidate.target_id,
