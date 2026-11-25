@@ -730,3 +730,53 @@ pub fn read_original_numeric_candidate_fibre(
     tx.commit()?;
     Ok(fibre)
 }
+
+#[cfg(test)]
+mod original_typed_candidate_fibre_tests {
+    use super::*;
+
+    fn row(kind:i16,id:i64,refuted:bool,active:bool)->OriginalTypedCandidateRow {
+        OriginalTypedCandidateRow {
+            target_kind:kind,target_id:id,active,execution_residual:!active,refuted,
+            event_kind:if refuted {1} else {0},
+            event_id:if refuted {41} else {0},
+            evidence_id:if refuted {42} else {0},
+            evidence_demand:if refuted {11} else {0},
+            evidence_target_kind:if refuted {kind} else {0},
+            evidence_target_id:if refuted {id} else {0},
+            evidence_ref:if refuted {"original-evidence".into()} else {String::new()},
+        }
+    }
+
+    #[test]
+    fn numeric_pnf_typed_fibre_uses_existing_kind_sensitive_inverse() {
+        let rows=vec![row(1,9,true,false),row(1,9007199254740993,false,false),
+            row(2,9,false,true)];
+        let mut objects=candidate_fibre_from_original_rows(11,1,&rows).unwrap();
+        objects.record_original_signed_residual(9007199254740993,3,-9).unwrap();
+        objects.record_original_signed_residual(9007199254740993,6,0).unwrap();
+        assert_eq!(objects.represented_ids().collect::<Vec<_>>(),vec![9,9007199254740993]);
+        assert_eq!(objects.refuted_ids().collect::<Vec<_>>(),vec![9]);
+        assert_eq!(objects.live_ids().collect::<Vec<_>>(),vec![9007199254740993]);
+        assert_eq!(objects.deferred_count(),1);
+        assert!(objects.open_world());
+        assert_eq!(objects.unique_admissible(),None);
+        let entities=candidate_fibre_from_original_rows(11,2,&rows).unwrap();
+        assert_eq!(entities.live_ids().collect::<Vec<_>>(),vec![9]);
+        assert_eq!(entities.refuted_count(),0);
+    }
+
+    #[test]
+    fn numeric_pnf_typed_fibre_rejects_foreign_refutation_coordinates() {
+        for axis in 0..4 {
+            let mut r=row(1,9,true,false);
+            match axis {
+                0=>r.evidence_demand=12,
+                1=>r.evidence_target_kind=2,
+                2=>r.evidence_target_id=10,
+                _=>r.evidence_id=0,
+            }
+            assert!(candidate_fibre_from_original_rows(11,1,&[r]).is_err());
+        }
+    }
+}
