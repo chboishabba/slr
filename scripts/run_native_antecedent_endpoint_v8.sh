@@ -71,9 +71,19 @@ done
 [[ "$ready" == true ]] || { echo "Prefix work still pending; bounded attempt stopped" >&2; exit 3; }
 # Reopen full receipts rather than silently skipping the parity probes.
 export SLR_NATIVE_IDENTITY_REPLAY_MODE=0
+export SLR_NATIVE_ENDPOINT_REPLAY_MODE=0
 capture "$checkpoint/cold.json" "${cli[@]}" endpoint "$review" "$run" --commit
 export SLR_NATIVE_IDENTITY_REPLAY_MODE=1
-capture "$checkpoint/replay.json" "${cli[@]}" endpoint "$review" "$run" --commit
+export SLR_NATIVE_ENDPOINT_REPLAY_MODE=1
+# Install the explicit replay fence and obtain a quiescent full readback
+# before attempting a no-observation hit. Missing/changed state cannot seed.
+for attempt in {1..4}; do
+  capture "$checkpoint/replay-$attempt.json" "${cli[@]}" endpoint "$review" "$run" --commit
+  cp "$checkpoint/replay-$attempt.json" "$checkpoint/replay.json"
+  if jq -e '.endpoint_execution_replay.hit==true' "$checkpoint/replay.json" >/dev/null; then
+    break
+  fi
+done
 jq -s '
   def binding: .binding_passes[-1];
   def candidate_gate:
@@ -100,10 +110,11 @@ jq -s '
       .identity_execution_replay.input_events_pending==0 and .identity_execution_replay.source_support_scan_performed==false and
       .parser_identity_refresh_invocations==0 and .consumer_horizon_work.h6_producer_invocations==0);
   def warm_gate:
-    (all(.numeric_publication[]; .bounded_replay_supported and
-      (.newly_registered_sentence_refs|length)==0 and (.closed_sentence_region_starts|length)==0)) and
-    (binding | .parser_identity_refresh_invocations==0 and .source_partition_wake.affected_queue_rows==0
-       and (.identity_execution_replay.source_support_scan_performed==false));
+    (.endpoint_execution_replay |
+      .hit==true and .source_observation_scan_performed==false and
+      .numeric_binding_scan_performed==false and .parser_identity_refresh_invocations==0 and
+      .semantic_recomputation_performed==false and .writes_semantic_state==false and
+      .current_authority_reused==false);
   def semantic_gate: .governed_identity_paid and .level_three_paid and
       (binding | .complete_typed_coverage_paid and (.outside_model_possible|not)
         and .native_binding_bridge.structural_relation_parity_paid);
