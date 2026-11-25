@@ -1629,6 +1629,236 @@ fn probe_parser_witness_withdrawals(
     Ok(receipts)
 }
 
+
+// Candidate relation projection: original shared_reducer.py predicate and
+// composition branches + semantic_reductions.py predicate/argument rules.
+// The original strict numeric run remains immutable: publish this projected
+// factor graph only in a nested rollback acceptance transaction. This is not
+// a full relational bundle (action metadata, modifiers, temporal and spatial
+// families still need original producer parity).
+#[derive(Debug,Clone)]
+struct NativeRelationToken{
+    id:i64,region:i64,lemma_id:i64,head:i64,start:i64,end:i64,
+    orth:String,lemma:String,pos:String,dep:String,
+}
+#[derive(Debug,Clone,PartialEq,Eq,Serialize)]
+struct ProjectedRelation{
+    region:i64,head_token_id:i64,relation_type:&'static str,
+    roles:Vec<(&'static str,i64)>,
+}
+fn projected_predicate_relations(tokens:&[NativeRelationToken])->Vec<ProjectedRelation>{
+    let mut children=BTreeMap::<i64,Vec<&NativeRelationToken>>::new();
+    for t in tokens{children.entry(t.head).or_default().push(t);}
+    let nounish=|t:&&NativeRelationToken|matches!(t.pos.as_str(),"NOUN"|"PROPN"|"PRON"|"NUM");
+    let mut out=Vec::new();
+    for t in tokens{
+        if !matches!(t.pos.as_str(),"VERB"|"AUX")
+            ||!matches!(t.dep.as_str(),"root"|"acl"|"xcomp"|"ccomp"|"advcl"){continue;}
+        let direct=children.get(&t.id).map(Vec::as_slice).unwrap_or(&[]);
+        let aux=direct.iter().copied().filter(|c|matches!(c.dep.as_str(),"aux"|"auxpass")&&c.pos=="AUX").collect::<Vec<_>>();
+        let mut subjects=direct.iter().copied().filter(|c|matches!(c.dep.as_str(),"nsubj"|"nsubjpass")).filter(nounish).collect::<Vec<_>>();
+        for a in &aux{
+            subjects.extend(children.get(&a.id).into_iter().flatten().copied()
+                .filter(|c|matches!(c.dep.as_str(),"nsubj"|"nsubjpass")).filter(nounish));
+        }
+        let objects=direct.iter().copied().filter(|c|matches!(c.dep.as_str(),"dobj"|"obj"|"attr"|"oprd")).filter(nounish).collect::<Vec<_>>();
+        let oblique=direct.iter().copied().filter(|c|matches!(c.dep.as_str(),"obl"|"pobj"|"iobj")).filter(nounish).collect::<Vec<_>>();
+        let complements=direct.iter().copied().filter(|c|matches!(c.dep.as_str(),"attr"|"acomp"|"ccomp"|"xcomp"|"oprd")).collect::<Vec<_>>();
+        // Explicit parser negation only, do not infer lexical negation or
+        // inflection until the original action metadata producer is ported.
+        let neg=direct.iter().copied().filter(|c|c.dep=="neg").collect::<Vec<_>>();
+        let base=||{
+            let mut roles=vec![("head",t.id)];
+            roles.extend(subjects.iter().map(|s|("subject",s.id)));roles
+        };
+        let tail=|roles:&mut Vec<(&'static str,i64)>|{
+            roles.extend(neg.iter().map(|s|("negation",s.id)));
+            roles.extend(aux.iter().map(|s|("auxiliary",s.id)));
+        };
+        if objects.is_empty(){
+            let mut roles=base();
+            for s in oblique{roles.extend([("oblique",s.id),("argument",s.id)]);}
+            for s in &complements{roles.extend([("complement",s.id),("argument",s.id)]);}
+            tail(&mut roles);
+            out.push(ProjectedRelation{region:t.region,head_token_id:t.id,relation_type:"predicate",roles});
+        }else{
+            for s in objects{
+                let mut roles=base();roles.extend([("object",s.id),("argument",s.id)]);tail(&mut roles);
+                out.push(ProjectedRelation{region:t.region,head_token_id:t.id,relation_type:"predicate",roles});
+            }
+        }
+        for s in complements.into_iter().filter(|s|matches!(s.dep.as_str(),"ccomp"|"xcomp")){
+            out.push(ProjectedRelation{region:t.region,head_token_id:t.id,relation_type:"composition",roles:vec![("host",t.id),("content",s.id)]});
+        }
+    }
+    // Canonical dedup retains distinct role-labelled occurrences.
+    let mut seen=BTreeSet::new();
+    out.retain(|r|seen.insert((r.region,r.relation_type,r.roles.clone())));
+    out
+}
+#[derive(Debug,Clone,Serialize)]
+pub struct NativeProjectedRelationProbe{
+    pub original_producer_refs:Vec<&'static str>,
+    pub source_parser_tokens:usize,
+    pub predicate_relations:usize,
+    pub composition_relations:usize,
+    pub relation_budget_deferred:usize,
+    pub projected_factor_ids:Vec<i64>,
+    pub projected_focus_subject_factor_ids:Vec<i64>,
+    pub focus_reference_alternatives:Vec<&'static str>,
+    pub original_direct_substitutions:i64,
+    pub original_supported_substitutions:i64,
+    pub new_level_three_refs:Vec<String>,
+    pub withdrawal_probes:Vec<NativeParserWitnessWithdrawalProbe>,
+    pub projected_level_one_preserved:bool,
+    pub outer_level_one_restored:bool,
+    pub outer_level_three_restored:bool,
+    pub persisted:bool,
+    pub full_original_relation_parity_paid:bool,
+    pub focus_identity_paid:bool,
+}
+fn relation_symbol(tx:&mut postgres::Transaction<'_>,kind:i16,name:&str)->Result<i64,NativeNumericAuditError>{
+    Ok(tx.query_one("SELECT execution.ensure_semantic_symbol($1,$2)",&[&kind,&name])?.get(0))
+}
+fn projected_relation_probe(
+    tx:&mut postgres::Transaction<'_>,run:i64,doc:i64,run_ref:&str,document_ref:&str,
+    demand:i64,classes:&[NativeNumericDocumentIdentityObservation],
+)->Result<NativeProjectedRelationProbe,NativeNumericAuditError>{
+    let before_one=level_one_snapshot(tx,run,doc)?;
+    let before_three=level_three_snapshot(tx,run,doc)?;
+    let source=tx.query_one("SELECT locator,encode(content_sha256,'hex')
+        FROM execution.semantic_parser_source WHERE run_ref=$1 AND document_ref=$2",
+        &[&run_ref,&document_ref])?;
+    let locator:String=source.get(0);let sha:String=source.get(1);
+    let bytes=std::fs::read(locator).map_err(|_|NativeNumericAuditError::ForeignSource)?;
+    if hex(&Sha256::digest(&bytes))!=sha{return Err(NativeNumericAuditError::ForeignSource);}
+    let text=String::from_utf8(bytes).map_err(|_|NativeNumericAuditError::ForeignSource)?;
+    let chars=text.chars().collect::<Vec<_>>();
+    let rows=tx.query(
+        "SELECT t.token_id,r.region_id,t.lemma_symbol_id,t.head_token_id,t.start_char,t.end_char,
+                orth.symbol_text,lemma.symbol_text,pos.symbol_text,dep.symbol_text
+         FROM execution.semantic_parser_token t
+         JOIN execution.semantic_pnf_sentence_region l ON l.sentence_id=t.sentence_id
+         JOIN execution.semantic_pnf_region r ON r.region_id=l.region_id
+         JOIN execution.semantic_symbol orth ON orth.symbol_id=t.orth_symbol_id
+         JOIN execution.semantic_symbol lemma ON lemma.symbol_id=t.lemma_symbol_id
+         JOIN execution.semantic_symbol pos ON pos.symbol_id=t.pos_symbol_id
+         JOIN execution.semantic_symbol dep ON dep.symbol_id=t.dependency_symbol_id
+         WHERE t.run_ref=$1 AND t.document_ref=$2 AND t.representation_version=2
+           AND r.run_ref=$1 AND r.document_ref=$2 AND r.region_kind=1 AND r.closure_state IN (2,3)
+         ORDER BY t.start_char,t.end_char,t.token_id",
+        &[&run_ref,&document_ref])?;
+    let mut tokens=Vec::new();let mut ids=BTreeSet::new();
+    for row in rows{
+        let t=NativeRelationToken{id:row.get(0),region:row.get(1),lemma_id:row.get(2),head:row.get(3),
+            start:row.get(4),end:row.get(5),orth:row.get(6),lemma:row.get(7),pos:row.get(8),
+            dep:row.get::<_,String>(9).to_ascii_lowercase()};
+        let a=usize::try_from(t.start).map_err(|_|NativeNumericAuditError::ForeignSource)?;
+        let b=usize::try_from(t.end).map_err(|_|NativeNumericAuditError::ForeignSource)?;
+        if a>=b||b>chars.len()||!ids.insert(t.id)||chars[a..b].iter().collect::<String>()!=t.orth{
+            return Err(NativeNumericAuditError::ForeignSource);
+        }
+        tokens.push(t);
+    }
+    let by_id=tokens.iter().map(|t|(t.id,t)).collect::<BTreeMap<_,_>>();
+    if tokens.iter().any(|t|by_id.get(&t.head).is_none_or(|h|h.region!=t.region)){
+        return Err(NativeNumericAuditError::ForeignSource);
+    }
+    let focus_ids=tx.query(
+        "SELECT s.token_id FROM execution.semantic_pnf_demand d
+         JOIN execution.semantic_pnf_object_token_support s ON s.object_id=d.source_object_id
+         WHERE d.demand_id=$1",&[&demand])?.iter().map(|r|r.get::<_,i64>(0)).collect::<BTreeSet<_>>();
+    let mut relations=projected_predicate_relations(&tokens);
+    let predicates=relations.iter().filter(|r|r.relation_type=="predicate").count();
+    let compositions=relations.len()-predicates;
+    // First preserve the consumer's actual source predicate, then canonical
+    // document order. The bound is execution only, never semantic exclusion.
+    relations.sort_by_key(|r|(!r.roles.iter().any(|(role,id)|*role=="subject"&&focus_ids.contains(id)),r.region,r.head_token_id,r.relation_type,r.roles.clone()));
+    let deferred=relations.len().saturating_sub(256);
+    relations.truncate(256);
+    let mut probe=tx.transaction()?;
+    let object_kind=relation_symbol(&mut probe,14,"parser.role_participant")?;
+    let eventuality=relation_symbol(&mut probe,10,"semantic.eventuality")?;
+    let composition=relation_symbol(&mut probe,10,"semantic.embedded_proposition")?;
+    let mut role_ids=BTreeMap::new();
+    let mut role_objects=BTreeMap::<i64,i64>::new();
+    let mut factor_ids=Vec::new();let mut focus_factor_ids=Vec::new();
+    for relation in relations{
+        let mut hash=Sha256::new();hash.update(b"slr:projected-source-relation-probe:v1");
+        hash.update(relation.region.to_be_bytes());hash.update(relation.relation_type.as_bytes());
+        for (role,id) in &relation.roles{
+            hash.update((role.len() as u64).to_be_bytes());hash.update(role.as_bytes());hash.update(id.to_be_bytes());
+        }
+        let digest=hash.finalize().to_vec();
+        let typ=if relation.relation_type=="predicate"{eventuality}else{composition};
+        let pred=relation_symbol(&mut probe,11,&format!("parser.{}:{}",relation.relation_type,by_id[&relation.head_token_id].lemma))?;
+        let factor:i64=probe.query_one(
+            "INSERT INTO execution.semantic_pnf_factor
+             (factor_digest,region_id,factor_type_symbol_id,predicate_symbol_id,scope_region_id,
+              temporal_state,modal_state,promotion_level,support_score,active)
+             VALUES($1,$2,$3,$4,$2,0,0,0,1,TRUE) RETURNING factor_id",
+            &[&digest,&relation.region,&typ,&pred])?.get(0);
+        factor_ids.push(factor);
+        if relation.roles.iter().any(|(role,id)|*role=="subject"&&focus_ids.contains(id)){
+            focus_factor_ids.push(factor);
+        }
+        let support=relation.roles.iter().map(|(_,id)|*id).collect::<BTreeSet<_>>();
+        for (ordinal,id) in support.iter().enumerate(){
+            probe.execute("INSERT INTO execution.semantic_pnf_factor_token_support(factor_id,token_id,ordinal)
+                VALUES($1,$2,$3)",&[&factor,id,&(ordinal as i32)])?;
+        }
+        for (ordinal,(role,id)) in relation.roles.iter().enumerate(){
+            let t=by_id[id];
+            if t.region!=relation.region{return Err(NativeNumericAuditError::ForeignSource);}
+            let object=if let Some(o)=role_objects.get(id){*o}else{
+                let mut h=Sha256::new();h.update(b"slr:projected-source-role-probe:v1");
+                h.update(t.region.to_be_bytes());h.update(id.to_be_bytes());
+                let dg=h.finalize().to_vec();
+                let object:i64=probe.query_one(
+                    "INSERT INTO execution.semantic_pnf_object
+                     (object_digest,region_id,object_kind_symbol_id,head_symbol_id,scope_region_id,
+                      promotion_level,information_gain,representation_cost,ambiguity_cost,promotion_score,active)
+                     VALUES($1,$2,$3,$4,$2,0,0,1,1,0,TRUE) RETURNING object_id",
+                    &[&dg,&t.region,&object_kind,&t.lemma_id])?.get(0);
+                probe.execute("INSERT INTO execution.semantic_pnf_object_token_support(object_id,token_id,ordinal)
+                    VALUES($1,$2,0)",&[&object,id])?;
+                role_objects.insert(*id,object);object
+            };
+            let role_id=if let Some(x)=role_ids.get(role){*x}else{
+                let x=relation_symbol(&mut probe,12,role)?;
+                role_ids.insert(*role,x);x
+            };
+            probe.execute("INSERT INTO execution.semantic_pnf_hyperedge
+                (factor_id,slot_ordinal,role_symbol_id,object_id,resolution_state,required)
+                VALUES($1,$2,$3,$4,2,TRUE)",&[&factor,&(ordinal as i32),&role_id,&object])?;
+        }
+    }
+    let projected_one=level_one_snapshot(&mut probe,run,doc)?;
+    let direct:i64=probe.query_one("SELECT execution.refresh_numeric_pnf_identity_substitution_derivations($1,$2)",&[&run,&doc])?.get(0);
+    let supported:i64=probe.query_one("SELECT execution.refresh_numeric_pnf_supported_identity_substitution_derivations($1,$2)",&[&run,&doc])?.get(0);
+    let after_three=level_three_snapshot(&mut probe,run,doc)?;
+    let new_refs=after_three.keys().filter(|k|!before_three.contains_key(*k)).cloned().collect();
+    let withdrawal_probes=probe_parser_witness_withdrawals(&mut probe,run,doc,classes)?;
+    let preserved=projected_one==level_one_snapshot(&mut probe,run,doc)?;
+    probe.rollback()?;
+    let one_restored=before_one==level_one_snapshot(tx,run,doc)?;
+    let three_restored=before_three==level_three_snapshot(tx,run,doc)?;
+    if !preserved||!one_restored||!three_restored{return Err(NativeNumericAuditError::AdmissionProbeInvariant);}
+    Ok(NativeProjectedRelationProbe{
+        original_producer_refs:vec!["SensibLaw:f9c4670e:shared_reducer.collect_canonical_relational_bundle",
+            "SensibLaw:f9c4670e:semantic_reductions.grammar:semantic:predicate:v0_4",
+            "SensibLaw:f9c4670e:semantic_reductions.grammar:semantic:composition:v0_4"],
+        source_parser_tokens:tokens.len(),predicate_relations:predicates,composition_relations:compositions,
+        relation_budget_deferred:deferred,projected_factor_ids:factor_ids,
+        focus_reference_alternatives:if focus_factor_ids.is_empty(){vec![]}else{
+            vec!["entity_reference","eventuality_reference","proposition_reference","expletive_realisation"]},
+        projected_focus_subject_factor_ids:focus_factor_ids,
+        original_direct_substitutions:direct,original_supported_substitutions:supported,new_level_three_refs:new_refs,
+        withdrawal_probes,projected_level_one_preserved:preserved,outer_level_one_restored:one_restored,
+        outer_level_three_restored:three_restored,persisted:false,full_original_relation_parity_paid:false,focus_identity_paid:false,
+    })
+}
+
 #[derive(Debug,Clone,Serialize)]
 pub struct NativeGovernedIdentityProbe{
     pub admission_owner:&'static str,
@@ -1643,6 +1873,7 @@ pub struct NativeGovernedIdentityProbe{
     pub source_factor_count:i64,
     pub focus_factor_argument_count:i64,
     pub witness_withdrawal_probes:Vec<NativeParserWitnessWithdrawalProbe>,
+    pub projected_relation_probe:NativeProjectedRelationProbe,
     pub immutable_level_one_preserved:bool,
     pub rollback_preserved_prior_level_three:bool,
     pub rollback_preserved_prior_candidate_classes:bool,
@@ -1700,6 +1931,7 @@ fn probe_original_governed_identity(
     let after=level_three_snapshot(&mut probe,run,document)?;
     let refs=after.keys().filter(|k|!prior.contains_key(*k)).cloned().collect();
     let witness_withdrawal_probes=probe_parser_witness_withdrawals(&mut probe,run,document,&classes)?;
+    let projected_relation_probe=projected_relation_probe(&mut probe,run,document,run_ref,document_ref,demand,&classes)?;
     let immutable=level_one==level_one_snapshot(&mut probe,run,document)?;
     probe.rollback()?;
     let rollback_level_three=prior==level_three_snapshot(tx,run,document)?;
@@ -1716,7 +1948,7 @@ fn probe_original_governed_identity(
         covered_unique_entity_id:covered_unique_class(&projection,false),
         candidate_class_projection:projection,level_three_refs_new_in_probe:refs,
         level_three_rows_after_refresh:rows,direct_level_three_rows_after_refresh:direct,
-        source_factor_count,focus_factor_argument_count,factor_alignment_counts,witness_withdrawal_probes,
+        source_factor_count,focus_factor_argument_count,factor_alignment_counts,witness_withdrawal_probes,projected_relation_probe,
         immutable_level_one_preserved:immutable,
         rollback_preserved_prior_level_three:rollback_level_three,
         rollback_preserved_prior_candidate_classes:rollback_classes,
@@ -2003,6 +2235,18 @@ mod tests{
         assert_eq!(s[&(0,2)],vec!["named_entity_shape"]);
         assert_eq!(s[&(1,2)],vec!["lexical_token"]);
         assert_eq!(s[&(3,4)],vec!["lexical_token"]);
+    }
+    #[test]
+    fn original_predicate_projection_keeps_object_argument_and_reference_roles(){
+        let t=|id,head,pos:&str,dep:&str|NativeRelationToken{
+            id,region:1,lemma_id:id,head,start:id,end:id+1,orth:id.to_string(),lemma:id.to_string(),
+            pos:pos.into(),dep:dep.into(),
+        };
+        let rows=projected_predicate_relations(&[t(1,2,"PRON","nsubj"),t(2,2,"VERB","root"),
+            t(3,2,"NOUN","obj"),t(4,2,"PART","neg"),t(5,2,"VERB","ccomp")]);
+        assert!(rows.iter().any(|r|r.relation_type=="predicate"&&r.roles==vec![
+            ("head",2),("subject",1),("object",3),("argument",3),("negation",4)]));
+        assert!(rows.iter().any(|r|r.relation_type=="composition"&&r.roles==vec![("host",2),("content",5)]));
     }
     #[test]
     fn unsupported_scope_refused_before_any_sql(){

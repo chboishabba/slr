@@ -110,8 +110,8 @@ pub fn run(args:&[String])->Result<(),String>{
         | [subcommand,review_item_ref,original_parser_run,_,_]
             if (subcommand=="audit" && args.len()==3)
                 || (subcommand=="retract" && args.len()==5)
-                || (subcommand=="bind" && args.len()==5) => {
-            let transport_budget=if subcommand=="bind"{
+                || (matches!(subcommand.as_str(),"bind"|"bind-campaign") && args.len()==5) => {
+            let transport_budget=if matches!(subcommand.as_str(),"bind"|"bind-campaign"){
                 if args[4]!="--commit"{return Err("candidate transport requires --commit".into());}
                 let n=args[3].parse::<usize>().map_err(|_|"invalid candidate budget")?;
                 if !(1..=64).contains(&n){return Err("candidate budget must be 1..=64".into());}
@@ -148,6 +148,28 @@ pub fn run(args:&[String])->Result<(),String>{
                 .map_err(|_|"numeric audit requires SENSIBLAW_DATABASE_URL")?;
             let numeric_run=deterministic_numeric_run_ref(&evidence.manifest);
             if let Some(budget)=transport_budget {
+                if subcommand=="bind-campaign" {
+                    let mut passes=Vec::new();
+                    let mut stop_reason="bounded_pass_limit";
+                    for _ in 0..8 {
+                        let receipt=transport_original_numeric_candidates_for_source_answer(
+                            &numeric_url,&numeric_run,&answer,budget
+                        ).map_err(|e|e.to_string())?;
+                        let done=receipt.governed_identity_rollback_probe.is_some();
+                        let progress=!receipt.inserted_candidate_ids.is_empty()
+                            ||receipt.nominal_head_objects_inserted>0
+                            ||receipt.original_mention_binding_campaign.newly_materialized_span_objects>0
+                            ||receipt.morphology_observations_inserted>0;
+                        passes.push(receipt);
+                        if done{stop_reason="bounded_execution_drained_governed_probe_completed";break;}
+                        if !progress{stop_reason="unresolved_without_execution_progress";break;}
+                    }
+                    return print_json(&serde_json::json!({
+                        "schema":"slr-native-binding-campaign-v1",
+                        "stop_reason":stop_reason,"committed_passes":passes.len(),
+                        "passes":passes,"focus_identity_paid":false,"typed_coverage_paid":false
+                    }));
+                }
                 let receipt=transport_original_numeric_candidates_for_source_answer(
                     &numeric_url,&numeric_run,&answer,budget
                 ).map_err(|e|e.to_string())?;
@@ -207,7 +229,7 @@ pub fn run(args:&[String])->Result<(),String>{
             print_json(&receipt)
         }
         _=>Err(
-            "numeric-pnf-native usage: inspect SOURCE_REV PARSER_RUN | plan SOURCE_REV PARSER_RUN | audit S29_REVIEW_ITEM_REF PARSER_RUN | bind S29_REVIEW_ITEM_REF PARSER_RUN MAX_CANDIDATES --commit | retract S29_REVIEW_ITEM_REF PARSER_RUN WITNESS_ID --rollback-probe|--commit | compile SOURCE_REV PARSER_RUN MAX_SENTENCES --commit [--allow-partial-source] (numeric DB URL required for audit/compile, durable source root for compile)".into()
+            "numeric-pnf-native usage: inspect SOURCE_REV PARSER_RUN | plan SOURCE_REV PARSER_RUN | audit S29_REVIEW_ITEM_REF PARSER_RUN | bind S29_REVIEW_ITEM_REF PARSER_RUN MAX_CANDIDATES --commit | bind-campaign S29_REVIEW_ITEM_REF PARSER_RUN MAX_CANDIDATES --commit | retract S29_REVIEW_ITEM_REF PARSER_RUN WITNESS_ID --rollback-probe|--commit | compile SOURCE_REV PARSER_RUN MAX_SENTENCES --commit [--allow-partial-source] (numeric DB URL required for audit/compile, durable source root for compile)".into()
         )
     }
 }
@@ -219,6 +241,8 @@ mod tests {
     fn incomplete_or_wrong_commit_command_never_runs() {
         assert!(run(&["compile".into()]).is_err());
         assert!(run(&["bind".into(),"a".into(),"b".into(),"65".into(),"--commit".into()]).is_err());
+        assert!(run(&["bind-campaign".into(),"a".into(),"b".into(),"65".into(),"--commit".into()]).is_err());
+        assert!(run(&["bind-campaign".into(),"a".into(),"b".into(),"1".into(),"--rollback-probe".into()]).is_err());
         assert!(run(&["bind".into(),"a".into(),"b".into(),"1".into(),"--dry-run".into()]).is_err());
         assert!(run(&["retract".into(),"a".into(),"b".into(),"1".into(),"--dry-run".into()]).is_err());
         assert!(run(&["retract".into(),"a".into(),"b".into(),"0".into(),"--commit".into()]).is_err());
