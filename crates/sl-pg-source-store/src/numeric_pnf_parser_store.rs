@@ -474,6 +474,7 @@ pub fn persist_original_numeric_parser_plan(
     let mut tx=db.transaction()?;
     tx.batch_execute("SET LOCAL statement_timeout='90000ms'")?;
     tx.batch_execute(NATIVE_PARSER_SENTENCE_RECEIPT_SQL)?;
+    tx.query_one("SELECT pg_advisory_xact_lock(hashtext($1),hashtext($2))", &[&plan.numeric_run_ref,&plan.source_document_ref])?;
     tx.query(
         "SELECT pg_advisory_xact_lock(hashtextextended($1,0))",
         &[&format!("slr-native-numeric:{}:{}",
