@@ -181,4 +181,37 @@ BEGIN
 END;
 $slr_debt_test$;
 
+-- The original outcome refresh must not mutate a stable projection.
+DO $slr_noop_test$
+DECLARE d bigint := current_setting('slr.test_demand')::bigint;
+        c text := 'slr:rollback-noop:'||txid_current()::text;
+        q text := c||':query';
+        run_id_value bigint;
+        document_id_value bigint;
+        first_write bigint;
+        second_write bigint;
+        before_row jsonb;
+        after_row jsonb;
+BEGIN
+    SELECT r.run_id,r.document_id INTO STRICT run_id_value,document_id_value
+      FROM execution.semantic_pnf_demand demand
+      JOIN execution.semantic_pnf_region r ON r.region_id=demand.source_region_id
+      WHERE demand.demand_id=d;
+    INSERT INTO execution.semantic_pnf_consumer_horizon_work_queue
+      (demand_id,consumer_ref,query_ref,policy_ref,horizon,work_state,completed_at)
+    VALUES(d,c,q,'',3,2,CURRENT_TIMESTAMP);
+    first_write := execution.refresh_numeric_pnf_consumer_horizon_outcome(
+        run_id_value,document_id_value,3::smallint,c,q,'');
+    SELECT to_jsonb(o) INTO STRICT before_row FROM execution.semantic_pnf_consumer_horizon_outcome o
+      WHERE o.demand_id=d AND o.consumer_ref=c AND o.query_ref=q AND o.horizon=3;
+    second_write := execution.refresh_numeric_pnf_consumer_horizon_outcome(
+        run_id_value,document_id_value,3::smallint,c,q,'');
+    SELECT to_jsonb(o) INTO STRICT after_row FROM execution.semantic_pnf_consumer_horizon_outcome o
+      WHERE o.demand_id=d AND o.consumer_ref=c AND o.query_ref=q AND o.horizon=3;
+    IF first_write<>1 OR second_write<>0 OR before_row IS DISTINCT FROM after_row THEN
+        RAISE EXCEPTION 'stable consumer outcome caused physical rewrite';
+    END IF;
+END;
+$slr_noop_test$;
+
 ROLLBACK;
