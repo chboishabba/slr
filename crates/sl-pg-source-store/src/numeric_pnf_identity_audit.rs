@@ -612,8 +612,9 @@ fn morphology_mismatches(reference:&[String],candidate:&[String])->Vec<&'static 
         let values=|rows:&[String]|{
             rows.iter().filter_map(|row|{
                 let (name,value)=row.split_once('=')?;
-                if name.eq_ignore_ascii_case(feature){Some(value.to_owned())}else{None}
-            }).collect::<BTreeSet<_>>()
+                if name.eq_ignore_ascii_case(feature){Some(value)}else{None}
+            }).flat_map(|value|value.split(',').filter(|v|!v.is_empty()).map(str::to_owned))
+              .collect::<BTreeSet<_>>()
         };
         let a=values(reference);let b=values(candidate);
         !a.is_empty()&&!b.is_empty()&&a.is_disjoint(&b)
@@ -1566,7 +1567,15 @@ fn bridge_morphology(rows:&[String])->Vec<(String,String)> {
     for row in rows{
         if let Some((feature,raw))=row.split_once('='){
             for value in raw.split(',').filter(|v|!v.is_empty()){
-                if !feature.is_empty(){values.insert((feature.to_owned(),value.to_owned()));}
+                if !feature.is_empty(){
+                    // Numeric parser kind 6 uppercases feature symbols.
+                    // Original m009 declaration compares exact UD feature
+                    // names ('Number','Gender','Person'); map only those
+                    // known coordinates, keeping all other symbols intact.
+                    let canonical=MORPH_FEATURES.iter().copied()
+                        .find(|name|feature.eq_ignore_ascii_case(name)).unwrap_or(feature);
+                    values.insert((canonical.to_owned(),value.to_owned()));
+                }
             }
         }
     }
@@ -3152,11 +3161,13 @@ mod native_binding_bridge_regression {
     fn numeric_pnf_binding_structural_metadata_and_morphology_are_not_guessed(){
         let source="he";
         let mut t=token(7,0,0,0,2,"PRON","he");
-        t.morphology=bridge_morphology(&["Number=Sing,Plur".into(),"Gender=Masc".into(),"Number=Sing".into()]);
+        t.morphology=bridge_morphology(&["NUMBER=Sing,Plur".into(),"GENDER=Masc".into(),"Number=Sing".into()]);
         let tokens=BTreeMap::from([(7,t)]);
         let a=bridge_anchor("x".into(),"semantic.argument.subject",&[7],vec![],&tokens,source,Some(("p","predicate"))).unwrap();
         assert_eq!(a.clause.as_deref(),Some("clause:p"));assert_eq!(a.reporting,None);
         assert_eq!(a.morphology,vec![("Gender".to_owned(),"Masc".to_owned()),("Number".to_owned(),"Plur".to_owned()),("Number".to_owned(),"Sing".to_owned())]);
+        assert!(morphology_mismatches(&["NUMBER=Sing,Plur".into()],&["Number=Plur".into()]).is_empty());
+        assert_eq!(morphology_mismatches(&["NUMBER=Sing".into()],&["Number=Plur".into()]),vec!["Number"]);
         let c=bridge_anchor("y".into(),"semantic.embedded_proposition",&[7],vec![],&tokens,source,Some(("c","composition"))).unwrap();
         assert_eq!(c.reporting.as_deref(),Some("c"));assert_eq!(c.coordination,None);
     }
