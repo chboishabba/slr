@@ -2583,6 +2583,7 @@ pub struct NativeNumericCandidateTransportReceipt {
     pub original_parser_identity_producer:Option<OriginalParserIdentityProducerObservation>,
     pub parser_identity_refresh_invocations:usize,
     pub lean_typed_evidence:Option<serde_json::Value>,
+    pub source_partition_wake:NativePartitionWakeReceipt,
     pub document_identity_fibre:NativeNumericIdentityFibreProjection,
     pub original_cross_resource_needs:Vec<OriginalCrossResourceNeedObservation>,
     pub structural_binding:NativeBindingStructuralReceipt,
@@ -2722,9 +2723,132 @@ fn produce_lean_typed_evidence(
     Ok(Some(actual))
 }
 
+/// Extension of the original m094 consumer reverse dependency index for
+/// absence/coverage of *not-yet-existing* numeric regions. Wake output is
+/// the original m094 queue, not a second scheduler or semantic authority.
+#[derive(Debug,Clone,Serialize)]
+pub struct NativePartitionWakeReceipt {
+    pub applied_partition_refs: Vec<String>,
+    pub already_applied_partition_refs: Vec<String>,
+    pub affected_queue_rows: u64,
+    pub dependency_scope_start_char: i64,
+    pub dependency_scope_end_char: i64,
+}
+fn sync_native_partition_consumer(
+    tx:&mut postgres::Transaction<'_>, run:&str, answer:&NativeSourceLocalAnswer,
+    demand:i64, focus:i64, changes:&[crate::long_document_ingest_store::SourcePartitionChange],
+)->Result<NativePartitionWakeReceipt,NativeNumericAuditError>{
+    let end:i64=tx.query_one("SELECT r.end_char FROM execution.semantic_pnf_demand d
+        JOIN execution.semantic_pnf_region r ON r.region_id=d.source_region_id
+        JOIN execution.semantic_parser_token t ON t.token_id=$2
+        WHERE d.demand_id=$1 AND r.run_ref=$3 AND r.document_ref=$4
+          AND t.run_ref=$3 AND t.document_ref=$4 AND r.start_char<=t.start_char AND t.end_char<=r.end_char",
+        &[&demand,&focus,&run,&answer.source_document_ref])?.get(0);
+    if end<=answer.original_focus_span[0] as i64 {
+        return Err(NativeNumericAuditError::ForeignSource);
+    }
+    tx.batch_execute("CREATE TABLE IF NOT EXISTS execution.slr_native_consumer_source_interval (
+        run_ref text NOT NULL,document_ref text NOT NULL,source_revision_ref text NOT NULL,
+        source_sha256 text NOT NULL,parser_run_ref text NOT NULL,
+        demand_id bigint NOT NULL REFERENCES execution.semantic_pnf_demand(demand_id) ON DELETE CASCADE,
+        consumer_ref text NOT NULL,query_ref text NOT NULL,policy_ref text NOT NULL,
+        start_char bigint NOT NULL,end_char bigint NOT NULL CHECK(end_char>start_char),
+        PRIMARY KEY(run_ref,document_ref,source_revision_ref,demand_id,consumer_ref,query_ref,policy_ref)
+    );
+    CREATE INDEX IF NOT EXISTS slr_native_consumer_source_interval_scope_idx
+        ON execution.slr_native_consumer_source_interval(run_ref,document_ref,source_revision_ref);
+    CREATE INDEX IF NOT EXISTS slr_native_consumer_source_interval_range_idx
+        ON execution.slr_native_consumer_source_interval USING gist(int8range(start_char,end_char,'[)'));
+    CREATE TABLE IF NOT EXISTS execution.slr_native_partition_wake_receipt (
+        run_ref text NOT NULL,document_ref text NOT NULL,source_revision_ref text NOT NULL,
+        partition_ref text NOT NULL,previous_partition_ref text NOT NULL,
+        source_digest_ref text NOT NULL,delta_digest text NOT NULL,
+        affected_queue_rows bigint NOT NULL CHECK(affected_queue_rows>=0),
+        PRIMARY KEY(run_ref,document_ref,source_revision_ref,partition_ref)
+    );")?;
+    let doc=&answer.source_document_ref;
+    let rev=&answer.source_revision_ref;
+    let sha=&answer.source_content_sha256;
+    let parser=&answer.original_parser_run_ref;
+    let consumer=&answer.consumer_scope_ref;
+    let query=&answer.original_review_item_ref;
+    let policy=&answer.original_policy_ref;
+    tx.execute("INSERT INTO execution.slr_native_consumer_source_interval
+        (run_ref,document_ref,source_revision_ref,source_sha256,parser_run_ref,demand_id,consumer_ref,query_ref,policy_ref,start_char,end_char)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,0,$10) ON CONFLICT DO NOTHING",
+        &[&run,doc,rev,sha,parser,&demand,consumer,query,policy,&end])?;
+    let exact:bool=tx.query_one("SELECT EXISTS(SELECT 1 FROM execution.slr_native_consumer_source_interval
+        WHERE run_ref=$1 AND document_ref=$2 AND source_revision_ref=$3 AND source_sha256=$4
+          AND parser_run_ref=$5 AND demand_id=$6 AND consumer_ref=$7 AND query_ref=$8 AND policy_ref=$9
+          AND start_char=0 AND end_char=$10)",
+        &[&run,doc,rev,sha,parser,&demand,consumer,query,policy,&end])?.get(0);
+    if !exact {return Err(NativeNumericAuditError::ForeignSource);}
+    let mut applied=Vec::new();
+    let mut reused=Vec::new();
+    let mut affected=0u64;
+    let mut previous:Option<&str>=None;
+    for c in changes {
+        if c.source_revision_ref!=*rev || c.source_digest_ref!=format!("sha256:{sha}")
+            || c.added.is_empty() || c.added.len()>128
+            || previous.is_some_and(|p|p!=c.previous_partition_ref.as_str())
+            || c.partition_ref==c.previous_partition_ref {
+            return Err(NativeNumericAuditError::ForeignSource);
+        }
+        previous=Some(c.partition_ref.as_str());
+        let delta_digest=bridge_digest(c)?;
+        if let Some(row)=tx.query_opt("SELECT previous_partition_ref,source_digest_ref,delta_digest
+            FROM execution.slr_native_partition_wake_receipt
+            WHERE run_ref=$1 AND document_ref=$2 AND source_revision_ref=$3 AND partition_ref=$4",
+            &[&run,doc,rev,&c.partition_ref])? {
+            if row.get::<_,String>(0)!=c.previous_partition_ref
+                ||row.get::<_,String>(1)!=c.source_digest_ref ||row.get::<_,String>(2)!=delta_digest {
+                return Err(NativeNumericAuditError::ForeignSource);
+            }
+            reused.push(c.partition_ref.clone());
+            continue;
+        }
+        let mut starts=Vec::new();let mut ends=Vec::new();
+        for r in &c.added {
+            if r.start_char<0||r.end_char<=r.start_char||r.region_ref.is_empty()||r.parent_region_ref.is_empty(){
+                return Err(NativeNumericAuditError::ForeignSource);
+            }
+            starts.push(r.start_char);ends.push(r.end_char);
+        }
+        // Intersect exact source intervals (including absence dependencies)
+        // before enqueue. Original m139 handles ordinary positive evidence.
+        let rows=tx.execute("WITH changed AS (
+            SELECT * FROM unnest($5::bigint[],$6::bigint[]) AS r(start_char,end_char)
+        ), affected AS (
+            SELECT DISTINCT d.demand_id,d.consumer_ref,d.query_ref,d.policy_ref
+            FROM changed c JOIN execution.slr_native_consumer_source_interval d
+              ON int8range(d.start_char,d.end_char,'[)') && int8range(c.start_char,c.end_char,'[)')
+            WHERE d.run_ref=$1 AND d.document_ref=$2 AND d.source_revision_ref=$3 AND d.source_sha256=$4
+        )
+        INSERT INTO execution.semantic_pnf_consumer_horizon_work_queue
+            (demand_id,consumer_ref,query_ref,policy_ref,horizon,work_state,completed_at)
+        SELECT demand_id,consumer_ref,query_ref,policy_ref,3,1,NULL FROM affected
+        ON CONFLICT(demand_id,consumer_ref,query_ref,policy_ref,horizon)
+        DO UPDATE SET work_state=1,completed_at=NULL",&[&run,doc,rev,sha,&starts,&ends])?;
+        tx.execute("INSERT INTO execution.slr_native_partition_wake_receipt
+            (run_ref,document_ref,source_revision_ref,partition_ref,previous_partition_ref,source_digest_ref,delta_digest,affected_queue_rows)
+            VALUES($1,$2,$3,$4,$5,$6,$7,$8)",&[&run,doc,rev,&c.partition_ref,&c.previous_partition_ref,
+            &c.source_digest_ref,&delta_digest,&(rows as i64)])?;
+        applied.push(c.partition_ref.clone());affected+=rows;
+    }
+    Ok(NativePartitionWakeReceipt{applied_partition_refs:applied,already_applied_partition_refs:reused,
+        affected_queue_rows:affected,dependency_scope_start_char:0,dependency_scope_end_char:end})
+}
+
 pub fn transport_original_numeric_candidates_for_source_answer(
     numeric_url:&str,numeric_run_ref:&str,answer:&NativeSourceLocalAnswer,
     budget:usize,
+)->Result<NativeNumericCandidateTransportReceipt,NativeNumericAuditError>{
+    transport_original_numeric_candidates_for_source_answer_with_partition(
+        numeric_url,numeric_run_ref,answer,budget,&[])
+}
+pub fn transport_original_numeric_candidates_for_source_answer_with_partition(
+    numeric_url:&str,numeric_run_ref:&str,answer:&NativeSourceLocalAnswer,
+    budget:usize,changes:&[crate::long_document_ingest_store::SourcePartitionChange],
 )->Result<NativeNumericCandidateTransportReceipt,NativeNumericAuditError>{
     original_receipt_policy(answer)?;
     if budget==0||budget>64||numeric_run_ref.trim().is_empty(){
@@ -2768,6 +2892,7 @@ pub fn transport_original_numeric_candidates_for_source_answer(
     let demand:i64=rows[0].get(0);
     let source:i64=rows[0].get(1);
     let focus_token:i64=rows[0].get(2);
+    let source_partition_wake=sync_native_partition_consumer(&mut tx,numeric_run_ref,answer,demand,focus_token,changes)?;
     let (nominal_head_objects_inserted,nominal_head_token_supports_inserted,nominal_heads_remaining)=
         materialize_prior_nominal_heads(&mut tx,numeric_run_ref,&answer.source_document_ref,
             answer.original_focus_span[0] as i64,budget)?;
@@ -2881,7 +3006,7 @@ pub fn transport_original_numeric_candidates_for_source_answer(
         nominal_head_objects_inserted,nominal_head_token_supports_inserted,nominal_heads_remaining,original_h6_evidence_inserted,
         morphology_observations_inserted,candidates_without_morphology_observation,morphology_head_unobservable_count,
         original_horizon_observations,original_document_identity_observations,
-        original_parser_identity_producer,parser_identity_refresh_invocations,lean_typed_evidence,document_identity_fibre,original_cross_resource_needs,
+        original_parser_identity_producer,parser_identity_refresh_invocations,lean_typed_evidence,source_partition_wake,document_identity_fibre,original_cross_resource_needs,
         structural_binding,native_binding_bridge,original_mention_binding_campaign,original_h9_readiness,governed_identity_rollback_probe,
     })
 }
