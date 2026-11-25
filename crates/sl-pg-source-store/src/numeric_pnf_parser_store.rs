@@ -55,7 +55,7 @@ pub struct NumericParserStoreReceipt {
 }
 
 /// All symbols originate from source annotations, not inferred world actors.
-fn normalize(kind:i16,text:&str)->Result<String,NumericParserStoreError>{
+pub(crate) fn normalize(kind:i16,text:&str)->Result<String,NumericParserStoreError>{
     let nfc=text.nfc().collect::<String>();
     if nfc.is_empty(){return Err(NumericParserStoreError::ForeignSource);}
     let canonical=match kind{

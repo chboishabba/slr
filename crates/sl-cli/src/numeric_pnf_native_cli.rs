@@ -8,7 +8,7 @@
 
 use sensiblaw_pg_source_store::{
     load_database_config, load_exact_native_numeric_evidence, prepare_native_endpoint_replay,
-    plan_original_native_numeric_parser, deterministic_numeric_run_ref,
+    plan_original_native_numeric_parser, deterministic_numeric_run_ref, compile_direct_numeric_candidates,
     run_native_numeric_exact_source_slice, run_native_numeric_prefix_slice, OriginalNativeNumericEvidence,
     inspect_native_antecedent_review, native_antecedent_frontier,
     compile_native_source_local_answer,
@@ -83,6 +83,16 @@ fn print_json<T:Serialize>(value:&T)->Result<(),String>{
 }
 pub fn run(args:&[String])->Result<(),String>{
     match args {
+        [subcommand,source_revision,parser_run,first,count] if subcommand=="direct-inspect"=>{
+            let first=first.parse::<usize>().map_err(|_|"invalid first sentence")?;
+            let count=count.parse::<usize>().map_err(|_|"invalid sentence budget")?;
+            if !(1..=64).contains(&count){return Err("direct inspection budget must be 1..=64".into());}
+            let config=load_database_config(None).map_err(|e|e.to_string())?;
+            let evidence=load_exact_native_numeric_evidence(&config,source_revision,parser_run,"slr-strict-numeric-pnf-v1")
+                .map_err(|e|e.to_string())?;
+            let receipt=compile_direct_numeric_candidates(&evidence,first,count).map_err(|e|e.to_string())?;
+            print_json(&receipt)
+        }
         [subcommand,review,parser_run,flag] if subcommand=="prefix-prepare"&&(flag=="--commit"||flag=="--inspect")=>{
             let config=load_database_config(None).map_err(|e|e.to_string())?;
             let receipt=prepare_native_prefix_recovery(&config,review,parser_run,flag=="--commit")?;
@@ -436,7 +446,7 @@ pub fn run(args:&[String])->Result<(),String>{
             print_json(&receipt)
         }
         _=>Err(
-            "numeric-pnf-native usage: prefix-prepare REVIEW PARSER_RUN --inspect|--commit | prefix-repair REVIEW PARSER_RUN --commit | endpoint REVIEW PARSER_RUN --commit | inspect SOURCE_REV PARSER_RUN | plan SOURCE_REV PARSER_RUN | audit S29_REVIEW_ITEM_REF PARSER_RUN | reuse-original S29_REVIEW_ITEM_REF PARSER_RUN | bind S29_REVIEW_ITEM_REF PARSER_RUN MAX_CANDIDATES --commit | bind-campaign S29_REVIEW_ITEM_REF PARSER_RUN MAX_CANDIDATES --commit | retract S29_REVIEW_ITEM_REF PARSER_RUN WITNESS_ID --rollback-probe|--commit | compile SOURCE_REV PARSER_RUN MAX_SENTENCES --commit [--allow-partial-source] (numeric DB URL required for audit/compile, durable source root for compile)".into()
+            "numeric-pnf-native usage: direct-inspect SOURCE_REV PARSER_RUN FIRST_SENTENCE MAX_SENTENCES | prefix-prepare REVIEW PARSER_RUN --inspect|--commit | prefix-repair REVIEW PARSER_RUN --commit | endpoint REVIEW PARSER_RUN --commit | inspect SOURCE_REV PARSER_RUN | plan SOURCE_REV PARSER_RUN | audit S29_REVIEW_ITEM_REF PARSER_RUN | reuse-original S29_REVIEW_ITEM_REF PARSER_RUN | bind S29_REVIEW_ITEM_REF PARSER_RUN MAX_CANDIDATES --commit | bind-campaign S29_REVIEW_ITEM_REF PARSER_RUN MAX_CANDIDATES --commit | retract S29_REVIEW_ITEM_REF PARSER_RUN WITNESS_ID --rollback-probe|--commit | compile SOURCE_REV PARSER_RUN MAX_SENTENCES --commit [--allow-partial-source] (numeric DB URL required for audit/compile, durable source root for compile)".into()
         )
     }
 }

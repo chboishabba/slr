@@ -200,6 +200,172 @@ fn lexicon(database_url:&str)->Result<NumericOperatorLexicon,NumericPipelineErro
     Ok(lex)
 }
 
+
+// Direct, source-addressed sentence-local candidate execution. The local
+// integer coordinates below are codec addresses, NOT semantic identities
+// or original SQL surrogates. Every address is invertible in this packet.
+// The legacy publisher cannot consume these IDs without a separate
+// checked correspondence; this path never calls that publisher.
+#[derive(Debug,Clone,PartialEq,Serialize)]
+pub struct DirectNumericSentenceCandidate {
+    pub sentence_ref:String,
+    pub original_region_ref:String,
+    pub original_compilation_key:String,
+    pub start_char:i64,
+    pub end_char:i64,
+    pub input_sha256:String,
+    pub token_inverse:Vec<crate::numeric_pnf_parser_plan::NativeNumericParserTokenPlan>,
+    pub entity_observations:Vec<crate::numeric_pnf_parser_plan::NativeNumericParserEntityPlan>,
+    pub symbol_inverse:Vec<(i16,String)>,
+    pub numeric_tokens:Vec<NumericToken>,
+    pub closure:NativeSentenceClosure,
+    pub missing_original_tag_count:usize,
+}
+
+#[derive(Debug,Clone,PartialEq,Serialize)]
+pub struct DirectNumericCandidateSlice {
+    pub schema:&'static str,
+    pub source_revision_ref:String,
+    pub original_source_sha256:String,
+    pub original_parser_run_ref:String,
+    pub numeric_run_ref:String,
+    pub source_document_ref:String,
+    pub first_sentence:usize,
+    pub next_sentence:usize,
+    pub represented_sentence_count:usize,
+    pub source_full_document_coverage_paid:bool,
+    pub sentences:Vec<DirectNumericSentenceCandidate>,
+    pub sentence_local_database_crossings:usize,
+    pub production_parser_token_writes:usize,
+    pub candidate_only:bool,
+    pub governed_identity_paid:bool,
+    pub level_three_paid:bool,
+    pub direct_production_activation_paid:bool,
+}
+
+fn direct_symbol_lexicon(symbols:&BTreeMap<(i16,String),i64>)
+    ->Result<NumericOperatorLexicon,NumericPipelineError>{
+    let mut lex=NumericOperatorLexicon{
+        lemma_ids:BTreeMap::new(),dependency_ids:BTreeMap::new(),
+        pos_ids:BTreeMap::new(),factor_type_ids:BTreeMap::new(),
+        predicate_ids:BTreeMap::new(),role_ids:BTreeMap::new(),
+        residual_ids:BTreeMap::new(),object_kind_ids:BTreeMap::new(),
+    };
+    for ((kind,name),id) in symbols{
+        let map=match *kind{
+            2=>&mut lex.lemma_ids,3=>&mut lex.pos_ids,5=>&mut lex.dependency_ids,
+            10=>&mut lex.factor_type_ids,11=>&mut lex.predicate_ids,
+            12=>&mut lex.role_ids,13=>&mut lex.residual_ids,14=>&mut lex.object_kind_ids,
+            _=>continue,
+        };
+        map.insert(name.clone(),*id);
+    }
+    lex.validate()?;
+    Ok(lex)
+}
+
+fn direct_sentence_candidate(sentence:&crate::numeric_pnf_parser_plan::NativeNumericParserSentencePlan)
+    ->Result<DirectNumericSentenceCandidate,NumericPipelineError>{
+    use crate::numeric_pnf_parser_store::normalize;
+    if sentence.start_char<0||sentence.end_char<=sentence.start_char||sentence.tokens.is_empty(){
+        return Err(NumericPipelineError::InvalidSentence);
+    }
+    let mut inverse=sentence.tokens.clone();
+    inverse.sort_by_key(|t|t.original_token_ordinal);
+    let mut refs=BTreeMap::new();
+    let mut names=operator_symbols();
+    let mut ordinals=BTreeSet::new();
+    for (i,t) in inverse.iter().enumerate(){
+        if t.original_compilation_key!=sentence.original_compilation_key
+            ||t.creates_semantic_authority||t.token_ref.is_empty()
+            ||t.start_char<sentence.start_char||t.end_char>sentence.end_char
+            ||t.end_char<=t.start_char||t.original_token_ordinal<0
+            ||!ordinals.insert(t.original_token_ordinal)
+            ||refs.insert(t.token_ref.clone(),(i as i64+1,t.start_char,t.end_char)).is_some(){
+            return Err(NumericPipelineError::InvalidSentence);
+        }
+        for (k,s) in [(1,t.orth.as_str()),(2,t.lemma.as_str()),(3,t.pos.as_str()),(5,t.dependency.as_str())]{
+            names.insert((k,normalize(k,s)?));
+        }
+        match t.tag_origin_id{
+            1=>{names.insert((4,normalize(4,&t.tag)?));},
+            3=>{}, // Unknown TAG is not POS on the direct carrier.
+            _=>return Err(NumericPipelineError::InvalidSentence),
+        }
+    }
+    let symbol_inverse=names.into_iter().collect::<Vec<_>>();
+    let symbols=symbol_inverse.iter().cloned().enumerate()
+        .map(|(i,k)|(k,i as i64+1)).collect::<BTreeMap<_,_>>();
+    let symbol=|k:i16,s:&str|->Result<i64,NumericPipelineError>{
+        symbols.get(&(k,normalize(k,s)?)).copied().ok_or(NumericPipelineError::InvalidSentence)
+    };
+    let lex=direct_symbol_lexicon(&symbols)?;
+    let mut tokens=Vec::with_capacity(inverse.len());
+    for t in &inverse{
+        let &(head,start,end)=refs.get(&t.head_token_ref).ok_or(NumericPipelineError::InvalidSentence)?;
+        if (start,end)!=(t.head_start_char,t.head_end_char){return Err(NumericPipelineError::InvalidSentence);}
+        tokens.push(NumericToken{
+            token_id:refs[&t.token_ref].0,orth_id:symbol(1,&t.orth)?,
+            lemma_id:symbol(2,&t.lemma)?,pos_id:symbol(3,&t.pos)?,
+            tag_id:if t.tag_origin_id==1{symbol(4,&t.tag)?}else{0},
+            dependency_id:symbol(5,&t.dependency)?,head_token_id:head,
+            // Morphology remains exact in the inverse; this existing
+            // normative composer does not consume morphology or TAG.
+            morph_set_id:None,start_char:t.start_char,end_char:t.end_char,
+        });
+    }
+    let closure=compose_numeric_sentence_native(1,&tokens,&lex)?;
+    crate::numeric_pnf_operator::validate_native_numeric_sentence_closure(1,&closure)?;
+    let mut entities=sentence.entities.clone();
+    entities.sort_by_key(|e|(e.start_char,e.end_char,e.original_entity_ordinal));
+    if entities.iter().any(|e|e.creates_semantic_authority||!e.source_candidate_only
+        ||e.original_compilation_key!=sentence.original_compilation_key
+        ||e.start_char<sentence.start_char||e.end_char>sentence.end_char||e.end_char<=e.start_char){
+        return Err(NumericPipelineError::InvalidSentence);
+    }
+    let input=serde_json::to_vec(&(&sentence.sentence_ref,&sentence.original_region_ref,
+        &sentence.original_compilation_key,sentence.start_char,sentence.end_char,&inverse,&entities))
+        .map_err(|_|NumericPipelineError::InvalidSentence)?;
+    let missing_original_tag_count=inverse.iter().filter(|t|t.tag_origin_id!=1).count();
+    Ok(DirectNumericSentenceCandidate{
+        sentence_ref:sentence.sentence_ref.clone(),original_region_ref:sentence.original_region_ref.clone(),
+        original_compilation_key:sentence.original_compilation_key.clone(),
+        start_char:sentence.start_char,end_char:sentence.end_char,
+        input_sha256:format!("{:x}",Sha256::digest(input)),token_inverse:inverse,
+        entity_observations:entities,symbol_inverse,numeric_tokens:tokens,closure,missing_original_tag_count,
+    })
+}
+
+/// Bounded direct execution over the existing exact, source-checked parser
+/// evidence. No SQL token round trip, no alternate semantic composer.
+/// This is an inspection/candidate stage, not durable generation publication.
+pub fn compile_direct_numeric_candidates(
+    source:&crate::OriginalNativeNumericEvidence,first:usize,max_sentences:usize,
+)->Result<DirectNumericCandidateSlice,NumericPipelineError>{
+    if !(1..=64).contains(&max_sentences){return Err(NumericPipelineError::Budget);}
+    let run=deterministic_numeric_run_ref(&source.manifest);
+    let plan=plan_original_native_numeric_parser(source,&run)?;
+    if first>plan.sentences.len(){return Err(NumericPipelineError::Budget);}
+    let mut rows=Vec::new();
+    let mut tokens=0usize;
+    for sentence in plan.sentences.iter().skip(first).take(max_sentences){
+        let n=sentence.tokens.len();
+        if n>12_000{return Err(NumericPipelineError::Budget);}
+        if tokens+n>12_000{break;}
+        rows.push(direct_sentence_candidate(sentence)?);
+        tokens+=n;
+    }
+    Ok(DirectNumericCandidateSlice{
+        schema:"slr-direct-numeric-candidate-slice-v1",source_revision_ref:plan.source_revision_ref,
+        original_source_sha256:plan.original_source_sha256,original_parser_run_ref:plan.original_parser_run_ref,
+        numeric_run_ref:run,source_document_ref:plan.source_document_ref,
+        first_sentence:first,next_sentence:first+rows.len(),represented_sentence_count:plan.sentences.len(),
+        source_full_document_coverage_paid:false,sentences:rows,
+        sentence_local_database_crossings:0,production_parser_token_writes:0,
+        candidate_only:true,governed_identity_paid:false,level_three_paid:false,direct_production_activation_paid:false,
+    })
+}
+
 fn lease_one(database_url:&str,run_ref:&str,document_ref:&str,focus:Option<i64>)
     ->Result<Option<(NumericSentenceLease,i64)>,NumericPipelineError>{
     let mut db=Client::connect(database_url,NoTls)?;

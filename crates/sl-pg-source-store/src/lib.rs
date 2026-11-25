@@ -266,6 +266,7 @@ pub use numeric_pnf_identity_audit::{
     transport_original_numeric_candidates_for_source_answer_with_partition, NativePartitionWakeReceipt,
 };
 pub use numeric_pnf_pipeline::{
+    compile_direct_numeric_candidates,DirectNumericCandidateSlice,DirectNumericSentenceCandidate,
     run_native_numeric_exact_source_slice, run_native_numeric_prefix_slice, deterministic_numeric_run_ref,
     NumericPipelineError, NumericPipelineReceipt,
 };
