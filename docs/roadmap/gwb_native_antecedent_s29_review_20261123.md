@@ -10,6 +10,22 @@ Native v3 extends the original lexical and contiguous proper-name licensing rule
 
 The same campaign now ports original shared_reducer predicate/composition token roles and semantic_reductions v0_4 declaration types into a separate rollback-only numeric source-factor projection. It prioritizes the actual focus subject within a 256-relation execution cap, preserves all four reference alternatives, binds every role to exact source token support, invokes original m070/m086 forward derivations and m073 withdrawal for parser-admitted class witnesses, and verifies the strict original Level-1/3 surfaces restored. This is a source-backed candidate graph probe, not full relational bundle parity or a committed general-language PNF producer; lexical negation/action metadata, full binding graph metadata and non-predicate families remain outstanding. The new bind-campaign command drains up to eight bounded transactions in one invocation, stopping at the governed probe or no progress. One workstation run, not serial handoffs. Source-written, uncompiled, no live PostgreSQL acceptance by assistant.
 
+
+### Single workstation campaign (supersedes repeated bind handoffs)
+
+Source-written SLR commits 4de8b4e (nominal span fibres and original inverse), f18d6d8 (source predicate/composition rollback projection and multi-pass CLI), d40f654 (checked SMALLINT ordinals and unique hyperedge roles). Run:
+
+```sh
+cargo test -p sensiblaw-pg-source-store --lib numeric_pnf
+cargo test -p sensiblaw-cli numeric_pnf_native
+cargo run -p sensiblaw-cli -- numeric-pnf-native bind-campaign \
+  review-item:native-antecedent-candidate:sha256:25e927f12a0092fbed143669f6a0621fa004636d728074d576275b361da8f7d1 \
+  parser-run:sha256:56ea4c0a05c3beb97f05dfe447570c7d753f15d8b8bf76cb86145ca41f8f2d63 \
+  64 --commit | tee native-numeric-binding-campaign.json
+```
+
+Eight bounded transactions maximum; committed earlier passes remain if a later transaction fails. Report parser prefix residual, nominal span coverage, original cap-deferred alternatives, prospective classes, strict graph factor/argument support, projected predicate/composition factors, actual new Level-3 refs and each dependent withdrawal check. Probe IDs are ephemeral. Original typed coverage and focus identity remain explicitly false: the source parser-token span projection is not canonical tokenizer parity, the general-language SQL factor projection is rollback-only and not full original semantic factor parity, and the unique class cannot be substituted into the legacy unique-object API without a real governed witness. Original H9 provider target and external evidence remain separately licensed. No CI, Python restart or duplicate identity service.
+
 ## 25 November — first binding acceptance and governed replay
 
 Operator receipt [f6c14e5](https://github.com/chboishabba/slr/blob/f6c14e59191ab861c1972b78a6a158c8fc4a24fa/native-numeric-binding.json): 25 focused Rust + 1 CLI tests reported passing; 49 nominal heads inserted, zero remaining; 64 represented with 34 untransported; 192 H3/H6/H9 observations (all execution residuals); 33 parser identity candidate rows (27 name expansion, four kind 2, two kind 4), zero admitted classes, zero H6 insertions, no observed external needs. This is not typed coverage or semantic admission.
