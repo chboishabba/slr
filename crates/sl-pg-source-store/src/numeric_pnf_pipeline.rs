@@ -390,16 +390,78 @@ pub fn inspect_direct_numeric_source_slice(
 )->Result<DirectNumericCandidateSlice,NumericPipelineError>{
     let (source,inventory)=crate::numeric_pnf_source_bridge::load_exact_native_numeric_evidence_window(
         config,source_revision,parser_run,"slr-strict-numeric-pnf-v1",first,count)?;
-    let mut receipt=compile_direct_numeric_candidates(&source,0,count)?;
+    direct_slice_from_window(&source,&inventory,first,count)
+}
+
+fn direct_slice_from_window(
+    source:&crate::OriginalNativeNumericEvidence,inventory:&[(i64,i64)],first:usize,count:usize,
+)->Result<DirectNumericCandidateSlice,NumericPipelineError>{
+    let mut receipt=compile_direct_numeric_candidates(source,0,count)?;
     receipt.first_sentence=first;
     receipt.next_sentence=first+receipt.sentences.len();
     receipt.represented_sentence_count=inventory.len();
     // Cursor callers must compare the inventory digest before resuming a
     // different read snapshot; this is a scope observation, not a durable fence.
-    let encoded=serde_json::to_vec(&(&receipt.source_revision_ref,&receipt.original_parser_run_ref,&inventory))
+    let encoded=serde_json::to_vec(&(&receipt.source_revision_ref,&receipt.original_parser_run_ref,inventory))
         .map_err(|_|NumericPipelineError::ForeignRun)?;
     receipt.source_inventory_sha256=Some(format!("{:x}",Sha256::digest(encoded)));
     Ok(receipt)
+}
+
+#[derive(Debug,Clone,PartialEq,Serialize)]
+pub struct DirectNumericStagingReceipt{
+    pub schema:&'static str,
+    pub candidate:DirectNumericCandidateSlice,
+    pub compiler_executable_sha256:String,
+    pub inserted_candidate_products:usize,
+    pub unchanged_candidate_products_skipped:usize,
+    pub physical_candidate_row_mutations:usize,
+    pub locally_recomputed_sentences:usize,
+    pub committed:bool,
+    pub creates_semantic_authority:bool,
+    pub authority_publication_paid:bool,
+}
+
+fn direct_compiler_executable_digest()->Result<String,NumericPipelineError>{
+    use std::io::Read;
+    let error=|e:std::io::Error|NumericPipelineError::Database(format!("direct executable digest: {e}"));
+    let mut file=std::fs::File::open(std::env::current_exe().map_err(error)?).map_err(error)?;
+    let mut sha=Sha256::new();let mut buf=[0u8;64*1024];
+    loop{
+        let n=file.read(&mut buf).map_err(error)?;
+        if n==0{break;}
+        sha.update(&buf[..n]);
+    }
+    Ok(format!("{:x}",sha.finalize()))
+}
+
+/// Durable candidate staging, not authority publication. Reuse the existing
+/// source snapshot and candidate product persistence owner. A later source
+/// correction gets a different input key; old immutable products remain
+/// historical. A same-input replay checks exact payload and does not rewrite.
+/// The current implementation still recomputes the bounded local closure.
+pub fn stage_direct_numeric_source_slice(
+    config:&DatabaseConfig,source_revision:&str,parser_run:&str,first:usize,count:usize,
+)->Result<DirectNumericStagingReceipt,NumericPipelineError>{
+    if !(1..=64).contains(&count){return Err(NumericPipelineError::Budget);}
+    let compiler=direct_compiler_executable_digest()?;
+    let mut connection=Client::connect(config.database_url(),NoTls)?;
+    let mut tx=connection.transaction()?;
+    tx.batch_execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE; SET LOCAL statement_timeout='90000ms'; SET LOCAL lock_timeout='5000ms'")?;
+    let (source,inventory)=crate::numeric_pnf_source_bridge::load_exact_native_numeric_evidence_on_client(
+        &mut tx,source_revision,parser_run,"slr-strict-numeric-pnf-v1",None,Some((first,count)))?;
+    let candidate=direct_slice_from_window(&source,&inventory,first,count)?;
+    let (inserted,unchanged)=crate::candidate_pnf_store::stage_direct_numeric_candidate_products(
+        &mut tx,&candidate,&compiler).map_err(|e|NumericPipelineError::Database(e.to_string()))?;
+    if inserted+unchanged!=candidate.sentences.len(){return Err(NumericPipelineError::ForeignRun);}
+    let recomputed=candidate.sentences.len();
+    tx.commit()?;
+    Ok(DirectNumericStagingReceipt{
+        schema:"slr-direct-numeric-staging-v1",candidate,compiler_executable_sha256:compiler,
+        inserted_candidate_products:inserted,unchanged_candidate_products_skipped:unchanged,
+        physical_candidate_row_mutations:inserted,locally_recomputed_sentences:recomputed,
+        committed:true,creates_semantic_authority:false,authority_publication_paid:false,
+    })
 }
 
 fn checked_direct_codec_parity(

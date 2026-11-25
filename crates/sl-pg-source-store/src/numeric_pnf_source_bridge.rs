@@ -130,13 +130,20 @@ fn load_exact_native_numeric_evidence_selected(
     config:&DatabaseConfig,source_revision_ref:&str,parser_run_ref:&str,
     rule_set_revision:&str,focus:Option<i64>,window:Option<(usize,usize)>,
 )->Result<(OriginalNativeNumericEvidence,Vec<(i64,i64)>),NativeNumericSourceError>{
-    if source_revision_ref.is_empty()||parser_run_ref.is_empty()
-        ||rule_set_revision.is_empty(){
-        return Err(NativeNumericSourceError::SourceManifest);
-    }
     let mut connection=Client::connect(config.database_url(),NoTls)?;
     let mut db=connection.transaction()?;
     db.batch_execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY; SET LOCAL statement_timeout='90000ms'")?;
+    load_exact_native_numeric_evidence_on_client(&mut db,source_revision_ref,parser_run_ref,rule_set_revision,focus,window)
+}
+
+pub(crate) fn load_exact_native_numeric_evidence_on_client(
+    db:&mut impl postgres::GenericClient,source_revision_ref:&str,parser_run_ref:&str,
+    rule_set_revision:&str,focus:Option<i64>,window:Option<(usize,usize)>,
+)->Result<(OriginalNativeNumericEvidence,Vec<(i64,i64)>),NativeNumericSourceError>{
+    if source_revision_ref.is_empty()||parser_run_ref.is_empty()||rule_set_revision.is_empty()
+        ||window.is_some_and(|(_,count)|!(1..=64).contains(&count)){
+        return Err(NativeNumericSourceError::SourceManifest);
+    }
     let rows=db.query(
         "SELECT g.source_ref,g.document_ref,g.content_digest_ref,c.payload,
                 g.candidate_only,g.creates_semantic_authority,
@@ -176,7 +183,7 @@ fn load_exact_native_numeric_evidence_selected(
     let run=db.query(
         "SELECT source_revision_ref,status,candidate_only,
                 creates_semantic_authority,applicability_promoted,
-                claim_truth_promoted,parser_family,parser_version,model_ref
+                claim_truth_promoted,parser_family,parser_version,model_ref,config_digest_ref
          FROM ingest.parser_run WHERE parser_run_ref=$1",
         &[&parser_run_ref])?;
     if run.len()!=1{return Err(NativeNumericSourceError::ParserRun);}
@@ -261,6 +268,16 @@ fn load_exact_native_numeric_evidence_selected(
         inventory.push((start,end));
         if focus.is_some_and(|f|start>f)||window.is_some_and(|(first,count)|
             job_index<first||job_index-first>=count){full_document=false;continue;}
+        if window.is_some(){
+            // Direct path requires the existing exact parser product
+            // identity, not merely a nonempty legacy product locator.
+            let literal=&text[bounds[start as usize]..bounds[end as usize]];
+            let expected=crate::db_native_parser::parser_product_key(literal,
+                &r.get::<_,String>(6),&r.get::<_,String>(7),&r.get::<_,String>(8),&r.get::<_,String>(9));
+            if job.get::<_,Option<String>>(6).as_deref()!=Some(expected.as_str()){
+                return Err(NativeNumericSourceError::JobScope);
+            }
+        }
         let rows=token_rows_by_job.remove(&compilation_key)
             .unwrap_or_default();
         let mut ordinals=BTreeSet::new();

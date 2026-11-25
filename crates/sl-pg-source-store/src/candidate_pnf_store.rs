@@ -102,6 +102,22 @@ CREATE TABLE IF NOT EXISTS pnf.candidate_persistence_stage_receipt (
     PRIMARY KEY (source_revision_ref, parser_run_ref, compiler_ref)
 );
 
+
+-- Rich numeric-PNF candidate products are a sibling encoding of the
+-- existing M12 candidate product, NOT another reviewed semantic store.
+-- Immutable source-bound staging is never an authority/current pointer.
+CREATE TABLE IF NOT EXISTS pnf.direct_numeric_candidate_product (
+    source_revision_ref TEXT NOT NULL,
+    parser_run_ref TEXT NOT NULL,
+    compilation_key TEXT NOT NULL,
+    compiler_sha256 TEXT NOT NULL CHECK(length(compiler_sha256)=64),
+    input_sha256 TEXT NOT NULL CHECK(length(input_sha256)=64),
+    payload_sha256 TEXT NOT NULL CHECK(length(payload_sha256)=64),
+    payload_json TEXT NOT NULL,
+    candidate_only BOOLEAN NOT NULL CHECK(candidate_only),
+    creates_semantic_authority BOOLEAN NOT NULL CHECK(NOT creates_semantic_authority),
+    PRIMARY KEY(source_revision_ref,parser_run_ref,compilation_key,compiler_sha256,input_sha256)
+);
 "#;
 
 #[derive(Debug, Error)]
@@ -342,6 +358,79 @@ pub fn install_candidate_pnf_schema(config: &DatabaseConfig) -> Result<(), Candi
     let mut client = Client::connect(config.database_url(), NoTls)?;
     client.batch_execute(CANDIDATE_PNF_SCHEMA_SQL)?;
     Ok(())
+}
+
+
+// The direct product lives under the existing candidate persistence owner.
+// Only exact checked source packets from the caller's serializable snapshot
+// reach this private function. One set-wise missing-key insert; no rewrite
+// of unchanged immutable products. Readback is checked before outer commit.
+pub(crate) fn stage_direct_numeric_candidate_products(
+    tx:&mut postgres::Transaction<'_>,candidate:&crate::DirectNumericCandidateSlice,compiler:&str,
+)->Result<(usize,usize),CandidatePnfStoreError>{
+    if !candidate.candidate_only||candidate.governed_identity_paid||candidate.level_three_paid
+        ||candidate.direct_production_activation_paid||compiler.len()!=64
+        ||candidate.source_inventory_sha256.is_none(){
+        return Err(CandidatePnfStoreError::InvalidCandidate);
+    }
+    if candidate.sentences.is_empty(){return Ok((0,0));}
+    let ready:bool=tx.query_one("SELECT to_regclass('pnf.direct_numeric_candidate_product') IS NOT NULL",&[])?.get(0);
+    if !ready{
+        // Install through the existing candidate product schema owner.
+        tx.batch_execute(CANDIDATE_PNF_SCHEMA_SQL)?;
+    }
+    let mut desired=BTreeMap::<(String,String),(String,String)>::new();
+    for sentence in &candidate.sentences{
+        let payload=serde_json::to_string(&sentence).map_err(|_|CandidatePnfStoreError::InvalidCandidate)?;
+        let sha=format!("{:x}",Sha256::digest(payload.as_bytes()));
+        let key=(sentence.original_compilation_key.clone(),sentence.input_sha256.clone());
+        if desired.insert(key,(sha,payload)).is_some(){return Err(CandidatePnfStoreError::InvalidCandidate);}
+    }
+    let keys=desired.keys().map(|k|k.0.clone()).collect::<Vec<_>>();
+    let inputs=desired.keys().map(|k|k.1.clone()).collect::<Vec<_>>();
+    fn read(tx:&mut postgres::Transaction<'_>,candidate:&crate::DirectNumericCandidateSlice,compiler:&str,
+        keys:&[String],inputs:&[String],
+    )->Result<BTreeMap<(String,String),(String,String)>,CandidatePnfStoreError>{
+        let rows=tx.query(
+            "SELECT p.compilation_key,p.input_sha256,p.payload_sha256,p.payload_json,
+                    p.candidate_only,p.creates_semantic_authority
+             FROM pnf.direct_numeric_candidate_product p
+             JOIN UNNEST($4::text[],$5::text[]) AS wanted(compilation_key,input_sha256)
+               USING(compilation_key,input_sha256)
+             WHERE p.source_revision_ref=$1 AND p.parser_run_ref=$2 AND p.compiler_sha256=$3",
+            &[&candidate.source_revision_ref,&candidate.original_parser_run_ref,&compiler,&keys,&inputs])?;
+        let mut out=BTreeMap::new();
+        for row in rows{
+            if !row.get::<_,bool>(4)||row.get::<_,bool>(5){return Err(CandidatePnfStoreError::ExistingBatchConflict);}
+            if out.insert((row.get(0),row.get(1)),(row.get(2),row.get(3))).is_some(){
+                return Err(CandidatePnfStoreError::ExistingBatchConflict);
+            }
+        }
+        Ok(out)
+    }
+    let current=read(tx,candidate,compiler,&keys,&inputs)?;
+    if current.iter().any(|(key,value)|desired.get(key)!=Some(value)){
+        return Err(CandidatePnfStoreError::ExistingBatchConflict);
+    }
+    let missing=desired.iter().filter(|(key,_)|!current.contains_key(*key)).collect::<Vec<_>>();
+    let inserted=if missing.is_empty(){0}else{
+        let mk=missing.iter().map(|(k,_)|k.0.clone()).collect::<Vec<_>>();
+        let mi=missing.iter().map(|(k,_)|k.1.clone()).collect::<Vec<_>>();
+        let mh=missing.iter().map(|(_,v)|v.0.clone()).collect::<Vec<_>>();
+        let mp=missing.iter().map(|(_,v)|v.1.clone()).collect::<Vec<_>>();
+        tx.execute(
+            "INSERT INTO pnf.direct_numeric_candidate_product
+             (source_revision_ref,parser_run_ref,compiler_sha256,compilation_key,input_sha256,
+              payload_sha256,payload_json,candidate_only,creates_semantic_authority)
+             SELECT $1,$2,$3,k,i,h,p,TRUE,FALSE
+             FROM UNNEST($4::text[],$5::text[],$6::text[],$7::text[]) AS x(k,i,h,p)
+             ON CONFLICT DO NOTHING",
+            &[&candidate.source_revision_ref,&candidate.original_parser_run_ref,&compiler,&mk,&mi,&mh,&mp])? as usize
+    };
+    if inserted!=missing.len()||read(tx,candidate,compiler,&keys,&inputs)?!=desired{
+        return Err(CandidatePnfStoreError::ExistingBatchConflict);
+    }
+    Ok((inserted,current.len()))
 }
 
 fn persist_candidate_semantic_product_in_scope<C: GenericClient>(
