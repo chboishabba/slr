@@ -1268,15 +1268,20 @@ pub struct NativeH6ValidityReceipt {
 }
 fn ensure_native_h6_current_authority(tx:&mut postgres::Transaction<'_>,demand:i64)
     ->Result<(),NativeNumericAuditError>{
-    let installed:bool=tx.query_one("SELECT to_regprocedure('execution.slr_reconcile_native_candidate_only_debt(bigint,boolean,boolean)') IS NOT NULL",&[])?.get(0);
+    let installed:bool=tx.query_one("SELECT to_regprocedure('execution.slr_wake_native_validity_delta()') IS NOT NULL",&[])?.get(0);
     if !installed{
         tx.query_one("SELECT pg_advisory_xact_lock(hashtext('slr-native-h6-current:v1'))",&[])?;
-        let ready:bool=tx.query_one("SELECT to_regprocedure('execution.slr_reconcile_native_candidate_only_debt(bigint,boolean,boolean)') IS NOT NULL",&[])?.get(0);
+        let ready:bool=tx.query_one("SELECT to_regprocedure('execution.slr_wake_native_validity_delta()') IS NOT NULL",&[])?.get(0);
         if !ready{tx.batch_execute(include_str!("numeric_pnf_h6_current_authority.sql"))?;}
     }
     let intact:bool=tx.query_one("SELECT EXISTS(SELECT 1 FROM execution.slr_native_h6_current_contract WHERE contract_ref='slr-native-h6-current:v1')
       AND EXISTS(SELECT 1 FROM execution.slr_native_h3_current_contract WHERE contract_ref='slr-native-h3-current:v1')
-      AND EXISTS(SELECT 1 FROM execution.slr_native_current_authority_contract WHERE contract_ref='slr-native-current-authority:v2')
+      AND EXISTS(SELECT 1 FROM execution.slr_native_current_authority_contract WHERE contract_ref='slr-native-current-authority:v3')
+      AND (SELECT count(*)=2 FROM pg_trigger t WHERE NOT t.tgisinternal AND t.tgenabled IN ('O','A')
+         AND t.tgfoid='execution.slr_wake_native_validity_delta()'::regprocedure
+         AND t.tgnewtable='inserted_validity'
+         AND ((t.tgname='slr_native_h3_validity_delta_wake' AND t.tgrelid='execution.slr_native_h3_validity_history'::regclass)
+           OR (t.tgname='slr_native_h6_validity_delta_wake' AND t.tgrelid='execution.slr_native_h6_validity_history'::regclass)))
       AND position('slr_native_candidate_only_authority_absent' in pg_get_functiondef(
          'execution.slr_reconcile_native_candidate_only_debt(bigint,boolean,boolean)'::regprocedure))>0
       AND position('slr_native_current_authority_usable' in pg_get_functiondef(
@@ -1322,19 +1327,6 @@ fn reconcile_native_h3_validity(tx:&mut postgres::Transaction<'_>,demand:i64)
 fn reopen_native_h6_validity(tx:&mut postgres::Transaction<'_>,demand:i64)
     ->Result<NativeH6ValidityReceipt,NativeNumericAuditError>{
     ensure_native_h6_current_authority(tx,demand)?;
-    tx.batch_execute("CREATE TEMP TABLE IF NOT EXISTS slr_h6_validity_probe(singleton bool) ON COMMIT DROP;
-        CREATE TABLE IF NOT EXISTS execution.slr_native_h6_validity_current (
-          evidence_id bigint PRIMARY KEY REFERENCES execution.semantic_pnf_candidate_evidence(evidence_id) ON DELETE CASCADE,
-          demand_id bigint NOT NULL REFERENCES execution.semantic_pnf_demand(demand_id) ON DELETE CASCADE,
-          supported boolean NOT NULL, revision bigint NOT NULL CHECK(revision>0)
-        );
-        CREATE INDEX IF NOT EXISTS slr_native_h6_validity_demand_idx
-          ON execution.slr_native_h6_validity_current(demand_id,supported,evidence_id);
-        CREATE TABLE IF NOT EXISTS execution.slr_native_h6_validity_history (
-          evidence_id bigint NOT NULL,demand_id bigint NOT NULL,revision bigint NOT NULL,
-          supported boolean NOT NULL,original_atom jsonb NOT NULL,
-          PRIMARY KEY(evidence_id,revision)
-        );")?;
     let row=tx.query_one("WITH physical AS MATERIALIZED (
         SELECT * FROM execution.slr_current_m110_h6_atoms($1)
       ), observed AS MATERIALIZED (
