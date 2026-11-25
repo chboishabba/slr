@@ -1963,6 +1963,7 @@ pub struct NativeBindingBridgeReceipt {
     pub anchors:usize,pub mention_anchors:usize,pub relation_anchors:usize,
     pub native_relation_reductions:usize,pub native_role_reductions:usize,
     pub native_action_metadata_reductions:usize,
+    pub question_mode_observation:Option<serde_json::Value>,pub original_tag_capability_missing_count:usize,
     pub focus_reference_anchors:usize,pub retired_index_anchors:u64,
     pub candidate_sets:Vec<NativeBindingSetBridgeReceipt>,
     pub focus_reference_alternatives:Vec<&'static str>,
@@ -2109,9 +2110,8 @@ fn materialize_native_binding_bridge(
     if relation_tokens.iter().any(|t|tokens.get(&t.head).map_or(true,|h|h.region!=t.region)){
         return Err(NativeNumericAuditError::ForeignSource);
     }
-    let mut relations=native_relation_grammar(&relation_tokens);
-    relations.sort_by_key(|r|(r.region,r.head_token_id,r.relation_type,r.roles.clone()));
-    let relation_reductions=native_relation_reductions(tx,run_ref,doc,&relation_tokens,&relations)?;
+    let relations=native_relation_grammar(&relation_tokens);
+    let (relation_reductions,question_mode,missing_original_tags)=native_relation_reductions(tx,run_ref,doc,&relation_tokens,&relations)?;
     let mut anchors=Vec::new();
     for span in &campaign.represented_spans{
         let anchor=bridge_anchor(span.original_mention_ref.clone(),"semantic.mention_identity",
@@ -2154,7 +2154,7 @@ fn materialize_native_binding_bridge(
     // anchor metadata, exact source and inverse object IDs; never a count key.
     let tape=tokens.values().map(|t|(t.id,t.sentence_id,t.ordinal,t.start,t.end,t.head,
         &t.pos,&t.dep,&t.morphology)).collect::<Vec<_>>();
-    let snapshot=format!("slr-native-binding-index:v2:{}",bridge_digest(&("consumer-prefix:v2",run_ref,doc,sha,tape,&anchors,&relation_reductions))?);
+    let snapshot=format!("slr-native-binding-index:v2:{}",bridge_digest(&("consumer-prefix:v2",run_ref,doc,sha,tape,&anchors,&relation_reductions,&question_mode,missing_original_tags))?);
     // Explicit projection/history tables on the existing numeric DB. Old
     // immutable factor/revision/member/span rows are never deleted. Only
     // mutable anchor index rows are retired, after saving their exact JSON.
@@ -2232,6 +2232,15 @@ fn materialize_native_binding_bridge(
             WHERE run_ref=$1 AND document_ref=$2 AND snapshot_ref=$3 AND relation_ref=$4",
             &[&run_ref,&doc,&snapshot,&r.relation_ref])?.get(0);
         if stored!=payload{return Err(NativeNumericAuditError::ForeignSource);}
+    }
+    if let Some(q)=&question_mode{
+        let name=format!("native-question-mode:{}",bridge_digest(&(run_ref,doc,q))?);
+        tx.execute("INSERT INTO execution.slr_native_relation_reduction(run_ref,document_ref,snapshot_ref,relation_ref,payload)
+            VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING",&[&run_ref,&doc,&snapshot,&name,q])?;
+        let stored:serde_json::Value=tx.query_one("SELECT payload FROM execution.slr_native_relation_reduction
+            WHERE run_ref=$1 AND document_ref=$2 AND snapshot_ref=$3 AND relation_ref=$4",
+            &[&run_ref,&doc,&snapshot,&name])?.get(0);
+        if &stored!=q{return Err(NativeNumericAuditError::ForeignSource);}
     }
     let mut references=Vec::new();
     for a in &anchors{
@@ -2330,7 +2339,8 @@ fn materialize_native_binding_bridge(
         snapshot_ref:snapshot,source_parser_tokens:tokens.len(),anchors:anchors.len(),mention_anchors,
         relation_anchors,native_relation_reductions:relation_reductions.len(),
         native_role_reductions:relation_reductions.iter().map(|r|r.role_factors.len()).sum(),
-        native_action_metadata_reductions:relation_reductions.iter().filter(|r|r.action_meta.is_some()).count(),focus_reference_anchors:focus_keys.len(),retired_index_anchors:retired,candidate_sets:sets,
+        native_action_metadata_reductions:relation_reductions.iter().filter(|r|r.action_meta.is_some()).count(),
+        question_mode_observation:question_mode,original_tag_capability_missing_count:missing_original_tags,focus_reference_anchors:focus_keys.len(),retired_index_anchors:retired,candidate_sets:sets,
         focus_reference_alternatives:alternatives,original_index_candidate_evidence_inserted,
         exact_index_entity_objects_outside_transport,indexed_entity_spans_missing_from_projected,
         projected_entity_spans_missing_from_index,
@@ -2687,6 +2697,14 @@ fn native_relation_grammar(tokens:&[NativeRelationToken])->Vec<ProjectedRelation
                 roles:vec![("anchor",t.id)]});
         }
     }
+    // Original producer emits relations in the generating token's source
+    // order, not numeric allocation order or relation family order.
+    rows.sort_by_key(|r|{
+        let generator=match r.relation_type{"modifier"|"conjunction"=>r.roles.last().map(|(_,id)|*id).unwrap_or(r.head_token_id),_=>r.head_token_id};
+        let order=by_id.get(&generator).map(|t|(t.start,t.end,t.id)).unwrap_or((i64::MAX,i64::MAX,generator));
+        let lane=match r.relation_type{"predicate"=>0,"composition"=>1,"modifier"=>2,"conjunction"=>3,_=>4};
+        (order,lane)
+    });
     let mut seen=BTreeSet::new();
     rows.retain(|r|seen.insert((r.region,r.relation_type,r.roles.clone())));
     rows
@@ -2754,6 +2772,7 @@ fn original_relation_action_metadata(raw:Option<&str>,surface:&str,dep:&str)
 #[derive(Debug,Clone,Serialize)]
 struct NativeRelationReductionRow {
     relation_ref:String,
+    projected_relation_ordinal:usize,
     relation:ProjectedRelation,
     grammar_ref:&'static str,
     factor_type:&'static str,
@@ -2766,7 +2785,7 @@ struct NativeRelationReductionRow {
 fn native_relation_reductions(
     tx:&mut postgres::Transaction<'_>,run:&str,doc:&str,tokens:&[NativeRelationToken],
     relations:&[ProjectedRelation],
-)->Result<Vec<NativeRelationReductionRow>,NativeNumericAuditError>{
+)->Result<(Vec<NativeRelationReductionRow>,Option<serde_json::Value>,usize),NativeNumericAuditError>{
     let wanted=tokens.iter().map(|t|t.id).collect::<Vec<_>>();
     let rows=tx.query("SELECT t.token_id,p.morph_json,p.tag_origin_id
         FROM execution.slr_native_parser_sentence_receipt r
@@ -2778,7 +2797,7 @@ fn native_relation_reductions(
     if raw.len()!=rows.len()||raw.len()!=wanted.len(){return Err(NativeNumericAuditError::ForeignSource);}
     let by_id=tokens.iter().map(|t|(t.id,t)).collect::<BTreeMap<_,_>>();
     let mut out=Vec::new();
-    for relation in relations{
+    for (index,relation) in relations.iter().enumerate(){
         let (grammar_ref,factor_type,candidate_type,residuals)=relation_declaration(relation.relation_type)
             .ok_or(NativeNumericAuditError::ForeignSource)?;
         let relation_ref=format!("native-projected-relation:{}",bridge_digest(&(run,doc,relation))?);
@@ -2802,10 +2821,34 @@ fn native_relation_reductions(
                 "parser_pos":atom.pos,"parser_dependency":atom.dep,"parser_morph_json":raw[id].0,
                 "reference_alternatives":if pronoun{vec!["entity_reference","eventuality_reference","proposition_reference","expletive_realisation"]}else{vec![]}}));
         }
-        out.push(NativeRelationReductionRow{relation_ref,relation:relation.clone(),grammar_ref,factor_type,candidate_type,
+        out.push(NativeRelationReductionRow{relation_ref,projected_relation_ordinal:index+1,relation:relation.clone(),grammar_ref,factor_type,candidate_type,
             residuals:residuals.to_vec(),action_meta,role_factors});
     }
-    Ok(out)
+    // The donor question detector checks punctuation first within each
+    // sentence and then tag/preposed auxiliary. Original SLR did not retain
+    // TAG, so a known punctuation/auxiliary mode is an observation, not a
+    // complete first-question witness. Do not assign it a fake atom role.
+    let missing_tags=raw.values().filter(|(_,origin)|*origin!=1).count();
+    let mut sentences=BTreeMap::<i64,Vec<&NativeRelationToken>>::new();
+    for t in tokens{sentences.entry(t.region).or_default().push(t);}
+    let mut ordered=sentences.into_values().collect::<Vec<_>>();
+    ordered.sort_by_key(|s|s.first().map(|t|t.start).unwrap_or(i64::MAX));
+    let mut question=None;
+    for sentence in ordered{
+        let hit=sentence.iter().copied().find(|t|t.orth=="?").map(|t|(t,"question_mark"))
+          .or_else(||sentence.iter().copied().find(|t|t.dep=="aux"&&by_id.get(&t.head)
+            .is_some_and(|head|matches!(head.pos.as_str(),"VERB"|"AUX")&&t.start<head.start))
+            .map(|t|(t,"preposed_auxiliary")));
+        if let Some((t,route))=hit{
+            question=Some(serde_json::json!({"grammar_ref":"grammar:semantic:composition:v0_4",
+                "factor_type":"semantic.embedded_proposition","candidate_type":"semantic.composition_candidate",
+                "relation_type":"composition","mode_role":{"role":"mode","value":"question","span_start":t.start,"span_end":t.end},
+                "source_token_id":t.id,"route":route,"bindings":[],"residuals":["composition_scope_unresolved","proposition_truth_not_evaluated"],
+                "original_tag_capability_missing_count":missing_tags,"first_original_question_paid":false,"candidate_only":true}));
+            break;
+        }
+    }
+    Ok((out,question,missing_tags))
 }
 #[derive(Debug,Clone,Serialize)]
 pub struct NativeTypedRelationProofBridge{
@@ -5008,6 +5051,26 @@ mod tests{
         assert!(rows.iter().any(|r|r.relation_type=="predicate"&&r.roles==vec![
             ("head",2),("subject",1),("object",3),("argument",3),("negation",4)]));
         assert!(rows.iter().any(|r|r.relation_type=="composition"&&r.roles==vec![("host",2),("content",5)]));
+    }
+    #[test]
+    fn original_relation_grammar_keeps_distinct_modifier_coordination_and_temporal_roles(){
+        let t=|id,head,pos:&str,dep:&str,orth:&str|NativeRelationToken{
+            id,region:1,lemma_id:id,head,start:id,end:id+1,orth:orth.into(),lemma:orth.into(),pos:pos.into(),dep:dep.into()
+        };
+        let rows=native_relation_grammar(&[t(1,1,"NOUN","root","actor"),t(2,1,"NOUN","conj","person"),
+            t(3,1,"NUM","tmod","2001"),t(4,1,"ADJ","amod","new")]);
+        assert!(rows.iter().any(|r|r.relation_type=="modifier"&&r.roles==vec![("head",1),("modifier",2)]));
+        assert!(rows.iter().any(|r|r.relation_type=="conjunction"&&r.roles==vec![("item",1),("item",2)]));
+        assert!(rows.iter().any(|r|r.relation_type=="temporal"&&r.roles==vec![("anchor",3)]));
+        assert_eq!(relation_declaration("conjunction").unwrap().1,"semantic.coordination");
+    }
+    #[test]
+    fn original_action_metadata_preserves_missing_and_explicit_morphology(){
+        let missing=original_relation_action_metadata(None,"went","root").unwrap();
+        assert_eq!(missing["voice"],"unknown");
+        let known=original_relation_action_metadata(Some(r#"{"VerbForm":["Fin"],"Tense":["Past"],"Aspect":["Perf","Prog"],"Mood":["Ind"]}"#),"went","auxpass").unwrap();
+        assert_eq!(known["tense"],"past");assert_eq!(known["aspect"],"perfect_progressive");
+        assert_eq!(known["voice"],"passive");assert_eq!(known["verb_form"],"finite");
     }
     #[test]
     fn unsupported_scope_refused_before_any_sql(){
