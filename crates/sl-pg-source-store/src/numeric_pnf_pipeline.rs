@@ -365,6 +365,11 @@ fn reduce_original_frontier_slice(
         let id:i64=row.get(0);
         if tx.execute("DELETE FROM execution.semantic_pnf_frontier_dirty WHERE interface_id=$1",
             &[&id])?!=1 {return Err(NumericPipelineError::ForeignRun);}
+        // The existing m209 owner already performs desired/current
+        // reconciliation. Correct its exact historical receipt accounting
+        // only, without duplicating the reducer. Unknown versions are not
+        // silently overwritten; legacy databases without m209 are unchanged.
+        tx.batch_execute(include_str!("numeric_pnf_m209_receipt_correction.sql"))?;
         // m211 publication barrier: topology construction can defer this
         // stable owner. A bounded explicit publication must force it, or
         // a read-only return could consume the dirty marker.
