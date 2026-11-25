@@ -48,6 +48,8 @@ mod numeric_pnf_parser_plan;
 mod numeric_pnf_parser_store;
 mod numeric_pnf_pipeline;
 mod numeric_pnf_identity_audit;
+mod numeric_pnf_endpoint_replay;
+pub use numeric_pnf_endpoint_replay::{prepare_native_endpoint_replay,NativeEndpointReplaySession,NativeEndpointReplayError};
 mod statement_pnf_spine;
 mod generic_source_compiler;
 mod source_candidate_persistence;
