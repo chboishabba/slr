@@ -526,6 +526,8 @@ pub fn enqueue_parser_regions(
     let mut client = Client::connect(config.database_url(), NoTls)?;
     client.batch_execute(DB_NATIVE_PARSER_SCHEMA_SQL)?;
     let mut tx = client.transaction()?;
+    tx.query_one("SELECT pg_advisory_xact_lock(hashtext('slr-long-document-partition:v1'), hashtext($1))",
+        &[&run.source_revision_ref])?;
     let mut inserted = 0usize;
 
     for region in regions {
@@ -574,6 +576,8 @@ pub fn enqueue_parser_regions_with_content_reuse(
     let mut client = Client::connect(config.database_url(), NoTls)?;
     client.batch_execute(DB_NATIVE_PARSER_SCHEMA_SQL)?;
     let mut tx = client.transaction()?;
+    tx.query_one("SELECT pg_advisory_xact_lock(hashtext('slr-long-document-partition:v1'), hashtext($1))",
+        &[&run.source_revision_ref])?;
 
     let mut queued_new_job_count = 0usize;
     let mut same_revision_reused_job_count = 0usize;
