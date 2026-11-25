@@ -300,7 +300,8 @@ fn reduce_original_frontier_slice(
 )->Result<(usize,i64),NumericPipelineError>{
     let started=std::time::Instant::now();
     let mut completed=0usize;
-    // Seed missing or stale receipts once, using the original recovery rule.
+    // Seed missing/stale receipts using original m200 child-closure and
+    // child-reduction freshness rules, not a second frontier reducer.
     {
         let mut tx=db.transaction()?;
         tx.batch_execute("SET LOCAL statement_timeout='90000ms'; SET LOCAL lock_timeout='5000ms'")?;
@@ -317,7 +318,23 @@ fn reduce_original_frontier_slice(
              WHERE r.run_ref=$1 AND r.document_ref=$2
                AND r.region_kind NOT IN (1,2,4,9) AND i.closure_state IN (2,3)
                AND (receipt.interface_id IS NULL OR
-                    receipt.graph_revision IS DISTINCT FROM i.graph_revision)
+                    receipt.graph_revision IS DISTINCT FROM i.graph_revision
+                    OR EXISTS (
+                        SELECT 1 FROM execution.semantic_pnf_interface child
+                        JOIN execution.semantic_pnf_region child_region ON child_region.region_id=child.region_id
+                        WHERE child.parent_interface_id=i.interface_id
+                          AND child_region.region_kind NOT IN (2,4,9)
+                          AND child_region.closed_at>receipt.reduced_at
+                    )
+                    OR EXISTS (
+                        SELECT 1 FROM execution.semantic_pnf_interface child
+                        JOIN execution.semantic_pnf_region child_region ON child_region.region_id=child.region_id
+                        JOIN execution.semantic_pnf_frontier_reduction_receipt child_receipt
+                          ON child_receipt.interface_id=child.interface_id
+                        WHERE child.parent_interface_id=i.interface_id
+                          AND child_region.region_kind NOT IN (2,4,9)
+                          AND child_receipt.reduced_at>receipt.reduced_at
+                    ))
              ON CONFLICT (interface_id) DO NOTHING",
             &[&run_ref,&document_ref])?;
         tx.commit()?;
@@ -348,7 +365,20 @@ fn reduce_original_frontier_slice(
         let id:i64=row.get(0);
         if tx.execute("DELETE FROM execution.semantic_pnf_frontier_dirty WHERE interface_id=$1",
             &[&id])?!=1 {return Err(NumericPipelineError::ForeignRun);}
+        // m211 publication barrier: topology construction can defer this
+        // stable owner. A bounded explicit publication must force it, or
+        // a read-only return could consume the dirty marker.
+        tx.query_one("SELECT set_config('sensiblaw.force_frontier_rebuild','on',true)",&[])?;
         tx.query_one("SELECT * FROM execution.rebuild_numeric_pnf_parent_frontier($1)",&[&id])?;
+        // Reopen the original receipt, not just the function return shape.
+        // Failure rolls back the marker removal in the same transaction.
+        let receipt_current:bool=tx.query_one(
+            "SELECT EXISTS(SELECT 1 FROM execution.semantic_pnf_interface i
+              JOIN execution.semantic_pnf_frontier_reduction_receipt receipt
+                ON receipt.interface_id=i.interface_id
+              WHERE i.interface_id=$1 AND receipt.graph_revision=i.graph_revision)",
+            &[&id])?.get(0);
+        if !receipt_current{return Err(NumericPipelineError::ForeignRun);}
         tx.commit()?;
         completed+=1;
     }
