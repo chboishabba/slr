@@ -866,6 +866,7 @@ pub struct OriginalParserIdentityProducerObservation{
     pub admission_executed:bool,
     pub admitted_candidate_witnesses:Vec<OriginalParserCandidateWitnessObservation>,
     pub bounded_identity_parity:Option<NativeBoundedIdentityParity>,
+    pub evidence_delta_frontier:Option<NativeIdentityEvidenceDelta>,
 }
 fn observe_refreshed_parser_identity_producer(
     probe:&mut postgres::Transaction<'_>,run_id:i64,document_id:i64,demand:i64,
@@ -896,7 +897,7 @@ fn observe_refreshed_parser_identity_producer(
         producer_ref:"execution.refresh_numeric_pnf_parser_identity_evidence",
         scope:"current_numeric_document_candidate_projection_not_global_coverage",
         refreshed_in_rollback_probe:true,candidate_rows:rows,name_overflow_rows:overflow,
-        admission_executed:false,admitted_candidate_witnesses:Vec::new(),bounded_identity_parity:None,
+        admission_executed:false,admitted_candidate_witnesses:Vec::new(),bounded_identity_parity:None,evidence_delta_frontier:None,
     })
 }
 
@@ -2581,13 +2582,18 @@ pub struct NativeBoundedIdentityParity {
 type ParserEvidenceKey=(i64,i64,i16,Option<i64>,Option<i64>,Option<i64>,String,i16);
 fn parser_evidence_keys(tx:&mut postgres::Transaction<'_>,run:i64,doc:i64)
     ->Result<BTreeSet<ParserEvidenceKey>,NativeNumericAuditError>{
+    parser_evidence_keys_in_states(tx,run,doc,&[1i16])
+}
+
+fn parser_evidence_keys_in_states(tx:&mut postgres::Transaction<'_>,run:i64,doc:i64,states:&[i16])
+    ->Result<BTreeSet<ParserEvidenceKey>,NativeNumericAuditError>{
     // A bounded acceptance campaign may not silently truncate the
     // reference relation. Fail if the explicit audit budget is exceeded.
     let rows=tx.query("SELECT source_object_id,target_object_id,witness_kind,
         source_token_id,target_token_id,sentence_id,evidence_ref,candidate_count
         FROM execution.semantic_pnf_identity_evidence_candidate
-        WHERE run_id=$1 AND document_id=$2 AND evidence_state=1
-        LIMIT 100001",&[&run,&doc])?;
+        WHERE run_id=$1 AND document_id=$2 AND evidence_state=ANY($3::smallint[])
+        LIMIT 100001",&[&run,&doc,&states])?;
     if rows.len()>100000 {return Err(NativeNumericAuditError::AdmissionProbeInvariant);}
     let keys=rows.iter().map(|r|(r.get(0),r.get(1),r.get(2),r.get(3),r.get(4),r.get(5),r.get(6),r.get(7)))
         .collect::<BTreeSet<_>>();
@@ -2643,9 +2649,98 @@ fn bounded_parser_evidence_reference(reference:&BTreeSet<ParserEvidenceKey>,limi
     Ok((retained,overflow))
 }
 
+/// Actual evidence-row delta, keyed by the original m077 unique key.
+/// No semantic change is inferred from refreshing state 1/2/3 alone.
+/// This is a measured frontier of the bounded producer, not yet a complete
+/// source-insertion dependency oracle or a production admission scheduler.
+#[derive(Debug,Clone,PartialEq,Eq,Serialize)]
+pub struct NativeIdentityEvidenceDelta {
+    pub inserted:usize,
+    pub withdrawn:usize,
+    pub changed:usize,
+    pub unchanged:usize,
+    pub touched_sentence_ids:Vec<i64>,
+    pub touched_token_ids:Vec<i64>,
+    pub affected_target_object_ids:Vec<i64>,
+    pub affected_original_witness_ids:Vec<i64>,
+    pub affected_target_entity_ids:Vec<i64>,
+    pub affected_existing_candidate_ids:Vec<i64>,
+    pub complete_source_dependency_paid:bool,
+}
+
+fn identity_evidence_delta(before:&BTreeSet<ParserEvidenceKey>,after:&BTreeSet<ParserEvidenceKey>)
+    ->Result<NativeIdentityEvidenceDelta,NativeNumericAuditError>{
+    type NaturalKey=(i64,i64,i16,String);
+    let index=|rows:&BTreeSet<ParserEvidenceKey>|->Result<BTreeMap<NaturalKey,ParserEvidenceKey>,NativeNumericAuditError>{
+        let mut m=BTreeMap::new();
+        for r in rows {
+            if m.insert((r.0,r.1,r.2,r.6.clone()),r.clone()).is_some() {
+                return Err(NativeNumericAuditError::AdmissionProbeInvariant);
+            }
+        }
+        Ok(m)
+    };
+    let a=index(before)?;let b=index(after)?;
+    let keys=a.keys().chain(b.keys()).collect::<BTreeSet<_>>();
+    let mut inserted=0;let mut withdrawn=0;let mut changed=0;let mut unchanged=0;
+    let mut sentences=BTreeSet::new();let mut tokens=BTreeSet::new();let mut targets=BTreeSet::new();
+    for k in keys {
+        let old=a.get(k);let new=b.get(k);
+        if old==new {unchanged+=1;continue;}
+        match (old,new) {
+            (None,Some(_))=>inserted+=1,
+            (Some(_),None)=>withdrawn+=1,
+            (Some(_),Some(_))=>changed+=1,
+            _=>return Err(NativeNumericAuditError::AdmissionProbeInvariant),
+        }
+        for r in old.into_iter().chain(new) {
+            targets.insert(r.1);
+            sentences.extend(r.5);
+            tokens.extend(r.3);
+            tokens.extend(r.4);
+        }
+    }
+    Ok(NativeIdentityEvidenceDelta{inserted,withdrawn,changed,unchanged,
+        touched_sentence_ids:sentences.into_iter().collect(),
+        touched_token_ids:tokens.into_iter().collect(),
+        affected_target_object_ids:targets.into_iter().collect(),
+        affected_original_witness_ids:Vec::new(),affected_target_entity_ids:Vec::new(),
+        affected_existing_candidate_ids:Vec::new(),complete_source_dependency_paid:false})
+}
+
+/// Reopen the m080 inverse for the exact changed target groups. Include
+/// every name candidate sharing a target, even if its own evidence row
+/// did not change: its independent corroboration may have been withdrawn.
+/// This is observational until the scoped admission/retraction owner is
+/// parity-certified, and leaves other original witnesses untouched.
+fn reopen_identity_delta_provenance(
+    tx:&mut postgres::Transaction<'_>,run:i64,doc:i64,delta:&mut NativeIdentityEvidenceDelta
+)->Result<(),NativeNumericAuditError>{
+    if delta.affected_target_object_ids.is_empty(){return Ok(());}
+    let rows=tx.query("SELECT DISTINCT c.candidate_id,p.witness_id,w.target_entity_id
+        FROM execution.semantic_pnf_identity_evidence_candidate c
+        LEFT JOIN execution.semantic_pnf_identity_evidence_witness p ON p.candidate_id=c.candidate_id
+        LEFT JOIN execution.semantic_pnf_identity_witness w ON w.witness_id=p.witness_id
+        WHERE c.run_id=$1 AND c.document_id=$2 AND c.target_object_id=ANY($3::bigint[])
+        ORDER BY c.candidate_id,p.witness_id,w.target_entity_id
+        LIMIT 100001",&[&run,&doc,&delta.affected_target_object_ids])?;
+    if rows.len()>100000{return Err(NativeNumericAuditError::AdmissionProbeInvariant);}
+    let mut candidates=BTreeSet::new();let mut witnesses=BTreeSet::new();let mut entities=BTreeSet::new();
+    for r in rows {
+        candidates.insert(r.get::<_,i64>(0));
+        witnesses.extend(r.get::<_,Option<i64>>(1));
+        entities.extend(r.get::<_,Option<i64>>(2));
+    }
+    delta.affected_existing_candidate_ids=candidates.into_iter().collect();
+    delta.affected_original_witness_ids=witnesses.into_iter().collect();
+    delta.affected_target_entity_ids=entities.into_iter().collect();
+    Ok(())
+}
+
 fn refresh_bounded_parser_identity_with_parity(
     probe:&mut postgres::Transaction<'_>,run:i64,doc:i64,
-)->Result<(NativeBoundedIdentityParity,BTreeSet<String>),NativeNumericAuditError>{
+)->Result<(NativeBoundedIdentityParity,BTreeSet<String>,NativeIdentityEvidenceDelta),NativeNumericAuditError>{
+    let before=parser_evidence_keys_in_states(probe,run,doc,&[1,2,3])?;
     let (reference,reference_witnesses,reference_elapsed_ms)={
         let mut reference_tx=probe.transaction()?;
         let started=std::time::Instant::now();
@@ -2691,13 +2786,15 @@ fn refresh_bounded_parser_identity_with_parity(
         }
     }
     if expected_overflow!=actual_overflow{return Err(NativeNumericAuditError::AdmissionProbeInvariant);}
+    let mut delta=identity_evidence_delta(&before,&actual)?;
+    reopen_identity_delta_provenance(probe,run,doc,&mut delta)?;
     Ok((NativeBoundedIdentityParity{
         reference_candidate_rows:reference.len(),bounded_candidate_rows:actual.len(),
         omitted_ambiguous_rows:reference.len()-actual.len(),overflow_mentions:actual_overflow.len(),
         reference_admitted_witnesses:reference_witnesses.len(),bounded_admitted_witnesses:0,
         candidate_projection_exact:true,original_admission_projection_exact:false,
         reference_elapsed_ms,bounded_elapsed_ms,full_typed_coverage_paid:false,persisted:false,
-    },reference_witnesses))
+    },reference_witnesses,delta))
 }
 
 fn probe_original_governed_identity(
@@ -2728,13 +2825,14 @@ fn probe_original_governed_identity(
         &[&run,&document])?.get(0);
     let parser_admission_elapsed_ms=started.elapsed().as_millis();
     observe_original_parser_candidate_witnesses(&mut probe,run,document,&mut original_parser_identity_producer)?;
-    if let Some((mut parity,reference_witnesses))=bounded {
+    if let Some((mut parity,reference_witnesses,delta))=bounded {
         let current=parser_admitted_witness_keys(&mut probe,run,document)?;
         if current!=reference_witnesses{return Err(NativeNumericAuditError::AdmissionProbeInvariant);}
         parity.bounded_admitted_witnesses=current.len();
         parity.original_admission_projection_exact=true;
         original_parser_identity_producer.producer_ref="pg_temp.slr_refresh_numeric_pnf_parser_identity_evidence_bounded";
         original_parser_identity_producer.bounded_identity_parity=Some(parity);
+        original_parser_identity_producer.evidence_delta_frontier=Some(delta);
     }
     let (horizons,classes)=observe_original_resolution_fibre(&mut probe,demand,run_ref,document_ref)?;
     let outside:bool=probe.query_one(
@@ -3284,6 +3382,23 @@ pub fn transport_original_numeric_candidates_for_source_answer_with_partition(
 #[cfg(test)]
 mod tests{
     use super::*;
+    #[test]
+    fn identity_delta_distinguishes_payload_change_from_new_and_withdrawn_keys(){
+        let kept=name_key(10,20,1,1);
+        let removed=name_key(11,21,2,2);
+        let old=name_key(12,22,3,1);
+        let new=name_key(12,22,3,2);
+        let added=name_key(13,23,4,2);
+        let before=BTreeSet::from([kept.clone(),removed,old]);
+        let after=BTreeSet::from([kept,new,added]);
+        let d=identity_evidence_delta(&before,&after).unwrap();
+        assert_eq!((d.inserted,d.withdrawn,d.changed,d.unchanged),(1,1,1,1));
+        assert_eq!(d.affected_target_object_ids,vec![102,103,104]);
+        assert!(!d.complete_source_dependency_paid);
+        let no_change=identity_evidence_delta(&after,&after).unwrap();
+        assert_eq!((no_change.inserted,no_change.withdrawn,no_change.changed,no_change.unchanged),(0,0,0,3));
+        assert!(no_change.affected_target_object_ids.is_empty());
+    }
     fn name_key(source:i64,token:i64,entity:i64,count:i16)->ParserEvidenceKey{
         (source,entity+100,3,Some(token),Some(entity+200),Some(1),
             format!("proper-name-expansion:{token}:{entity}"),count)
