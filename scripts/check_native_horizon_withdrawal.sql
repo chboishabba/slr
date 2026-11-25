@@ -78,7 +78,7 @@ $$;
 -- Original m094 queue, m139 coordinates and m163 statement-local delta.
 -- Prove that a validity revision wakes an exact interested consumer and
 -- already-existing downstream horizons, not an unrelated consumer.
-DO $
+DO $$
 DECLARE d bigint := current_setting('slr.test_demand')::bigint;
         atom record; prior_revision bigint; key_ref text := 'slr:rollback-validity:'||txid_current()::text;
         unrelated_ref text := key_ref||':unrelated';
@@ -97,6 +97,10 @@ BEGIN
     INSERT INTO execution.semantic_pnf_consumer_reverse_dependency
       (source_kind,source_id,demand_id,consumer_ref,query_ref,policy_ref,minimum_horizon,dependency_kind)
     VALUES(6,atom.evidence_id,d,key_ref,qref,'',6,1);
+
+    -- Isolate the journal's creation of debt from the manual debt test
+    -- above. This is a rollback-only negative-control setup.
+    DELETE FROM execution.slr_native_h3_authority_debt WHERE demand_id=d;
 
     -- Initial supported observation is not a change. An empty journal
     -- insertion must not wake either test consumer.
@@ -122,7 +126,21 @@ BEGIN
        AND work_state<>2) THEN
         RAISE EXCEPTION 'validity withdrawal wake was not exact';
     END IF;
+    IF NOT EXISTS(SELECT 1 FROM execution.slr_native_h3_authority_debt WHERE demand_id=d)
+       OR execution.slr_native_current_authority_usable(d) THEN
+        RAISE EXCEPTION 'journal withdrawal failed to suspend original authority';
+    END IF;
+
+    UPDATE execution.slr_native_h3_validity_current
+      SET supported=true,revision=prior_revision+2 WHERE evidence_id=atom.evidence_id;
+    INSERT INTO execution.slr_native_h3_validity_history
+      (evidence_id,demand_id,revision,supported,original_atom)
+    VALUES(atom.evidence_id,d,prior_revision+2,true,to_jsonb(atom));
+    IF NOT EXISTS(SELECT 1 FROM execution.slr_native_h3_authority_debt WHERE demand_id=d)
+       OR execution.slr_native_current_authority_usable(d) THEN
+        RAISE EXCEPTION 'physical restoration erased authority debt';
+    END IF;
 END;
-$;
+$$;
 
 ROLLBACK;
