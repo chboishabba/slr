@@ -133,6 +133,13 @@ pub fn audit_original_numeric_identity_for_source_answer(
         "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY;
          SET LOCAL statement_timeout='90000ms'"
     )?;
+    let audit=audit_original_numeric_identity_tx(&mut tx,numeric_run_ref,answer)?;
+    tx.commit()?;
+    Ok(audit)
+}
+
+fn audit_original_numeric_identity_tx(tx:&mut postgres::Transaction<'_>,numeric_run_ref:&str,answer:&NativeSourceLocalAnswer)
+    ->Result<NativeNumericIdentityAudit,NativeNumericAuditError>{
     let source=tx.query(
         "SELECT content_sha256
          FROM execution.semantic_parser_source
@@ -449,7 +456,6 @@ pub fn audit_original_numeric_identity_for_source_answer(
     }
     remaining.push("ORIGINAL_ACCEPTED_DOCUMENT_IDENTITY_WITNESS_UNPAID".into());
     remaining.push("ORIGINAL_LEVEL_THREE_TRANSACTIONAL_RETRACTION_UNPAID".into());
-    tx.commit()?;
     Ok(NativeNumericIdentityAudit{
         schema:"slr-original-numeric-pnf-identity-audit-v1",
         original_source_relative_answer:"Bush".into(),
@@ -661,17 +667,69 @@ pub struct NativeFocusIdentityCertification {
     pub original:NativeNumericIdentityAudit,
     pub inverse:Option<NativeNumericRetractionReceipt>,
     pub rollback_readback_exact:bool,
+    pub independent_current_owner_binding:Option<serde_json::Value>,
+    pub independent_current_owner_authenticated:bool,
     pub governed_identity_paid:bool,
     pub level_three_paid:bool,
     pub persisted:bool,
 }
 
+/// The independent owner signs the exact current audit and conservative
+/// numeric revision fence. The referee table's own DML is excluded from
+/// the fence solely to allow issuance; its row is independently reopened
+/// in the same transaction. No semantic rows are written by this reader.
+fn read_focus_owner_binding(url:&str,run:&str,answer:&NativeSourceLocalAnswer)
+ ->Result<(NativeNumericIdentityAudit,Option<serde_json::Value>,bool),NativeNumericAuditError>{
+    use sensiblaw_formal_proof_bridge::{RefereeReceiptLocator,read_source_bound_referee_receipt};
+    original_receipt_policy(answer)?;
+    let mut db=Client::connect(url,NoTls)?;
+    let mut tx=db.transaction()?;
+    tx.batch_execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY; SET LOCAL statement_timeout='90000ms'")?;
+    let audit=audit_original_numeric_identity_tx(&mut tx,run,answer)?;
+    let installed:bool=tx.query_one("SELECT to_regprocedure('slr_native_replay.current_stamp()') IS NOT NULL",&[])?.get(0);
+    let stamp:Option<String>=if installed{tx.query_one("SELECT slr_native_replay.current_stamp()",&[])?.get(0)}else{None};
+    let mut binding=None;
+    let mut authenticated=false;
+    if let Some(stamp)=stamp{
+        let mut fence:serde_json::Value=serde_json::from_str(&stamp).map_err(|_|NativeNumericAuditError::ForeignSource)?;
+        let referee_oid:Option<i64>=tx.query_one("SELECT to_regclass('formal.referee_receipt')::oid::bigint",&[])?.get(0);
+        let tables=fence["tables"].as_array_mut().ok_or(NativeNumericAuditError::ForeignSource)?;
+        if let Some(oid)=referee_oid{tables.retain(|r|r[0].as_u64()!=Some(oid as u64));}
+        let coordinates=serde_json::to_value(&audit).map_err(|_|NativeNumericAuditError::ForeignSource)?;
+        let fence_digest=hex(&Sha256::digest(serde_json::to_vec(&fence).map_err(|_|NativeNumericAuditError::ForeignSource)?));
+        let payload=serde_json::json!({"schema":"slr-current-numeric-focus-owner-binding:v1",
+            "scope":"existing_original_typed_coverage_and_governed_identity",
+            "numeric_run_ref":run,"source_revision_ref":answer.source_revision_ref,
+            "source_sha256":answer.source_content_sha256,"focus_span":answer.original_focus_span,
+            "audit":coordinates,"numeric_fence_sha256":fence_digest});
+        let digest=hex(&Sha256::digest(serde_json::to_vec(&payload).map_err(|_|NativeNumericAuditError::ForeignSource)?));
+        let expected=serde_json::json!({"schema":"slr-current-numeric-focus-owner-proof:v1",
+            "binding_sha256":digest,"coverage_and_identity_theorem":"Wikidata.GwbCoreferenceFormalRepair.unique_source_local_referent",
+            "proof_kind":"exact_current_scoped_coverage_and_governed_identity"});
+        // Locator is routing only. Authentication is exclusively against
+        // the existing independently issued referee row, never this input.
+        let coords=["SLR_NUMERIC_REFEREE_REPO","SLR_NUMERIC_REFEREE_SHA","SLR_NUMERIC_REFEREE_PATH","SLR_NUMERIC_REFEREE_THREAD"]
+            .map(|k|std::env::var(k).ok());
+        if let [Some(repo),Some(sha),Some(path),Some(canonical_thread_id)]=coords {
+            let locator=RefereeReceiptLocator{repo,sha,path,canonical_thread_id};
+            if let Ok(receipt)=read_source_bound_referee_receipt(&mut tx,&locator){
+                let value:serde_json::Value=serde_json::from_str(&receipt).map_err(|_|NativeNumericAuditError::ForeignSource)?;
+                authenticated=value.get("slr_numeric_authority_binding")==Some(&expected);
+            }
+        }
+        binding=Some(serde_json::json!({"payload":payload,"expected_referee_binding":expected}));
+    }
+    tx.commit()?;
+    Ok((audit,binding,authenticated))
+}
+
 pub fn certify_original_focus_identity(
     url:&str,run:&str,answer:&NativeSourceLocalAnswer,
 )->Result<NativeFocusIdentityCertification,NativeNumericAuditError>{
-    let original=audit_original_numeric_identity_for_source_answer(url,run,answer)?;
+    let (original,independent_current_owner_binding,independent_current_owner_authenticated)=read_focus_owner_binding(url,run,answer)?;
     let mut receipt=NativeFocusIdentityCertification{
         original,inverse:None,rollback_readback_exact:false,
+        independent_current_owner_binding,independent_current_owner_authenticated,
         governed_identity_paid:false,level_three_paid:false,persisted:false,
     };
     if !receipt.original.resolved_unique_target_from_original_sql
@@ -682,7 +740,7 @@ pub fn certify_original_focus_identity(
     }
     let witness=receipt.original.observed_accepted_document_witness_ids[0];
     let inverse=retract_original_numeric_identity_for_source_answer(url,run,answer,witness,false)?;
-    let reopened=audit_original_numeric_identity_for_source_answer(url,run,answer)?;
+    let (reopened,reopened_binding,reopened_authenticated)=read_focus_owner_binding(url,run,answer)?;
     let before=serde_json::to_value(&receipt.original).map_err(|_|NativeNumericAuditError::RetractionInvariant)?;
     let after=serde_json::to_value(&reopened).map_err(|_|NativeNumericAuditError::RetractionInvariant)?;
     let observed=receipt.original.observed_witnessed_level_three_derivation_refs.iter().collect::<BTreeSet<_>>();
@@ -693,7 +751,11 @@ pub fn certify_original_focus_identity(
         return Err(NativeNumericAuditError::RetractionInvariant);
     }
     receipt.rollback_readback_exact=true;
-    receipt.governed_identity_paid=true;receipt.level_three_paid=true;receipt.inverse=Some(inverse);
+    receipt.independent_current_owner_authenticated &= reopened_authenticated
+        && receipt.independent_current_owner_binding.is_some()
+        && receipt.independent_current_owner_binding==reopened_binding;
+    receipt.governed_identity_paid=receipt.independent_current_owner_authenticated;
+    receipt.level_three_paid=receipt.governed_identity_paid;receipt.inverse=Some(inverse);
     Ok(receipt)
 }
 
@@ -732,6 +794,7 @@ pub struct NativeNumericDocumentIdentityObservation{
     pub object_id:i64,
     pub admitted_entity_ids:Vec<i64>,
     pub admitted_witness_ids:Vec<i64>,
+    pub current_projection_usable:bool,
 }
 
 /// Consumer projection of the existing proof-relevant identity fibre (m069).
@@ -762,7 +825,7 @@ fn project_original_identity_fibre(
         if h.target_kind==1{
             if let Some(c)=by_object.get(&h.target_id){
                 if let [entity]=c.admitted_entity_ids.as_slice(){
-                    if !c.admitted_witness_ids.is_empty(){
+                    if c.current_projection_usable&&!c.admitted_witness_ids.is_empty(){
                         projection.admitted_classes.entry(*entity).or_default().push(h.target_id);
                         continue;
                     }
@@ -805,7 +868,9 @@ fn observe_original_resolution_fibre(
                 COALESCE(array_agg(DISTINCT w.target_entity_id ORDER BY w.target_entity_id)
                     FILTER (WHERE w.witness_id IS NOT NULL),'{}'::bigint[]),
                 COALESCE(array_agg(DISTINCT w.witness_id ORDER BY w.witness_id)
-                    FILTER (WHERE w.witness_id IS NOT NULL),'{}'::bigint[])
+                    FILTER (WHERE w.witness_id IS NOT NULL),'{}'::bigint[]),
+                EXISTS(SELECT 1 FROM execution.semantic_pnf_identity_projection p
+                  WHERE p.source_object_id=u.target_id AND p.authority_class=2)
          FROM execution.semantic_pnf_candidate_universe u
          JOIN execution.semantic_pnf_object o ON o.object_id=u.target_id
          JOIN execution.semantic_pnf_region r ON r.region_id=o.region_id
@@ -825,7 +890,7 @@ fn observe_original_resolution_fibre(
            AND r.run_ref=$2 AND r.document_ref=$3
          GROUP BY u.target_id ORDER BY u.target_id",&[&demand,&run_ref,&document_ref])?
         .iter().map(|r|NativeNumericDocumentIdentityObservation{
-            object_id:r.get(0),admitted_entity_ids:r.get(1),admitted_witness_ids:r.get(2),
+            object_id:r.get(0),admitted_entity_ids:r.get(1),admitted_witness_ids:r.get(2),current_projection_usable:r.get(3),
         }).collect();
     Ok((horizons,classes))
 }
@@ -1282,15 +1347,15 @@ pub struct NativeH6ValidityReceipt {
 }
 fn ensure_native_h6_current_authority(tx:&mut postgres::Transaction<'_>,demand:i64)
     ->Result<(),NativeNumericAuditError>{
-    let installed:bool=tx.query_one("SELECT EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='execution' AND p.proname='slr_wake_native_validity_delta' AND p.pronargs=0 AND position('slr_native_h3_authority_debt' in p.prosrc)>0) AND COALESCE(position('candidate_bins' in pg_get_viewdef(to_regclass('execution.semantic_pnf_candidate_evidence_horizon_v1'),true)),0)>0 AND to_regprocedure('execution.slr_produce_native_h6_for_demand(bigint,text,text,text)') IS NOT NULL AND to_regprocedure('execution.slr_suspend_native_authority_on_debt()') IS NOT NULL AND to_regprocedure('execution.slr_suspend_native_identity_derivations(bigint[])') IS NOT NULL AND COALESCE(position('slr_native_blocked_identity_fibre_v1' in (SELECT p.prosrc FROM pg_proc p WHERE p.oid=to_regprocedure('execution.slr_native_candidate_only_authority_absent(bigint)'))),0)>0 AND COALESCE(position('prior.outcome_state' in (SELECT p.prosrc FROM pg_proc p WHERE p.oid=to_regprocedure('execution.refresh_numeric_pnf_consumer_horizon_outcome(bigint,bigint,smallint,text,text,text)'))),0)>0",&[])?.get(0);
+    let installed:bool=tx.query_one("SELECT EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='execution' AND p.proname='slr_wake_native_validity_delta' AND p.pronargs=0 AND position('slr_native_h3_authority_debt' in p.prosrc)>0) AND COALESCE(position('candidate_bins' in pg_get_viewdef(to_regclass('execution.semantic_pnf_candidate_evidence_horizon_v1'),true)),0)>0 AND to_regprocedure('execution.slr_produce_native_h6_for_demand(bigint,text,text,text)') IS NOT NULL AND to_regprocedure('execution.slr_suspend_native_authority_on_debt()') IS NOT NULL AND COALESCE(position('blocked_groups' in (SELECT p.prosrc FROM pg_proc p WHERE p.oid=to_regprocedure('execution.slr_suspend_native_identity_derivations(bigint[])'))),0)>0 AND COALESCE(position('slr_native_blocked_identity_fibre_v1' in (SELECT p.prosrc FROM pg_proc p WHERE p.oid=to_regprocedure('execution.slr_native_candidate_only_authority_absent(bigint)'))),0)>0 AND COALESCE(position('prior.outcome_state' in (SELECT p.prosrc FROM pg_proc p WHERE p.oid=to_regprocedure('execution.refresh_numeric_pnf_consumer_horizon_outcome(bigint,bigint,smallint,text,text,text)'))),0)>0",&[])?.get(0);
     if !installed{
         tx.query_one("SELECT pg_advisory_xact_lock(hashtext('slr-native-h6-current:v1'))",&[])?;
-        let ready:bool=tx.query_one("SELECT EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='execution' AND p.proname='slr_wake_native_validity_delta' AND p.pronargs=0 AND position('slr_native_h3_authority_debt' in p.prosrc)>0) AND COALESCE(position('candidate_bins' in pg_get_viewdef(to_regclass('execution.semantic_pnf_candidate_evidence_horizon_v1'),true)),0)>0 AND to_regprocedure('execution.slr_produce_native_h6_for_demand(bigint,text,text,text)') IS NOT NULL AND to_regprocedure('execution.slr_suspend_native_authority_on_debt()') IS NOT NULL AND to_regprocedure('execution.slr_suspend_native_identity_derivations(bigint[])') IS NOT NULL AND COALESCE(position('slr_native_blocked_identity_fibre_v1' in (SELECT p.prosrc FROM pg_proc p WHERE p.oid=to_regprocedure('execution.slr_native_candidate_only_authority_absent(bigint)'))),0)>0 AND COALESCE(position('prior.outcome_state' in (SELECT p.prosrc FROM pg_proc p WHERE p.oid=to_regprocedure('execution.refresh_numeric_pnf_consumer_horizon_outcome(bigint,bigint,smallint,text,text,text)'))),0)>0",&[])?.get(0);
+        let ready:bool=tx.query_one("SELECT EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='execution' AND p.proname='slr_wake_native_validity_delta' AND p.pronargs=0 AND position('slr_native_h3_authority_debt' in p.prosrc)>0) AND COALESCE(position('candidate_bins' in pg_get_viewdef(to_regclass('execution.semantic_pnf_candidate_evidence_horizon_v1'),true)),0)>0 AND to_regprocedure('execution.slr_produce_native_h6_for_demand(bigint,text,text,text)') IS NOT NULL AND to_regprocedure('execution.slr_suspend_native_authority_on_debt()') IS NOT NULL AND COALESCE(position('blocked_groups' in (SELECT p.prosrc FROM pg_proc p WHERE p.oid=to_regprocedure('execution.slr_suspend_native_identity_derivations(bigint[])'))),0)>0 AND COALESCE(position('slr_native_blocked_identity_fibre_v1' in (SELECT p.prosrc FROM pg_proc p WHERE p.oid=to_regprocedure('execution.slr_native_candidate_only_authority_absent(bigint)'))),0)>0 AND COALESCE(position('prior.outcome_state' in (SELECT p.prosrc FROM pg_proc p WHERE p.oid=to_regprocedure('execution.refresh_numeric_pnf_consumer_horizon_outcome(bigint,bigint,smallint,text,text,text)'))),0)>0",&[])?.get(0);
         if !ready{tx.batch_execute(include_str!("numeric_pnf_h6_current_authority.sql"))?;}
     }
     let intact:bool=tx.query_one("SELECT EXISTS(SELECT 1 FROM execution.slr_native_h6_current_contract WHERE contract_ref='slr-native-h6-current:v1')
       AND EXISTS(SELECT 1 FROM execution.slr_native_h3_current_contract WHERE contract_ref='slr-native-h3-current:v1')
-      AND EXISTS(SELECT 1 FROM execution.slr_native_current_authority_contract WHERE contract_ref='slr-native-current-authority:v10')
+      AND EXISTS(SELECT 1 FROM execution.slr_native_current_authority_contract WHERE contract_ref='slr-native-current-authority:v11')
       AND position('slr_native_blocked_identity_fibre_v1' in pg_get_functiondef(
         'execution.slr_native_candidate_only_authority_absent(bigint)'::regprocedure))>0
       AND position('slr_suspend_native_identity_derivations' in pg_get_functiondef(
@@ -5790,7 +5855,7 @@ mod tests{
             evidence_count:1,active:false,execution_residual:true,refuted:false,strict_preference:false,
         };
         let cls=|id,entities:Vec<i64>| NativeNumericDocumentIdentityObservation{
-            object_id:id,admitted_entity_ids:entities,admitted_witness_ids:vec![99],
+            object_id:id,admitted_entity_ids:entities,admitted_witness_ids:vec![99],current_projection_usable:true,
         };
         let result=project_original_identity_fibre(
             &[h(10),h(11),h(12),h(13)],

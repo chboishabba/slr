@@ -194,6 +194,23 @@ BEGIN
       AND d.epistemic_level=3
       AND d.rule_ref IN('identity-substitution:v1','identity-supported-substitution:v1');
     GET DIAGNOSTICS retired=ROW_COUNT;
+    -- Composition uses ranked region/entity/authority fibres. Retire the
+    -- entire affected rank group, not just a pair whose rank may shift.
+    -- m084 remains the producer; this is withdrawal, not new composition.
+    WITH blocked_groups AS (
+      SELECT DISTINCT f.region_id,w.target_entity_id,b.authority_class
+      FROM execution.slr_native_blocked_identity_fibre_v1 b
+      JOIN execution.semantic_pnf_identity_witness w
+        ON w.source_object_id=b.source_object_id AND w.authority_class=b.authority_class
+      JOIN execution.semantic_pnf_identity_witness_admission a ON a.witness_id=w.witness_id AND a.admission_state=2
+      JOIN execution.semantic_pnf_hyperedge e ON e.object_id=b.source_object_id
+      JOIN execution.semantic_pnf_factor f ON f.factor_id=e.factor_id
+      WHERE b.demand_id=ANY(selected_demands)
+    )
+    DELETE FROM execution.semantic_pnf_factor_composition_candidate c
+    USING blocked_groups b
+    WHERE c.region_id=b.region_id AND c.bridge_entity_id=b.target_entity_id
+      AND c.identity_authority_class=b.authority_class;
     RETURN retired;
 END;
 $slr_l3$;
@@ -760,3 +777,10 @@ WHERE NOT EXISTS(SELECT 1 FROM execution.slr_native_current_authority_contract
     WHERE contract_ref='slr-native-current-authority:v9');
 INSERT INTO execution.slr_native_current_authority_contract VALUES('slr-native-current-authority:v9') ON CONFLICT DO NOTHING;
 INSERT INTO execution.slr_native_current_authority_contract VALUES('slr-native-current-authority:v10') ON CONFLICT DO NOTHING;
+
+-- Upgrade existing debt groups without changing original admission rows.
+SELECT execution.slr_suspend_native_identity_derivations(
+    ARRAY(SELECT demand_id FROM execution.slr_native_h3_authority_debt))
+WHERE NOT EXISTS(SELECT 1 FROM execution.slr_native_current_authority_contract
+    WHERE contract_ref='slr-native-current-authority:v11');
+INSERT INTO execution.slr_native_current_authority_contract VALUES('slr-native-current-authority:v11') ON CONFLICT DO NOTHING;

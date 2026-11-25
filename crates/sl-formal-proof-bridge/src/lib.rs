@@ -466,6 +466,50 @@ impl RefereeReceiptLocator {
     }
 }
 
+/// Shared independent referee-store boundary. This never authenticates
+/// a caller-supplied JSON object or authorizes a numeric mutation.
+fn require_read_only_referee_store(tx:&mut Transaction<'_>)->Result<(),FormalProofBridgeError>{
+    let exists: bool = tx.query_one(
+        "SELECT to_regclass('formal.referee_receipt') IS NOT NULL", &[])?.get(0);
+    if !exists { return Err(FormalProofBridgeError::UnauthenticatedRefereeReceipt); }
+    let read_only: bool = tx.query_one(
+        "SELECT has_table_privilege(current_user,'formal.referee_receipt','SELECT')
+         AND NOT EXISTS(SELECT 1 FROM pg_roles r
+           WHERE (pg_has_role(current_user,r.oid,'MEMBER')
+               OR pg_has_role(session_user,r.oid,'MEMBER')) AND (
+             r.rolsuper OR has_table_privilege(r.oid,'formal.referee_receipt','INSERT,UPDATE,DELETE,TRUNCATE,TRIGGER')
+             OR has_any_column_privilege(r.oid,'formal.referee_receipt','INSERT,UPDATE')
+             OR has_schema_privilege(r.oid,'formal','CREATE')))",
+        &[])?.get(0);
+    if !read_only { return Err(FormalProofBridgeError::UnauthenticatedRefereeReceipt); }
+    Ok(())
+}
+
+/// Read the existing source-bound kernel receipt, including any independently
+/// issued domain binding, in the caller's transaction. Domain consumers must
+/// compare their exact binding themselves. Return text to preserve the
+/// original bridge's postgres feature set.
+pub fn read_source_bound_referee_receipt(
+    tx:&mut Transaction<'_>,locator:&RefereeReceiptLocator,
+)->Result<String,FormalProofBridgeError>{
+    locator.validate()?;
+    require_read_only_referee_store(tx)?;
+    let row=tx.query_opt("SELECT r.receipt_json::text FROM formal.referee_receipt r
+       WHERE r.repo=$1 AND r.sha=$2 AND r.path=$3 AND r.canonical_thread_id=$4
+         AND r.receipt_json @> jsonb_build_object(
+          'status','verified','kernel_handoff_eligible',true,
+          'authority_kind','isolated_kernel_check','candidate_only',false,'establishes_proof',true,
+          'handoff',jsonb_build_object('subject_commit',$2::text,'authority_kind','isolated_kernel_check',
+              'candidate_only',false,'establishes_proof',true),
+          'reference_binding',jsonb_build_object('repo',$1::text,'sha',$2::text,'path',$3::text,
+              'canonical_thread_id',$4::text,'authenticated_local_referee',true))
+         AND NOT EXISTS(SELECT 1 FROM unnest(ARRAY['source_digest','artifact_digest','checker_digest','dependency_digest']) k(key)
+           WHERE jsonb_typeof(r.receipt_json->'handoff'->k.key) IS DISTINCT FROM 'string'
+              OR COALESCE(length(r.receipt_json->'handoff'->>k.key),0)=0)",
+       &[&locator.repo,&locator.sha,&locator.path,&locator.canonical_thread_id])?;
+    row.map(|r|r.get(0)).ok_or(FormalProofBridgeError::UnauthenticatedRefereeReceipt)
+}
+
 /// Read the original ITIR #58 table, with the exact SLR premise binding
 /// extension issued by an independent referee. The original source-only
 /// receipt is insufficient. This consumer must have no direct/inherited
@@ -482,19 +526,7 @@ fn require_authenticated_referee_receipt(
     if demand.da51_address != evidence.da51_address {
         return Err(FormalProofBridgeError::Da51Mismatch);
     }
-    let exists: bool = tx.query_one(
-        "SELECT to_regclass('formal.referee_receipt') IS NOT NULL", &[])?.get(0);
-    if !exists { return Err(FormalProofBridgeError::UnauthenticatedRefereeReceipt); }
-    let read_only: bool = tx.query_one(
-        "SELECT has_table_privilege(current_user,'formal.referee_receipt','SELECT')
-         AND NOT EXISTS(SELECT 1 FROM pg_roles r
-           WHERE (pg_has_role(current_user,r.oid,'MEMBER')
-               OR pg_has_role(session_user,r.oid,'MEMBER')) AND (
-             r.rolsuper OR has_table_privilege(r.oid,'formal.referee_receipt','INSERT,UPDATE,DELETE,TRUNCATE,TRIGGER')
-             OR has_any_column_privilege(r.oid,'formal.referee_receipt','INSERT,UPDATE')
-             OR has_schema_privilege(r.oid,'formal','CREATE')))",
-        &[])?.get(0);
-    if !read_only { return Err(FormalProofBridgeError::UnauthenticatedRefereeReceipt); }
+    require_read_only_referee_store(tx)?;
     // Bind the complete immutable premise coordinates. The original ITIR
     // handoff flags and binding are necessary independently of the new
     // demand-specific extension. Missing or non-boolean flags fail closed.
