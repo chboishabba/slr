@@ -262,6 +262,24 @@ BEGIN
         WHERE b.demand_id=d) THEN
         RAISE EXCEPTION 'blocked identity or shared-token fibre still projects';
     END IF;
+    -- Both pair and overflow projections belong to the same m084 rank
+    -- group. A fresh original producer read must not rerank survivors.
+    IF EXISTS(SELECT 1 FROM execution.slr_native_blocked_composition_group_v1 b
+        JOIN execution.semantic_pnf_factor_composition_candidate c
+          ON c.region_id=b.region_id AND c.bridge_entity_id=b.target_entity_id
+         AND c.identity_authority_class=b.authority_class
+        WHERE b.demand_id=d)
+       OR EXISTS(SELECT 1 FROM execution.slr_native_blocked_composition_group_v1 b
+        JOIN execution.semantic_pnf_factor_composition_overflow c
+          ON c.region_id=b.region_id AND c.bridge_entity_id=b.target_entity_id
+         AND c.identity_authority_class=b.authority_class AND c.bridge_kind=2
+        WHERE b.demand_id=d)
+       OR EXISTS(SELECT 1 FROM execution.numeric_pnf_bounded_entity_composition_pairs(run_value,doc_value,16) p
+        JOIN execution.slr_native_blocked_composition_group_v1 b
+          ON p.region_id=b.region_id AND p.bridge_entity_id=b.target_entity_id
+         AND p.identity_authority_class=b.authority_class
+        WHERE b.demand_id=d)
+    THEN RAISE EXCEPTION 'blocked m084 composition pair or overflow still projects'; END IF;
     -- Compare every prior derivation ID to the exact reverse cone.
     IF EXISTS(SELECT 1 FROM slr_l3_before old
       WHERE (NOT EXISTS(SELECT 1 FROM execution.semantic_pnf_factor_derivation current_row
