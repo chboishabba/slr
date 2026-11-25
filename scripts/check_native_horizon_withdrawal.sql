@@ -2,13 +2,13 @@
 -- Run only in a rollback transaction on the original numeric DB. This is
 -- a negative-control projection test, not a new semantic authority event.
 \set ON_ERROR_STOP on
-BEGIN;
+BEGIN ISOLATION LEVEL SERIALIZABLE;
 SET LOCAL statement_timeout='90000ms';
 SELECT set_config('slr.test_demand', :'demand_id', true);
 DO $$
 DECLARE d bigint := current_setting('slr.test_demand')::bigint;
         atom record; before_row record; after_row record; h smallint;
-        represented bigint; events bigint; history bigint;
+        represented bigint; events bigint; history bigint; debt_history bigint;
 BEGIN
     IF NOT EXISTS(SELECT 1 FROM execution.slr_native_h6_managed_demand WHERE demand_id=d) THEN
         RAISE EXCEPTION 'not the native managed demand';
@@ -42,6 +42,26 @@ BEGIN
     INSERT INTO execution.slr_native_h3_authority_debt(demand_id) VALUES(d) ON CONFLICT DO NOTHING;
     IF execution.slr_native_current_authority_usable(d) THEN
         RAISE EXCEPTION 'pending nonmonotone authority was reusable';
+    END IF;
+    SELECT count(*) INTO debt_history FROM execution.slr_native_candidate_reconciliation_history WHERE demand_id=d;
+    IF execution.slr_reconcile_native_candidate_only_debt(d,false,true)
+       OR execution.slr_reconcile_native_candidate_only_debt(d,true,false) THEN
+        RAISE EXCEPTION 'unchecked or undrained execution cleared authority debt';
+    END IF;
+    IF execution.slr_native_candidate_only_authority_absent(d) THEN
+        IF NOT execution.slr_reconcile_native_candidate_only_debt(d,true,true)
+           OR NOT execution.slr_native_current_authority_usable(d) THEN
+            RAISE EXCEPTION 'checked authority-free represented slice remained blocked';
+        END IF;
+        IF execution.slr_reconcile_native_candidate_only_debt(d,true,true)
+           OR (SELECT count(*) FROM execution.slr_native_candidate_reconciliation_history WHERE demand_id=d)<>debt_history+1 THEN
+            RAISE EXCEPTION 'candidate reconciliation was not idempotent';
+        END IF;
+    ELSE
+        IF execution.slr_reconcile_native_candidate_only_debt(d,true,true)
+           OR execution.slr_native_current_authority_usable(d) THEN
+            RAISE EXCEPTION 'candidate-only reconciliation consumed original authority';
+        END IF;
     END IF;
     IF represented<>(SELECT count(*) FROM execution.semantic_pnf_candidate_universe WHERE demand_id=d)
        OR events<>(SELECT count(*) FROM execution.semantic_pnf_candidate_admissibility_event WHERE demand_id=d)
