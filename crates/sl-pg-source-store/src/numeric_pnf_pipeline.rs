@@ -38,7 +38,7 @@ pub enum NumericPipelineError {
     #[error("numeric PostgreSQL parser: {0}")]
     Parser(#[from] NumericParserStoreError),
     #[error("numeric SQL query: {0}")]
-    Database(#[from] postgres::Error),
+    Database(String),
     #[error("numeric operator: {0}")]
     Operator(#[from] NumericOperatorError),
     #[error("numeric sentence persistence: {0}")]
@@ -49,6 +49,20 @@ pub enum NumericPipelineError {
     InvalidSentence,
     #[error("numeric pipeline job cannot be replayed within bounded limits")]
     Budget,
+}
+
+impl From<postgres::Error> for NumericPipelineError {
+    fn from(error: postgres::Error) -> Self {
+        let detail = error.as_db_error().map(|db| {
+            let mut parts = vec![db.message().to_owned()];
+            if let Some(detail) = db.detail() { parts.push(format!("detail={detail}")); }
+            if let Some(hint) = db.hint() { parts.push(format!("hint={hint}")); }
+            if let Some(constraint) = db.constraint() { parts.push(format!("constraint={constraint}")); }
+            parts.push(format!("code={}", db.code().code()));
+            parts.join("; ")
+        }).unwrap_or_else(|| format!("{error:?}"));
+        Self::Database(detail)
+    }
 }
 
 #[derive(Debug,Clone,PartialEq,Eq,Serialize)]
@@ -346,7 +360,7 @@ fn materialize_numeric_entity_occurrences(
 )->Result<(i64,i64),NumericPipelineError>{
     let mut tx=db.transaction()?;
     tx.batch_execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;
-        SET LOCAL statement_timeout='90000ms'; SET LOCAL lock_timeout='5000ms'")?;
+        SET LOCAL statement_timeout='600000ms'; SET LOCAL lock_timeout='5000ms'")?;
     tx.query_one("SELECT pg_advisory_xact_lock(hashtext($1),hashtext($2))",
         &[&run_ref,&document_ref])?;
     let kind:i64=tx.query_one(

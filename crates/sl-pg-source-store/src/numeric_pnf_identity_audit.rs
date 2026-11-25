@@ -15,7 +15,7 @@ use std::collections::{BTreeMap,BTreeSet};
 #[derive(Debug,Error)]
 pub enum NativeNumericAuditError{
     #[error("numeric PostgreSQL: {0}")]
-    Database(#[from] postgres::Error),
+    Database(String),
     #[error("original source-relative linguistic receipt invalid for this audit")]
     SourcePolicy,
     #[error("numeric run is tied to a different canonical source manifestation")]
@@ -28,6 +28,20 @@ pub enum NativeNumericAuditError{
     AdmissionProbeInvariant,
     #[error("original retraction failed preservation or current-projection checks; transaction rolled back")]
     RetractionInvariant,
+}
+
+impl From<postgres::Error> for NativeNumericAuditError {
+    fn from(error: postgres::Error) -> Self {
+        let detail = error.as_db_error().map(|db| {
+            let mut parts = vec![db.message().to_owned()];
+            if let Some(detail) = db.detail() { parts.push(format!("detail={detail}")); }
+            if let Some(hint) = db.hint() { parts.push(format!("hint={hint}")); }
+            if let Some(constraint) = db.constraint() { parts.push(format!("constraint={constraint}")); }
+            parts.push(format!("code={}", db.code().code()));
+            parts.join("; ")
+        }).unwrap_or_else(|| format!("{error:?}"));
+        Self::Database(detail)
+    }
 }
 
 #[derive(Debug,Clone,Serialize)]
