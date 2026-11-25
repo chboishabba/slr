@@ -867,6 +867,7 @@ pub struct OriginalParserIdentityProducerObservation{
     pub admitted_candidate_witnesses:Vec<OriginalParserCandidateWitnessObservation>,
     pub bounded_identity_parity:Option<NativeBoundedIdentityParity>,
     pub evidence_delta_frontier:Option<NativeIdentityEvidenceDelta>,
+    pub support_index:Option<NativeIdentitySupportIndexReceipt>,
 }
 fn observe_refreshed_parser_identity_producer(
     probe:&mut postgres::Transaction<'_>,run_id:i64,document_id:i64,demand:i64,
@@ -897,7 +898,7 @@ fn observe_refreshed_parser_identity_producer(
         producer_ref:"execution.refresh_numeric_pnf_parser_identity_evidence",
         scope:"current_numeric_document_candidate_projection_not_global_coverage",
         refreshed_in_rollback_probe:true,candidate_rows:rows,name_overflow_rows:overflow,
-        admission_executed:false,admitted_candidate_witnesses:Vec::new(),bounded_identity_parity:None,evidence_delta_frontier:None,
+        admission_executed:false,admitted_candidate_witnesses:Vec::new(),bounded_identity_parity:None,evidence_delta_frontier:None,support_index:None,
     })
 }
 
@@ -2573,10 +2574,153 @@ pub struct NativeBoundedIdentityParity {
     pub bounded_admitted_witnesses:usize,
     pub candidate_projection_exact:bool,
     pub original_admission_projection_exact:bool,
+    pub embedded_reference_name_rows:usize,
+    pub embedded_bounded_name_rows:usize,
+    pub golden_standalone_permission_matches:bool,
     pub reference_elapsed_ms:u128,
     pub bounded_elapsed_ms:u128,
     pub full_typed_coverage_paid:bool,
     pub persisted:bool,
+}
+
+/// Candidate-only materialization of the original document anchor and
+/// family supports. This is a rebuildable execution index, not a new
+/// parser, source of semantic authority, or proof of complete dependencies.
+#[derive(Debug,Clone,Serialize)]
+pub struct NativeIdentitySupportIndexReceipt {
+    pub scope_ref:String,
+    pub observed_rows:usize,
+    pub inserted_rows:usize,
+    pub changed_rows:usize,
+    pub withdrawn_rows:usize,
+    pub unchanged_rows:usize,
+    pub affected_sentence_ids:Vec<i64>,
+    pub affected_family_ids:Vec<i64>,
+    pub zero_family_mentions:usize,
+    pub unanchored_mentions:usize,
+    pub embedded_mentions:usize,
+    pub support_scan_performed:bool,
+    pub dependency_complete:bool,
+    pub identity_paid:bool,
+}
+
+#[derive(Debug,Clone,PartialEq,Eq,Serialize)]
+struct IdentitySupportRow {
+    lane:i16,
+    key:String,
+    sentence_id:Option<i64>,
+    family_id:Option<i64>,
+    payload:serde_json::Value,
+}
+
+fn read_identity_support_index(probe:&mut postgres::Transaction<'_>)
+    ->Result<Vec<IdentitySupportRow>,NativeNumericAuditError>{
+    // Every local row is retained, including missing anchors, empty families
+    // and embedded mentions. Sentence and family dependencies are independent.
+    let rows=probe.query("SELECT lane,key,sentence_id,family_id,payload FROM (
+      SELECT 1::smallint AS lane,t.token_id::text AS key,t.sentence_id,
+        t.lemma_symbol_id AS family_id,to_jsonb(t) AS payload FROM pg_temp.slr_identity_token t
+      UNION ALL SELECT 2,p.entity_id::text,s.sentence_id,NULL::bigint,to_jsonb(p)
+        FROM pg_temp.slr_identity_person p JOIN pg_temp.slr_identity_sentence s USING(sentence_ref)
+      UNION ALL SELECT 3,a.token_id::text,a.sentence_id,t.lemma_symbol_id,to_jsonb(a)
+        FROM pg_temp.slr_identity_anchor a JOIN pg_temp.slr_identity_token t USING(token_id)
+      UNION ALL SELECT 4,f.parser_entity_id::text,s.sentence_id,f.family_lemma_symbol_id,to_jsonb(f)
+        FROM pg_temp.slr_identity_family f JOIN pg_temp.slr_identity_sentence s USING(sentence_ref)
+      UNION ALL SELECT 5,m.token_id::text,m.sentence_id,m.lemma_symbol_id,to_jsonb(m)
+        FROM pg_temp.slr_identity_mention_scope m
+      UNION ALL SELECT 6,'hot-constants',NULL::bigint,NULL::bigint,to_jsonb(c)
+        FROM pg_temp.slr_identity_constant c
+      UNION ALL SELECT 7,concat(c.cue_class,':',c.symbol_id),NULL::bigint,NULL::bigint,to_jsonb(c)
+        FROM execution.semantic_pnf_hot_cue_symbol c
+      UNION ALL SELECT 8,s.sentence_id::text,s.sentence_id,NULL::bigint,to_jsonb(s)
+        FROM pg_temp.slr_identity_sentence s
+    ) support ORDER BY lane,key LIMIT 100001",&[])?;
+    if rows.len()>100000{return Err(NativeNumericAuditError::AdmissionProbeInvariant);}
+    let mut seen=BTreeSet::new();
+    let mut out=Vec::with_capacity(rows.len());
+    for r in rows {
+        let row=IdentitySupportRow{lane:r.get(0),key:r.get(1),sentence_id:r.get(2),family_id:r.get(3),payload:r.get(4)};
+        if row.key.is_empty()||!seen.insert((row.lane,row.key.clone())){return Err(NativeNumericAuditError::AdmissionProbeInvariant);}
+        out.push(row);
+    }
+    Ok(out)
+}
+
+/// Called only after the rollback audit has proved preservation. Persist
+/// the observed source support in the outer native transport transaction.
+/// No cache hit is licensed by this snapshot; all support was read afresh.
+fn sync_identity_support_index(
+    tx:&mut postgres::Transaction<'_>,run_ref:&str,answer:&NativeSourceLocalAnswer,
+    rows:&[IdentitySupportRow],
+)->Result<NativeIdentitySupportIndexReceipt,NativeNumericAuditError>{
+    let scope=serde_json::json!({
+        "schema":"slr-native-identity-support-index-v1","run_ref":run_ref,
+        "document_ref":answer.source_document_ref,"source_revision_ref":answer.source_revision_ref,
+        "source_sha256":answer.source_content_sha256,"parser_run_ref":answer.original_parser_run_ref,
+        "producer":"m090-bounded-reference-only-v1",
+        "golden":"BoundedProperNameEvidenceExecution:3cc851c87c50c3cc18c9610984dc48fb5f28d11d",
+    });
+    let scope_ref=bridge_digest(&scope)?;
+    tx.batch_execute("CREATE TABLE IF NOT EXISTS execution.slr_native_identity_support_scope (
+        scope_ref text PRIMARY KEY, scope_payload jsonb NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS execution.slr_native_identity_support_index (
+        scope_ref text NOT NULL REFERENCES execution.slr_native_identity_support_scope(scope_ref),
+        lane smallint NOT NULL CHECK(lane BETWEEN 1 AND 8),
+        key text NOT NULL,sentence_id bigint,family_id bigint,payload jsonb NOT NULL,
+        PRIMARY KEY(scope_ref,lane,key)
+    );
+    CREATE INDEX IF NOT EXISTS slr_native_identity_support_sentence_idx
+       ON execution.slr_native_identity_support_index(scope_ref,sentence_id,lane,key);
+    CREATE INDEX IF NOT EXISTS slr_native_identity_support_family_idx
+       ON execution.slr_native_identity_support_index(scope_ref,family_id,lane,key);")?;
+    tx.query_one("SELECT pg_advisory_xact_lock(hashtext('slr-native-identity-support-index-v1'),hashtext($1))",&[&scope_ref])?;
+    tx.execute("INSERT INTO execution.slr_native_identity_support_scope VALUES($1,$2) ON CONFLICT DO NOTHING",&[&scope_ref,&scope])?;
+    let stored:serde_json::Value=tx.query_one("SELECT scope_payload FROM execution.slr_native_identity_support_scope WHERE scope_ref=$1",&[&scope_ref])?.get(0);
+    if stored!=scope{return Err(NativeNumericAuditError::ForeignSource);}
+    let packet=serde_json::to_value(rows).map_err(|_|NativeNumericAuditError::ForeignSource)?;
+    let deltas=tx.query("WITH incoming AS MATERIALIZED (
+        SELECT * FROM jsonb_to_recordset($2) AS r(lane smallint,key text,sentence_id bigint,family_id bigint,payload jsonb)
+    ), prior AS MATERIALIZED (
+        SELECT lane,key,sentence_id,family_id,payload FROM execution.slr_native_identity_support_index WHERE scope_ref=$1
+    )
+    SELECT CASE WHEN p.key IS NULL THEN 1 WHEN n.key IS NULL THEN 2
+        WHEN (p.sentence_id,p.family_id,p.payload) IS DISTINCT FROM (n.sentence_id,n.family_id,n.payload) THEN 3
+        ELSE 4 END::smallint,
+        p.sentence_id,n.sentence_id,p.family_id,n.family_id
+      FROM prior p FULL JOIN incoming n USING(lane,key)",&[&scope_ref,&packet])?;
+    let(mut inserted,mut withdrawn,mut changed,mut unchanged)=(0usize,0usize,0usize,0usize);
+    let mut sentences=BTreeSet::new();let mut families=BTreeSet::new();
+    for d in deltas{
+        match d.get::<_,i16>(0){
+            1=>inserted+=1,2=>withdrawn+=1,3=>changed+=1,4=>{unchanged+=1;continue;},
+            _=>return Err(NativeNumericAuditError::AdmissionProbeInvariant),
+        }
+        sentences.extend(d.get::<_,Option<i64>>(1));sentences.extend(d.get::<_,Option<i64>>(2));
+        families.extend(d.get::<_,Option<i64>>(3));families.extend(d.get::<_,Option<i64>>(4));
+    }
+    let removed=tx.execute("DELETE FROM execution.slr_native_identity_support_index p
+        WHERE p.scope_ref=$1 AND NOT EXISTS(SELECT 1 FROM jsonb_to_recordset($2) AS n(lane smallint,key text)
+            WHERE n.lane=p.lane AND n.key=p.key)",&[&scope_ref,&packet])?;
+    let written=tx.execute("INSERT INTO execution.slr_native_identity_support_index AS p
+        (scope_ref,lane,key,sentence_id,family_id,payload)
+        SELECT $1,n.lane,n.key,n.sentence_id,n.family_id,n.payload
+        FROM jsonb_to_recordset($2) AS n(lane smallint,key text,sentence_id bigint,family_id bigint,payload jsonb)
+        ON CONFLICT(scope_ref,lane,key) DO UPDATE SET sentence_id=EXCLUDED.sentence_id,
+          family_id=EXCLUDED.family_id,payload=EXCLUDED.payload
+        WHERE (p.sentence_id,p.family_id,p.payload) IS DISTINCT FROM
+          (EXCLUDED.sentence_id,EXCLUDED.family_id,EXCLUDED.payload)",&[&scope_ref,&packet])?;
+    if removed!=withdrawn as u64||written!=(inserted+changed) as u64
+       ||inserted+changed+unchanged!=rows.len(){return Err(NativeNumericAuditError::AdmissionProbeInvariant);}
+    Ok(NativeIdentitySupportIndexReceipt{
+        scope_ref,observed_rows:rows.len(),inserted_rows:inserted,changed_rows:changed,
+        withdrawn_rows:withdrawn,unchanged_rows:unchanged,
+        affected_sentence_ids:sentences.into_iter().collect(),affected_family_ids:families.into_iter().collect(),
+        zero_family_mentions:rows.iter().filter(|r|r.lane==5&&r.payload["full_count"].as_i64()==Some(0)).count(),
+        unanchored_mentions:rows.iter().filter(|r|r.lane==5&&r.payload["source_object_id"].is_null()).count(),
+        embedded_mentions:rows.iter().filter(|r|r.lane==5&&r.payload["embedded_in_person"].as_bool()==Some(true)).count(),
+        support_scan_performed:true,dependency_complete:false,identity_paid:false,
+    })
 }
 
 type ParserEvidenceKey=(i64,i64,i16,Option<i64>,Option<i64>,Option<i64>,String,i16);
@@ -2760,6 +2904,10 @@ fn refresh_bounded_parser_identity_with_parity(
     probe.query_one("SELECT pg_temp.slr_refresh_numeric_pnf_parser_identity_evidence_bounded($1,$2)",&[&run,&doc])?;
     let bounded_elapsed_ms=started.elapsed().as_millis();
     let actual=parser_evidence_keys(probe,run,doc)?;
+    let embedded=probe.query("SELECT token_id FROM pg_temp.slr_identity_mention_scope WHERE embedded_in_person",&[])?
+        .iter().map(|r|r.get::<_,i64>(0)).collect::<BTreeSet<_>>();
+    let embedded_reference_name_rows=reference.iter().filter(|r|r.2==3&&r.3.is_some_and(|t|embedded.contains(&t))).count();
+    let embedded_bounded_name_rows=actual.iter().filter(|r|r.2==3&&r.3.is_some_and(|t|embedded.contains(&t))).count();
     if actual!=expected {return Err(NativeNumericAuditError::AdmissionProbeInvariant);}
     // Exact original family count and eligible count are independently
     // reopened from the indexed source carrier. Every omitted reference
@@ -2793,12 +2941,14 @@ fn refresh_bounded_parser_identity_with_parity(
         omitted_ambiguous_rows:reference.len()-actual.len(),overflow_mentions:actual_overflow.len(),
         reference_admitted_witnesses:reference_witnesses.len(),bounded_admitted_witnesses:0,
         candidate_projection_exact:true,original_admission_projection_exact:false,
+        embedded_reference_name_rows,embedded_bounded_name_rows,
+        golden_standalone_permission_matches:embedded_reference_name_rows==0&&embedded_bounded_name_rows==0,
         reference_elapsed_ms,bounded_elapsed_ms,full_typed_coverage_paid:false,persisted:false,
     },reference_witnesses,delta))
 }
 
 fn probe_original_governed_identity(
-    tx:&mut postgres::Transaction<'_>,run_ref:&str,document_ref:&str,demand:i64,
+    tx:&mut postgres::Transaction<'_>,run_ref:&str,document_ref:&str,demand:i64,answer:&NativeSourceLocalAnswer,
 )->Result<(OriginalParserIdentityProducerObservation,NativeGovernedIdentityProbe),NativeNumericAuditError>{
     let row=tx.query_one(
         "SELECT r.run_id,r.document_id FROM execution.semantic_pnf_demand d
@@ -2818,6 +2968,7 @@ fn probe_original_governed_identity(
         None
     };
     let parser_refresh_elapsed_ms=started.elapsed().as_millis();
+    let support_rows=if bounded.is_some(){Some(read_identity_support_index(&mut probe)?)}else{None};
     let mut original_parser_identity_producer=observe_refreshed_parser_identity_producer(&mut probe,run,document,demand)?;
     let started=std::time::Instant::now();
     let admitted:i64=probe.query_one(
@@ -2872,6 +3023,9 @@ fn probe_original_governed_identity(
     if !immutable||!rollback_level_three||!rollback_classes
         ||level_one!=level_one_snapshot(tx,run,document)?{
         return Err(NativeNumericAuditError::AdmissionProbeInvariant);
+    }
+    if let Some(rows)=support_rows {
+        original_parser_identity_producer.support_index=Some(sync_identity_support_index(tx,run_ref,answer,&rows)?);
     }
     Ok((original_parser_identity_producer,NativeGovernedIdentityProbe{
         parser_refresh_elapsed_ms,parser_admission_elapsed_ms,
@@ -3359,7 +3513,7 @@ pub fn transport_original_numeric_candidates_for_source_answer_with_partition(
     let (original_parser_identity_producer,governed_identity_rollback_probe)=if remaining==0&&nominal_heads_remaining==0
         &&candidates_without_morphology_observation==0
         &&original_mention_binding_campaign.spans_without_exact_objects==0{
-        let (observed,governed)=probe_original_governed_identity(&mut tx,numeric_run_ref,&answer.source_document_ref,demand)?;
+        let (observed,governed)=probe_original_governed_identity(&mut tx,numeric_run_ref,&answer.source_document_ref,demand,answer)?;
         (Some(observed),Some(governed))
     }else{(None,None)};
     let parser_identity_refresh_invocations=original_parser_identity_producer.as_ref()
