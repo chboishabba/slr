@@ -16,6 +16,7 @@ use sensiblaw_pg_source_store::{
     reuse_original_binding_and_identity_owners,
     retract_original_numeric_identity_for_source_answer,
     transport_original_numeric_candidates_for_source_answer,
+    prepare_native_prefix_recovery, complete_parser_run,
 };
 use serde::Serialize;
 use std::{env,path::PathBuf};
@@ -81,6 +82,74 @@ fn print_json<T:Serialize>(value:&T)->Result<(),String>{
 }
 pub fn run(args:&[String])->Result<(),String>{
     match args {
+        [subcommand,review,parser_run,flag] if subcommand=="prefix-prepare"&&(flag=="--commit"||flag=="--inspect")=>{
+            let config=load_database_config(None).map_err(|e|e.to_string())?;
+            let receipt=prepare_native_prefix_recovery(&config,review,parser_run,flag=="--commit")?;
+            print_json(&receipt)
+        }
+        [subcommand,review,parser_run,flag] if subcommand=="endpoint"&&flag=="--commit"=>{
+            let config=load_database_config(None).map_err(|e|e.to_string())?;
+            // Existing parser-only worker may already have completed queued
+            // jobs. Finalize just this original run, never source compilation.
+            let scope=prepare_native_prefix_recovery(&config,review,parser_run,false)?;
+            if !scope.parser_scope_ready{
+                return print_json(&serde_json::json!({
+                    "schema":"slr-native-antecedent-endpoint-v1","prefix_scope":scope,
+                    "outcome":"unresolved_original_prefix_parser_scope",
+                    "governed_identity_paid":false,"level_three_paid":false
+                }));
+            }
+            complete_parser_run(&config,parser_run).map_err(|e|e.to_string())?;
+            let url=env::var("SENSIBLAW_DATABASE_URL").map_err(|_|"SENSIBLAW_DATABASE_URL required")?;
+            let root=env::var("SLR_NATIVE_NUMERIC_SOURCE_ROOT").map(PathBuf::from)
+                .map_err(|_|"SLR_NATIVE_NUMERIC_SOURCE_ROOT required")?;
+            let mut publication=Vec::new();
+            for _ in 0..8 {
+                let step=run_native_numeric_exact_source_slice(&config,&url,&scope.source_revision_ref,parser_run,&root,64)
+                    .map_err(|e|e.to_string())?;
+                let done=step.sentence_jobs_remaining==0&&
+                    !step.residuals.iter().any(|r|r.starts_with("original_numeric_parser_sentence_bootstrap_pending:"));
+                publication.push(step);
+                if done{break;}
+            }
+            let inspection=inspect_native_antecedent_review(&config,review).map_err(|e|e.to_string())?;
+            let frontier=native_antecedent_frontier(&config,review,parser_run).map_err(|e|e.to_string())?;
+            let answer=compile_native_source_local_answer(&inspection,&frontier).map_err(|e|e.to_string())?;
+            let evidence=load_exact_native_numeric_evidence(&config,&scope.source_revision_ref,parser_run,
+                "slr-strict-numeric-pnf-v1").map_err(|e|e.to_string())?;
+            let numeric_run=deterministic_numeric_run_ref(&evidence.manifest);
+            let mut passes=Vec::new();
+            for _ in 0..8 {
+                let step=transport_original_numeric_candidates_for_source_answer(&url,&numeric_run,&answer,64)
+                    .map_err(|e|e.to_string())?;
+                let done=step.governed_identity_rollback_probe.is_some();
+                let progress=!step.inserted_candidate_ids.is_empty()||step.nominal_head_objects_inserted>0
+                    ||step.original_mention_binding_campaign.newly_materialized_span_objects>0
+                    ||step.morphology_observations_inserted>0;
+                passes.push(step);
+                if done||!progress{break;}
+            }
+            let readback=reuse_original_binding_and_identity_owners(&url,&numeric_run,&answer).map_err(|e|e.to_string())?;
+            let last=passes.last().ok_or("no native binding pass")?;
+            let prefix_complete=last.original_mention_binding_campaign.prefix_uncovered_nonwhitespace==0;
+            let cross_owner=last.native_binding_bridge.indexed_entity_spans_missing_from_projected.is_empty()
+                &&last.native_binding_bridge.projected_entity_spans_missing_from_index.is_empty();
+            let inverse=readback.original_binding_sets.iter().any(|s|s.referential_type_ref=="entity_reference"
+                &&s.exact_entity_inverse_complete&&s.native_projection_verified&&s.original_index_matches_persisted_members);
+            let identity=readback.original_numeric_audits.iter().any(|a|a.numeric_run_ref==numeric_run&&a.original_accepted_document_identity_paid);
+            let l3=readback.original_numeric_audits.iter().any(|a|a.numeric_run_ref==numeric_run&&a.original_level_three_substitution_paid);
+            let endpoint=if identity&&l3&&prefix_complete&&cross_owner&&inverse{
+                "governed_source_answer"
+            }else{"source_local_answer_with_governed_identity_unresolved"};
+            print_json(&serde_json::json!({
+                "schema":"slr-native-antecedent-endpoint-v1","prefix_scope":scope,
+                "numeric_publication":publication,"binding_passes":passes,"original_owner_reuse":readback,
+                "source_local_answer":answer,"observed_prefix_token_coverage":prefix_complete,
+                "projected_vs_original_entity_membership_parity":cross_owner,"exact_entity_inverse_complete":inverse,
+                "outcome":endpoint,"governed_identity_paid":identity,"level_three_paid":l3,
+                "external_qid_paid":false,"historical_truth_paid":false
+            }))
+        }
         [subcommand,source_revision,parser_run] if subcommand=="inspect" => {
             let (evidence,_)=exact_plan(source_revision,parser_run)?;
             let total_entities=evidence.parser_regions.iter()
@@ -237,7 +306,7 @@ pub fn run(args:&[String])->Result<(),String>{
             print_json(&receipt)
         }
         _=>Err(
-            "numeric-pnf-native usage: inspect SOURCE_REV PARSER_RUN | plan SOURCE_REV PARSER_RUN | audit S29_REVIEW_ITEM_REF PARSER_RUN | reuse-original S29_REVIEW_ITEM_REF PARSER_RUN | bind S29_REVIEW_ITEM_REF PARSER_RUN MAX_CANDIDATES --commit | bind-campaign S29_REVIEW_ITEM_REF PARSER_RUN MAX_CANDIDATES --commit | retract S29_REVIEW_ITEM_REF PARSER_RUN WITNESS_ID --rollback-probe|--commit | compile SOURCE_REV PARSER_RUN MAX_SENTENCES --commit [--allow-partial-source] (numeric DB URL required for audit/compile, durable source root for compile)".into()
+            "numeric-pnf-native usage: prefix-prepare REVIEW PARSER_RUN --inspect|--commit | endpoint REVIEW PARSER_RUN --commit | inspect SOURCE_REV PARSER_RUN | plan SOURCE_REV PARSER_RUN | audit S29_REVIEW_ITEM_REF PARSER_RUN | reuse-original S29_REVIEW_ITEM_REF PARSER_RUN | bind S29_REVIEW_ITEM_REF PARSER_RUN MAX_CANDIDATES --commit | bind-campaign S29_REVIEW_ITEM_REF PARSER_RUN MAX_CANDIDATES --commit | retract S29_REVIEW_ITEM_REF PARSER_RUN WITNESS_ID --rollback-probe|--commit | compile SOURCE_REV PARSER_RUN MAX_SENTENCES --commit [--allow-partial-source] (numeric DB URL required for audit/compile, durable source root for compile)".into()
         )
     }
 }

@@ -459,7 +459,7 @@ pub fn run_native_numeric_exact_source_slice(
     )?;
     let canonical=original_bytes(slr,&original.manifest)?;
     let run_ref=deterministic_numeric_run_ref(&original.manifest);
-    let plan:NativeNumericParserPlan=
+    let mut plan:NativeNumericParserPlan=
         plan_original_native_numeric_parser(&original,&run_ref)?;
     // One indexed read of existing immutable sentence refs; source bootstrap
     // and numeric work use independent <=64-sentence bounded cursors.
@@ -476,6 +476,30 @@ pub fn run_native_numeric_exact_source_slice(
         .collect::<BTreeSet<_>>();
     if !known.is_subset(&expected) {
         return Err(NumericPipelineError::ForeignRun);
+    }
+    // Preserve the immutable partition allocation coordinates on extension.
+    // Original m149 sentence region sequence is start_char, independently of
+    // this append-only parser partition allocation ordinal.
+    let allocated=bootstrap_db.query("SELECT s.sentence_ref,p.sequence_no
+        FROM execution.semantic_parser_sentence s JOIN execution.semantic_parser_partition p
+          ON p.partition_ref=s.partition_ref
+        WHERE s.run_ref=$1 AND s.document_ref=$2 AND s.representation_version=2",
+        &[&run_ref,&original.manifest.document_ref])?;
+    let mut ordinals=std::collections::BTreeMap::new();
+    let mut seen=BTreeSet::new();
+    for row in allocated{
+        let id:String=row.get(0);
+        let seq=usize::try_from(row.get::<_,i64>(1)).map_err(|_|NumericPipelineError::ForeignRun)?;
+        if !seen.insert(seq)||ordinals.insert(id,seq).is_some(){return Err(NumericPipelineError::ForeignRun);}
+    }
+    if ordinals.len()!=known.len()||seen.iter().copied().ne(0..known.len()){
+        return Err(NumericPipelineError::ForeignRun);
+    }
+    let mut next=known.len();
+    for sentence in &mut plan.sentences{
+        sentence.source_sentence_index=if let Some(seq)=ordinals.get(&sentence.sentence_ref){*seq}else{
+            let seq=next;next+=1;seq
+        };
     }
     let mut selected=Vec::new();
     let mut token_budget=0usize;

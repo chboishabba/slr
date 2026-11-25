@@ -1310,6 +1310,7 @@ pub struct NativeMentionSpanBinding{
     pub original_mention_ref:String,pub factor_type:&'static str,
     pub license_kinds:Vec<&'static str>,pub anchor_pos:String,
     pub exact_object_ids:Vec<i64>,pub unique_dependency_head:Option<i64>,
+    pub dependency_head_alternatives:Vec<i64>,
     pub accessibility_path:&'static str,pub morphology_mismatches:Vec<&'static str>,
     pub projected_compatible:bool,pub within_original_execution_cap:bool,
     pub persisted_candidate_evidence:usize,
@@ -1442,6 +1443,7 @@ fn original_mention_binding_campaign(
     let mut support=exact_mention_support_index(tx,run_ref,doc)?;
     let noun:i64=tx.query_one("SELECT execution.ensure_semantic_symbol(14::smallint,'mention.noun')",&[])?.get(0);
     let proper:i64=tx.query_one("SELECT execution.ensure_semantic_symbol(14::smallint,'mention.proper_noun')",&[])?.get(0);
+    let unresolved_kind:i64=tx.query_one("SELECT execution.ensure_semantic_symbol(14::smallint,'mention.unresolved_head')",&[])?.get(0);
     let mut created=0usize;let mut observations=Vec::new();
     for ((a,b),licenses) in spans.into_iter().rev(){
         let slice=&tokens[a..b];let first=&slice[0];let last=&slice[slice.len()-1];
@@ -1449,17 +1451,22 @@ fn original_mention_binding_campaign(
         token_ids.sort_unstable();
         let head=slice.iter().filter(|t|t.head.is_some_and(|h|h==t.id||!token_ids.contains(&h)))
             .collect::<Vec<_>>();
+        let head_alternatives=head.iter().map(|h|h.id).collect::<Vec<_>>();
         let head=if let [h]=head.as_slice(){Some(*h)}else{None};
         let key=(first.region,token_ids.clone());
         let mut objects=support.get(&key).cloned().unwrap_or_default();
         if objects.is_empty()&&created<budget{
-            if let Some(h)=head{
-                // Distinct source-span object; exact support set, no spelling quotient.
-                let mut d=Sha256::new();d.update(b"slr:numeric-mention-span:v1");
+            {
+                // A multi-head or headless occurrence is still a source object.
+                // NULL lexical head + distinct unresolved kind prevents guessed name identity.
+                let mut d=Sha256::new();
+                if head.is_some(){d.update(b"slr:numeric-mention-span:v1");}
+                else{d.update(b"slr:numeric-mention-span:unresolved-head:v1");}
                 d.update(first.region.to_be_bytes());
                 for id in &token_ids{d.update(id.to_be_bytes());}
                 let digest=d.finalize().to_vec();
-                let kind=if first.pos=="PROPN"{proper}else{noun};
+                let kind=if head.is_none(){unresolved_kind}else if first.pos=="PROPN"{proper}else{noun};
+                let lexical_head=head.map(|h|h.lemma);
                 let row=tx.query_one(
                     "INSERT INTO execution.semantic_pnf_object
                      (object_digest,region_id,object_kind_symbol_id,head_symbol_id,scope_region_id,
@@ -1467,9 +1474,9 @@ fn original_mention_binding_campaign(
                      VALUES($1,$2,$3,$4,$2,0,0,1,1,0,TRUE)
                      ON CONFLICT(object_digest) DO UPDATE SET object_digest=EXCLUDED.object_digest
                      RETURNING object_id,region_id,object_kind_symbol_id,head_symbol_id,active",
-                     &[&digest,&first.region,&kind,&h.lemma])?;
+                     &[&digest,&first.region,&kind,&lexical_head])?;
                 if row.get::<_,i64>(1)!=first.region||row.get::<_,i64>(2)!=kind
-                    ||row.get::<_,i64>(3)!=h.lemma||!row.get::<_,bool>(4){
+                    ||row.get::<_,Option<i64>>(3)!=lexical_head||!row.get::<_,bool>(4){
                     return Err(NativeNumericAuditError::ForeignSource);
                 }
                 let id:i64=row.get(0);
@@ -1500,7 +1507,7 @@ fn original_mention_binding_campaign(
             start_char:first.start,end_char:last.end,token_ids,
             original_mention_ref:format!("mention:{doc}:{}:{}",first.start,last.end),
             factor_type:"semantic.mention_identity",license_kinds:licenses,anchor_pos:first.pos.clone(),
-            exact_object_ids:objects,unique_dependency_head:head.map(|h|h.id),
+            exact_object_ids:objects,unique_dependency_head:head.map(|h|h.id),dependency_head_alternatives:head_alternatives,
             accessibility_path:path,morphology_mismatches:mismatches,
             projected_compatible:compatible,within_original_execution_cap:false,
             persisted_candidate_evidence:0,
@@ -1548,6 +1555,9 @@ pub struct NativeBindingBridgeReceipt {
     pub focus_reference_alternatives:Vec<&'static str>,
     pub original_index_candidate_evidence_inserted:u64,
     pub exact_index_entity_objects_outside_transport:usize,
+    pub indexed_entity_spans_missing_from_projected:Vec<(i64,i64)>,
+    pub projected_entity_spans_missing_from_index:Vec<(i64,i64)>,
+    pub multihead_or_headless_spans:usize,
     pub unresolved_structural_metadata:Vec<&'static str>,
     pub mention_spans_without_objects:usize,
     pub mention_spans_with_multiple_objects:usize,
@@ -1854,6 +1864,23 @@ fn materialize_native_binding_bridge(
     }
     let (original_index_candidate_evidence_inserted,exact_index_entity_objects_outside_transport)=
         persist_native_index_evidence(tx,demand,&snapshot,&doc,&sets)?;
+    // Cross-owner parity, not self-parity. Compare exact mention spans,
+    // including cap-deferred candidates, without conflating equal spelling.
+    let mut indexed_spans=BTreeSet::new();
+    for set in sets.iter().filter(|s|s.referential_type=="entity_reference"){
+        let rows=tx.query("SELECT sp.start_char,sp.end_char
+            FROM resolution.binding_candidate_set s
+            CROSS JOIN LATERAL resolution.query_binding_candidates(s.reference_factor_revision_ref,
+                s.referential_type_ref,s.accessibility_declaration_ref,s.compatibility_declaration_ref,$2) m
+            JOIN execution.slr_native_binding_anchor_projection p ON p.factor_revision_ref=m.candidate_factor_revision_ref AND p.active
+            JOIN corpus.span sp ON sp.span_ref=p.span_ref WHERE s.candidate_set_ref=$1",
+            &[&set.candidate_set_ref,&i32::try_from(anchors.len()).map_err(|_|NativeNumericAuditError::ForeignSource)?])?;
+        for row in rows{indexed_spans.insert((i64::from(row.get::<_,i32>(0)),i64::from(row.get::<_,i32>(1))));}
+    }
+    let projected_spans=campaign.represented_spans.iter().filter(|s|s.projected_compatible)
+        .map(|s|(s.start_char,s.end_char)).collect::<BTreeSet<_>>();
+    let indexed_entity_spans_missing_from_projected=indexed_spans.difference(&projected_spans).copied().collect();
+    let projected_entity_spans_missing_from_index=projected_spans.difference(&indexed_spans).copied().collect();
     let has_subject=anchors.iter().any(|a|focus_keys.contains(&a.key)&&a.kind=="semantic.argument.subject");
     let mut alternatives=vec!["entity_reference","eventuality_reference","proposition_reference"];
     if has_subject{alternatives.push("expletive_realisation");}
@@ -1861,7 +1888,9 @@ fn materialize_native_binding_bridge(
         snapshot_ref:snapshot,source_parser_tokens:tokens.len(),anchors:anchors.len(),mention_anchors,
         relation_anchors,focus_reference_anchors:focus_keys.len(),retired_index_anchors:retired,candidate_sets:sets,
         focus_reference_alternatives:alternatives,original_index_candidate_evidence_inserted,
-        exact_index_entity_objects_outside_transport,
+        exact_index_entity_objects_outside_transport,indexed_entity_spans_missing_from_projected,
+        projected_entity_spans_missing_from_index,
+        multihead_or_headless_spans:campaign.represented_spans.iter().filter(|s|s.unique_dependency_head.is_none()).count(),
         unresolved_structural_metadata:vec!["canonical_tokenizer_parity","full_original_mention_factor_parity",
             "original_relation_id_and_bundle_parity","nonprojected_coordination_and_other_relation_families"],
         mention_spans_without_objects:campaign.spans_without_exact_objects,
@@ -2634,7 +2663,7 @@ pub fn transport_original_numeric_candidates_for_source_answer(
     }else{None};
     tx.commit()?;
     Ok(NativeNumericCandidateTransportReceipt{
-        schema:"slr-native-candidate-only-transport-v5",
+        schema:"slr-native-candidate-only-transport-v6",
         numeric_run_ref:numeric_run_ref.into(),demand_id:demand,source_object_id:source,
         inserted_candidate_ids:ids,remaining_untransported_count:remaining,
         represented_candidate_count:count,outside_model_possible:open,

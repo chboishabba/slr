@@ -282,7 +282,7 @@ pub use numeric_pnf_owner::{
     NumericOwnerWorkReceipt, NumericWorkBudget,
 };
 pub use numeric_pnf_source_bridge::{
-    load_exact_native_numeric_evidence, NativeNumericSourceError,
+    load_exact_native_numeric_evidence, prepare_native_prefix_recovery, NativePrefixRecoveryReceipt, NativeNumericSourceError,
     OriginalNativeNumericEvidence, OriginalNumericSentenceFibre,
     OriginalNumericRawToken, OriginalNumericRawEntity,
 };

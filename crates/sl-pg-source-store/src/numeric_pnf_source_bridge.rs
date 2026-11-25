@@ -303,6 +303,141 @@ pub fn load_exact_native_numeric_evidence(
     })
 }
 
+
+/// Exact same-run extension, using only original source sentence regions and
+/// existing content-addressed parser jobs. No new segmentation or compiler.
+/// Pending jobs are executed by the existing parser-only worker.
+#[derive(Debug,Clone,Serialize)]
+pub struct NativePrefixRecoveryReceipt{
+    pub source_revision_ref:String,pub parser_run_ref:String,pub source_sha256:String,
+    pub focus_start_char:u64,pub original_prefix_regions:usize,
+    pub already_succeeded:usize,pub missing_region_refs:Vec<String>,
+    pub queued_region_refs:Vec<String>,pub residual_region_refs:Vec<String>,
+    pub uncovered_source_intervals:Vec<(usize,usize,usize)>,
+    pub newly_enqueued_or_pending:usize,pub reused_products:usize,
+    pub parser_scope_ready:bool,pub writes_database:bool,
+}
+pub fn prepare_native_prefix_recovery(
+    config:&DatabaseConfig,review_item:&str,parser_run:&str,commit:bool,
+)->Result<NativePrefixRecoveryReceipt,String>{
+    use crate::{inspect_native_antecedent_review,ParserRunReceipt,ParserRegionJobSpec,
+        enqueue_parser_regions_with_content_reuse};
+    let review=inspect_native_antecedent_review(config,review_item).map_err(|e|e.to_string())?;
+    let focus=review.focus.start_char;
+    let mut db=Client::connect(config.database_url(),NoTls).map_err(|e|e.to_string())?;
+    let row=db.query_one("SELECT c.payload,g.content_digest_ref FROM ingest.generic_source_revision g
+        JOIN corpus.document d ON d.document_ref=g.document_ref
+        JOIN corpus.canonical_content c ON c.canonical_ref=d.canonical_ref
+        WHERE g.source_revision_ref=$1 AND g.document_ref=$2 AND g.candidate_only
+          AND NOT g.creates_semantic_authority AND NOT g.applicability_promoted AND NOT g.claim_truth_promoted",
+        &[&review.source_revision_ref,&review.document_ref]).map_err(|e|e.to_string())?;
+    let bytes:Vec<u8>=row.get(0);
+    let sha=format!("{:x}",Sha256::digest(&bytes));
+    if sha!=review.canonical_content_sha256||row.get::<_,String>(1)!=format!("sha256:{sha}"){
+        return Err("prefix recovery source digest mismatch".into());
+    }
+    let text=std::str::from_utf8(&bytes).map_err(|e|e.to_string())?;
+    let chars=text.chars().collect::<Vec<_>>();
+    let stop=usize::try_from(focus).map_err(|e|e.to_string())?;
+    if stop>chars.len(){return Err("focus outside canonical source".into());}
+    let run=db.query_one("SELECT source_revision_ref,parser_family,parser_version,model_ref,
+        config_digest_ref,config_json,candidate_only,creates_semantic_authority,
+        applicability_promoted,claim_truth_promoted FROM ingest.parser_run WHERE parser_run_ref=$1",
+        &[&parser_run]).map_err(|e|e.to_string())?;
+    if run.get::<_,String>(0)!=review.source_revision_ref||!run.get::<_,bool>(6)
+        ||run.get::<_,bool>(7)||run.get::<_,bool>(8)||run.get::<_,bool>(9){
+        return Err("foreign or promoted parser run".into());
+    }
+    let receipt=ParserRunReceipt{parser_run_ref:parser_run.into(),source_revision_ref:review.source_revision_ref.clone(),
+        parser_family:run.get(1),parser_version:run.get(2),model_ref:run.get(3),
+        config_digest_ref:run.get(4),config_json:run.get(5),candidate_only:true,
+        creates_semantic_authority:false,applicability_promoted:false,claim_truth_promoted:false};
+    let focus_i64=i64::try_from(focus).map_err(|e|e.to_string())?;
+    let regions=db.query("SELECT DISTINCT r.region_ref,r.start_char,r.end_char
+        FROM ingest.long_document_region r JOIN corpus.source_statement s
+          ON s.source_revision_ref=r.source_revision_ref AND s.exact_span_ref=r.region_ref AND s.document_ref=$3
+        WHERE r.source_revision_ref=$1 AND r.source_ref=$2 AND r.region_kind='sentence'
+          AND r.start_char<$4 AND r.candidate_only AND NOT r.creates_semantic_authority AND NOT r.claim_truth_promoted
+          AND s.candidate_only AND NOT s.creates_semantic_authority AND NOT s.applicability_promoted AND NOT s.claim_truth_promoted
+        ORDER BY r.start_char,r.end_char,r.region_ref",
+        &[&review.source_revision_ref,&review.original_source_ref,&review.document_ref,&focus_i64]).map_err(|e|e.to_string())?;
+    let jobs=db.query("SELECT region_ref,region_start_char,region_end_char,status,source_revision_ref,
+        candidate_only,creates_semantic_authority,applicability_promoted,claim_truth_promoted
+        FROM ingest.parser_job WHERE parser_run_ref=$1 ORDER BY region_start_char,region_end_char",
+        &[&parser_run]).map_err(|e|e.to_string())?;
+    let mut existing=BTreeMap::new();let mut last=0i64;
+    for j in jobs{
+        let a:i64=j.get(1);let b:i64=j.get(2);
+        if a<last||b<=a||b>chars.len() as i64||j.get::<_,String>(4)!=review.source_revision_ref
+            ||!j.get::<_,bool>(5)||j.get::<_,bool>(6)||j.get::<_,bool>(7)||j.get::<_,bool>(8){
+            return Err("invalid original parser job scope".into());
+        }
+        last=b;
+        existing.insert(j.get::<_,String>(0),(a,b,j.get::<_,String>(3)));
+    }
+    let mut missing=Vec::new();let mut queued=Vec::new();let mut residual=Vec::new();
+    let mut succeeded=0;let mut covered=vec![false;stop];let mut prior=0i64;
+    for region in &regions{
+        let key:String=region.get(0);let a:i64=region.get(1);let b:i64=region.get(2);
+        if a<prior||b<=a||b>chars.len() as i64{return Err("overlapping original source sentence regions".into());}
+        prior=b;
+        match existing.get(&key){
+            Some((x,y,state)) if *x==a&&*y==b=>{
+                match state.as_str(){
+                    "succeeded"=>{succeeded+=1;covered[a as usize..(b as usize).min(stop)].fill(true);},
+                    "queued"|"leased"=>queued.push(key),
+                    "residual"=>residual.push(key),
+                    _=>return Err("unknown parser job state".into()),
+                }
+            }
+            Some(_)=>return Err("original region/job coordinate mismatch".into()),
+            None=>{
+                // Never add a sentence overlapping a larger pre-existing job.
+                // Such an interval must be recovered from that job's own tape.
+                if existing.values().any(|(x,y,_)|a<*y&&*x<b){
+                    return Err(format!("prefix region overlaps a different original parser job: {key}"));
+                }
+                missing.push(ParserRegionJobSpec{region_ref:key,start_char:a as u64,end_char:b as u64});
+            }
+        }
+    }
+    if missing.len()>128||missing.iter().map(|r|r.end_char-r.start_char).sum::<u64>()>100_000{
+        return Err("prefix-only parser recovery exceeds bounded scope".into());
+    }
+    let gaps=|covered:&[bool]|{
+        let mut out=Vec::new();let mut i=0;
+        while i<covered.len(){
+            if covered[i]{i+=1;continue;}
+            let a=i;while i<covered.len()&&!covered[i]{i+=1;}
+            let n=chars[a..i].iter().filter(|c|!c.is_whitespace()).count();
+            if n>0{out.push((a,i,n));}
+        }
+        out
+    };
+    let mut enqueued=0;let mut reused=0;
+    if commit&&!missing.is_empty(){
+        // Reopen the same deterministic parser run. Original success rows
+        // remain immutable; only the run's completion status is reopened.
+        db.execute("UPDATE ingest.parser_run SET status='active',completed_at=NULL
+            WHERE parser_run_ref=$1 AND source_revision_ref=$2",
+            &[&parser_run,&review.source_revision_ref]).map_err(|e|e.to_string())?;
+        let e=enqueue_parser_regions_with_content_reuse(config,&receipt,&missing,text).map_err(|e|e.to_string())?;
+        enqueued=e.queued_new_job_count;reused=e.reused_job_count();
+    }
+    // The readiness receipt is deliberately the PRE-enqueue scope; a fresh
+    // read after the parser-only worker is required before numeric publication.
+    let uncovered=gaps(&covered);
+    Ok(NativePrefixRecoveryReceipt{
+        source_revision_ref:review.source_revision_ref,parser_run_ref:parser_run.into(),source_sha256:sha,
+        focus_start_char:focus,original_prefix_regions:regions.len(),already_succeeded:succeeded,
+        missing_region_refs:missing.iter().map(|r|r.region_ref.clone()).collect(),
+        queued_region_refs:queued.clone(),residual_region_refs:residual.clone(),
+        uncovered_source_intervals:uncovered.clone(),newly_enqueued_or_pending:enqueued+queued.len(),
+        reused_products:reused,parser_scope_ready:missing.is_empty()&&queued.is_empty()&&residual.is_empty()&&uncovered.is_empty(),
+        writes_database:commit&&!missing.is_empty(),
+    })
+}
+
 #[cfg(test)]
 mod tests{
     use super::*;
