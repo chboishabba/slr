@@ -445,6 +445,13 @@ SELECT EXISTS(SELECT 1 FROM execution.slr_native_h6_managed_demand WHERE demand_
        AND d.resolved_target_kind IS NULL AND d.resolved_target_id IS NULL)
  AND NOT EXISTS(SELECT 1 FROM execution.semantic_pnf_candidate_latest_admissibility WHERE demand_id=selected_demand_id)
  AND NOT EXISTS(SELECT 1 FROM execution.semantic_pnf_frontier_resolution WHERE demand_id=selected_demand_id AND outcome_state=2)
+ -- Identity is a distinct authority lane. A historical admitted witness
+ -- may survive a changed frontier; candidate execution cannot reactivate it.
+ AND NOT EXISTS(SELECT 1 FROM execution.semantic_pnf_identity_witness w
+    JOIN execution.semantic_pnf_identity_witness_admission a ON a.witness_id=w.witness_id
+    WHERE w.demand_id=selected_demand_id AND a.admission_state=2)
+ AND NOT EXISTS(SELECT 1 FROM execution.slr_native_blocked_identity_fibre_v1 b
+    WHERE b.demand_id=selected_demand_id)
  AND EXISTS(SELECT 1 FROM execution.semantic_pnf_demand_open_world_state WHERE demand_id=selected_demand_id AND outside_model_possible)
  AND NOT EXISTS(SELECT 1 FROM execution.semantic_pnf_consumer_sufficiency_current_v1 WHERE demand_id=selected_demand_id AND certificate_state=1);
 $$;
@@ -752,3 +759,4 @@ SELECT execution.slr_suspend_native_identity_derivations(
 WHERE NOT EXISTS(SELECT 1 FROM execution.slr_native_current_authority_contract
     WHERE contract_ref='slr-native-current-authority:v9');
 INSERT INTO execution.slr_native_current_authority_contract VALUES('slr-native-current-authority:v9') ON CONFLICT DO NOTHING;
+INSERT INTO execution.slr_native_current_authority_contract VALUES('slr-native-current-authority:v10') ON CONFLICT DO NOTHING;
