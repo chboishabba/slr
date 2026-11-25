@@ -528,14 +528,55 @@ fn require_authenticated_referee_receipt(
     Ok(())
 }
 
+/// Checked readback is a distinct opaque type; a caller-created legacy
+/// FormalEvidencePayment cannot substitute for a checked referee receipt.
+/// It is still a formal-premise receipt, not current numeric identity,
+/// coverage, or authority-debt reconciliation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AuthenticatedFormalEvidencePayment {
+    payment: FormalEvidencePayment,
+    locator: RefereeReceiptLocator,
+}
+
+impl AuthenticatedFormalEvidencePayment {
+    #[must_use]
+    pub fn payment(&self) -> &FormalEvidencePayment { &self.payment }
+    #[must_use]
+    pub fn locator(&self) -> &RefereeReceiptLocator { &self.locator }
+}
+
 /// Strict production entrypoint. An independently issued exact demand
 /// binding must already exist in the original referee store. This pays
 /// only the formal premise; it does not close a numeric identity demand.
 pub fn persist_authenticated_formal_evidence(
     database_url: &str, evidence: &FormalEvidenceReceiptInput,
     locator: &RefereeReceiptLocator,
-) -> Result<FormalEvidencePayment, FormalProofBridgeError> {
-    persist_formal_evidence_inner(database_url, evidence, Some(locator))
+) -> Result<AuthenticatedFormalEvidencePayment, FormalProofBridgeError> {
+    let payment = persist_formal_evidence_inner(database_url, evidence, Some(locator))?;
+    Ok(AuthenticatedFormalEvidencePayment { payment, locator: locator.clone() })
+}
+
+/// Reopen existing immutable bridge evidence/payment and the independently
+/// stored referee row in one serializable snapshot. A historical payment
+/// or a copied authentication result is never enough on its own.
+pub fn reopen_authenticated_formal_evidence(
+    database_url: &str, evidence_ref: &str, locator: &RefereeReceiptLocator,
+) -> Result<AuthenticatedFormalEvidencePayment, FormalProofBridgeError> {
+    require_non_empty("evidence_ref", evidence_ref)?;
+    let mut client = Client::connect(database_url, NoTls)?;
+    let mut tx = client.transaction()?;
+    tx.batch_execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE READ ONLY")?;
+    let evidence = load_evidence_tx(&mut tx, evidence_ref)?;
+    let demand = load_demand_tx(&mut tx, &evidence.demand_ref)?;
+    require_existing_inputs(&mut tx, &demand)?;
+    let expected = validate_formal_evidence_payment(&demand, &evidence)?;
+    require_authenticated_referee_receipt(&mut tx, locator, &demand, &evidence)?;
+    let payment = load_payment_tx(&mut tx, evidence_ref)?;
+    if !payment_replay_matches(&payment, &expected) {
+        return Err(FormalProofBridgeError::ExistingRowConflict);
+    }
+    tx.commit()?;
+    Ok(AuthenticatedFormalEvidencePayment { payment, locator: locator.clone() })
 }
 
 /// Historical structural transport/replay ABI. Its returned payment is
