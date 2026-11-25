@@ -2165,7 +2165,7 @@ fn materialize_native_binding_bridge(
     // anchor metadata, exact source and inverse object IDs; never a count key.
     let tape=tokens.values().map(|t|(t.id,t.sentence_id,t.ordinal,t.start,t.end,t.head,
         &t.pos,&t.dep,&t.morphology)).collect::<Vec<_>>();
-    let snapshot=format!("slr-native-binding-index:v2:{}",bridge_digest(&("consumer-prefix:v2",run_ref,doc,sha,tape,&anchors,&relation_reductions,&question_mode,missing_original_tags))?);
+    let snapshot=format!("slr-native-binding-index:v2:{}",bridge_digest(&("consumer-prefix:v3",run_ref,doc,sha,tape,&anchors,&relation_reductions,&question_mode,missing_original_tags))?);
     // Explicit projection/history tables on the existing numeric DB. Old
     // immutable factor/revision/member/span rows are never deleted. Only
     // mutable anchor index rows are retired, after saving their exact JSON.
@@ -2253,6 +2253,19 @@ fn materialize_native_binding_bridge(
             &[&run_ref,&doc,&snapshot,&name])?.get(0);
         if &stored!=q{return Err(NativeNumericAuditError::ForeignSource);}
     }
+    let mut local_relation_keys=BTreeSet::new();
+    for row in &relation_reductions{
+        if row.residuals.is_empty(){local_relation_keys.insert(row.relation_ref.clone());}
+        if row.action_meta.is_some(){local_relation_keys.insert(format!("{}:feature:action_meta",row.relation_ref));}
+        for role in &row.role_factors{
+            if role["residuals"].as_array().is_some_and(|r|r.is_empty()){
+                let ordinal=role["ordinal"].as_u64().ok_or(NativeNumericAuditError::ForeignSource)?;
+                let name=role["role"].as_str().ok_or(NativeNumericAuditError::ForeignSource)?;
+                let token=role["token_id"].as_i64().ok_or(NativeNumericAuditError::ForeignSource)?;
+                local_relation_keys.insert(format!("{}:role:{ordinal}:{name}:{token}",row.relation_ref));
+            }
+        }
+    }
     let mut references=Vec::new();
     let mut relation_factor_keys=BTreeMap::<String,(String,String)>::new();
     for a in &anchors{
@@ -2268,12 +2281,13 @@ fn materialize_native_binding_bridge(
         tx.execute("INSERT INTO corpus.span(span_ref,document_ref,start_char,end_char,start_token,end_token,span_type_ref)
             VALUES($1,$2,$3,$4,$5,$6,'native-binding-factor:v2') ON CONFLICT DO NOTHING",
             &[&span,&doc,&start,&end,&a.ordinal,&a.end_ordinal])?;
+        let closure=if local_relation_keys.contains(&a.key){"locally_closed"}else{"requires_external_resolution"};
         tx.execute("INSERT INTO algebra.factor(factor_ref,document_ref,factor_type_ref,closure_state_ref,factor_sha256)
-            VALUES($1,$2,$3,'requires_external_resolution',$4) ON CONFLICT DO NOTHING",
-            &[&factor,&doc,&a.kind,&dg])?;
+            VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING",
+            &[&factor,&doc,&a.kind,&closure,&dg])?;
         tx.execute("INSERT INTO algebra.factor_revision(factor_revision_ref,factor_ref,closure_state_ref,factor_sha256)
-            VALUES($1,$2,'requires_external_resolution',$3) ON CONFLICT DO NOTHING",
-            &[&revision,&factor,&dg])?;
+            VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING",
+            &[&revision,&factor,&closure,&dg])?;
         tx.execute("INSERT INTO pnf.factor_anchor(factor_revision_ref,document_ref,sentence_index,clause_ref,
             start_token,end_token,pnf_kind_ref,morphology_sha256,discourse_unit_ref,paragraph_index,
             quotation_depth,reporting_scope_ref,coordination_group_ref,parser_pos_ref,parser_dependency_ref)
@@ -2394,9 +2408,13 @@ fn persist_relation_candidate(
     }
     for residual in residuals{
         let key=format!("{revision}:residual:{residual}");
-        let digest=Sha256::digest(key.as_bytes()).to_vec();
+        let digest=Sha256::digest(format!("slr-native-reference-residual:v2:{key}").as_bytes()).to_vec();
         tx.execute("INSERT INTO algebra.residual(residual_ref,target_ref,residual_type_ref,residual_state_ref,residual_sha256)
             VALUES($1,$2,$3,'open',$4) ON CONFLICT DO NOTHING",&[&key,&revision,residual,&digest])?;
+        let exact:bool=tx.query_one("SELECT EXISTS(SELECT 1 FROM algebra.residual WHERE residual_ref=$1
+            AND target_ref=$2 AND residual_type_ref=$3 AND residual_state_ref='open' AND residual_sha256=$4)",
+            &[&key,&revision,residual,&digest])?.get(0);
+        if !exact{return Err(NativeNumericAuditError::ForeignSource);}
     }
     let valid:bool=tx.query_one("SELECT EXISTS(SELECT 1 FROM algebra.alternative a
         JOIN algebra.factor_revision_alternative r ON r.alternative_ref=a.alternative_ref
