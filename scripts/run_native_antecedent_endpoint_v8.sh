@@ -66,8 +66,13 @@ execution_sha=$(sha256sum target/debug/sensiblaw \
 scope_of() {
   jq -ce --argjson manifest "$manifest" --arg execution "$execution_sha" '
     select(.prefix_scope.parser_run_ref==$manifest.run and
+        .source_local_answer.original_parser_run_ref==$manifest.run and
+        .source_local_answer.original_review_item_ref==$manifest.review and
+        .numeric_publication[-1].original_parser_run_ref==$manifest.run and
         .prefix_scope.source_revision_ref==.source_local_answer.source_revision_ref and
+        .numeric_publication[-1].original_source_revision_ref==.source_local_answer.source_revision_ref and
         .prefix_scope.source_sha256==.source_local_answer.source_content_sha256 and
+        .numeric_publication[-1].original_source_sha256==.source_local_answer.source_content_sha256 and
         .prefix_scope.focus_start_char==.source_local_answer.original_focus_span[0])
     | {manifest:$manifest,execution_sha256:$execution,
         source_revision_ref:.source_local_answer.source_revision_ref,

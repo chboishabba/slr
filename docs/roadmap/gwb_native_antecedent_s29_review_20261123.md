@@ -1,5 +1,17 @@
 # C4.11: source-native antecedent review on original SLR S29
 
+## 2026-11-26 — maximum-cut acceptance lanes and m084 composition debt (source-written)
+
+Audited live SLR #78 `2acebedd6dfa` / Lean #112 `e8ca8397872f` against actual main: SLR 378 ahead/1 behind, Lean 181 ahead/869 behind; no merge/rebase. The former v8 integrated gate was impossible: a candidate-only cache hit required open world and unpaid identity while the same replay was expected to be closed and governed.
+
+- `59cf53c`: post-transport closed original focus follows the existing independent current-owner binding, real inverse and rollback readback. The observation-only audit never pays authority.
+- `09e434b`: separate historical candidate and current governed acceptance receipts, exact source/revision/parser/numeric-run/focus/implementation and independent comparator scope. Candidate success retains its own receipt; current owner is a separate live proof. Exit 3 means integrated authority/parity still unpaid; exit 1 means candidate acceptance failed. New default checkpoint directory `.native-v8-endpoint-maxcut-checkpoint` preserves existing v7/v8 artifacts; `SLR_NATIVE_V8_CHECKPOINT` can explicitly choose an isolated resume directory. Both negative-control psql invocations stop on SQL errors.
+- `e6b2235`: reuse the original pinned SensibLaw m084 direct identity region/entity/authority rank groups. Debt suspends pair and overflow rows and filters the entire group before original rank and overflow recomputation. Local-object composition unchanged. Installer v12 and rollback regression include the original live group; zero groups do not pay semantic acceptance. Historical anchor changes and concurrent refresh/reconciliation still need a real proof, not assumed.
+- Lean `4491517f` and `0c6a8c83`: disjoint lanes, exact-scope composition through CurrentFocusOwnerProof, whole composition-pair/overflow absence vs zero contract, controlling roadmap and numeric-port roadmap updated.
+
+Independent local finite models: 64 lane cases, 2,040 composition rank-group cases including 1,836 naive nonempty suspended group cases; jq scope filter checked. No Rust/Cargo, PostgreSQL or Lean kernel execution here; no CI. These are source changes, not v8 acceptance. No prototype/Agda/main changes. Remaining cut: exact historical TAG and independent original whole relation/typed algebra and H3 all-owner parity; actual independent live scoped typed coverage/identity proof and transactional owner debt revalidation/restoration; historical resolution-anchor provenance; nonvacuous live derived-consumer restore/retraction including composition, concurrent correctness; minimal non-leaf/numeric absence-sensitive replay; integrated execution/performance. Preserve accepted v7 and never infer closure from candidate-only output.
+
+
 ## 2026-11-26 — integrated max-cut (source changes, not acceptance)
 
 Rechecked the existing main/PR owners: persisted parser artifacts and jobs; original relation producer grammar/reduction references; original identity witness, m074/m086 projection, m084 composition rank group and m094/m139 reverse dependencies; existing authenticated formal bridge and endpoint replay fence. SLR #78 starting point b5095ec; Lean #112 starting point b38792f. No alternative parser, witness, referee store or cache. Agda and SensibLaw remain read-only references.
