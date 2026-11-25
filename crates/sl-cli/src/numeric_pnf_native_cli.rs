@@ -7,7 +7,7 @@
 //! evidence as an admitted document identity.
 
 use sensiblaw_pg_source_store::{
-    load_database_config, load_exact_native_numeric_evidence,
+    load_database_config, load_exact_native_numeric_evidence, prepare_native_endpoint_replay,
     plan_original_native_numeric_parser, deterministic_numeric_run_ref,
     run_native_numeric_exact_source_slice, run_native_numeric_prefix_slice, OriginalNativeNumericEvidence,
     inspect_native_antecedent_review, native_antecedent_frontier,
@@ -95,6 +95,15 @@ pub fn run(args:&[String])->Result<(),String>{
         }
         [subcommand,review,parser_run,flag] if subcommand=="endpoint"&&flag=="--commit"=>{
             let config=load_database_config(None).map_err(|e|e.to_string())?;
+            let replay_session=if env::var("SLR_NATIVE_ENDPOINT_REPLAY_MODE").as_deref()==Ok("1"){
+                let url=env::var("SENSIBLAW_DATABASE_URL").map_err(|_|"SENSIBLAW_DATABASE_URL required")?;
+                prepare_native_endpoint_replay(&config,&url,review,parser_run).map_err(|e|e.to_string())?
+            }else{None};
+            if let Some(session)=&replay_session{
+                if let Some(hit)=session.reopen().map_err(|e|e.to_string())?{
+                    return print_json(&hit);
+                }
+            }
             // Existing parser-only worker may already have completed queued
             // jobs. Finalize just this original run, never source compilation.
             let scope=prepare_native_prefix_recovery(&config,review,parser_run,false)?;
@@ -229,7 +238,7 @@ pub fn run(args:&[String])->Result<(),String>{
                 &&last.consumer_horizon_work.h6_validity.original_consumer_authority_reconciled{
                 "governed_source_answer"
             }else{"source_local_answer_with_governed_identity_unresolved"};
-            print_json(&serde_json::json!({
+            let mut payload=serde_json::json!({
                 "schema":"slr-native-antecedent-endpoint-v1","prefix_scope":scope,
                 "numeric_publication":publication,"binding_passes":passes,"original_owner_reuse":readback,
                 "source_partition_changes":source_partition_changes,
@@ -238,7 +247,16 @@ pub fn run(args:&[String])->Result<(),String>{
                 "projected_vs_original_entity_membership_parity":cross_owner,"exact_entity_inverse_complete":inverse,
                 "outcome":endpoint,"governed_identity_paid":identity,"level_three_paid":l3,
                 "external_qid_paid":false,"historical_truth_paid":false
-            }))
+            });
+            if let Some(session)=&replay_session {
+                let seeded=session.record_if_quiescent(&payload).map_err(|e|e.to_string())?;
+                payload["endpoint_execution_replay"]=serde_json::json!({
+                    "schema":"slr-native-endpoint-replay-seed:v1","hit":false,"quiescent_receipt_recorded":seeded,
+                    "source_observation_scan_performed":true,"numeric_binding_scan_performed":true,
+                    "semantic_recomputation_performed":true,"conservative_database_wide_invalidation":true
+                });
+            }
+            print_json(&payload)
         }
         [subcommand,source_revision,parser_run] if subcommand=="inspect" => {
             let (evidence,_)=exact_plan(source_revision,parser_run)?;
