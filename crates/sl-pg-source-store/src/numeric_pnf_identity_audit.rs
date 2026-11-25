@@ -1173,12 +1173,22 @@ fn materialize_prior_nominal_heads(
 /// Current physical support is a separately versioned projection, never a
 /// synthetic negative atom or an instruction to refute a candidate.
 #[derive(Debug,Clone,Serialize)]
+pub struct NativeCurrentSignedHorizon {
+    pub target_kind:i16,
+    pub target_id:i64,
+    pub horizon:i16,
+    pub signed_residual:i64,
+    pub phase:i16,
+    pub evidence_count:i64,
+}
+#[derive(Debug,Clone,Serialize)]
 pub struct NativeH6ValidityReceipt {
     pub historical_atom_count:usize,
     pub currently_supported_atom_count:usize,
     pub stale_evidence_ids:Vec<i64>,
     pub stale_admissibility_event_ids:Vec<i64>,
     pub state_rows_changed:u64,
+    pub current_signed_horizons:Vec<NativeCurrentSignedHorizon>,
     pub current_projection_exact:bool,
     pub original_consumer_authority_reconciled:bool,
 }
@@ -1235,11 +1245,31 @@ fn reopen_native_h6_validity(tx:&mut postgres::Transaction<'_>,demand:i64)
     if historical<0||supported<0||changed<0||historical!=supported+stale.len() as i64{
         return Err(NativeNumericAuditError::AdmissionProbeInvariant);
     }
+    // Same original m086 cumulative carrier with only physically withdrawn
+    // m110 atoms omitted. Do not subtract an arbitrary score or refute a
+    // candidate; all other evidence and neutral/negative atoms survive.
+    let current_signed_horizons=tx.query("WITH horizon(horizon) AS
+        (VALUES(3::smallint),(6::smallint),(9::smallint))
+      SELECT u.target_kind,u.target_id,h.horizon,
+          COALESCE(sum(e.signed_residual),0)::bigint,
+          sign(COALESCE(sum(e.signed_residual),0))::smallint,count(e.evidence_id)::bigint
+        FROM execution.semantic_pnf_candidate_universe u CROSS JOIN horizon h
+        LEFT JOIN execution.semantic_pnf_candidate_evidence e
+          ON e.demand_id=u.demand_id AND e.target_kind=u.target_kind AND e.target_id=u.target_id
+         AND e.horizon<=h.horizon AND NOT EXISTS(
+          SELECT 1 FROM execution.slr_native_h6_validity_current v
+          WHERE v.evidence_id=e.evidence_id AND v.demand_id=e.demand_id AND NOT v.supported)
+        WHERE u.demand_id=$1
+        GROUP BY u.target_kind,u.target_id,h.horizon ORDER BY u.target_kind,u.target_id,h.horizon",
+      &[&demand])?.iter().map(|r|NativeCurrentSignedHorizon{
+          target_kind:r.get(0),target_id:r.get(1),horizon:r.get(2),
+          signed_residual:r.get(3),phase:r.get(4),evidence_count:r.get(5),
+      }).collect();
     Ok(NativeH6ValidityReceipt{
         historical_atom_count:historical as usize,currently_supported_atom_count:supported as usize,
         original_consumer_authority_reconciled:stale.is_empty(),
         stale_evidence_ids:stale,stale_admissibility_event_ids:stale_events,
-        state_rows_changed:changed as u64,current_projection_exact:true,
+        state_rows_changed:changed as u64,current_signed_horizons,current_projection_exact:true,
     })
 }
 
@@ -4536,7 +4566,7 @@ pub fn transport_original_numeric_candidates_for_source_answer_with_partition(
         (Some(observed),Some(governed))
     }else{(None,None)};
     let support_delta=original_parser_identity_producer.as_ref().and_then(|p|p.support_index.as_ref());
-    let nonmonotone=support_delta.is_some_and(|p|p.withdrawn_rows>0||p.changed_rows>0&&p.hot_symbol_scope_changed);
+    let nonmonotone=support_delta.is_some_and(|p|p.withdrawn_rows>0||p.changed_rows>0);
     let inputs_changed=source_partition_wake.affected_queue_rows>0
         ||nominal_head_objects_inserted>0||nominal_head_token_supports_inserted>0||!ids.is_empty()
         ||morphology_observations_inserted>0||original_mention_binding_campaign.newly_materialized_span_objects>0
@@ -4564,7 +4594,8 @@ pub fn transport_original_numeric_candidates_for_source_answer_with_partition(
     let original_cross_resource_needs=observe_original_cross_resource_needs(&mut tx,demand,numeric_run_ref,&answer.source_document_ref)?;
     let original_h9_readiness=observe_native_h9_readiness(&mut tx,demand,numeric_run_ref,&answer.source_document_ref)?;
     let parser_identity_refresh_invocations=original_parser_identity_producer.as_ref()
-        .map_or(0,|p|if p.bounded_identity_parity.is_some(){3}else{1});
+        .map_or(0,|p|if p.bounded_identity_parity.is_some(){3}else{1})
+        +usize::from(document_identity_publication.as_ref().is_some_and(|p|p.committed||p.blockers.contains(&"golden_exact_support_priority_disagreement")));
     tx.commit()?;
     Ok(NativeNumericCandidateTransportReceipt{
         schema:"slr-native-candidate-only-transport-v6",
