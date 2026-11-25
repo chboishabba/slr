@@ -51,6 +51,7 @@ CREATE OR REPLACE FUNCTION execution.slr_suspend_native_debt_outcomes(selected_d
 RETURNS bigint LANGUAGE plpgsql AS $slr_suspend$
 DECLARE retired bigint;
 BEGIN
+    IF COALESCE(cardinality(selected_demands),0)=0 THEN RETURN 0; END IF;
     WITH affected AS MATERIALIZED (
         SELECT o.demand_id,o.consumer_ref,o.query_ref,o.policy_ref,o.horizon
         FROM execution.semantic_pnf_consumer_horizon_outcome o
@@ -526,7 +527,7 @@ BEGIN
           JOIN candidate_count USING (demand_id)
           JOIN preferred_count USING (demand_id)
     )
-    INSERT INTO execution.semantic_pnf_consumer_horizon_outcome
+    INSERT INTO execution.semantic_pnf_consumer_horizon_outcome AS prior
         (demand_id,consumer_ref,query_ref,policy_ref,horizon,outcome_state,
          evidence_count,nonneutral_evidence_count,represented_candidate_count,
          preferred_candidate_count,proof_unique,consumer_sufficient,
@@ -555,7 +556,17 @@ BEGIN
         proof_unique=EXCLUDED.proof_unique,
         consumer_sufficient=EXCLUDED.consumer_sufficient,
         residual_required=EXCLUDED.residual_required,
-        refreshed_at=EXCLUDED.refreshed_at;
+        refreshed_at=EXCLUDED.refreshed_at
+    -- A replay observes the same outcome; it is not a new publication.
+    -- Retain its original change timestamp and avoid triggering the
+    -- whole-endpoint revision fence for an unchanged payload.
+    WHERE ROW(prior.outcome_state,prior.evidence_count,prior.nonneutral_evidence_count,
+              prior.represented_candidate_count,prior.preferred_candidate_count,
+              prior.proof_unique,prior.consumer_sufficient,prior.residual_required)
+      IS DISTINCT FROM
+          ROW(EXCLUDED.outcome_state,EXCLUDED.evidence_count,EXCLUDED.nonneutral_evidence_count,
+              EXCLUDED.represented_candidate_count,EXCLUDED.preferred_candidate_count,
+              EXCLUDED.proof_unique,EXCLUDED.consumer_sufficient,EXCLUDED.residual_required);
     GET DIAGNOSTICS affected=ROW_COUNT;
     RETURN affected;
 END;
@@ -627,3 +638,4 @@ SELECT execution.slr_suspend_native_debt_outcomes(
 WHERE NOT EXISTS(SELECT 1 FROM execution.slr_native_current_authority_contract
     WHERE contract_ref='slr-native-current-authority:v7');
 INSERT INTO execution.slr_native_current_authority_contract VALUES('slr-native-current-authority:v7') ON CONFLICT DO NOTHING;
+INSERT INTO execution.slr_native_current_authority_contract VALUES('slr-native-current-authority:v8') ON CONFLICT DO NOTHING;
