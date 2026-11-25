@@ -283,7 +283,10 @@ pub fn audit_original_numeric_identity_for_source_answer(
                AND evidence.evidence_id IS NULL",
             &[demand_id])?.get(0);
         let current_h6_installed:bool=tx.query_one("SELECT to_regclass('execution.slr_native_current_candidate_evidence_v1') IS NOT NULL",&[])?.get(0);
-        let historical_h6_proof_revalidation_required=if current_h6_installed{
+        let h6_managed=if current_h6_installed{
+            tx.query_one("SELECT EXISTS(SELECT 1 FROM execution.slr_native_h6_managed_demand WHERE demand_id=$1)",&[demand_id])?.get::<_,bool>(0)
+        }else{false};
+        let historical_h6_proof_revalidation_required=if h6_managed{
             let stale:i64=tx.query_one("SELECT count(*)::bigint FROM execution.semantic_pnf_candidate_evidence e
                 WHERE e.demand_id=$1 AND e.horizon=6 AND NOT EXISTS(
                    SELECT 1 FROM execution.slr_native_current_candidate_evidence_v1 c WHERE c.evidence_id=e.evidence_id)",
@@ -1423,6 +1426,10 @@ fn process_original_native_consumer_horizons(
     // Reopen the original consumer's H6 outcome (and downstream work) when
     // H6 had already been requested; H3 still owns its own readiness.
     if h6_validity.state_rows_changed>0 {
+        // Preferences have no proof authority; retract stale winners even
+        // while a separate original proof/sufficiency residual stays open.
+        tx.query_one("SELECT execution.slr_refresh_native_preference($1,6::smallint)",&[&demand])?;
+        tx.query_one("SELECT execution.slr_refresh_native_preference($1,9::smallint)",&[&demand])?;
         tx.execute("UPDATE execution.semantic_pnf_consumer_horizon_work_queue
             SET work_state=1,completed_at=NULL WHERE demand_id=$1 AND consumer_ref=$2
               AND query_ref=$3 AND policy_ref=$4 AND horizon IN(6,9) AND work_state<>1",
@@ -4757,6 +4764,7 @@ pub fn transport_original_numeric_candidates_for_source_answer_with_partition(
     let demand:i64=rows[0].get(0);
     let source:i64=rows[0].get(1);
     let focus_token:i64=rows[0].get(2);
+    ensure_native_h6_current_authority(&mut tx,demand)?;
     let source_partition_wake=sync_native_partition_consumer(&mut tx,numeric_run_ref,answer,demand,focus_token,changes)?;
     let (nominal_head_objects_inserted,nominal_head_token_supports_inserted,nominal_heads_remaining)=
         materialize_prior_nominal_heads(&mut tx,numeric_run_ref,&answer.source_document_ref,
