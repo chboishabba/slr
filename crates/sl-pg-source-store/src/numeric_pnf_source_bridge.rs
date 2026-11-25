@@ -114,7 +114,9 @@ pub(crate) fn load_exact_native_numeric_evidence_scope(
         ||rule_set_revision.is_empty(){
         return Err(NativeNumericSourceError::SourceManifest);
     }
-    let mut db=Client::connect(config.database_url(),NoTls)?;
+    let mut connection=Client::connect(config.database_url(),NoTls)?;
+    let mut db=connection.transaction()?;
+    db.batch_execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY; SET LOCAL statement_timeout='90000ms'")?;
     let rows=db.query(
         "SELECT g.source_ref,g.document_ref,g.content_digest_ref,c.payload,
                 g.candidate_only,g.creates_semantic_authority,
@@ -222,7 +224,9 @@ pub(crate) fn load_exact_native_numeric_evidence_scope(
             ||job.get::<_,bool>(9)||job.get::<_,bool>(10){
             return Err(NativeNumericSourceError::JobScope);
         }
-        if start!=last_end{full_document=false;}
+        if text[bounds[last_end as usize]..bounds[start as usize]].chars().any(|c|!c.is_whitespace()){
+            full_document=false;
+        }
         last_end=end;
         inventory.push((start,end));
         if focus.is_some_and(|f|start>f){full_document=false;continue;}
@@ -284,12 +288,20 @@ pub(crate) fn load_exact_native_numeric_evidence_scope(
                 end_char:ent_end,surface,label_ref,candidate_only:true,
             });
         }
+        // Whitespace gaps are allowed; any other missing source codepoint
+        // remains a coverage residual. A sentence coordinate is not a token.
+        let mut covered=vec![false;(end-start) as usize];
+        for t in &tokens{
+            covered[(t.start_char-start) as usize..(t.end_char-start) as usize].fill(true);
+        }
+        if text[bounds[start as usize]..bounds[end as usize]].chars().zip(&covered)
+            .any(|(ch,paid)|!ch.is_whitespace()&&!*paid){full_document=false;}
         fibres.push(OriginalNumericSentenceFibre{
             compilation_key,region_ref,start_char:start,end_char:end,
             tokens,entities,full_numeric_tag_capability_available:false,
         });
     }
-    if last_end!=len{full_document=false;}
+    if text[bounds[last_end as usize]..].chars().any(|c|!c.is_whitespace()){full_document=false;}
     if !token_rows_by_job.is_empty()||!entity_rows_by_job.is_empty(){
         return Err(NativeNumericSourceError::JobScope);
     }
