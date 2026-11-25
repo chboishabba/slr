@@ -43,7 +43,7 @@ bounded cargo test -p sensiblaw-pg-source-store --lib numeric_pnf >&2
 bounded cargo test -p sensiblaw-cli numeric_pnf_native >&2
 bounded cargo build -p sensiblaw-cli >&2
 bounded cargo build -p sensiblaw-pg-source-store --example scale1_long_document >&2
-cli=(target/debug/sensiblaw-cli numeric-pnf-native)
+cli=(target/debug/sensiblaw numeric-pnf-native)
 # Use the existing source parser worker only; this script does not extend its
 # historical Python parser adapter. No unrelated parser run is drained.
 worker=(target/debug/examples/scale1_long_document worker "$run" native-prefix-v8 32 "${SLR_PREFIX_PARSER_SCRIPT:-scripts/scale1_spacy_json_parser.py}")
@@ -102,13 +102,14 @@ jq -s '
   {schema:"slr-native-antecedent-endpoint-v8",
    cold:.[0], replay:.[1],
    candidate_reference_parity_paid:(.[0]|candidate_gate),
-   replay_candidate_reference_parity_paid:(.[1]|candidate_gate),
+   replay_candidate_reference_parity_observed:(.[1]|candidate_gate),
+   exact_replayed_source_answer:(.[0].source_local_answer==.[1].source_local_answer),
    warm_zero_semantic_work_paid:(.[1]|warm_gate),
    semantic_endpoint_paid:(.[1]|semantic_gate),
    external_qid_paid:false,historical_truth_paid:false}
   | . + {integrated_acceptance_paid:(.candidate_reference_parity_paid and
-      .replay_candidate_reference_parity_paid and .warm_zero_semantic_work_paid and .semantic_endpoint_paid)}
+      .exact_replayed_source_answer and .warm_zero_semantic_work_paid and .semantic_endpoint_paid)}
 ' "$checkpoint/cold.json" "$checkpoint/replay.json" > "$checkpoint/acceptance.json.tmp"
 mv "$checkpoint/acceptance.json.tmp" "$checkpoint/acceptance.json"
-jq '{schema,candidate_reference_parity_paid,replay_candidate_reference_parity_paid,warm_zero_semantic_work_paid,semantic_endpoint_paid,integrated_acceptance_paid}' "$checkpoint/acceptance.json"
+jq '{schema,candidate_reference_parity_paid,replay_candidate_reference_parity_observed,exact_replayed_source_answer,warm_zero_semantic_work_paid,semantic_endpoint_paid,integrated_acceptance_paid}' "$checkpoint/acceptance.json"
 jq -e '.integrated_acceptance_paid==true' "$checkpoint/acceptance.json" >/dev/null
