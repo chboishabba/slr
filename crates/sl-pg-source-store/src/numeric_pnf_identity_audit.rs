@@ -1250,8 +1250,22 @@ pub struct NativeCurrentSignedHorizon {
     pub phase:i16,
     pub evidence_count:i64,
 }
+/// H3 retains planner-membership as an append-only represented atom,
+/// not a live candidate or admissibility event. Unowned H3 evidence stays
+/// visible as a residual rather than being assigned a made-up producer.
+#[derive(Debug,Clone,Serialize)]
+pub struct NativeH3OwnerInventory {
+    pub planner_membership_atom_count:usize,
+    pub planner_membership_mismatch_ids:Vec<i64>,
+    pub missing_planner_membership_targets:Vec<(i16,i64)>,
+    pub native_owned_atom_count:usize,
+    pub native_missing_validity_ids:Vec<i64>,
+    pub other_owner_evidence_ids:Vec<i64>,
+    pub known_owner_inventory_exact:bool,
+}
 #[derive(Debug,Clone,Serialize)]
 pub struct NativeH6ValidityReceipt {
+    pub h3_owner_inventory:NativeH3OwnerInventory,
     pub historical_atom_count:usize,
     pub currently_supported_atom_count:usize,
     pub native_h3_stale_evidence_ids:Vec<i64>,
@@ -1341,6 +1355,65 @@ fn reconcile_native_h3_validity(tx:&mut postgres::Transaction<'_>,demand:i64)
         RETURNING evidence_id
       ) SELECT count(*)::bigint FROM history",&[&demand])?.get(0);
     u64::try_from(n).map_err(|_|NativeNumericAuditError::AdmissionProbeInvariant)
+}
+
+/// Independently reopen original m086/m162/m207 membership observations.
+/// A deleted current planner row is still represented; only an original
+/// insertion observation with the same typed key and interface supports
+/// the historical neutral membership atom. Do not withdraw an unknown
+/// external owner's atom or confuse structural provenance with proof.
+fn native_h3_owner_inventory(tx:&mut postgres::Transaction<'_>,demand:i64)
+    ->Result<NativeH3OwnerInventory,NativeNumericAuditError>{
+    let rows=tx.query("SELECT e.evidence_id,
+      (e.evidence_ref LIKE 'planner-membership:%' OR e.evidence_kind='candidate_generation'
+         OR e.provenance_ref='semantic_pnf_demand_candidate') IS TRUE AS planner,
+      (e.evidence_ref='planner-membership:'||e.target_kind::text||':'||e.target_id::text
+         AND e.evidence_kind='candidate_generation'
+         AND e.provenance_ref='semantic_pnf_demand_candidate'
+         AND e.signed_residual=0 AND e.source_region_id IS NULL
+         AND EXISTS(SELECT 1 FROM execution.semantic_pnf_demand_candidate_observation o
+           WHERE o.demand_id=e.demand_id AND o.target_kind=e.target_kind AND o.target_id=e.target_id
+             AND o.observation_kind=1 AND o.source_interface_id IS NOT DISTINCT FROM e.source_interface_id)) IS TRUE AS planner_exact,
+      ((e.provenance_ref='native-occurrence-transport:v1' AND e.evidence_ref LIKE 'native-occurrence-transport:v1:%')
+        OR (e.provenance_ref='binding-compatibility:pnf-kind-morphology:v0_3'
+            AND (e.evidence_ref LIKE 'native-binding-morphology:v0_3:%' OR e.evidence_ref LIKE 'native-binding-morphology:v0_4:%'))
+        OR (e.evidence_kind LIKE 'original_binding_index_member:%' AND e.evidence_ref LIKE 'native-binding-index-member:v2:%')) IS TRUE AS native_owned,
+      EXISTS(SELECT 1 FROM execution.slr_native_h3_validity_current v
+        WHERE v.demand_id=e.demand_id AND v.evidence_id=e.evidence_id) AS journaled
+      FROM execution.semantic_pnf_candidate_evidence e
+      WHERE e.demand_id=$1 AND e.evidence_family=1 AND e.horizon=3
+      ORDER BY e.evidence_id",&[&demand])?;
+    let mut receipt=NativeH3OwnerInventory{
+        planner_membership_atom_count:0,planner_membership_mismatch_ids:Vec::new(),
+        missing_planner_membership_targets:Vec::new(),native_owned_atom_count:0,
+        native_missing_validity_ids:Vec::new(),other_owner_evidence_ids:Vec::new(),
+        known_owner_inventory_exact:false,
+    };
+    for r in rows{
+        let id:i64=r.get(0);
+        let planner:bool=r.get(1);let planner_exact:bool=r.get(2);
+        let owned:bool=r.get(3);let journaled:bool=r.get(4);
+        if planner{
+            receipt.planner_membership_atom_count+=1;
+            if !planner_exact||owned{receipt.planner_membership_mismatch_ids.push(id);}
+        }else if owned{
+            receipt.native_owned_atom_count+=1;
+            if !journaled{receipt.native_missing_validity_ids.push(id);}
+        }else{receipt.other_owner_evidence_ids.push(id);}
+    }
+    receipt.missing_planner_membership_targets=tx.query("SELECT DISTINCT o.target_kind,o.target_id
+        FROM execution.semantic_pnf_demand_candidate_observation o
+        WHERE o.demand_id=$1 AND o.observation_kind=1 AND NOT EXISTS(
+          SELECT 1 FROM execution.semantic_pnf_candidate_evidence e
+          WHERE e.demand_id=o.demand_id AND e.target_kind=o.target_kind AND e.target_id=o.target_id
+            AND e.evidence_family=1 AND e.horizon=3
+            AND e.evidence_ref='planner-membership:'||o.target_kind::text||':'||o.target_id::text)
+        ORDER BY o.target_kind,o.target_id",&[&demand])?.iter()
+        .map(|r|(r.get(0),r.get(1))).collect();
+    receipt.known_owner_inventory_exact=receipt.planner_membership_mismatch_ids.is_empty()
+        &&receipt.missing_planner_membership_targets.is_empty()
+        &&receipt.native_missing_validity_ids.is_empty();
+    Ok(receipt)
 }
 
 fn reopen_native_h6_validity(tx:&mut postgres::Transaction<'_>,demand:i64)
@@ -1436,7 +1509,9 @@ fn reopen_native_h6_validity(tx:&mut postgres::Transaction<'_>,demand:i64)
         OR EXISTS(SELECT 1 FROM execution.semantic_pnf_demand_open_world_state WHERE demand_id=$1 AND NOT outside_model_possible)
         OR EXISTS(SELECT 1 FROM execution.semantic_pnf_consumer_sufficiency_current_v1 WHERE demand_id=$1 AND certificate_state=1)",
         &[&demand])?.get::<_,bool>(0);
+    let h3_owner_inventory=native_h3_owner_inventory(tx,demand)?;
     Ok(NativeH6ValidityReceipt{
+        h3_owner_inventory,
         historical_atom_count:historical as usize,currently_supported_atom_count:supported as usize,
         original_consumer_authority_reconciled:current_stale_events.is_empty()&&!proof_or_sufficiency&&!durable_pending,
         native_h3_stale_evidence_ids:h3_stale,native_h3_state_rows_changed:0,durable_nonmonotone_authority_pending:durable_pending,
