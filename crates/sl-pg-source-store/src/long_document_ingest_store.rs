@@ -326,6 +326,8 @@ pub(crate) fn publish_heading_partition(
     legacy: &LongDocumentSource,
     canonical_text: &str,
     selected_paragraph_refs: &[String],
+    parser_run_ref: &str,
+    prefix_end_char: u64,
 ) -> Result<HeadingPartitionPublication, LongDocumentIngestStoreError> {
     let revision = &legacy.ingest.source_revision_ref;
     let mut db = Client::connect(config.database_url(), NoTls)?;
@@ -359,6 +361,24 @@ pub(crate) fn publish_heading_partition(
     ).map_err(|_| LongDocumentIngestStoreError::StoredStructureMismatch)?;
     let next = partition_ref(&after);
     let added_refs = added.iter().map(|r| r.region_ref.clone()).collect::<Vec<_>>();
+    // No job may be enqueued on an overlapping old interval. The same
+    // original parser run/coordinates must remain authoritative.
+    let valid_run: bool = tx.query_one("SELECT EXISTS(SELECT 1 FROM ingest.parser_run
+        WHERE parser_run_ref=$1 AND source_revision_ref=$2 AND candidate_only
+          AND NOT creates_semantic_authority AND NOT applicability_promoted AND NOT claim_truth_promoted)",
+        &[&parser_run_ref,&revision])?.get(0);
+    if !valid_run || added.len()>128
+        || added.iter().map(|r| r.end_char-r.start_char).sum::<u64>()>100_000
+        || added.iter().any(|r| r.end_char>prefix_end_char) {
+        return Err(LongDocumentIngestStoreError::StoredStructureMismatch);
+    }
+    // Existing parser enqueue writers share the same source advisory lock.
+    for r in &added {
+        let overlap:bool=tx.query_one("SELECT EXISTS(SELECT 1 FROM ingest.parser_job
+          WHERE parser_run_ref=$1 AND region_start_char<$3 AND region_end_char>$2)",
+          &[&parser_run_ref,&(r.start_char as i64),&(r.end_char as i64)])?.get(0);
+        if overlap { return Err(LongDocumentIngestStoreError::StoredStructureMismatch); }
+    }
     if !added.is_empty() {
         if head.is_none() {
             tx.execute("INSERT INTO ingest.long_document_partition_revision
