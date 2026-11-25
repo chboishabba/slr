@@ -522,7 +522,7 @@ pub fn prepare_native_prefix_recovery(
 /// prefix recovery remains the parser job owner. This helper is not yet
 /// activated by the CLI: the numeric consumer absence-dependency handshake
 /// must be integrated before the repair can be a complete endpoint campaign.
-pub(crate) fn publish_native_prefix_heading_repair(
+pub fn publish_native_prefix_heading_repair(
     config:&DatabaseConfig, review_item:&str, parser_run:&str,
 )->Result<crate::long_document_ingest_store::HeadingPartitionPublication,String>{
     let scope=prepare_native_prefix_recovery(config,review_item,parser_run,false)?;
@@ -557,6 +557,9 @@ pub(crate) fn publish_native_prefix_heading_repair(
             return Err("repair paragraph differs from original source ledger".into());
         }
         selected.push(gap.region_ref.clone());
+    }
+    if selected.is_empty() {
+        return Err("no checked heading-exclusion paragraph to repair".into());
     }
     crate::long_document_ingest_store::publish_heading_partition(
         config,&legacy,&text,&selected,parser_run,scope.focus_start_char,
