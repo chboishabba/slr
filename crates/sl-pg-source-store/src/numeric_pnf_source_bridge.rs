@@ -517,6 +517,52 @@ pub fn prepare_native_prefix_recovery(
     })
 }
 
+/// Recover exact selected original heading-excluded paragraphs. The original
+/// partition ledger is the durable publication owner, and the original
+/// prefix recovery remains the parser job owner. This helper is not yet
+/// activated by the CLI: the numeric consumer absence-dependency handshake
+/// must be integrated before the repair can be a complete endpoint campaign.
+pub(crate) fn publish_native_prefix_heading_repair(
+    config:&DatabaseConfig, review_item:&str, parser_run:&str,
+)->Result<crate::long_document_ingest_store::HeadingPartitionPublication,String>{
+    let scope=prepare_native_prefix_recovery(config,review_item,parser_run,false)?;
+    if !scope.parser_scope_ready {
+        return Err("original parser scope must be drained before partition repair".into());
+    }
+    let (source,text)=crate::load_generic_text_source(config,&scope.source_revision_ref)
+        .map_err(|e|e.to_string())?;
+    let envelope=crate::load_generic_source_envelope(config,&scope.source_revision_ref)
+        .map_err(|e|e.to_string())?;
+    if source.content_digest_ref!=format!("sha256:{}",scope.source_sha256)
+        || source.source_ref!=envelope.source_ref || !envelope.semantic_text_allowed() {
+        return Err("foreign canonical source for repair".into());
+    }
+    let (legacy,_)=crate::build_plain_text_long_source_with_family(
+        &envelope.source_ref,&envelope.source_revision_ref,&envelope.provider_ref,
+        &envelope.acquisition_receipt_ref,envelope.family,None,None,&text,
+    ).map_err(|e|e.to_string())?;
+    let chars=text.chars().collect::<Vec<_>>();
+    let mut selected=Vec::new();
+    for gap in scope.original_gap_paragraph_receipts.iter()
+        .filter(|p|p.original_heading_exclusion_matches&&p.nonempty_line_count>1) {
+        let a=usize::try_from(gap.start_char).map_err(|e|e.to_string())?;
+        let b=usize::try_from(gap.end_char).map_err(|e|e.to_string())?;
+        let literal=chars.get(a..b).ok_or("repair paragraph outside canonical source")?
+            .iter().collect::<String>();
+        if format!("{:x}",Sha256::digest(literal.as_bytes()))!=gap.literal_sha256
+            || !legacy.regions.iter().any(|r|r.region_ref==gap.region_ref
+                &&r.kind==sensiblaw_core::source_ingest::DocumentRegionKind::Paragraph
+                &&r.start_char==a as u64&&r.end_char==b as u64)
+        {
+            return Err("repair paragraph differs from original source ledger".into());
+        }
+        selected.push(gap.region_ref.clone());
+    }
+    crate::long_document_ingest_store::publish_heading_partition(
+        config,&legacy,&text,&selected,parser_run,scope.focus_start_char,
+    ).map_err(|e|e.to_string())
+}
+
 #[cfg(test)]
 mod tests{
     use super::*;
