@@ -208,7 +208,7 @@ fn lexicon(database_url:&str)->Result<NumericOperatorLexicon,NumericPipelineErro
 // or original SQL surrogates. Every address is invertible in this packet.
 // The legacy publisher cannot consume these IDs without a separate
 // checked correspondence; this path never calls that publisher.
-#[derive(Debug,Clone,PartialEq,Serialize)]
+#[derive(Debug,Clone,PartialEq,Serialize,serde::Deserialize)]
 pub struct DirectNumericSentenceCandidate {
     pub sentence_ref:String,
     pub original_region_ref:String,
@@ -268,8 +268,19 @@ fn direct_symbol_lexicon(symbols:&BTreeMap<(i16,String),i64>)
     Ok(lex)
 }
 
-fn direct_sentence_candidate(sentence:&crate::numeric_pnf_parser_plan::NativeNumericParserSentencePlan)
-    ->Result<DirectNumericSentenceCandidate,NumericPipelineError>{
+struct PreparedDirectSentence<'a>{
+    sentence:&'a crate::numeric_pnf_parser_plan::NativeNumericParserSentencePlan,
+    input_sha256:String,
+    inverse:Vec<crate::numeric_pnf_parser_plan::NativeNumericParserTokenPlan>,
+    entities:Vec<crate::numeric_pnf_parser_plan::NativeNumericParserEntityPlan>,
+    symbol_inverse:Vec<(i16,String)>,
+    tokens:Vec<NumericToken>,
+    lex:NumericOperatorLexicon,
+    missing_original_tag_count:usize,
+}
+
+fn prepare_direct_sentence(sentence:&crate::numeric_pnf_parser_plan::NativeNumericParserSentencePlan)
+    ->Result<PreparedDirectSentence<'_>,NumericPipelineError>{
     use crate::numeric_pnf_parser_store::normalize;
     if sentence.start_char<0||sentence.end_char<=sentence.start_char||sentence.tokens.is_empty(){
         return Err(NumericPipelineError::InvalidSentence);
@@ -318,8 +329,6 @@ fn direct_sentence_candidate(sentence:&crate::numeric_pnf_parser_plan::NativeNum
             morph_set_id:None,start_char:t.start_char,end_char:t.end_char,
         });
     }
-    let closure=compose_numeric_sentence_native(1,&tokens,&lex)?;
-    crate::numeric_pnf_operator::validate_native_numeric_sentence_closure(1,&closure)?;
     let mut entities=sentence.entities.clone();
     entities.sort_by_key(|e|(e.start_char,e.end_char,e.original_entity_ordinal));
     if entities.iter().any(|e|e.creates_semantic_authority||!e.source_candidate_only
@@ -331,13 +340,57 @@ fn direct_sentence_candidate(sentence:&crate::numeric_pnf_parser_plan::NativeNum
         &sentence.original_compilation_key,sentence.start_char,sentence.end_char,&inverse,&entities))
         .map_err(|_|NumericPipelineError::InvalidSentence)?;
     let missing_original_tag_count=inverse.iter().filter(|t|t.tag_origin_id!=1).count();
-    Ok(DirectNumericSentenceCandidate{
-        sentence_ref:sentence.sentence_ref.clone(),original_region_ref:sentence.original_region_ref.clone(),
-        original_compilation_key:sentence.original_compilation_key.clone(),
-        start_char:sentence.start_char,end_char:sentence.end_char,
-        input_sha256:format!("{:x}",Sha256::digest(input)),token_inverse:inverse,
-        entity_observations:entities,symbol_inverse,numeric_tokens:tokens,closure,missing_original_tag_count,
-    })
+    Ok(PreparedDirectSentence{sentence,input_sha256:format!("{:x}",Sha256::digest(input)),
+        inverse,entities,symbol_inverse,tokens,lex,missing_original_tag_count})
+}
+
+impl PreparedDirectSentence<'_>{
+    fn key(&self)->(String,String){
+        (self.sentence.original_compilation_key.clone(),self.input_sha256.clone())
+    }
+    fn finish(self,cached:Option<DirectNumericSentenceCandidate>)
+        ->Result<DirectNumericSentenceCandidate,NumericPipelineError>{
+        if let Some(c)=cached{
+            // Only an immutable, digest-checked product from the exact
+            // executable/input key can reach this branch. Verify the whole
+            // inverse carrier against the current checked parser snapshot.
+            if c.sentence_ref!=self.sentence.sentence_ref
+                ||c.original_region_ref!=self.sentence.original_region_ref
+                ||c.original_compilation_key!=self.sentence.original_compilation_key
+                ||(c.start_char,c.end_char)!=(self.sentence.start_char,self.sentence.end_char)
+                ||c.input_sha256!=self.input_sha256||c.token_inverse!=self.inverse
+                ||c.entity_observations!=self.entities||c.symbol_inverse!=self.symbol_inverse
+                ||c.numeric_tokens!=self.tokens||c.missing_original_tag_count!=self.missing_original_tag_count{
+                return Err(NumericPipelineError::InvalidSentence);
+            }
+            // Structural inverse validation is not a second rule solve.
+            // Require the closure to use only actual codec coordinates,
+            // and require every factor residual to retain its demand.
+            let tokens=self.tokens.iter().map(|t|(t.token_id,t.token_id)).collect();
+            let symbols=(1..=self.symbol_inverse.len() as i64).map(|id|(id,id)).collect();
+            if crate::numeric_pnf_operator::rekey_numeric_sentence_closure(
+                1,1,&c.closure,&tokens,&symbols)?!=c.closure{
+                return Err(NumericPipelineError::InvalidSentence);
+            }
+            return Ok(c);
+        }
+        let closure=compose_numeric_sentence_native(1,&self.tokens,&self.lex)?;
+        crate::numeric_pnf_operator::validate_native_numeric_sentence_closure(1,&closure)?;
+        Ok(DirectNumericSentenceCandidate{
+            sentence_ref:self.sentence.sentence_ref.clone(),
+            original_region_ref:self.sentence.original_region_ref.clone(),
+            original_compilation_key:self.sentence.original_compilation_key.clone(),
+            start_char:self.sentence.start_char,end_char:self.sentence.end_char,
+            input_sha256:self.input_sha256,token_inverse:self.inverse,
+            entity_observations:self.entities,symbol_inverse:self.symbol_inverse,
+            numeric_tokens:self.tokens,closure,missing_original_tag_count:self.missing_original_tag_count,
+        })
+    }
+}
+
+fn direct_sentence_candidate(sentence:&crate::numeric_pnf_parser_plan::NativeNumericParserSentencePlan)
+    ->Result<DirectNumericSentenceCandidate,NumericPipelineError>{
+    prepare_direct_sentence(sentence)?.finish(None)
 }
 
 /// Bounded direct execution over the existing exact, source-checked parser
@@ -346,11 +399,19 @@ fn direct_sentence_candidate(sentence:&crate::numeric_pnf_parser_plan::NativeNum
 pub fn compile_direct_numeric_candidates(
     source:&crate::OriginalNativeNumericEvidence,first:usize,max_sentences:usize,
 )->Result<DirectNumericCandidateSlice,NumericPipelineError>{
+    Ok(compile_direct_numeric_candidates_with(source,first,max_sentences,|_|Ok(BTreeMap::new()))?.0)
+}
+
+type DirectProductMap=BTreeMap<(String,String),DirectNumericSentenceCandidate>;
+fn compile_direct_numeric_candidates_with(
+    source:&crate::OriginalNativeNumericEvidence,first:usize,max_sentences:usize,
+    load:impl FnOnce(&[(String,String)])->Result<DirectProductMap,NumericPipelineError>,
+)->Result<(DirectNumericCandidateSlice,usize),NumericPipelineError>{
     if !(1..=64).contains(&max_sentences){return Err(NumericPipelineError::Budget);}
     let run=deterministic_numeric_run_ref(&source.manifest);
     if first>source.parser_regions.len(){return Err(NumericPipelineError::Budget);}
     if source.parser_regions.is_empty(){
-        return Ok(DirectNumericCandidateSlice{
+        return Ok((DirectNumericCandidateSlice{
             schema:"slr-direct-numeric-candidate-slice-v1",source_revision_ref:source.manifest.source_revision_ref.clone(),
             original_source_sha256:source.manifest.canonical_content_sha256.clone(),
             original_parser_run_ref:source.manifest.parser_run_ref.clone(),numeric_run_ref:run,
@@ -359,19 +420,29 @@ pub fn compile_direct_numeric_candidates(
             source_full_document_coverage_paid:false,sentences:vec![],
             sentence_local_database_crossings:0,production_parser_token_writes:0,candidate_only:true,
             governed_identity_paid:false,level_three_paid:false,direct_production_activation_paid:false,
-        });
+        },0));
     }
     let plan=plan_original_native_numeric_parser(source,&run)?;
-    let mut rows=Vec::new();
+    let mut prepared=Vec::new();
     let mut tokens=0usize;
     for sentence in plan.sentences.iter().skip(first).take(max_sentences){
         let n=sentence.tokens.len();
         if n>12_000{return Err(NumericPipelineError::Budget);}
         if tokens+n>12_000{break;}
-        rows.push(direct_sentence_candidate(sentence)?);
+        prepared.push(prepare_direct_sentence(sentence)?);
         tokens+=n;
     }
-    Ok(DirectNumericCandidateSlice{
+    let keys=prepared.iter().map(PreparedDirectSentence::key).collect::<Vec<_>>();
+    if keys.iter().collect::<BTreeSet<_>>().len()!=keys.len(){return Err(NumericPipelineError::InvalidSentence);}
+    let mut cached=load(&keys)?;
+    let reused=cached.len();
+    let mut rows=Vec::with_capacity(prepared.len());
+    for p in prepared{
+        let product=cached.remove(&p.key());
+        rows.push(p.finish(product)?);
+    }
+    if !cached.is_empty(){return Err(NumericPipelineError::ForeignRun);}
+    Ok((DirectNumericCandidateSlice{
         schema:"slr-direct-numeric-candidate-slice-v1",source_revision_ref:plan.source_revision_ref,
         original_source_sha256:plan.original_source_sha256,original_parser_run_ref:plan.original_parser_run_ref,
         numeric_run_ref:run,source_document_ref:plan.source_document_ref,
@@ -380,7 +451,7 @@ pub fn compile_direct_numeric_candidates(
         source_full_document_coverage_paid:false,sentences:rows,
         sentence_local_database_crossings:0,production_parser_token_writes:0,
         candidate_only:true,governed_identity_paid:false,level_three_paid:false,direct_production_activation_paid:false,
-    })
+    },reused))
 }
 
 
@@ -396,7 +467,12 @@ pub fn inspect_direct_numeric_source_slice(
 fn direct_slice_from_window(
     source:&crate::OriginalNativeNumericEvidence,inventory:&[(i64,i64)],first:usize,count:usize,
 )->Result<DirectNumericCandidateSlice,NumericPipelineError>{
-    let mut receipt=compile_direct_numeric_candidates(source,0,count)?;
+    bind_direct_window(compile_direct_numeric_candidates(source,0,count)?,inventory,first)
+}
+
+fn bind_direct_window(
+    mut receipt:DirectNumericCandidateSlice,inventory:&[(i64,i64)],first:usize,
+)->Result<DirectNumericCandidateSlice,NumericPipelineError>{
     receipt.first_sentence=first;
     receipt.next_sentence=first+receipt.sentences.len();
     receipt.represented_sentence_count=inventory.len();
@@ -439,7 +515,9 @@ fn direct_compiler_executable_digest()->Result<String,NumericPipelineError>{
 /// source snapshot and candidate product persistence owner. A later source
 /// correction gets a different input key; old immutable products remain
 /// historical. A same-input replay checks exact payload and does not rewrite.
-/// The current implementation still recomputes the bounded local closure.
+/// Same-input replay reopens a digest-bound immutable candidate product,
+/// checks its inverse carrier and structural closure, and skips the rule solve.
+/// Source observation/codec validation still runs; this is not endpoint replay.
 pub fn stage_direct_numeric_source_slice(
     config:&DatabaseConfig,source_revision:&str,parser_run:&str,first:usize,count:usize,
 )->Result<DirectNumericStagingReceipt,NumericPipelineError>{
@@ -450,11 +528,18 @@ pub fn stage_direct_numeric_source_slice(
     tx.batch_execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE; SET LOCAL statement_timeout='90000ms'; SET LOCAL lock_timeout='5000ms'")?;
     let (source,inventory)=crate::numeric_pnf_source_bridge::load_exact_native_numeric_evidence_on_client(
         &mut tx,source_revision,parser_run,"slr-strict-numeric-pnf-v1",None,Some((first,count)))?;
-    let candidate=direct_slice_from_window(&source,&inventory,first,count)?;
+    let (candidate,reused)=compile_direct_numeric_candidates_with(&source,0,count,|keys|{
+        crate::candidate_pnf_store::load_direct_numeric_candidate_products(
+            &mut tx,source_revision,parser_run,&compiler,keys)
+            .map_err(|e|NumericPipelineError::Database(e.to_string()))
+    })?;
+    let candidate=bind_direct_window(candidate,&inventory,first)?;
     let (inserted,unchanged)=crate::candidate_pnf_store::stage_direct_numeric_candidate_products(
         &mut tx,&candidate,&compiler).map_err(|e|NumericPipelineError::Database(e.to_string()))?;
-    if inserted+unchanged!=candidate.sentences.len(){return Err(NumericPipelineError::ForeignRun);}
-    let recomputed=candidate.sentences.len();
+    if inserted+unchanged!=candidate.sentences.len()||reused!=unchanged{
+        return Err(NumericPipelineError::ForeignRun);
+    }
+    let recomputed=candidate.sentences.len()-reused;
     tx.commit()?;
     Ok(DirectNumericStagingReceipt{
         schema:"slr-direct-numeric-staging-v1",candidate,compiler_executable_sha256:compiler,
@@ -1172,6 +1257,24 @@ mod numeric_pnf_consumer_workset_golden{
         let corrected=compile_direct_numeric_candidates(&changed,0,1).unwrap();
         assert_ne!(d.input_sha256,corrected.sentences[0].input_sha256);
         assert_eq!(corrected.sentences[0].missing_original_tag_count,0);
+    }
+
+
+    #[test]
+    fn direct_candidate_replay_reuses_only_exact_inverse(){
+        let source=direct_fixture();
+        let cold=compile_direct_numeric_candidates(&source,0,1).unwrap();
+        let item=cold.sentences[0].clone();
+        let key=(item.original_compilation_key.clone(),item.input_sha256.clone());
+        let (warm,reused)=compile_direct_numeric_candidates_with(&source,0,1,|keys|{
+            assert_eq!(keys,&[key.clone()]);
+            Ok(BTreeMap::from([(key.clone(),item.clone())]))
+        }).unwrap();
+        assert_eq!(warm,cold);assert_eq!(reused,1);
+        let mut forged=item;
+        forged.numeric_tokens[0].head_token_id=1;
+        assert!(compile_direct_numeric_candidates_with(&source,0,1,|_|Ok(
+            BTreeMap::from([(key,forged)]))).is_err());
     }
 
     #[test]

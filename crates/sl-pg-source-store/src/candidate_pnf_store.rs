@@ -365,6 +365,42 @@ pub fn install_candidate_pnf_schema(config: &DatabaseConfig) -> Result<(), Candi
 // Only exact checked source packets from the caller's serializable snapshot
 // reach this private function. One set-wise missing-key insert; no rewrite
 // of unchanged immutable products. Readback is checked before outer commit.
+
+pub(crate) fn load_direct_numeric_candidate_products(
+    tx:&mut postgres::Transaction<'_>,source_revision:&str,parser_run:&str,compiler:&str,
+    keys:&[(String,String)],
+)->Result<BTreeMap<(String,String),crate::DirectNumericSentenceCandidate>,CandidatePnfStoreError>{
+    if keys.is_empty(){return Ok(BTreeMap::new());}
+    let ready:bool=tx.query_one("SELECT to_regclass('pnf.direct_numeric_candidate_product') IS NOT NULL",&[])?.get(0);
+    if !ready{return Ok(BTreeMap::new());}
+    let jobs=keys.iter().map(|k|k.0.clone()).collect::<Vec<_>>();
+    let inputs=keys.iter().map(|k|k.1.clone()).collect::<Vec<_>>();
+    let rows=tx.query(
+        "SELECT p.compilation_key,p.input_sha256,p.payload_sha256,p.payload_json,
+                p.candidate_only,p.creates_semantic_authority
+         FROM pnf.direct_numeric_candidate_product p
+         JOIN UNNEST($4::text[],$5::text[]) AS wanted(compilation_key,input_sha256)
+           USING(compilation_key,input_sha256)
+         WHERE p.source_revision_ref=$1 AND p.parser_run_ref=$2 AND p.compiler_sha256=$3",
+        &[&source_revision,&parser_run,&compiler,&jobs,&inputs])?;
+    let mut out=BTreeMap::new();
+    for row in rows{
+        let key:(String,String)=(row.get(0),row.get(1));
+        let sha:String=row.get(2);let payload:String=row.get(3);
+        if !row.get::<_,bool>(4)||row.get::<_,bool>(5)
+            ||sha!=format!("{:x}",Sha256::digest(payload.as_bytes())){
+            return Err(CandidatePnfStoreError::ExistingBatchConflict);
+        }
+        let candidate:crate::DirectNumericSentenceCandidate=serde_json::from_str(&payload)
+            .map_err(|_|CandidatePnfStoreError::ExistingBatchConflict)?;
+        if candidate.original_compilation_key!=key.0||candidate.input_sha256!=key.1
+            ||out.insert(key,candidate).is_some(){
+            return Err(CandidatePnfStoreError::ExistingBatchConflict);
+        }
+    }
+    Ok(out)
+}
+
 pub(crate) fn stage_direct_numeric_candidate_products(
     tx:&mut postgres::Transaction<'_>,candidate:&crate::DirectNumericCandidateSlice,compiler:&str,
 )->Result<(usize,usize),CandidatePnfStoreError>{
