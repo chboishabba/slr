@@ -56,7 +56,7 @@ BEGIN
     CREATE UNIQUE INDEX ON slr_identity_sentence(sentence_ref);
     CREATE TEMP TABLE slr_identity_person ON COMMIT DROP AS
         SELECT entity_id,sentence_ref,start_char,end_char
-          FROM execution.semantic_parser_entity_span CROSS JOIN slr_identity_constant
+          FROM execution.semantic_parser_entity_span CROSS JOIN slr_identity_constant AS constant
          WHERE run_ref=selected_run_ref AND document_ref=selected_document_ref
            AND entity_type_symbol_id=person_id;
     CREATE UNIQUE INDEX ON slr_identity_person(entity_id);
@@ -74,7 +74,7 @@ BEGIN
                head.lemma_symbol_id AS family_lemma_symbol_id,
                anchor.object_id AS anchor_object_id
           FROM slr_identity_person AS entity
-          CROSS JOIN slr_identity_constant
+          CROSS JOIN slr_identity_constant AS constant
           JOIN LATERAL (
               SELECT token.token_id,token.lemma_symbol_id,token.end_char
                 FROM slr_identity_token AS token
@@ -114,7 +114,7 @@ BEGIN
                       AND target_token.end_char<=entity.end_char
                ) AS target_is_person
           FROM slr_identity_token AS source_token
-          CROSS JOIN slr_identity_constant
+          CROSS JOIN slr_identity_constant AS constant
           JOIN slr_identity_token AS target_token
             ON target_token.token_id=source_token.head_token_id
            AND target_token.sentence_ref=source_token.sentence_ref
@@ -158,7 +158,7 @@ BEGIN
                      AND excluded.end_char>=mention.end_char
                      AND excluded.anchor_object_id<>mention_anchor.object_id) AS eligible_count
           FROM slr_identity_token AS mention
-          CROSS JOIN slr_identity_constant
+          CROSS JOIN slr_identity_constant AS constant
           JOIN slr_identity_sentence AS sentence ON sentence.sentence_ref=mention.sentence_ref
           JOIN slr_identity_anchor AS mention_anchor ON mention_anchor.token_id=mention.token_id
           JOIN family_cardinality AS cardinality ON cardinality.family_lemma_symbol_id=mention.lemma_symbol_id
