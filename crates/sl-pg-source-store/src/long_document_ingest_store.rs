@@ -308,6 +308,52 @@ pub fn load_long_document_structure(
         .collect()
 }
 
+/// Reconstruct only the explicitly published v1 heading-repair extensions.
+/// The original full structure remains the authority for all legacy IDs;
+/// neither arbitrary extra rows nor a partially published paragraph are valid.
+/// Read-only; this is not a publication or dependency invalidation API.
+pub(crate) fn reopen_heading_repaired_structure(
+    legacy: &LongDocumentSource,
+    canonical_text: &str,
+    stored: &[PersistedLongDocumentStructureRegion],
+) -> Result<LongDocumentSource, LongDocumentIngestStoreError> {
+    let legacy_refs = legacy.regions.iter()
+        .map(|r| r.region_ref.as_str()).collect::<BTreeSet<_>>();
+    let mut parents = BTreeSet::new();
+    for row in stored {
+        if row.source_revision_ref != legacy.ingest.source_revision_ref
+            || row.source_ref != legacy.ingest.source_ref
+            || !row.candidate_only || row.creates_semantic_authority || row.claim_truth_promoted
+        {
+            return Err(LongDocumentIngestStoreError::StoredStructureMismatch);
+        }
+        if !legacy_refs.contains(row.region_ref.as_str()) {
+            let prefix = format!("document-region:{}:sentence:heading-repair-v1:",
+                legacy.ingest.source_revision_ref);
+            if row.region_kind != "sentence" || !row.region_ref.starts_with(&prefix) {
+                return Err(LongDocumentIngestStoreError::StoredStructureMismatch);
+            }
+            parents.insert(row.parent_region_ref.clone()
+                .ok_or(LongDocumentIngestStoreError::StoredStructureMismatch)?);
+        }
+    }
+    let (extended, _) = crate::plain_text_document_adapter::extend_plain_text_heading_exclusions(
+        legacy, canonical_text, &parents.into_iter().collect::<Vec<_>>(),
+    ).map_err(|_| LongDocumentIngestStoreError::StoredStructureMismatch)?;
+    let expected = extended.regions.iter().map(|r| (
+        r.region_ref.as_str(), r.parent_region_ref.as_deref(),
+        region_kind_db(r.kind), r.start_char, r.end_char
+    )).collect::<BTreeSet<_>>();
+    let actual = stored.iter().map(|r| (
+        r.region_ref.as_str(), r.parent_region_ref.as_deref(),
+        r.region_kind.as_str(), r.start_char, r.end_char
+    )).collect::<BTreeSet<_>>();
+    if expected != actual || actual.len() != stored.len() {
+        return Err(LongDocumentIngestStoreError::StoredStructureMismatch);
+    }
+    Ok(extended)
+}
+
 fn ensure_long_document_structure_matches(
     config: &DatabaseConfig,
     document: &LongDocumentSource,
