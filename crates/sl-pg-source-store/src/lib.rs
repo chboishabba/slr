@@ -283,7 +283,8 @@ pub use numeric_pnf_owner::{
     NumericOwnerWorkReceipt, NumericWorkBudget,
 };
 pub use numeric_pnf_source_bridge::{
-    load_exact_native_numeric_evidence, prepare_native_prefix_recovery, NativePrefixRecoveryReceipt, NativeNumericSourceError,
+    load_exact_native_numeric_evidence, prepare_native_prefix_recovery, publish_native_prefix_heading_repair,
+    NativePrefixRecoveryReceipt, NativeNumericSourceError,
     OriginalNativeNumericEvidence, OriginalNumericSentenceFibre,
     OriginalNumericRawToken, OriginalNumericRawEntity,
 };
@@ -418,7 +419,7 @@ pub use plain_text_document_adapter::{
 pub use long_document_ingest_store::{
     install_long_document_ingest_schema, load_long_document_ingest_receipt,
     load_long_document_regions, load_long_document_structure,
-    load_source_partition_changes, SourcePartitionChange, SourcePartitionInsertedRegion,
+    load_source_partition_changes, SourcePartitionChange, SourcePartitionInsertedRegion, HeadingPartitionPublication,
     persist_long_document_compilation, persist_long_document_structure,
     LongDocumentIngestStoreError, PersistedLongDocumentIngestReceipt,
     PersistedLongDocumentRegion, PersistedLongDocumentStructureRegion,
