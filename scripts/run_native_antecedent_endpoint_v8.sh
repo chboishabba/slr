@@ -70,7 +70,9 @@ for pass in {1..8}; do
 done
 [[ "$ready" == true ]] || { echo "Prefix work still pending; bounded attempt stopped" >&2; exit 3; }
 # Reopen full receipts rather than silently skipping the parity probes.
+export SLR_NATIVE_IDENTITY_REPLAY_MODE=0
 capture "$checkpoint/cold.json" "${cli[@]}" endpoint "$review" "$run" --commit
+export SLR_NATIVE_IDENTITY_REPLAY_MODE=1
 capture "$checkpoint/replay.json" "${cli[@]}" endpoint "$review" "$run" --commit
 jq -s '
   def binding: .binding_passes[-1];
@@ -78,9 +80,12 @@ jq -s '
     .prefix_scope.parser_scope_ready and .prefix_scope.source_region_prefix_covered and
     .prefix_scope.original_parser_token_prefix_covered and .observed_prefix_token_coverage and
     .projected_vs_original_entity_membership_parity and .exact_entity_inverse_complete and
+    (.numeric_publication[-1].exact_parser_sentence_receipts==true) and
     (all(.numeric_publication[]; .lean_workset_checked and
       ((.newly_registered_sentence_refs-.missing_required_sentence_refs)|length)==0)) and
     (binding | .lean_typed_evidence != null and
+      .consumer_horizon_work.h6_validity.original_consumer_authority_reconciled and
+      .original_parser_identity_producer.support_index.delta_reference_exact and
       .original_parser_identity_producer.bounded_identity_parity.candidate_projection_exact and
       .original_parser_identity_producer.bounded_identity_parity.original_admission_projection_exact and
       (.original_parser_identity_producer.scoped_admission_parity as $p |
@@ -91,11 +96,14 @@ jq -s '
        all($p[]; .reference_admission_exact and .reference_level_three_exact and
           .unrelated_admission_revisions_preserved and .unrelated_derivation_ids_preserved and
           .immutable_level_one_preserved and .rollback_restored and (.persisted|not))));
+  def identity_replay_gate: (binding | .identity_execution_replay.reference_baseline_present==true and
+      .identity_execution_replay.input_events_pending==0 and .identity_execution_replay.source_support_scan_performed==false and
+      .parser_identity_refresh_invocations==0 and .consumer_horizon_work.h6_producer_invocations==0);
   def warm_gate:
     (all(.numeric_publication[]; .bounded_replay_supported and
       (.newly_registered_sentence_refs|length)==0 and (.closed_sentence_region_starts|length)==0)) and
     (binding | .parser_identity_refresh_invocations==0 and .source_partition_wake.affected_queue_rows==0
-       and (.original_parser_identity_producer.support_index.support_scan_performed==false));
+       and (.identity_execution_replay.source_support_scan_performed==false));
   def semantic_gate: .governed_identity_paid and .level_three_paid and
       (binding | .complete_typed_coverage_paid and (.outside_model_possible|not)
         and .native_binding_bridge.structural_relation_parity_paid);
@@ -108,6 +116,7 @@ jq -s '
    exact_replayed_persisted_fibre:(.[0].binding_passes[-1].original_horizon_observations!=null and
       .[0].binding_passes[-1].original_horizon_observations==.[1].binding_passes[-1].original_horizon_observations and
       .[0].binding_passes[-1].original_document_identity_observations==.[1].binding_passes[-1].original_document_identity_observations),
+   identity_input_zero_refresh_paid:(try (.[1]|identity_replay_gate) catch false),
    warm_zero_semantic_work_paid:(try (.[1]|warm_gate) catch false),
    semantic_endpoint_paid:(try (.[1]|semantic_gate) catch false),
    external_qid_paid:false,historical_truth_paid:false}
@@ -115,5 +124,5 @@ jq -s '
       .exact_replayed_source_answer and .exact_replayed_persisted_fibre and .warm_zero_semantic_work_paid and .semantic_endpoint_paid)}
 ' "$checkpoint/cold.json" "$checkpoint/replay.json" > "$checkpoint/acceptance.json.tmp"
 mv "$checkpoint/acceptance.json.tmp" "$checkpoint/acceptance.json"
-jq '{schema,candidate_reference_parity_paid,replay_candidate_reference_parity_observed,exact_replayed_source_answer,exact_replayed_persisted_fibre,warm_zero_semantic_work_paid,semantic_endpoint_paid,integrated_acceptance_paid}' "$checkpoint/acceptance.json"
+jq '{schema,candidate_reference_parity_paid,replay_candidate_reference_parity_observed,exact_replayed_source_answer,exact_replayed_persisted_fibre,identity_input_zero_refresh_paid,warm_zero_semantic_work_paid,semantic_endpoint_paid,integrated_acceptance_paid}' "$checkpoint/acceptance.json"
 jq -e '.integrated_acceptance_paid==true' "$checkpoint/acceptance.json" >/dev/null
