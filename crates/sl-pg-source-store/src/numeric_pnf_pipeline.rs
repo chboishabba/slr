@@ -283,7 +283,7 @@ fn numeric_sentence_tokens(
 // rebuilding its interface either both commit or both roll back. The source
 // parser and all sentence work must be complete before this stage is entered.
 fn reduce_original_frontier_slice(
-    db:&mut Client, run_ref:&str, document_ref:&str, budget:usize,focus:Option<i64>,
+    db:&mut Client, run_ref:&str, document_ref:&str, budget:usize,
 )->Result<(usize,i64),NumericPipelineError>{
     let started=std::time::Instant::now();
     let mut completed=0usize;
@@ -357,7 +357,7 @@ fn reduce_original_frontier_slice(
 // Existing numeric factor objects and original pronoun demands remain intact.
 // This extension has its own digest domain and is not strict-legacy parity.
 fn materialize_numeric_entity_occurrences(
-    db:&mut Client, run_ref:&str, document_ref:&str, budget:usize,
+    db:&mut Client, run_ref:&str, document_ref:&str, budget:usize,focus:Option<i64>,
 )->Result<(i64,i64),NumericPipelineError>{
     let mut tx=db.transaction()?;
     tx.batch_execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;
