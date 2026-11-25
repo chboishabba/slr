@@ -2596,6 +2596,9 @@ pub struct NativeIdentitySupportIndexReceipt {
     pub unchanged_rows:usize,
     pub affected_sentence_ids:Vec<i64>,
     pub affected_family_ids:Vec<i64>,
+    pub affected_name_token_ids:Vec<i64>,
+    pub affected_anchor_object_ids:Vec<i64>,
+    pub hot_symbol_scope_changed:bool,
     pub zero_family_mentions:usize,
     pub unanchored_mentions:usize,
     pub embedded_mentions:usize,
@@ -2687,10 +2690,10 @@ fn sync_identity_support_index(
     SELECT CASE WHEN p.key IS NULL THEN 1 WHEN n.key IS NULL THEN 2
         WHEN (p.sentence_id,p.family_id,p.payload) IS DISTINCT FROM (n.sentence_id,n.family_id,n.payload) THEN 3
         ELSE 4 END::smallint,
-        p.sentence_id,n.sentence_id,p.family_id,n.family_id
+        p.sentence_id,n.sentence_id,p.family_id,n.family_id,COALESCE(p.lane,n.lane)
       FROM prior p FULL JOIN incoming n USING(lane,key)",&[&scope_ref,&packet])?;
     let(mut inserted,mut withdrawn,mut changed,mut unchanged)=(0usize,0usize,0usize,0usize);
-    let mut sentences=BTreeSet::new();let mut families=BTreeSet::new();
+    let mut sentences=BTreeSet::new();let mut families=BTreeSet::new();let mut hot_changed=false;
     for d in deltas{
         match d.get::<_,i16>(0){
             1=>inserted+=1,2=>withdrawn+=1,3=>changed+=1,4=>{unchanged+=1;continue;},
@@ -2698,6 +2701,33 @@ fn sync_identity_support_index(
         }
         sentences.extend(d.get::<_,Option<i64>>(1));sentences.extend(d.get::<_,Option<i64>>(2));
         families.extend(d.get::<_,Option<i64>>(3));families.extend(d.get::<_,Option<i64>>(4));
+        hot_changed|=matches!(d.get::<_,i16>(5),6|7);
+    }
+    let sentence_ids=sentences.into_iter().collect::<Vec<_>>();
+    let family_ids=families.into_iter().collect::<Vec<_>>();
+    // Reopen both sides of the changed support relation before replacing
+    // the derived current index. A family insertion must reach old
+    // zero-family mentions, and a deleted anchor must remain visible.
+    // Hot constant/cue edits conservatively invalidate the whole scope.
+    let affected=tx.query("WITH incoming AS (
+        SELECT * FROM jsonb_to_recordset($2) AS r(lane smallint,key text,sentence_id bigint,family_id bigint,payload jsonb)
+    ), support AS (
+        SELECT lane,key,sentence_id,family_id,payload FROM execution.slr_native_identity_support_index WHERE scope_ref=$1
+        UNION SELECT lane,key,sentence_id,family_id,payload FROM incoming
+    )
+    SELECT DISTINCT lane,key,CASE lane WHEN 3 THEN (payload->>'object_id')::bigint
+        WHEN 4 THEN (payload->>'anchor_object_id')::bigint
+        WHEN 5 THEN (payload->>'source_object_id')::bigint ELSE NULL END
+    FROM support
+    WHERE lane IN (3,4,5) AND ($5::boolean OR sentence_id=ANY($3::bigint[]) OR family_id=ANY($4::bigint[]))
+    ORDER BY lane,key",&[&scope_ref,&packet,&sentence_ids,&family_ids,&hot_changed])?;
+    let mut affected_names=BTreeSet::new();let mut affected_anchors=BTreeSet::new();
+    for row in affected {
+        if row.get::<_,i16>(0)==5 {
+            let key:String=row.get(1);
+            affected_names.insert(key.parse::<i64>().map_err(|_|NativeNumericAuditError::AdmissionProbeInvariant)?);
+        }
+        affected_anchors.extend(row.get::<_,Option<i64>>(2));
     }
     let removed=tx.execute("DELETE FROM execution.slr_native_identity_support_index p
         WHERE p.scope_ref=$1 AND NOT EXISTS(SELECT 1 FROM jsonb_to_recordset($2) AS n(lane smallint,key text)
@@ -2715,7 +2745,9 @@ fn sync_identity_support_index(
     Ok(NativeIdentitySupportIndexReceipt{
         scope_ref,observed_rows:rows.len(),inserted_rows:inserted,changed_rows:changed,
         withdrawn_rows:withdrawn,unchanged_rows:unchanged,
-        affected_sentence_ids:sentences.into_iter().collect(),affected_family_ids:families.into_iter().collect(),
+        affected_sentence_ids:sentence_ids,affected_family_ids:family_ids,
+        affected_name_token_ids:affected_names.into_iter().collect(),affected_anchor_object_ids:affected_anchors.into_iter().collect(),
+        hot_symbol_scope_changed:hot_changed,
         zero_family_mentions:rows.iter().filter(|r|r.lane==5&&r.payload["full_count"].as_i64()==Some(0)).count(),
         unanchored_mentions:rows.iter().filter(|r|r.lane==5&&r.payload["source_object_id"].is_null()).count(),
         embedded_mentions:rows.iter().filter(|r|r.lane==5&&r.payload["embedded_in_person"].as_bool()==Some(true)).count(),
