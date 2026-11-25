@@ -1466,7 +1466,7 @@ fn original_mention_binding_campaign(
                     tx.execute(
                         "INSERT INTO execution.semantic_pnf_object_token_support(object_id,token_id,ordinal)
                          VALUES($1,$2,$3) ON CONFLICT DO NOTHING",
-                        &[&id,&t.id,&(ordinal as i32)])?;
+                        &[&id,&t.id,&i16::try_from(ordinal).map_err(|_|NativeNumericAuditError::ForeignSource)?])?;
                 }
                 let actual:Vec<i64>=tx.query_one(
                     "SELECT array_agg(DISTINCT token_id ORDER BY token_id)
@@ -1693,6 +1693,7 @@ fn projected_predicate_relations(tokens:&[NativeRelationToken])->Vec<ProjectedRe
     }
     // Canonical dedup retains distinct role-labelled occurrences.
     let mut seen=BTreeSet::new();
+    for r in &mut out { let mut role_seen=BTreeSet::new(); r.roles.retain(|pair|role_seen.insert(*pair)); }
     out.retain(|r|seen.insert((r.region,r.relation_type,r.roles.clone())));
     out
 }
@@ -1761,7 +1762,7 @@ fn projected_relation_probe(
         tokens.push(t);
     }
     let by_id=tokens.iter().map(|t|(t.id,t)).collect::<BTreeMap<_,_>>();
-    if tokens.iter().any(|t|by_id.get(&t.head).is_none_or(|h|h.region!=t.region)){
+    if tokens.iter().any(|t|by_id.get(&t.head).map_or(true,|h|h.region!=t.region)){
         return Err(NativeNumericAuditError::ForeignSource);
     }
     let focus_ids=tx.query(
@@ -1805,7 +1806,7 @@ fn projected_relation_probe(
         let support=relation.roles.iter().map(|(_,id)|*id).collect::<BTreeSet<_>>();
         for (ordinal,id) in support.iter().enumerate(){
             probe.execute("INSERT INTO execution.semantic_pnf_factor_token_support(factor_id,token_id,ordinal)
-                VALUES($1,$2,$3)",&[&factor,id,&(ordinal as i32)])?;
+                VALUES($1,$2,$3)",&[&factor,id,&i16::try_from(ordinal).map_err(|_|NativeNumericAuditError::ForeignSource)?])?;
         }
         for (ordinal,(role,id)) in relation.roles.iter().enumerate(){
             let t=by_id[id];
@@ -1830,7 +1831,7 @@ fn projected_relation_probe(
             };
             probe.execute("INSERT INTO execution.semantic_pnf_hyperedge
                 (factor_id,slot_ordinal,role_symbol_id,object_id,resolution_state,required)
-                VALUES($1,$2,$3,$4,2,TRUE)",&[&factor,&(ordinal as i32),&role_id,&object])?;
+                VALUES($1,$2,$3,$4,2,TRUE)",&[&factor,&i16::try_from(ordinal).map_err(|_|NativeNumericAuditError::ForeignSource)?,&role_id,&object])?;
         }
     }
     let projected_one=level_one_snapshot(&mut probe,run,doc)?;
