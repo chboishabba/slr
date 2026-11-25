@@ -2609,6 +2609,11 @@ pub struct NativeIdentitySupportIndexReceipt {
     pub unanchored_mentions:usize,
     pub embedded_mentions:usize,
     pub support_scan_performed:bool,
+    pub input_replay_mode:&'static str,
+    pub input_events_acknowledged:usize,
+    pub delta_dirty_sentence_count:usize,
+    pub delta_live_source_scan_performed:bool,
+    pub delta_reference_exact:bool,
     pub dependency_complete:bool,
     pub identity_paid:bool,
 }
@@ -2655,6 +2660,147 @@ fn read_identity_support_index(probe:&mut postgres::Transaction<'_>)
     Ok(out)
 }
 
+/// Exact namespace for the original source and golden owner. A baseline
+/// created before input capture was installed cannot be a delta baseline.
+fn identity_support_scope(run_ref:&str,answer:&NativeSourceLocalAnswer)
+    ->Result<(String,serde_json::Value),NativeNumericAuditError>{
+    let scope=serde_json::json!({
+        "schema":"slr-native-identity-support-index-v2","run_ref":run_ref,
+        "document_ref":answer.source_document_ref,"source_revision_ref":answer.source_revision_ref,
+        "source_sha256":answer.source_content_sha256,"parser_run_ref":answer.original_parser_run_ref,
+        "producer":"m090-bounded-input-delta-v2",
+        "golden":"BoundedProperNameEvidenceExecution:3cc851c87c50c3cc18c9610984dc48fb5f28d11d",
+    });
+    let scope_ref=bridge_digest(&scope)?;
+
+    Ok((scope_ref,scope))
+}
+
+const IDENTITY_INPUT_CONTRACT:&str="slr-identity-input-delta:v1";
+
+fn ensure_identity_input_capture(db:&mut postgres::Client)->Result<(),NativeNumericAuditError>{
+    let exists:bool=db.query_one("SELECT to_regclass('execution.slr_native_identity_input_contract') IS NOT NULL",&[])?.get(0);
+    if !exists{
+        let mut tx=db.transaction()?;
+        tx.query_one("SELECT pg_advisory_xact_lock(hashtext('slr-identity-input-delta:v1'))",&[])?;
+        let installed:bool=tx.query_one("SELECT to_regclass('execution.slr_native_identity_input_contract') IS NOT NULL",&[])?.get(0);
+        if !installed{tx.batch_execute(include_str!("numeric_pnf_identity_input_delta.sql"))?;}
+        tx.commit()?;
+    }
+    // Never silently reinstall a missing/disabled capture trigger over an
+    // existing baseline: continuity would be unknown.
+    let contract:bool=db.query_one("SELECT EXISTS(SELECT 1 FROM execution.slr_native_identity_input_contract WHERE contract_ref=$1)",&[&IDENTITY_INPUT_CONTRACT])?.get(0);
+    let capture_count:i64=db.query_one("SELECT count(*)::bigint FROM pg_trigger t
+        JOIN pg_class c ON c.oid=t.tgrelid JOIN pg_namespace n ON n.oid=c.relnamespace
+        JOIN pg_proc p ON p.oid=t.tgfoid
+        WHERE n.nspname='execution' AND t.tgname LIKE 'slr_id_input_%'
+          AND p.proname=t.tgname AND NOT t.tgisinternal AND t.tgenabled IN ('O','A')",&[])?.get(0);
+    if !contract||capture_count!=32{return Err(NativeNumericAuditError::ForeignSource);}
+    Ok(())
+}
+
+#[derive(Debug,Clone)]
+struct NativeIdentityInputFrontier {
+    scope_ref:String,
+    event_ids:Vec<i64>,
+    dirty_sentence_refs:Vec<String>,
+    checked_baseline:bool,
+    whole_scope:bool,
+}
+
+fn identity_input_frontier(tx:&mut postgres::Transaction<'_>,run_ref:&str,answer:&NativeSourceLocalAnswer)
+    ->Result<NativeIdentityInputFrontier,NativeNumericAuditError>{
+    let (scope_ref,_)=identity_support_scope(run_ref,answer)?;
+    let checked_baseline:bool=tx.query_one("SELECT EXISTS(SELECT 1 FROM execution.slr_native_identity_input_baseline
+      WHERE scope_ref=$1 AND contract_ref=$2 AND exact_reference_parity)",&[&scope_ref,&IDENTITY_INPUT_CONTRACT])?.get(0);
+    let events=tx.query("SELECT e.event_id,e.whole_scope FROM execution.slr_native_identity_input_event e
+      WHERE ((e.run_ref=$1 AND e.document_ref=$2) OR e.run_ref IS NULL)
+        AND NOT EXISTS(SELECT 1 FROM execution.slr_native_identity_input_ack a
+            WHERE a.scope_ref=$3 AND a.event_id=e.event_id)
+      ORDER BY e.event_id LIMIT 100001",&[&run_ref,&answer.source_document_ref,&scope_ref])?;
+    if events.len()>100000{return Err(NativeNumericAuditError::AdmissionProbeInvariant);}
+    let event_ids=events.iter().map(|r|r.get::<_,i64>(0)).collect::<Vec<_>>();
+    let whole_scope=events.iter().any(|r|r.get::<_,bool>(1));
+    let mut dirty_sentence_refs=Vec::new();
+    if checked_baseline && !whole_scope && !event_ids.is_empty(){
+        // Old and current sentence/token rows recover deleted and inserted
+        // coordinates; interval intersection includes previously absent
+        // fallback anchors and all containing-region changes.
+        dirty_sentence_refs=tx.query("WITH events AS MATERIALIZED (
+            SELECT * FROM execution.slr_native_identity_input_event WHERE event_id=ANY($4::bigint[])
+          ), direct AS (SELECT unnest(sentence_refs) AS sentence_ref FROM events),
+          tokens AS (SELECT DISTINCT unnest(token_ids) AS token_id FROM events),
+          old_sentences AS (
+            SELECT i.payload->>'sentence_ref' AS sentence_ref,
+              (i.payload->>'start_char')::bigint AS start_char,
+              (i.payload->>'end_char')::bigint AS end_char
+            FROM execution.slr_native_identity_support_index i WHERE i.scope_ref=$3 AND i.lane=8
+          ), affected AS (
+            SELECT sentence_ref FROM direct
+            UNION SELECT t.sentence_ref FROM tokens d JOIN execution.semantic_parser_token t USING(token_id)
+              WHERE t.run_ref=$1 AND t.document_ref=$2
+            UNION SELECT i.payload->>'sentence_ref' FROM tokens d
+              JOIN execution.slr_native_identity_support_index i
+                ON i.scope_ref=$3 AND i.lane=1 AND i.key=d.token_id::text
+            UNION SELECT s.sentence_ref FROM events e
+              JOIN execution.semantic_parser_sentence s ON s.run_ref=$1 AND s.document_ref=$2
+                AND e.start_char<s.end_char AND e.end_char>s.start_char
+            UNION SELECT s.sentence_ref FROM events e JOIN old_sentences s
+                ON e.start_char<s.end_char AND e.end_char>s.start_char
+          )
+          SELECT sentence_ref FROM affected WHERE sentence_ref IS NOT NULL ORDER BY sentence_ref",
+          &[&run_ref,&answer.source_document_ref,&scope_ref,&event_ids])?.iter().map(|r|r.get(0)).collect();
+    }
+    Ok(NativeIdentityInputFrontier{scope_ref,event_ids,dirty_sentence_refs,checked_baseline,whole_scope})
+}
+
+fn read_cached_identity_support(tx:&mut postgres::Transaction<'_>,scope:&str)
+    ->Result<Vec<IdentitySupportRow>,NativeNumericAuditError>{
+    let rows=tx.query("SELECT lane,key,sentence_id,family_id,payload FROM execution.slr_native_identity_support_index
+      WHERE scope_ref=$1 ORDER BY lane,key LIMIT 100001",&[&scope])?;
+    if rows.len()>100000{return Err(NativeNumericAuditError::AdmissionProbeInvariant);}
+    Ok(rows.iter().map(|r|IdentitySupportRow{lane:r.get(0),key:r.get(1),sentence_id:r.get(2),family_id:r.get(3),payload:r.get(4)}).collect())
+}
+
+/// Actual delta producer, checked against the separately rebuilt original
+/// carrier. Its result, not the reference rows, is what the outer transaction
+/// writes. The full reference is still deliberately run in this audit mode.
+fn replay_identity_support_delta(probe:&mut postgres::Transaction<'_>,run:i64,doc:i64,
+    frontier:&NativeIdentityInputFrontier,reference:&[IdentitySupportRow])
+    ->Result<(Vec<IdentitySupportRow>,&'static str),NativeNumericAuditError>{
+    if !frontier.checked_baseline||frontier.whole_scope{
+        return Ok((reference.to_vec(),if frontier.checked_baseline{"global-invalidation-rebuild"}else{"cold-reference-baseline"}));
+    }
+    if frontier.event_ids.is_empty(){
+        let cached=read_cached_identity_support(probe,&frontier.scope_ref)?;
+        if cached!=reference{return Err(NativeNumericAuditError::AdmissionProbeInvariant);}
+        return Ok((cached,"unchanged-input-reopen"));
+    }
+    let mut delta=probe.transaction()?;
+    delta.batch_execute("DROP TABLE pg_temp.slr_identity_mention_scope,pg_temp.slr_identity_family,
+      pg_temp.slr_identity_anchor,pg_temp.slr_identity_person,pg_temp.slr_identity_sentence,
+      pg_temp.slr_identity_token,pg_temp.slr_identity_constant,pg_temp.slr_identity_stage_scope")?;
+    delta.batch_execute(include_str!("numeric_pnf_identity_support_delta.sql"))?;
+    let visited:i64=delta.query_one("SELECT pg_temp.slr_stage_identity_support_delta($1,$2,$3,$4)",
+      &[&run,&doc,&frontier.scope_ref,&frontier.dirty_sentence_refs])?.get(0);
+    if visited!=frontier.dirty_sentence_refs.len() as i64{return Err(NativeNumericAuditError::AdmissionProbeInvariant);}
+    let result=read_identity_support_index(&mut delta)?;
+    if result!=reference{return Err(NativeNumericAuditError::AdmissionProbeInvariant);}
+    delta.rollback()?;
+    Ok((result,"dirty-sentence-and-family-reopen"))
+}
+
+fn acknowledge_identity_inputs(tx:&mut postgres::Transaction<'_>,frontier:&NativeIdentityInputFrontier)
+    ->Result<usize,NativeNumericAuditError>{
+    let count=tx.execute("INSERT INTO execution.slr_native_identity_input_ack(scope_ref,event_id)
+      SELECT $1,id FROM unnest($2::bigint[]) ids(id) ON CONFLICT DO NOTHING",
+      &[&frontier.scope_ref,&frontier.event_ids])?;
+    if count!=frontier.event_ids.len() as u64{return Err(NativeNumericAuditError::AdmissionProbeInvariant);}
+    tx.execute("INSERT INTO execution.slr_native_identity_input_baseline(scope_ref,contract_ref,exact_reference_parity)
+      VALUES($1,$2,TRUE) ON CONFLICT(scope_ref) DO NOTHING",&[&frontier.scope_ref,&IDENTITY_INPUT_CONTRACT])?;
+    Ok(count as usize)
+}
+
 /// Called only after the rollback audit has proved preservation. Persist
 /// the observed source support in the outer native transport transaction.
 /// No cache hit is licensed by this snapshot; all support was read afresh.
@@ -2662,14 +2808,7 @@ fn sync_identity_support_index(
     tx:&mut postgres::Transaction<'_>,run_ref:&str,answer:&NativeSourceLocalAnswer,
     rows:&[IdentitySupportRow],
 )->Result<NativeIdentitySupportIndexReceipt,NativeNumericAuditError>{
-    let scope=serde_json::json!({
-        "schema":"slr-native-identity-support-index-v1","run_ref":run_ref,
-        "document_ref":answer.source_document_ref,"source_revision_ref":answer.source_revision_ref,
-        "source_sha256":answer.source_content_sha256,"parser_run_ref":answer.original_parser_run_ref,
-        "producer":"m090-bounded-reference-only-v1",
-        "golden":"BoundedProperNameEvidenceExecution:3cc851c87c50c3cc18c9610984dc48fb5f28d11d",
-    });
-    let scope_ref=bridge_digest(&scope)?;
+    let (scope_ref,scope)=identity_support_scope(run_ref,answer)?;
     tx.batch_execute("CREATE TABLE IF NOT EXISTS execution.slr_native_identity_support_scope (
         scope_ref text PRIMARY KEY, scope_payload jsonb NOT NULL
     );
@@ -2842,7 +2981,9 @@ fn sync_identity_support_index(
         zero_family_mentions:rows.iter().filter(|r|r.lane==5&&r.payload["full_count"].as_i64()==Some(0)).count(),
         unanchored_mentions:rows.iter().filter(|r|r.lane==5&&r.payload["source_object_id"].is_null()).count(),
         embedded_mentions:rows.iter().filter(|r|r.lane==5&&r.payload["embedded_in_person"].as_bool()==Some(true)).count(),
-        support_scan_performed:true,dependency_complete:false,identity_paid:false,
+        support_scan_performed:true,input_replay_mode:"unverified",input_events_acknowledged:0,
+        delta_dirty_sentence_count:0,delta_live_source_scan_performed:true,delta_reference_exact:false,
+        dependency_complete:false,identity_paid:false,
     })
 }
 
@@ -3343,16 +3484,21 @@ fn probe_original_governed_identity(
     let level_one=level_one_snapshot(tx,run,document)?;
     let prior=level_three_snapshot(tx,run,document)?;
     let (_,prior_classes)=observe_original_resolution_fibre(tx,demand,run_ref,document_ref)?;
+    let bounded_enabled=std::env::var("SLR_NATIVE_BOUNDED_IDENTITY_PROBE").as_deref()==Ok("1");
+    let input_frontier=if bounded_enabled{Some(identity_input_frontier(tx,run_ref,answer)?)}else{None};
     let mut probe=tx.transaction()?;
     let started=std::time::Instant::now();
-    let bounded=if std::env::var("SLR_NATIVE_BOUNDED_IDENTITY_PROBE").as_deref()==Ok("1") {
+    let bounded=if bounded_enabled {
         Some(refresh_bounded_parser_identity_with_parity(&mut probe,run,document)?)
     } else {
         probe.query_one("SELECT execution.refresh_numeric_pnf_parser_identity_evidence($1,$2)",&[&run,&document])?;
         None
     };
     let parser_refresh_elapsed_ms=started.elapsed().as_millis();
-    let support_rows=if bounded.is_some(){Some(read_identity_support_index(&mut probe)?)}else{None};
+    let support_rows=if let Some(frontier)=&input_frontier {
+        let reference=read_identity_support_index(&mut probe)?;
+        Some(replay_identity_support_delta(&mut probe,run,document,frontier,&reference)?)
+    }else{None};
     let mut original_parser_identity_producer=observe_refreshed_parser_identity_producer(&mut probe,run,document,demand)?;
     let started=std::time::Instant::now();
     let admitted:i64=probe.query_one(
@@ -3410,8 +3556,15 @@ fn probe_original_governed_identity(
         ||level_one!=level_one_snapshot(tx,run,document)?{
         return Err(NativeNumericAuditError::AdmissionProbeInvariant);
     }
-    if let Some(rows)=support_rows {
-        original_parser_identity_producer.support_index=Some(sync_identity_support_index(tx,run_ref,answer,&rows)?);
+    if let (Some((rows,mode)),Some(frontier))=(support_rows,input_frontier) {
+        let mut receipt=sync_identity_support_index(tx,run_ref,answer,&rows)?;
+        if receipt.scope_ref!=frontier.scope_ref{return Err(NativeNumericAuditError::ForeignSource);}
+        receipt.input_events_acknowledged=acknowledge_identity_inputs(tx,&frontier)?;
+        receipt.input_replay_mode=mode;
+        receipt.delta_dirty_sentence_count=frontier.dirty_sentence_refs.len();
+        receipt.delta_live_source_scan_performed=mode!="unchanged-input-reopen";
+        receipt.delta_reference_exact=true;
+        original_parser_identity_producer.support_index=Some(receipt);
     }
     Ok((original_parser_identity_producer,NativeGovernedIdentityProbe{
         parser_refresh_elapsed_ms,parser_admission_elapsed_ms,
@@ -3762,6 +3915,9 @@ pub fn transport_original_numeric_candidates_for_source_answer_with_partition(
         return Err(NativeNumericAuditError::SourcePolicy);
     }
     let mut db=Client::connect(numeric_url,NoTls)?;
+    if std::env::var("SLR_NATIVE_BOUNDED_IDENTITY_PROBE").as_deref()==Ok("1"){
+        ensure_identity_input_capture(&mut db)?;
+    }
     let mut tx=db.transaction()?;
     tx.batch_execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;
         SET LOCAL statement_timeout='90000ms'; SET LOCAL lock_timeout='5000ms'")?;
