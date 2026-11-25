@@ -258,10 +258,14 @@ pub fn extend_plain_text_heading_exclusions(
     let chars = text.chars().collect::<Vec<_>>();
     let mut extended = original.clone();
     let mut added = Vec::new();
-    for parent_ref in paragraph_refs {
-        let paragraph = original.regions.iter()
+    let mut parents = paragraph_refs.iter().map(|parent_ref| {
+        original.regions.iter()
             .find(|r| &r.region_ref == parent_ref && r.kind == DocumentRegionKind::Paragraph)
-            .ok_or(InvalidHeadingRepair("original paragraph missing"))?;
+            .ok_or(InvalidHeadingRepair("original paragraph missing"))
+    }).collect::<Result<Vec<_>, _>>()?;
+    parents.sort_by(|a, b| (a.start_char, &a.region_ref).cmp(&(b.start_char, &b.region_ref)));
+    parents.dedup_by(|a, b| a.region_ref == b.region_ref);
+    for paragraph in parents {
         let a = usize::try_from(paragraph.start_char)
             .map_err(|_| InvalidHeadingRepair("paragraph start overflow"))?;
         let b = usize::try_from(paragraph.end_char)
