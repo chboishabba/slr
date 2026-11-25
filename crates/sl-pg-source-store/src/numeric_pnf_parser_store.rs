@@ -331,6 +331,64 @@ fn intern_morphology(
 /// Register numeric v2 parser observations without broad Python reparsing.
 /// Preconditions require an exact, source-validated plan (never a Q207 label).
 /// For a partial SLR parser-run scope, coverage remains OPEN by construction.
+// A parser sentence is not a verified publication merely because its
+// coordinate-derived sentence_ref exists. Bind the exact original producer
+// plan and the complete registered numeric carrier; never trust a count or
+// a coordinate digest for lexical/morphological equivalence.
+const NATIVE_PARSER_SENTENCE_RECEIPT_SQL:&str="CREATE TABLE IF NOT EXISTS execution.slr_native_parser_sentence_receipt (
+    run_ref text NOT NULL,document_ref text NOT NULL,sentence_ref text NOT NULL,
+    source_revision_ref text NOT NULL,parser_run_ref text NOT NULL,source_sha256 text NOT NULL,
+    contract_ref text NOT NULL,plan_payload jsonb NOT NULL,registered_payload jsonb NOT NULL,
+    PRIMARY KEY(run_ref,document_ref,sentence_ref)
+);";
+
+const NATIVE_PARSER_SENTENCE_PAYLOAD_SQL:&str="SELECT s.sentence_ref,
+    jsonb_build_object('sentence',to_jsonb(s),'partition',to_jsonb(p),
+        'tokens',COALESCE((SELECT jsonb_agg(to_jsonb(t) ORDER BY t.local_token_ordinal,t.token_id)
+            FROM execution.semantic_parser_token t WHERE t.sentence_ref=s.sentence_ref
+              AND t.run_ref=s.run_ref AND t.document_ref=s.document_ref),'[]'::jsonb),
+        'entities',COALESCE((SELECT jsonb_agg(to_jsonb(e) ORDER BY e.entity_ref)
+            FROM execution.semantic_parser_entity_span e WHERE e.sentence_ref=s.sentence_ref
+              AND e.run_ref=s.run_ref AND e.document_ref=s.document_ref),'[]'::jsonb))
+    FROM execution.semantic_parser_sentence s JOIN execution.semantic_parser_partition p ON p.partition_ref=s.partition_ref
+    WHERE s.run_ref=$1 AND s.document_ref=$2 AND s.sentence_ref=ANY($3::text[])
+      AND s.representation_version=2 AND p.run_ref=s.run_ref AND p.document_ref=s.document_ref";
+
+fn parser_sentence_payloads(db:&mut impl postgres::GenericClient,plan:&NativeNumericParserPlan,refs:&[String])
+    ->Result<BTreeMap<String,Value>,NumericParserStoreError>{
+    let rows=db.query(NATIVE_PARSER_SENTENCE_PAYLOAD_SQL,&[&plan.numeric_run_ref,&plan.source_document_ref,&refs])?;
+    let map=rows.iter().map(|r|(r.get::<_,String>(0),r.get::<_,Value>(1))).collect::<BTreeMap<_,_>>();
+    if rows.len()!=map.len(){return Err(NumericParserStoreError::ExistingConflict);}
+    Ok(map)
+}
+
+pub(crate) fn checked_native_parser_sentence_refs(db:&mut impl postgres::GenericClient,plan:&NativeNumericParserPlan)
+    ->Result<BTreeSet<String>,NumericParserStoreError>{
+    let exists:bool=db.query_one("SELECT to_regclass('execution.slr_native_parser_sentence_receipt') IS NOT NULL",&[])?.get(0);
+    if !exists{return Ok(BTreeSet::new());}
+    let refs=plan.sentences.iter().map(|s|s.sentence_ref.clone()).collect::<Vec<_>>();
+    let receipts=db.query("SELECT sentence_ref,source_revision_ref,parser_run_ref,source_sha256,contract_ref,plan_payload,registered_payload
+        FROM execution.slr_native_parser_sentence_receipt
+        WHERE run_ref=$1 AND document_ref=$2 AND sentence_ref=ANY($3::text[])",
+        &[&plan.numeric_run_ref,&plan.source_document_ref,&refs])?;
+    let present=receipts.iter().map(|r|r.get::<_,String>(0)).collect::<Vec<_>>();
+    let payloads=parser_sentence_payloads(db,plan,&present)?;
+    let expected=plan.sentences.iter().map(|s|(s.sentence_ref.as_str(),s)).collect::<BTreeMap<_,_>>();
+    let mut checked=BTreeSet::new();
+    for r in receipts{
+        let name:String=r.get(0);
+        let original=expected.get(name.as_str()).ok_or(NumericParserStoreError::ExistingConflict)?;
+        let original_payload=serde_json::to_value(original).map_err(|_|NumericParserStoreError::ForeignSource)?;
+        if r.get::<_,String>(1)!=plan.source_revision_ref || r.get::<_,String>(2)!=plan.original_parser_run_ref
+           || r.get::<_,String>(3)!=plan.original_source_sha256 || r.get::<_,String>(4)!="slr-native-parser-sentence-receipt:v1"
+           || r.get::<_,Value>(5)!=original_payload || payloads.get(&name)!=Some(&r.get::<_,Value>(6))
+           || !checked.insert(name) {
+            return Err(NumericParserStoreError::ExistingConflict);
+        }
+    }
+    Ok(checked)
+}
+
 pub fn persist_original_numeric_parser_plan(
     database_url:&str,
     source_root:&Path,
@@ -415,6 +473,7 @@ pub fn persist_original_numeric_parser_plan(
     let mut db=Client::connect(database_url,NoTls)?;
     let mut tx=db.transaction()?;
     tx.batch_execute("SET LOCAL statement_timeout='90000ms'")?;
+    tx.batch_execute(NATIVE_PARSER_SENTENCE_RECEIPT_SQL)?;
     tx.query(
         "SELECT pg_advisory_xact_lock(hashtextextended($1,0))",
         &[&format!("slr-native-numeric:{}:{}",
@@ -772,6 +831,38 @@ pub fn persist_original_numeric_parser_plan(
                   &partition_ref,&sentence.sentence_ref,
                   &erefs,&estarts,&eends,&edigests,&ekinds])?;
         }
+        // Validate exact entity payload and multiplicity even for existing
+        // registrations. Equal source coordinates alone do not pay NER parity.
+        let entity_mismatches:i64=tx.query_one("WITH expected AS (
+            SELECT * FROM unnest($4::text[],$5::bigint[],$6::bigint[],$7::bytea[],$8::bigint[])
+              e(entity_ref,start_char,end_char,entity_digest,entity_type_symbol_id)
+          ), actual AS (
+            SELECT entity_ref,start_char,end_char,entity_digest,entity_type_symbol_id,partition_ref,representation_version
+            FROM execution.semantic_parser_entity_span WHERE run_ref=$1 AND document_ref=$2 AND sentence_ref=$3
+          )
+          SELECT count(*)::bigint FROM expected e FULL JOIN actual a USING(entity_ref)
+          WHERE e.entity_ref IS NULL OR a.entity_ref IS NULL OR a.partition_ref IS DISTINCT FROM $9
+            OR a.representation_version IS DISTINCT FROM 2 OR
+            (a.start_char,a.end_char,a.entity_digest,a.entity_type_symbol_id) IS DISTINCT FROM
+            (e.start_char,e.end_char,e.entity_digest,e.entity_type_symbol_id)",
+            &[&plan.numeric_run_ref,&plan.source_document_ref,&sentence.sentence_ref,&erefs,&estarts,&eends,&edigests,&ekinds,&partition_ref])?.get(0);
+        if entity_mismatches!=0{return Err(NumericParserStoreError::ExistingConflict);}
+    }
+    // Persist a per-sentence immutable receipt only after all original
+    // parser row and head checks succeed in this transaction.
+    let receipt_refs=plan.sentences.iter().map(|s|s.sentence_ref.clone()).collect::<Vec<_>>();
+    let registered_payloads=parser_sentence_payloads(&mut tx,plan,&receipt_refs)?;
+    for sentence in &plan.sentences{
+        let original_payload=serde_json::to_value(sentence).map_err(|_|NumericParserStoreError::ForeignSource)?;
+        let registered=registered_payloads.get(&sentence.sentence_ref).ok_or(NumericParserStoreError::ExistingConflict)?;
+        tx.execute("INSERT INTO execution.slr_native_parser_sentence_receipt
+          (run_ref,document_ref,sentence_ref,source_revision_ref,parser_run_ref,source_sha256,contract_ref,plan_payload,registered_payload)
+          VALUES($1,$2,$3,$4,$5,$6,'slr-native-parser-sentence-receipt:v1',$7,$8)
+          ON CONFLICT DO NOTHING",&[&plan.numeric_run_ref,&plan.source_document_ref,&sentence.sentence_ref,
+            &plan.source_revision_ref,&plan.original_parser_run_ref,&plan.original_source_sha256,&original_payload,registered])?;
+    }
+    if checked_native_parser_sentence_refs(&mut tx,plan)?.len()!=receipt_refs.len(){
+        return Err(NumericParserStoreError::ExistingConflict);
     }
     // One set-wise original numeric parser receipt family. Metadata comes
     // from the actual SLR parser run, not a newly claimed spaCy execution.
