@@ -5448,6 +5448,18 @@ mod tests{
         let a=original_relation_digest(&serde_json::json!({"x":1})).unwrap();
         let b=original_relation_digest(&serde_json::json!({"x":"1"})).unwrap();
         assert_ne!(a,b);
+        // Independently encoded from SensibLaw canonical.py's typed byte
+        // contract, using UTF-8 byte lengths, sorted map keys and integer tags.
+        assert_eq!(original_relation_digest(&serde_json::json!({"x":1,"a":null})).unwrap(),
+            "16483dd9d489e927584c7929ee62743a8bad819f49e368c27cec4e70390b2f37");
+        let roles=mapped.iter().map(|(atom,_,role)|serde_json::json!({"role":role,"atom":atom})).collect();
+        let inverse=mapped.iter().map(|(atom,id,_)|(atom.clone(),*id)).collect();
+        let cross=original_relation_reference("doc:test","grammar:semantic:predicate:v0_4",1,"predicate",roles,inverse).unwrap();
+        assert_eq!(cross.reconstructed_root_factor_ref,
+            "factor:d188f7cd217a008ad29b9f8484440b8ebdfabcba7de9cbea45b0257c3a92427e");
+        assert_eq!(cross.reconstructed_relation_ref,
+            "semantic-relation:a71ae0d62dd09b86a4f2727acf3d1739db33913d6c2085f3f4ac2a6b26d2f782");
+        assert!(!cross.independently_compared);
         assert_eq!(original_relation_digest(&serde_json::json!({"x":1,"a":null})).unwrap(),
             original_relation_digest(&serde_json::json!({"a":null,"x":1})).unwrap());
     }

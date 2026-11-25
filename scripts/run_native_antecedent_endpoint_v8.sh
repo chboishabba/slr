@@ -73,6 +73,12 @@ done
 export SLR_NATIVE_IDENTITY_REPLAY_MODE=0
 export SLR_NATIVE_ENDPOINT_REPLAY_MODE=0
 capture "$checkpoint/cold.json" "${cli[@]}" endpoint "$review" "$run" --commit
+# Actual represented H3 projection negative control; no fabricated fixture,
+# no persisted evidence, no authority write. This is not owner revalidation.
+command -v psql >/dev/null
+demand=$(jq -er '.binding_passes[-1].demand_id | select(type=="number")' "$checkpoint/cold.json")
+bounded psql "$SENSIBLAW_DATABASE_URL" -X -v "demand_id=$demand" \
+  -f scripts/check_native_horizon_withdrawal.sql > "$checkpoint/h3-withdrawal-rollback.log"
 export SLR_NATIVE_IDENTITY_REPLAY_MODE=1
 export SLR_NATIVE_ENDPOINT_REPLAY_MODE=1
 # Install the explicit replay fence and obtain a quiescent full readback
@@ -95,6 +101,8 @@ jq -s '
       ((.newly_registered_sentence_refs-.missing_required_sentence_refs)|length)==0)) and
     (binding | .lean_typed_evidence != null and
       .consumer_horizon_work.h6_validity.original_consumer_authority_reconciled and
+      (.consumer_horizon_work.nonmonotone_input_residual==false) and
+      (.consumer_horizon_work.h6_validity.durable_nonmonotone_authority_pending==false) and
       .original_parser_identity_producer.support_index.delta_reference_exact and
       .original_parser_identity_producer.bounded_identity_parity.candidate_projection_exact and
       .original_parser_identity_producer.bounded_identity_parity.original_admission_projection_exact and
@@ -112,6 +120,7 @@ jq -s '
   def warm_gate:
     (.endpoint_execution_replay |
       .hit==true and .source_observation_scan_performed==false and
+      .external_canonical_source_bytes_verified==true and
       .numeric_binding_scan_performed==false and .parser_identity_refresh_invocations==0 and
       .semantic_recomputation_performed==false and .writes_semantic_state==false and
       .current_authority_reused==false);
