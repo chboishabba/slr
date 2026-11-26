@@ -4052,19 +4052,19 @@ fn read_identity_support_index(probe:&mut postgres::Transaction<'_>)
     let rows=probe.query("SELECT lane,key,sentence_id,family_id,payload FROM (
       SELECT 1::smallint AS lane,t.token_id::text AS key,t.sentence_id,
         t.lemma_symbol_id AS family_id,to_jsonb(t) AS payload FROM pg_temp.slr_identity_token t
-      UNION ALL SELECT 2,p.entity_id::text,s.sentence_id,NULL::bigint,to_jsonb(p)
+      UNION ALL SELECT 2::smallint,p.entity_id::text,s.sentence_id,NULL::bigint,to_jsonb(p)
         FROM pg_temp.slr_identity_person p JOIN pg_temp.slr_identity_sentence s USING(sentence_ref)
-      UNION ALL SELECT 3,a.token_id::text,a.sentence_id,t.lemma_symbol_id,to_jsonb(a)
+      UNION ALL SELECT 3::smallint,a.token_id::text,a.sentence_id,t.lemma_symbol_id,to_jsonb(a)
         FROM pg_temp.slr_identity_anchor a JOIN pg_temp.slr_identity_token t USING(token_id)
-      UNION ALL SELECT 4,f.parser_entity_id::text,s.sentence_id,f.family_lemma_symbol_id,to_jsonb(f)
+      UNION ALL SELECT 4::smallint,f.parser_entity_id::text,s.sentence_id,f.family_lemma_symbol_id,to_jsonb(f)
         FROM pg_temp.slr_identity_family f JOIN pg_temp.slr_identity_sentence s USING(sentence_ref)
-      UNION ALL SELECT 5,m.token_id::text,m.sentence_id,m.lemma_symbol_id,to_jsonb(m)
+      UNION ALL SELECT 5::smallint,m.token_id::text,m.sentence_id,m.lemma_symbol_id,to_jsonb(m)
         FROM pg_temp.slr_identity_mention_scope m
-      UNION ALL SELECT 6,'hot-constants',NULL::bigint,NULL::bigint,to_jsonb(c)
+      UNION ALL SELECT 6::smallint,'hot-constants',NULL::bigint,NULL::bigint,to_jsonb(c)
         FROM pg_temp.slr_identity_constant c
-      UNION ALL SELECT 7,concat(c.cue_class,':',c.symbol_id),NULL::bigint,NULL::bigint,to_jsonb(c)
+      UNION ALL SELECT 7::smallint,concat(c.cue_class,':',c.symbol_id),NULL::bigint,NULL::bigint,to_jsonb(c)
         FROM execution.semantic_pnf_hot_cue_symbol c
-      UNION ALL SELECT 8,s.sentence_id::text,s.sentence_id,NULL::bigint,to_jsonb(s)
+      UNION ALL SELECT 8::smallint,s.sentence_id::text,s.sentence_id,NULL::bigint,to_jsonb(s)
         FROM pg_temp.slr_identity_sentence s
     ) support ORDER BY lane,key LIMIT 100001",&[])?;
     if rows.len()>100000{return Err(NativeNumericAuditError::AdmissionProbeInvariant);}
@@ -5412,7 +5412,7 @@ fn produce_lean_typed_evidence(
         }).collect::<Result<Vec<_>,NativeNumericAuditError>>()?;
         Ok(format!("[{}]",items.join(", ")))
     };
-    let expected_proof=format!("import RequestProject.Slr.NumericPnfRustPortContract\nopen Wikidata.Slr.NumericPnfRustPortContract\ntheorem slrTypedProjectionCertificate : liveTypedKeys {} {} = {} := by decide\n#print axioms slrTypedProjectionCertificate\n",
+    let expected_proof=format!("import RequestProject.Slr.NumericPnfRustPortContract\nopen Wikidata.Slr.NumericPnfRustPortContract\nset_option maxRecDepth 1000000 in\ntheorem slrTypedProjectionCertificate : liveTypedKeys {} {} = {} := by decide\n#print axioms slrTypedProjectionCertificate\n",
         key_list(&actual["represented"])?,
         key_list(&actual["refuted"])?,
         key_list(&actual["live"])?);
