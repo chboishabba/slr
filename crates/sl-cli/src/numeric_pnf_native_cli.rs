@@ -233,9 +233,17 @@ pub fn run(args:&[String])->Result<(),String>{
             let cross_owner=last.native_binding_bridge.indexed_entity_spans_missing_from_projected.is_empty()
                 &&last.native_binding_bridge.projected_entity_spans_missing_from_index.is_empty();
             let entity_sets=readback.original_binding_sets.iter().filter(|s|s.same_manifestation
-                &&s.referential_type_ref=="entity_reference"&&s.reference_factor_revision_ref.starts_with("factor-revision:native-binding-v2:"))
+                &&s.referential_type_ref=="entity_reference"&&s.reference_factor_revision_ref.starts_with("factor-revision:native-binding-v2:")
+                &&last.native_binding_bridge.candidate_sets.iter().any(|m|m.candidate_set_ref==s.candidate_set_ref
+                    &&m.referential_type==s.referential_type_ref))
                 .collect::<Vec<_>>();
-            let inverse=!entity_sets.is_empty()&&entity_sets.iter().all(|s|s.exact_entity_inverse_complete
+            let expected_entity_sets=last.native_binding_bridge.candidate_sets.iter()
+                .filter(|s|s.referential_type=="entity_reference").map(|s|s.candidate_set_ref.as_str())
+                .collect::<std::collections::BTreeSet<_>>();
+            let actual_entity_sets=entity_sets.iter().map(|s|s.candidate_set_ref.as_str())
+                .collect::<std::collections::BTreeSet<_>>();
+            let inverse=!entity_sets.is_empty()&&actual_entity_sets==expected_entity_sets
+                &&entity_sets.iter().all(|s|s.exact_entity_inverse_complete
                 &&s.native_projection_verified&&s.original_index_matches_persisted_members
                 &&s.original_index_prefix_matches_full_query);
             let projected=last.governed_identity_rollback_probe.as_ref().map(|p|&p.candidate_class_projection);
@@ -515,6 +523,8 @@ mod tests {
     #[test]
     fn incomplete_or_wrong_commit_command_never_runs() {
         assert!(run(&["compile".into()]).is_err());
+        assert!(run(&["relation-reopen".into(),"run".into(),"doc".into()]).is_err());
+        assert!(run(&["relation-compare".into(),"packet".into()]).is_err());
         assert!(run(&["direct-stage".into(),"source".into(),"run".into(),"0".into(),"1".into()]).is_err());
         assert!(run(&["direct-stage".into(),"source".into(),"run".into(),"0".into(),"65".into(),"--commit".into()]).is_err());
         assert!(run(&["direct-inspect".into(),"source".into(),"run".into(),"0".into(),"0".into()]).is_err());
