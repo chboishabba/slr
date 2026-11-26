@@ -107,7 +107,7 @@ fn canonicalize_string_set(values: &mut Vec<String>) {
     values.dedup();
 }
 
-fn canonical_review_item_for_persistence(mut item: ReviewItem) -> ReviewItem {
+pub(crate) fn canonical_review_item_for_persistence(mut item: ReviewItem) -> ReviewItem {
     canonicalize_string_set(&mut item.provenance_refs);
     canonicalize_string_set(&mut item.source_refs);
     canonicalize_string_set(&mut item.affected_consumer_refs);
@@ -212,7 +212,7 @@ pub(crate) fn install_review_workstation_on_client(
     Ok(())
 }
 
-fn same_review_projection_shape(expected: &ReviewItem, loaded: &ReviewItem) -> bool {
+pub(crate) fn same_review_projection_shape(expected: &ReviewItem, loaded: &ReviewItem) -> bool {
     expected.review_item_ref == loaded.review_item_ref
         && expected.semantic_ref == loaded.semantic_ref
         && expected.item_kind == loaded.item_kind

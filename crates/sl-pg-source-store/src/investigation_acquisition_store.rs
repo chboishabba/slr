@@ -411,7 +411,7 @@ pub fn persist_acquisition_update(
     Ok(Some(reopening))
 }
 
-fn load_acquisition_queue_rows(
+pub(crate) fn load_acquisition_queue_rows(
     client:&mut impl GenericClient,obligation_ref:&str,
 )->Result<Option<DurableAcquisitionQueue>,InvestigationStoreError>{
     let Some(obligation_row)=client.query_opt(

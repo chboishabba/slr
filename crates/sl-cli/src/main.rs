@@ -27,6 +27,11 @@ USAGE:
   sensiblaw pnf-candidate TSV_PATH SPAN_REF START_CHAR END_CHAR
   sensiblaw pnf-db-checked PARSER_RUN STATEMENT_REF DOCUMENT_REF SOURCE_REV REGION_REF START_CHAR END_CHAR LITERAL_FILE
   sensiblaw relational-family CONSUMER_REF ACCESS_CONSTRAINT_REF SELECTOR_REF SELECTOR_REF [SELECTOR_REF ...]
+  sensiblaw relational-family inspect FAMILY_REF
+  sensiblaw relational-family prepare-revision FAMILY_REF OLD_SELECTOR NEW_SELECTOR
+  sensiblaw relational-family inspect-revision TRANSITION_REF
+  sensiblaw relational-family review-revision TRANSITION_REF COMMAND_REF REVIEWER_REF accept|reject|abstain
+  sensiblaw relational-family publish-revision TRANSITION_REF
   sensiblaw native-antecedent-review prepare ORIGINAL_C410_RECEIPT.json
   sensiblaw native-antecedent-review inspect REVIEW_ITEM_REF
   sensiblaw native-antecedent-review runs REVIEW_ITEM_REF

@@ -4,14 +4,14 @@
 use std::collections::{BTreeMap,BTreeSet};
 use serde::{Serialize,Deserialize};
 use sensiblaw_core::review_workstation::{ReviewItemKind,ReviewItem,ReviewStatus,ReviewAction};
-use crate::review_workstation_store::{install_review_workstation_on_client,persist_review_projection_on_tx,ReviewWorkstationStoreError};
+use crate::review_workstation_store::{install_review_workstation_on_client,persist_review_projection_on_tx,load_review_item_with_client,canonical_review_item_for_persistence,same_review_projection_shape,ReviewWorkstationStoreError};
 use sha2::{Digest,Sha256};
 use thiserror::Error;
 use postgres::{Client,GenericClient,NoTls};
 use crate::workbench_projection::acceptance_control_store::load_relational_selection_on_client;
 use crate::workbench_projection::persisted_relational_observation::{relational_observations_from_checked_batch_on_client,relational_observation_from_persisted_wikidata_on_client};
-use crate::relational_interlingua_store::{RelationalSourceDigests,persist_relational_comparison_on_client};
-use crate::investigation_acquisition_store::{ensure_acquisition_obligation_on_client,load_acquisition_lifecycle_on_client,AcquisitionLifecycle};
+use crate::relational_interlingua_store::{RelationalSourceDigests,persist_relational_comparison_on_client,load_relational_comparison_on_client};
+use crate::investigation_acquisition_store::{ensure_acquisition_obligation_on_client,load_acquisition_lifecycle_on_client,load_acquisition_queue_rows,AcquisitionLifecycle};
 use crate::{
     AcceptanceObservationKind, AcceptanceObservationSelector, DatabaseConfig,
     RelationalObservation, RelationalConsumer, Polarity, ComparisonResidual,
@@ -43,6 +43,13 @@ pub enum RelationalFamilyError {
     #[error(transparent)] InvestigationStore(#[from] InvestigationStoreError),
     #[error(transparent)] Pg(#[from] postgres::Error),
     #[error(transparent)] Review(#[from] ReviewWorkstationStoreError),
+    #[error(transparent)] Encoding(#[from] serde_json::Error),
+    #[error("family or revision transition not found")]
+    MissingFamily,
+    #[error("revision transition requires the current exact S29 candidate review to be accepted")]
+    ReviewRequired,
+    #[error("family already superseded or replacement does not preserve all unaffected selections")]
+    InvalidTransition,
 }
 
 /// Classify the ordered SOURCE polarity pair, not truth or a reviewed ternary
@@ -128,6 +135,8 @@ pub struct RelationalFamilyProjection {
 }
 #[derive(Debug,Clone,PartialEq,Eq,Serialize)]
 pub struct PersistedRelationalFamily {
+    pub family_ref:String,
+    pub superseded_by:Option<String>,
     pub projection:RelationalFamilyProjection,
     pub durable_comparisons:Vec<DurableRelationalComparison>,
     pub durable_acquisition_queues:Vec<DurableAcquisitionQueue>,
@@ -371,40 +380,151 @@ pub fn project_relational_family(
     })
 }
 
-/// Actual PG-backed path. The old pair store owns persistence and replay,
-/// and the existing INV queue owns route/priority state. The operation is
-/// atomic across the newly selected comparison family and acquisition queues.
-pub fn run_persisted_relational_family(
-    config:&DatabaseConfig,consumer_ref:&str,access_constraint_ref:&str,selector_refs:&[String],
-)->Result<PersistedRelationalFamily,RelationalFamilyError>{
+// These are lineage/index sidecars, not a second observation or proof store.
+// Every source, comparison, obligation and review is read from its existing
+// owner. A family replacement retires that family selection only; L1,
+// unrelated pair rows and numeric governed L3 are never mutated here.
+const FAMILY_LINEAGE_SQL:&str=r#"
+CREATE TABLE IF NOT EXISTS semantic.itir_relational_family (
+  family_ref TEXT PRIMARY KEY,
+  packet_sha256 TEXT NOT NULL,
+  packet_json TEXT NOT NULL,
+  candidate_only BOOLEAN NOT NULL CHECK(candidate_only),
+  creates_semantic_authority BOOLEAN NOT NULL CHECK(NOT creates_semantic_authority)
+);
+CREATE TABLE IF NOT EXISTS semantic.itir_relational_family_revision (
+  transition_ref TEXT PRIMARY KEY,
+  old_family_ref TEXT NOT NULL REFERENCES semantic.itir_relational_family(family_ref),
+  new_family_ref TEXT NOT NULL REFERENCES semantic.itir_relational_family(family_ref),
+  review_item_ref TEXT NOT NULL REFERENCES semantic.review_item(review_item_ref),
+  packet_sha256 TEXT NOT NULL,
+  packet_json TEXT NOT NULL,
+  CHECK(old_family_ref<>new_family_ref)
+);
+CREATE TABLE IF NOT EXISTS semantic.itir_relational_family_successor (
+  old_family_ref TEXT PRIMARY KEY REFERENCES semantic.itir_relational_family(family_ref),
+  transition_ref TEXT NOT NULL UNIQUE REFERENCES semantic.itir_relational_family_revision(transition_ref),
+  new_family_ref TEXT NOT NULL REFERENCES semantic.itir_relational_family(family_ref),
+  CHECK(old_family_ref<>new_family_ref)
+);
+"#;
+
+#[derive(Debug,Clone,PartialEq,Eq,Serialize,Deserialize)]
+struct FamilyMember{
+    selector_ref:String,observation_ref:String,source_revision_ref:String,
+}
+#[derive(Debug,Clone,PartialEq,Eq,Serialize,Deserialize)]
+struct FamilyManifest{
+    schema:String,family_ref:String,consumer_ref:String,access_constraint_ref:String,
+    members:Vec<FamilyMember>,comparison_refs:Vec<String>,
+}
+fn digest_bytes(bytes:&[u8])->String{format!("sha256:{:x}",Sha256::digest(bytes))}
+fn family_manifest(projection:&RelationalFamilyProjection,access:&str)
+    ->Result<FamilyManifest,RelationalFamilyError>{
+    let mut members=projection.sources.iter().map(|s|FamilyMember{
+        selector_ref:s.selector_ref.clone(),observation_ref:s.observation.observation_ref.clone(),
+        source_revision_ref:s.observation.source_revision_ref.clone(),
+    }).collect::<Vec<_>>();
+    members.sort_by(|a,b|a.selector_ref.cmp(&b.selector_ref));
+    let mut comparison_refs=projection.directed_comparisons.iter()
+        .map(|p|p.comparison.comparison_ref.clone()).collect::<Vec<_>>();
+    comparison_refs.sort();
+    let mut m=FamilyManifest{
+        schema:"itir.relational-family-manifest.v1".into(),family_ref:String::new(),
+        consumer_ref:projection.consumer_ref.clone(),access_constraint_ref:access.into(),
+        members,comparison_refs,
+    };
+    m.family_ref=format!("relational-family:{}",digest_bytes(&serde_json::to_vec(&m)?));
+    Ok(m)
+}
+fn read_manifest(client:&mut impl GenericClient,family_ref:&str)
+    ->Result<FamilyManifest,RelationalFamilyError>{
+    let row=client.query_opt(
+        "SELECT packet_sha256,packet_json,candidate_only,creates_semantic_authority
+         FROM semantic.itir_relational_family WHERE family_ref=$1",&[&family_ref])?
+        .ok_or(RelationalFamilyError::MissingFamily)?;
+    let body:String=row.get(1);
+    let m:FamilyManifest=serde_json::from_str(&body)?;
+    let mut blank=m.clone();blank.family_ref.clear();
+    if !row.get::<_,bool>(2)||row.get::<_,bool>(3)
+        ||row.get::<_,String>(0)!=digest_bytes(body.as_bytes())
+        ||m.family_ref!=family_ref
+        ||m.family_ref!=format!("relational-family:{}",digest_bytes(&serde_json::to_vec(&blank)?)){
+        return Err(RelationalFamilyError::ChangedReplay);
+    }
+    Ok(m)
+}
+fn successor(client:&mut impl GenericClient,family_ref:&str)
+    ->Result<Option<String>,RelationalFamilyError>{
+    let row=client.query_opt(
+        "SELECT s.new_family_ref,r.old_family_ref,r.new_family_ref
+         FROM semantic.itir_relational_family_successor s
+         JOIN semantic.itir_relational_family_revision r ON r.transition_ref=s.transition_ref
+         WHERE s.old_family_ref=$1",&[&family_ref])?;
+    if let Some(row)=row{
+        let new:String=row.get(0);
+        if row.get::<_,String>(1)!=family_ref||row.get::<_,String>(2)!=new{
+            return Err(RelationalFamilyError::ChangedReplay);
+        }
+        Ok(Some(new))
+    }else{Ok(None)}
+}
+fn ensure_family_schema(client:&mut impl GenericClient)->Result<(),RelationalFamilyError>{
+    client.batch_execute(RELATIONAL_COMPARISON_SQL)?;
+    client.batch_execute(INVESTIGATION_ACQUISITION_SQL)?;
+    install_review_workstation_on_client(client)?;
+    client.batch_execute(FAMILY_LINEAGE_SQL)?;
+    Ok(())
+}
+fn current_projection(client:&mut impl GenericClient,consumer_ref:&str,
+    access:&str,selector_refs:&[String])
+    ->Result<(RelationalConsumer,RelationalFamilyProjection),RelationalFamilyError>{
     if !(2..=10).contains(&selector_refs.len())
-        ||selector_refs.iter().collect::<BTreeSet<_>>().len()!=selector_refs.len()
-    {return Err(RelationalFamilyError::InvalidFamily);}
-    if access_constraint_ref.trim().is_empty(){return Err(RelationalFamilyError::MissingAccessConstraint);}
-    let mut client=Client::connect(config.database_url(),NoTls)?;
-    let mut tx=client.transaction()?;
-    tx.batch_execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ; SET LOCAL statement_timeout='90000ms'; SET LOCAL lock_timeout='5000ms'")?;
-    let (consumer,selectors)=load_relational_selection_on_client(&mut tx,consumer_ref,selector_refs)?;
+        ||selector_refs.iter().collect::<BTreeSet<_>>().len()!=selector_refs.len(){
+        return Err(RelationalFamilyError::InvalidFamily);
+    }
+    if access.trim().is_empty(){return Err(RelationalFamilyError::MissingAccessConstraint);}
+    let mut ordered=selector_refs.to_vec();ordered.sort();
+    let (consumer,selectors)=load_relational_selection_on_client(client,consumer_ref,&ordered)?;
     let sources=selectors.iter().map(|s|Ok(SelectedRelationalSource{
-        selector_ref:s.selector_ref.clone(),observation:checked_observation(&mut tx,s)?,
+        selector_ref:s.selector_ref.clone(),observation:checked_observation(client,s)?,
     })).collect::<Result<Vec<_>,RelationalFamilyError>>()?;
-    let projection=project_relational_family(&sources,&consumer,access_constraint_ref)?;
-    let by_selector=sources.iter().map(|s|(s.selector_ref.as_str(),&s.observation))
+    let projection=project_relational_family(&sources,&consumer,access)?;
+    Ok((consumer,projection))
+}
+
+fn inspect_review(client:&mut impl GenericClient,item:&ReviewItem)
+    ->Result<ReviewItem,RelationalFamilyError>{
+    let expected=canonical_review_item_for_persistence(item.clone());
+    let actual=load_review_item_with_client(client,&expected.review_item_ref)?
+        .ok_or(RelationalFamilyError::ChangedReplay)?;
+    if !same_review_projection_shape(&expected,&actual){return Err(RelationalFamilyError::ChangedReplay);}
+    Ok(actual)
+}
+
+fn materialize_family(client:&mut impl GenericClient,consumer:&RelationalConsumer,
+    projection:RelationalFamilyProjection,access:&str,publish:bool)
+    ->Result<PersistedRelationalFamily,RelationalFamilyError>{
+    let manifest=family_manifest(&projection,access)?;
+    let by_selector=projection.sources.iter().map(|s|(s.selector_ref.as_str(),&s.observation))
         .collect::<BTreeMap<_,_>>();
-    // Selection, parser inverse, Wikidata diagnostic, comparison and queues
-    // use this same snapshot. A failed replay rolls back the family.
-    tx.batch_execute(RELATIONAL_COMPARISON_SQL)?;
-    tx.batch_execute(INVESTIGATION_ACQUISITION_SQL)?;
-    install_review_workstation_on_client(&mut tx)?;
-    let mut digests=RelationalSourceDigests::new(&mut tx)?;
+    let mut digests=RelationalSourceDigests::new(client)?;
     let mut durable_comparisons=Vec::with_capacity(projection.directed_comparisons.len());
     let mut ordered_pairs=projection.directed_comparisons.iter().collect::<Vec<_>>();
     ordered_pairs.sort_by(|a,b|a.comparison.comparison_ref.cmp(&b.comparison.comparison_ref));
     for pair in ordered_pairs{
-        let row=persist_relational_comparison_on_client(&mut tx,&mut digests,
-            by_selector[pair.left_selector_ref.as_str()],
-            by_selector[pair.right_selector_ref.as_str()],&consumer,STRICT_RELATIONAL_INTERLINGUA_SCHEMA)?;
-        if row.comparison!=pair.comparison{return Err(RelationalFamilyError::ChangedReplay);}
+        let left=by_selector[pair.left_selector_ref.as_str()];
+        let right=by_selector[pair.right_selector_ref.as_str()];
+        let row=if publish{
+            persist_relational_comparison_on_client(client,&mut digests,left,right,consumer,
+                STRICT_RELATIONAL_INTERLINGUA_SCHEMA)?
+        }else{
+            load_relational_comparison_on_client(client,&mut digests,&pair.comparison.comparison_ref)?
+                .ok_or(RelationalFamilyError::ChangedReplay)?
+        };
+        if row.comparison!=pair.comparison||row.left!=*left||row.right!=*right||row.consumer!=*consumer{
+            return Err(RelationalFamilyError::ChangedReplay);
+        }
         durable_comparisons.push(row);
     }
     let parents=durable_comparisons.iter().map(|p|(p.comparison.comparison_ref.as_str(),p))
@@ -412,30 +532,253 @@ pub fn run_persisted_relational_family(
     let mut durable_acquisition_queues=Vec::new();
     let mut residual_review_items=Vec::new();
     let mut acquisition_lifecycles=Vec::new();
-    // Stable lock order avoids family-dependent queue locking order.
     let mut demands=projection.acquisition_demands.iter().collect::<Vec<_>>();
     demands.sort_by(|a,b|a.obligation.obligation_ref.cmp(&b.obligation.obligation_ref));
     for demand in demands{
         let parent=parents.get(demand.obligation.comparison_ref.as_str())
             .ok_or(RelationalFamilyError::ChangedReplay)?;
-        let queue=ensure_acquisition_obligation_on_client(&mut tx,&demand.obligation,parent)?;
-        acquisition_lifecycles.push(load_acquisition_lifecycle_on_client(&mut tx,&queue)?);
+        let queue=if publish{
+            ensure_acquisition_obligation_on_client(client,&demand.obligation,parent)?
+        }else{
+            load_acquisition_queue_rows(client,&demand.obligation.obligation_ref)?
+                .ok_or(RelationalFamilyError::ChangedReplay)?
+        };
+        if queue.obligation!=demand.obligation{return Err(RelationalFamilyError::ChangedReplay);}
+        acquisition_lifecycles.push(load_acquisition_lifecycle_on_client(client,&queue)?);
         durable_acquisition_queues.push(queue);
-        let item=persist_review_projection_on_tx(&mut tx,&residual_review_item(demand,consumer_ref))?;
+        let expected=residual_review_item(demand,&consumer.consumer_ref);
+        let item=if publish{persist_review_projection_on_tx(client,&expected)?}
+            else{inspect_review(client,&expected)?};
         residual_review_items.push(FamilyReviewProjection{
             review_item_ref:item.review_item_ref,obligation_ref:demand.obligation.obligation_ref.clone(),
             comparison_ref:demand.obligation.comparison_ref.clone(),
             current_status:review_status_tag(item.current_status).into(),
             exact_residuals:demand.exact_residuals.clone(),
             source_revision_refs:demand.obligation.source_revision_refs.clone(),
-            consumer_ref:consumer_ref.into(),candidate_only:true,
+            consumer_ref:consumer.consumer_ref.clone(),candidate_only:true,
         });
     }
-    tx.commit()?;
+    if publish{
+        let body=serde_json::to_string(&manifest)?;
+        client.execute(
+            "INSERT INTO semantic.itir_relational_family(family_ref,packet_sha256,packet_json,
+             candidate_only,creates_semantic_authority) VALUES($1,$2,$3,TRUE,FALSE)
+             ON CONFLICT(family_ref) DO NOTHING",
+            &[&manifest.family_ref,&digest_bytes(body.as_bytes()),&body])?;
+    }
+    if read_manifest(client,&manifest.family_ref)?!=manifest{
+        return Err(RelationalFamilyError::ChangedReplay);
+    }
+    let superseded_by=successor(client,&manifest.family_ref)?;
     Ok(PersistedRelationalFamily{
-        projection,durable_comparisons,durable_acquisition_queues,residual_review_items,acquisition_lifecycles,
+        family_ref:manifest.family_ref,superseded_by,projection,durable_comparisons,
+        durable_acquisition_queues,residual_review_items,acquisition_lifecycles,
         creates_access_authority:false,applies_external_edit:false,
     })
+}
+
+pub fn run_persisted_relational_family(
+    config:&DatabaseConfig,consumer_ref:&str,access_constraint_ref:&str,selector_refs:&[String],
+)->Result<PersistedRelationalFamily,RelationalFamilyError>{
+    let mut connection=Client::connect(config.database_url(),NoTls)?;
+    let mut tx=connection.transaction()?;
+    tx.batch_execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ; SET LOCAL statement_timeout='90000ms'; SET LOCAL lock_timeout='5000ms'")?;
+    ensure_family_schema(&mut tx)?;
+    let (consumer,projection)=current_projection(&mut tx,consumer_ref,access_constraint_ref,selector_refs)?;
+    let result=materialize_family(&mut tx,&consumer,projection,access_constraint_ref,true)?;
+    tx.commit()?;
+    Ok(result)
+}
+fn read_family_on_client(client:&mut impl GenericClient,m:&FamilyManifest)
+    ->Result<PersistedRelationalFamily,RelationalFamilyError>{
+    let refs=m.members.iter().map(|x|x.selector_ref.clone()).collect::<Vec<_>>();
+    let (consumer,projection)=current_projection(client,&m.consumer_ref,&m.access_constraint_ref,&refs)?;
+    if family_manifest(&projection,&m.access_constraint_ref)?!=*m{
+        return Err(RelationalFamilyError::ChangedReplay);
+    }
+    materialize_family(client,&consumer,projection,&m.access_constraint_ref,false)
+}
+/// Reopen exact native source selection, full consumer, comparison/INV and
+/// S29 rows in one read-only snapshot. Changed source/contract fails closed.
+pub fn inspect_persisted_relational_family(config:&DatabaseConfig,family_ref:&str)
+    ->Result<PersistedRelationalFamily,RelationalFamilyError>{
+    let mut connection=Client::connect(config.database_url(),NoTls)?;
+    let mut tx=connection.transaction()?;
+    tx.batch_execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY; SET LOCAL statement_timeout='90000ms'")?;
+    let m=read_manifest(&mut tx,family_ref)?;
+    let result=read_family_on_client(&mut tx,&m)?;
+    tx.commit()?;
+    Ok(result)
+}
+
+#[derive(Debug,Clone,PartialEq,Eq,Serialize,Deserialize)]
+pub struct FamilyRevisionTransition{
+    pub schema:String,
+    pub transition_ref:String,
+    pub old_family_ref:String,
+    pub new_family_ref:String,
+    pub old_selector_ref:String,
+    pub new_selector_ref:String,
+    pub old_source_revision_ref:String,
+    pub new_source_revision_ref:String,
+    pub retained_comparison_refs:Vec<String>,
+    pub retired_family_comparison_refs:Vec<String>,
+    pub new_comparison_refs:Vec<String>,
+    pub review_item_ref:String,
+    pub candidate_only:bool,
+    pub creates_semantic_authority:bool,
+}
+fn revision_transition(old:&FamilyManifest,new:&FamilyManifest,old_selector:&str,new_selector:&str)
+    ->Result<FamilyRevisionTransition,RelationalFamilyError>{
+    let a=old.members.iter().find(|s|s.selector_ref==old_selector)
+        .ok_or(RelationalFamilyError::InvalidTransition)?;
+    let b=new.members.iter().find(|s|s.selector_ref==new_selector)
+        .ok_or(RelationalFamilyError::InvalidTransition)?;
+    if old.family_ref==new.family_ref||old.consumer_ref!=new.consumer_ref
+        ||old.access_constraint_ref!=new.access_constraint_ref
+        ||a.source_revision_ref==b.source_revision_ref
+        ||old_selector==new_selector
+        ||old.members.iter().filter(|s|s.selector_ref!=old_selector).collect::<Vec<_>>()
+            !=new.members.iter().filter(|s|s.selector_ref!=new_selector).collect::<Vec<_>>(){
+        return Err(RelationalFamilyError::InvalidTransition);
+    }
+    let x=old.comparison_refs.iter().cloned().collect::<BTreeSet<_>>();
+    let y=new.comparison_refs.iter().cloned().collect::<BTreeSet<_>>();
+    let n=old.members.len();
+    let mut t=FamilyRevisionTransition{
+        schema:"itir.relational-family-revision.v1".into(),transition_ref:String::new(),
+        old_family_ref:old.family_ref.clone(),new_family_ref:new.family_ref.clone(),
+        old_selector_ref:old_selector.into(),new_selector_ref:new_selector.into(),
+        old_source_revision_ref:a.source_revision_ref.clone(),new_source_revision_ref:b.source_revision_ref.clone(),
+        retained_comparison_refs:x.intersection(&y).cloned().collect(),
+        retired_family_comparison_refs:x.difference(&y).cloned().collect(),
+        new_comparison_refs:y.difference(&x).cloned().collect(),
+        review_item_ref:String::new(),candidate_only:true,creates_semantic_authority:false,
+    };
+    if n<2||t.retained_comparison_refs.len()!=(n-1)*(n-2)
+        ||t.retired_family_comparison_refs.len()!=2*(n-1)||t.new_comparison_refs.len()!=2*(n-1){
+        return Err(RelationalFamilyError::InvalidTransition);
+    }
+    t.transition_ref=format!("relational-family-revision:{}",digest_bytes(&serde_json::to_vec(&t)?));
+    t.review_item_ref=format!("review-item:{}",t.transition_ref);
+    Ok(t)
+}
+fn transition_review(t:&FamilyRevisionTransition,consumer:&str)->ReviewItem{
+    ReviewItem{
+        review_item_ref:t.review_item_ref.clone(),semantic_ref:t.transition_ref.clone(),
+        item_kind:ReviewItemKind::SourceCorrespondence,
+        reason:"Review a replacement of one selected source revision; not a same-entity or truth assertion".into(),
+        provenance_refs:vec![t.old_family_ref.clone(),t.new_family_ref.clone()],
+        source_refs:vec![t.old_source_revision_ref.clone(),t.new_source_revision_ref.clone()],
+        current_status:ReviewStatus::Pending,
+        available_actions:vec![ReviewAction::Accept,ReviewAction::Reject,ReviewAction::Abstain,ReviewAction::OpenSource],
+        affected_consumer_refs:vec![consumer.into()],candidate_only:true,creates_semantic_authority:false,
+        applicability_promoted:false,claim_truth_promoted:false,
+    }
+}
+fn read_transition(client:&mut impl GenericClient,transition_ref:&str)
+    ->Result<FamilyRevisionTransition,RelationalFamilyError>{
+    let row=client.query_opt(
+        "SELECT old_family_ref,new_family_ref,review_item_ref,packet_sha256,packet_json
+         FROM semantic.itir_relational_family_revision WHERE transition_ref=$1",&[&transition_ref])?
+        .ok_or(RelationalFamilyError::MissingFamily)?;
+    let body:String=row.get(4);
+    let t:FamilyRevisionTransition=serde_json::from_str(&body)?;
+    if row.get::<_,String>(3)!=digest_bytes(body.as_bytes())||t.transition_ref!=transition_ref
+        ||t.old_family_ref!=row.get::<_,String>(0)||t.new_family_ref!=row.get::<_,String>(1)
+        ||t.review_item_ref!=row.get::<_,String>(2){
+        return Err(RelationalFamilyError::ChangedReplay);
+    }
+    let old=read_manifest(client,&t.old_family_ref)?;
+    let new=read_manifest(client,&t.new_family_ref)?;
+    if t!=revision_transition(&old,&new,&t.old_selector_ref,&t.new_selector_ref)?{
+        return Err(RelationalFamilyError::ChangedReplay);
+    }
+    Ok(t)
+}
+/// Prepare a candidate child from one changed selector. Exact unaffected
+/// pair refs survive; old family remains live until explicit S29 review.
+pub fn prepare_relational_family_revision(config:&DatabaseConfig,family_ref:&str,
+    old_selector:&str,new_selector:&str)->Result<FamilyRevisionTransition,RelationalFamilyError>{
+    let mut connection=Client::connect(config.database_url(),NoTls)?;
+    let mut tx=connection.transaction()?;
+    tx.batch_execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ; SET LOCAL statement_timeout='90000ms'; SET LOCAL lock_timeout='5000ms'")?;
+    let old=read_manifest(&mut tx,family_ref)?;
+    if successor(&mut tx,family_ref)?.is_some(){return Err(RelationalFamilyError::InvalidTransition);}
+    read_family_on_client(&mut tx,&old)?;
+    let mut selectors=old.members.iter().map(|s|s.selector_ref.clone()).collect::<Vec<_>>();
+    let slot=selectors.iter_mut().find(|s|s.as_str()==old_selector)
+        .ok_or(RelationalFamilyError::InvalidTransition)?;
+    *slot=new_selector.into();
+    let (consumer,projection)=current_projection(&mut tx,&old.consumer_ref,&old.access_constraint_ref,&selectors)?;
+    let new=family_manifest(&projection,&old.access_constraint_ref)?;
+    let t=revision_transition(&old,&new,old_selector,new_selector)?;
+    materialize_family(&mut tx,&consumer,projection,&old.access_constraint_ref,true)?;
+    if successor(&mut tx,&new.family_ref)?.is_some(){return Err(RelationalFamilyError::InvalidTransition);}
+    persist_review_projection_on_tx(&mut tx,&transition_review(&t,&old.consumer_ref))?;
+    let body=serde_json::to_string(&t)?;
+    tx.execute(
+        "INSERT INTO semantic.itir_relational_family_revision
+         (transition_ref,old_family_ref,new_family_ref,review_item_ref,packet_sha256,packet_json)
+         VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(transition_ref) DO NOTHING",
+        &[&t.transition_ref,&t.old_family_ref,&t.new_family_ref,&t.review_item_ref,&digest_bytes(body.as_bytes()),&body])?;
+    if read_transition(&mut tx,&t.transition_ref)?!=t{return Err(RelationalFamilyError::ChangedReplay);}
+    tx.commit()?;
+    Ok(t)
+}
+/// A local S29 candidate review can retire an old *family selection*,
+/// without deleting any source, pair, evidence, or governed L3 derivation.
+pub fn publish_relational_family_revision(config:&DatabaseConfig,transition_ref:&str)
+    ->Result<FamilyRevisionTransition,RelationalFamilyError>{
+    let mut connection=Client::connect(config.database_url(),NoTls)?;
+    let mut tx=connection.transaction()?;
+    tx.batch_execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE; SET LOCAL statement_timeout='90000ms'; SET LOCAL lock_timeout='5000ms'")?;
+    let t=read_transition(&mut tx,transition_ref)?;
+    // Stable row locks; both the parent and child must remain unsuperseded,
+    // except an exact replay of this same accepted transition.
+    let mut keys=vec![t.old_family_ref.clone(),t.new_family_ref.clone()];keys.sort();
+    for k in keys{tx.query_one("SELECT family_ref FROM semantic.itir_relational_family WHERE family_ref=$1 FOR UPDATE",&[&k])?;}
+    let old=read_manifest(&mut tx,&t.old_family_ref)?;
+    let new=read_manifest(&mut tx,&t.new_family_ref)?;
+    tx.query_one("SELECT review_item_ref FROM semantic.review_item WHERE review_item_ref=$1 FOR UPDATE",&[&t.review_item_ref])?;
+    let item=inspect_review(&mut tx,&transition_review(&t,&old.consumer_ref))?;
+    if item.current_status!=ReviewStatus::Accepted{return Err(RelationalFamilyError::ReviewRequired);}
+    // Accepted status must have an actual non-promoting S29 command receipt.
+    let accepted=tx.query_one(
+        "SELECT EXISTS(SELECT 1 FROM semantic.review_receipt WHERE review_item_ref=$1
+          AND semantic_ref=$2 AND action_ref='accept' AND effect_ref='status_changed'
+          AND effect_value_ref='accepted' AND candidate_only AND NOT creates_semantic_authority
+          AND NOT applicability_promoted AND NOT claim_truth_promoted)",&[&t.review_item_ref,&t.transition_ref])?
+        .get::<_,bool>(0);
+    if !accepted{return Err(RelationalFamilyError::ReviewRequired);}
+    read_family_on_client(&mut tx,&old)?;
+    read_family_on_client(&mut tx,&new)?;
+    if let Some(next)=successor(&mut tx,&t.old_family_ref)?{
+        if next!=t.new_family_ref{return Err(RelationalFamilyError::InvalidTransition);}
+        let prior:String=tx.query_one("SELECT transition_ref FROM semantic.itir_relational_family_successor WHERE old_family_ref=$1",&[&t.old_family_ref])?.get(0);
+        if prior!=t.transition_ref{return Err(RelationalFamilyError::InvalidTransition);}
+        tx.commit()?;return Ok(t);
+    }
+    if successor(&mut tx,&t.new_family_ref)?.is_some(){return Err(RelationalFamilyError::InvalidTransition);}
+    tx.execute("INSERT INTO semantic.itir_relational_family_successor
+      (old_family_ref,transition_ref,new_family_ref) VALUES($1,$2,$3)",
+        &[&t.old_family_ref,&t.transition_ref,&t.new_family_ref])?;
+    if successor(&mut tx,&t.old_family_ref)?.as_deref()!=Some(t.new_family_ref.as_str()){
+        return Err(RelationalFamilyError::ChangedReplay);
+    }
+    tx.commit()?;
+    Ok(t)
+}
+
+/// Load the exact prepared candidate review coordinate for existing S29 UI.
+pub fn inspect_relational_family_revision(config:&DatabaseConfig,transition_ref:&str)
+    ->Result<FamilyRevisionTransition,RelationalFamilyError>{
+    let mut connection=Client::connect(config.database_url(),NoTls)?;
+    let mut tx=connection.transaction()?;
+    tx.batch_execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY; SET LOCAL statement_timeout='90000ms'")?;
+    let t=read_transition(&mut tx,transition_ref)?;
+    tx.commit()?;
+    Ok(t)
 }
 
 #[cfg(test)]
@@ -457,6 +800,22 @@ mod tests{
             required_roles:vec![],required_role_types:vec![],compare_scope:false,compare_time:false,
             compare_modality:false,compare_quantifier:false,compare_attribution:false,compare_ontology:false,
             compare_language:false,predicate_alignments:vec![],role_alignments:vec![],filler_alignments:vec![],type_alignments:vec![]}
+    }
+    #[test]
+    fn one_revision_replacement_preserves_exact_unaffected_pairs(){
+        let a=source("a","p",Polarity::Supports);
+        let b=source("b","p",Polarity::Supports);
+        let c=source("c","p",Polarity::Counters);
+        let d=source("d","p",Polarity::Undetermined);
+        let q=consumer();
+        let old=family_manifest(&project_relational_family(&[a,b.clone(),c.clone()],&q,"review").unwrap(),"review").unwrap();
+        let new=family_manifest(&project_relational_family(&[b,c,d],&q,"review").unwrap(),"review").unwrap();
+        let t=revision_transition(&old,&new,"selector:a","selector:d").unwrap();
+        assert_eq!(t.retained_comparison_refs.len(),2);
+        assert_eq!(t.retired_family_comparison_refs.len(),4);
+        assert_eq!(t.new_comparison_refs.len(),4);
+        assert!(!t.creates_semantic_authority);
+        assert!(revision_transition(&old,&new,"selector:b","selector:d").is_err());
     }
     #[test]
     fn observed_meet_retains_all_incidence_and_never_forges_synthesis(){
