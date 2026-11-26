@@ -208,7 +208,7 @@ RETURNS TABLE (
 )
 LANGUAGE sql
 STABLE
-AS $
+AS $$
 WITH projected_edge AS MATERIALIZED (
     SELECT edge.factor_id,
            edge.slot_ordinal,
@@ -288,7 +288,7 @@ SELECT bridge.source_interface_id,
              LIMIT max_per_bridge
         ) AS limited
   ) AS pair;
-$;
+$$;
 
 CREATE OR REPLACE FUNCTION execution.refresh_numeric_pnf_factor_composition_candidates(
     selected_run_id BIGINT,
@@ -297,7 +297,7 @@ CREATE OR REPLACE FUNCTION execution.refresh_numeric_pnf_factor_composition_cand
 )
 RETURNS BIGINT
 LANGUAGE plpgsql
-AS $
+AS $$
 DECLARE
     local_inserted BIGINT := 0;
     identity_inserted BIGINT := 0;
@@ -453,7 +453,7 @@ BEGIN
 
     RETURN local_inserted + identity_inserted;
 END;
-$;
+$$;
 
 -- Only the two existing rebuildable L3 substitution owners are retired.
 -- No witness/admission revision, immutable premise, or unrelated rule

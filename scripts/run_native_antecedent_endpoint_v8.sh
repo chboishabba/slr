@@ -14,6 +14,12 @@ command -v jq >/dev/null
 command -v timeout >/dev/null
 root=$(git rev-parse --show-toplevel)
 cd "$root"
+# The native worker delegates only the bounded spaCy parser call to Python.
+# Prefer this checkout's project environment so the worker cannot silently
+# fall back to a system interpreter without spaCy/model support.
+if [[ -z "${PYTHON_BIN:-}" && -x "$root/.venv/bin/python" ]]; then
+  export PYTHON_BIN="$root/.venv/bin/python"
+fi
 head=$(git rev-parse HEAD)
 lean_head=$(git -C "$DASHI_LEAN_ROOT" rev-parse HEAD)
 checkpoint="${SLR_NATIVE_V8_CHECKPOINT:-.native-v8-endpoint-maxcut-checkpoint}"

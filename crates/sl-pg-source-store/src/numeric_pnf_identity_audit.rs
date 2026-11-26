@@ -37,6 +37,8 @@ impl From<postgres::Error> for NativeNumericAuditError {
             if let Some(detail) = db.detail() { parts.push(format!("detail={detail}")); }
             if let Some(hint) = db.hint() { parts.push(format!("hint={hint}")); }
             if let Some(constraint) = db.constraint() { parts.push(format!("constraint={constraint}")); }
+            if let Some(position) = db.position() { parts.push(format!("position={position:?}")); }
+            if let Some(where_) = db.where_() { parts.push(format!("where={where_}")); }
             parts.push(format!("code={}", db.code().code()));
             parts.join("; ")
         }).unwrap_or_else(|| format!("{error:?}"));
@@ -2762,8 +2764,10 @@ fn persist_relation_candidate(
     let literal=serde_json::to_string(payload).map_err(|_|NativeNumericAuditError::ForeignSource)?;
     tx.execute("INSERT INTO algebra.alternative(alternative_ref,type_ref,value_literal,authority_state_ref,alternative_sha256)
         VALUES($1,$2,$3,'candidate_only',$4) ON CONFLICT DO NOTHING",&[&alternative,&typ,&literal,&bytes])?;
-    tx.execute("INSERT INTO algebra.factor_alternative(factor_ref,alternative_ref,alternative_state_ref)
-        VALUES($1,$2,'alternative') ON CONFLICT DO NOTHING",&[&factor,&alternative])?;
+    // The installed algebra schema carries this relation at revision scope;
+    // older prototype deployments may have algebra.factor_alternative, but
+    // the native owner must not require that retired table. The next insert
+    // is the canonical persisted membership relation for this checkout.
     tx.execute("INSERT INTO algebra.factor_revision_alternative(factor_revision_ref,alternative_ref,alternative_state_ref)
         VALUES($1,$2,'alternative') ON CONFLICT DO NOTHING",&[&revision,&alternative])?;
     for provenance in [grammar,relation]{
