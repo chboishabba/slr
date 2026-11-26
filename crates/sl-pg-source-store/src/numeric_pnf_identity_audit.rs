@@ -6110,6 +6110,21 @@ mod tests{
     }
 
     #[test]
+    fn morphology_head_fibre_keeps_missing_and_disagreeing_heads_distinct(){
+        let reference=vec!["Gender=Masc".to_owned(),"Number=Sing".to_owned(),"Person=3".to_owned()];
+        let token=|id,morph|NativeMentionToken{id,region:1,sentence:1,start:id,end:id+1,
+            orth:"name".into(),pos:"PROPN".into(),lemma:1,head:Some(id),morph};
+        let a=observe_head_morphology(&reference,&token(1,vec!["Gender=Fem".into()]));
+        let b=observe_head_morphology(&reference,&token(2,vec![]));
+        let c=observe_head_morphology(&reference,&token(3,reference.clone()));
+        assert_eq!(a.mismatches,vec!["Gender"]);
+        assert!(b.mismatches.is_empty()&&b.shared_observed_features.is_empty());
+        assert_eq!(c.shared_observed_features.len(),3);
+        assert!(c.mismatches.is_empty());
+        assert_ne!(a.token_id,b.token_id);
+    }
+
+    #[test]
     fn original_binding_morphology_retains_missing_and_overlapping_features(){
         let f=vec!["Number=Sing".into(),"Gender=Masc".into(),"Person=3".into()];
         assert!(morphology_mismatches(&f,&[]).is_empty());

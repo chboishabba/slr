@@ -1,0 +1,130 @@
+{
+  "schema": "slr-v8-published-receipt-inspection-v1",
+  "receipt_commit": "0671a9cd7780ccc6f81d19a9467043750031a6e9",
+  "receipt_path": "native-numeric-binding-v8-endpoint.json",
+  "numeric_run_ref": "slr-native-numeric-run:sha256:b165d42870fc0afecdc101ea8919e5c3290b0b53b4556d51b42a9f85ae8e2737",
+  "demand_id": 22165,
+  "source_object_id": 72766,
+  "snapshot_ref": "slr-native-binding-index:v2:ade35c2f34e88f4ad805571dc259f66b186c82c700e6f477c863e172336eb1af",
+  "packet_sha256": "b48b875c72a98eeac24d5835c4baef28d6d7944deb0acf55cb076ec216df7828",
+  "source_revision_ref": "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+  "source_sha256": "7ff2ec8ffe6243871ad682e7d7060fe3b84025fb15dbe229154d7aa7f6a72b30",
+  "parser_run_ref": "parser-run:sha256:56ea4c0a05c3beb97f05dfe447570c7d753f15d8b8bf76cb86145ca41f8f2d63",
+  "exact_represented_object_partition": true,
+  "indexed_count": 378,
+  "outside_index_count": 124,
+  "intersection_count": 0,
+  "live_object_count": 502,
+  "refuted_count": 0,
+  "index_families": [
+    {
+      "referential_type": "entity_reference",
+      "count": 378,
+      "exact_inverse_count": 378,
+      "cap_deferred_count": 314,
+      "original_index_query_complete": true
+    },
+    {
+      "referential_type": "eventuality_reference",
+      "count": 36,
+      "exact_inverse_count": 36,
+      "cap_deferred_count": 0,
+      "original_index_query_complete": true
+    },
+    {
+      "referential_type": "proposition_reference",
+      "count": 4,
+      "exact_inverse_count": 4,
+      "cap_deferred_count": 0,
+      "original_index_query_complete": true
+    }
+  ],
+  "h3_phase_counts": {
+    "0": 466,
+    "-1": 36
+  },
+  "h9_phase_counts": {
+    "0": 466,
+    "-1": 36
+  },
+  "rollback_only_class_count": 18,
+  "rollback_only_class_member_count": 30,
+  "rollback_unresolved_keys": 472,
+  "rollback_conflicting_objects": [
+    79229,
+    79267,
+    79438
+  ],
+  "head_fibres": [
+    {
+      "source_span": [
+        916,
+        932
+      ],
+      "objects": [
+        79636
+      ],
+      "head_alternatives": [
+        619401,
+        619402
+      ]
+    },
+    {
+      "source_span": [
+        205,
+        215
+      ],
+      "objects": [
+        78639
+      ],
+      "head_alternatives": [
+        558452,
+        558453
+      ]
+    },
+    {
+      "source_span": [
+        110,
+        134
+      ],
+      "objects": [
+        78640
+      ],
+      "head_alternatives": [
+        558437,
+        558438,
+        558439
+      ]
+    }
+  ],
+  "original_tag_missing_count": 975,
+  "original_relation_packet": {
+    "atom_count": 402,
+    "complete_supplied_prefix_relation_parity": false,
+    "explicit_constraint_count": 1152,
+    "factor_count": 931,
+    "independent_reference_exact": false,
+    "independent_reference_supplied": false,
+    "missing_original_tags": 975,
+    "packet_sha256": "b48b875c72a98eeac24d5835c4baef28d6d7944deb0acf55cb076ec216df7828",
+    "prefix_end_char": 4693,
+    "prefix_uncovered_nonwhitespace": 0,
+    "relation_count": 297,
+    "scope": "supplied_parser_prefix",
+    "whole_document_parity_paid": false
+  },
+  "focus_factor_argument_count": 0,
+  "blockers": [
+    "original_typed_coverage_witness_unpaid",
+    "outside_model_possible",
+    "full_original_relation_parity_unpaid",
+    "scalar_morphology_head_residual",
+    "transported_objects_outside_typed_index_not_refuted"
+  ],
+  "typed_coverage_paid": false,
+  "governed_identity_paid": false,
+  "level_three_paid": false,
+  "external_qid_paid": false,
+  "offline_receipt_inspection_only": true,
+  "live_native_acceptance_executed": false
+}
