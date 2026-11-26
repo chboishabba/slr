@@ -20,6 +20,36 @@ fn role_name(role: CandidatePnfRole) -> &'static str {
     }
 }
 
+// Structural projection of the original checked M12 token graph.
+// Keep independent signs and original ordinals; no event/identity admission.
+fn reporting_rows(tokens: &[sensiblaw_pg_source_store::ParserTokenRecord]) -> Vec<serde_json::Value> {
+    let mut rows = Vec::new();
+    let neg = |head| tokens.iter().filter(|t| t.head_ordinal == Some(head) &&
+        t.dependency_ref == "neg").map(|t| t.token_ordinal).collect::<Vec<_>>();
+    for report in tokens.iter().filter(|t| t.pos == "VERB" &&
+        ["state", "claim", "say", "assert", "deny", "report"].contains(&t.lemma.as_str())) {
+        for complement in tokens.iter().filter(|t| t.pos == "VERB" &&
+            t.head_ordinal == Some(report.token_ordinal) && t.dependency_ref == "ccomp") {
+            let contents = std::iter::once((complement, "ccomp")).chain(
+                tokens.iter().filter(|t| t.pos == "VERB" &&
+                    t.head_ordinal == Some(complement.token_ordinal) &&
+                    t.dependency_ref == "conj").map(|t| (t, "ccomp/conj")));
+            for (content, attachment) in contents {
+                rows.push(serde_json::json!({
+                    "report_ordinal": report.token_ordinal,
+                    "complement_ordinal": complement.token_ordinal,
+                    "content_ordinal": content.token_ordinal,
+                    "attachment": attachment,
+                    "report_negation_ordinals": neg(report.token_ordinal),
+                    "complement_negation_ordinals": neg(complement.token_ordinal),
+                    "content_negation_ordinals": neg(content.token_ordinal)
+                }));
+            }
+        }
+    }
+    rows
+}
+
 pub fn run(args: &[String]) -> Result<(), String> {
     // A caller must name the ORIGINAL parser run and source coordinates.
     // There is deliberately no review or semantic-authority override.
@@ -108,13 +138,38 @@ pub fn run(args: &[String]) -> Result<(), String> {
         "candidate_only": true, "semantic_admission_paid": false,
         "world_event_occurrence_paid": false, "claim_truth_paid": false,
         "candidates": factors, "tokens": tokens, "entities": entities,
+        "reporting_clauses": reporting_rows(evidence.tokens()),
     }));
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
-    use super::run;
+    use super::{run, reporting_rows};
+    use sensiblaw_pg_source_store::ParserTokenRecord;
+
+    #[test]
+    fn reporting_projection_preserves_scope_and_coordination() {
+        let token = |id, head, lemma: &str, dep: &str, pos: &str| ParserTokenRecord {
+            token_ordinal: id, start_char: id, end_char: id + 1,
+            surface: lemma.into(), lemma: lemma.into(), pos: pos.into(),
+            morph_json: None, head_ordinal: Some(head), dependency_ref: dep.into(),
+        };
+        let rows = reporting_rows(&[
+            token(0, 0, "state", "ROOT", "VERB"),
+            token(1, 0, "not", "neg", "PART"),
+            token(2, 0, "stimulate", "ccomp", "VERB"),
+            token(3, 2, "create", "conj", "VERB"),
+            token(4, 3, "not", "neg", "PART"),
+            token(5, 5, "warn", "ROOT", "VERB"),
+            token(6, 5, "fall", "ccomp", "VERB"),
+        ]);
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0]["report_negation_ordinals"], serde_json::json!([1]));
+        assert_eq!(rows[0]["content_negation_ordinals"], serde_json::json!([]));
+        assert_eq!(rows[1]["content_ordinal"], serde_json::json!(3));
+        assert_eq!(rows[1]["content_negation_ordinals"], serde_json::json!([4]));
+    }
 
     #[test]
     fn checked_m12_requires_all_source_coordinates() {
