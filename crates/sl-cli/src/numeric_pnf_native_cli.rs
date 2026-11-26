@@ -237,6 +237,15 @@ pub fn run(args:&[String])->Result<(),String>{
                 }));
             }
             let last=passes.last().ok_or("no native binding pass")?;
+            // Same immutable packet and focus coordinates as the binding
+            // pass, read in the existing correspondence owner. No new parser.
+            let focus_start=i64::try_from(answer.original_focus_span[0]).map_err(|e|e.to_string())?;
+            let focus_end=i64::try_from(answer.original_focus_span[1]).map_err(|e|e.to_string())?;
+            let focus_readback=reopen_native_original_relation_packet_with_focus(
+                &url,&numeric_run,&answer.source_document_ref,&last.native_binding_bridge.snapshot_ref,
+                &last.native_binding_bridge.original_relation_packet.packet_sha256,Some((focus_start,focus_end)))
+                .map_err(|e|e.to_string())?;
+            let focus_correspondence=focus_readback["focus_correspondence"].clone();
             let prefix_complete=last.original_mention_binding_campaign.prefix_uncovered_nonwhitespace==0;
             let cross_owner=last.native_binding_bridge.indexed_entity_spans_missing_from_projected.is_empty()
                 &&last.native_binding_bridge.projected_entity_spans_missing_from_index.is_empty();
@@ -286,6 +295,7 @@ pub fn run(args:&[String])->Result<(),String>{
             let transported_not_indexed=last.original_document_identity_observations.iter()
                 .filter(|o|!typed_objects.contains(&o.object_id)).map(|o|o.object_id).collect::<Vec<_>>();
             let mut blockers=Vec::new();
+            if focus_correspondence["exact_persisted_correspondence"]!=true{blockers.push("original_focus_numeric_role_correspondence_unpaid");}
             if !prefix_complete{blockers.push("exact_numeric_prefix_token_coverage_unpaid");}
             if !cross_owner{blockers.push("original_projected_typed_membership_disagreement");}
             if !inverse{blockers.push("typed_entity_inverse_unpaid");}
@@ -337,7 +347,7 @@ pub fn run(args:&[String])->Result<(),String>{
                 "transported_objects_outside_index":transported_not_indexed,
                 "focus_reference_alternatives":last.native_binding_bridge.focus_reference_alternatives,
                 "prospective_identity_classes_not_admitted":projected,
-                "typed_observation_partition":typed_partition,
+                "typed_observation_partition":typed_partition,"focus_relation_correspondence":focus_correspondence,
                 "blockers":blockers,"automatic_semantic_refutation_from_index_absence":false
             });
             // The original read-only audit cannot pay governed identity
