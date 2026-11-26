@@ -4228,6 +4228,108 @@ pub fn query_native_original_relations(
         "governed_identity_paid":false,"level_three_paid":false,"world_truth_paid":false}))
 }
 
+/// Generic pre-admission demand witness input, using the existing numeric
+/// H3/H6/H9 state owners (not the GWB named-topic policy). Includes the
+/// entire represented universe, even deferred, neutral and refuted members.
+/// A current refutation's provenance is not itself a semantic proof.
+/// Read-only, one MVCC snapshot; no admission or frontier mutation.
+pub fn query_native_demand_fibre(url:&str,run:&str,doc:&str,source_sha:&str,demand_id:i64)
+    ->Result<serde_json::Value,NativeNumericAuditError>{
+    use serde_json::{Value,json};
+    if demand_id<=0||run.trim().is_empty()||doc.trim().is_empty()||source_sha.len()!=64{
+        return Err(NativeNumericAuditError::ForeignSource);
+    }
+    let mut db=Client::connect(url,NoTls)?;
+    let mut tx=db.transaction()?;
+    tx.batch_execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY; SET LOCAL statement_timeout='90000ms'")?;
+    let source=tx.query_one("SELECT locator,encode(content_sha256,'hex') FROM execution.semantic_parser_source WHERE run_ref=$1 AND document_ref=$2",&[&run,&doc])?;
+    let locator:String=source.get(0);let actual_sha:String=source.get(1);
+    let bytes=std::fs::read(&locator).map_err(|_|NativeNumericAuditError::ForeignSource)?;
+    if actual_sha!=source_sha||hex(&Sha256::digest(&bytes))!=source_sha{
+        return Err(NativeNumericAuditError::ForeignSource);
+    }
+    let row=tx.query_one("SELECT to_jsonb(d),to_jsonb(r) FROM execution.semantic_pnf_demand d
+        JOIN execution.semantic_pnf_region r ON r.region_id=d.source_region_id
+        WHERE d.demand_id=$1 AND r.run_ref=$2 AND r.document_ref=$3",&[&demand_id,&run,&doc])?;
+    let demand:Value=row.get(0);let region:Value=row.get(1);
+    // Table names below are fixed existing owner names, never input.
+    let read=|tx:&mut postgres::Transaction<'_>,sql:&str|->Result<Vec<Value>,NativeNumericAuditError>{
+        Ok(tx.query(sql,&[&demand_id])?.iter().map(|r|r.get::<_,Value>(0)).collect())
+    };
+    let universe=read(&mut tx,"SELECT to_jsonb(u) FROM execution.semantic_pnf_candidate_universe u WHERE demand_id=$1 ORDER BY target_kind,target_id")?;
+    let states=read(&mut tx,"SELECT to_jsonb(s) FROM execution.semantic_pnf_candidate_state_v1 s WHERE demand_id=$1 ORDER BY target_kind,target_id")?;
+    let key=|v:&Value|->Result<(i64,i64),NativeNumericAuditError>{
+        Ok((v["target_kind"].as_i64().ok_or(NativeNumericAuditError::ForeignSource)?,
+            v["target_id"].as_i64().ok_or(NativeNumericAuditError::ForeignSource)?))
+    };
+    let universe_keys=universe.iter().map(key).collect::<Result<BTreeSet<_>,_>>()?;
+    let state_keys=states.iter().map(key).collect::<Result<BTreeSet<_>,_>>()?;
+    if universe_keys!=state_keys||universe_keys.len()!=universe.len()||state_keys.len()!=states.len(){
+        return Err(NativeNumericAuditError::ForeignSource);
+    }
+    let constraints=read(&mut tx,"SELECT to_jsonb(c) FROM execution.semantic_pnf_demand_constraint c WHERE demand_id=$1 ORDER BY ordinal")?;
+    let evidence=read(&mut tx,"SELECT to_jsonb(e) FROM execution.semantic_pnf_candidate_evidence e WHERE demand_id=$1 ORDER BY evidence_id")?;
+    let current_installed:bool=tx.query_one("SELECT to_regclass('execution.slr_native_current_candidate_evidence_v1') IS NOT NULL AND to_regprocedure('execution.slr_native_current_authority_usable(bigint)') IS NOT NULL",&[])?.get(0);
+    let (current,authority_usable)=if current_installed{
+        (read(&mut tx,"SELECT to_jsonb(e) FROM execution.slr_native_current_candidate_evidence_v1 e WHERE demand_id=$1 ORDER BY evidence_id")?,
+         tx.query_one("SELECT execution.slr_native_current_authority_usable($1)",&[&demand_id])?.get::<_,bool>(0))
+    }else{(Vec::new(),false)};
+    let evidence_ids=current.iter().map(|e|{
+        Ok((e["evidence_id"].as_i64().ok_or(NativeNumericAuditError::ForeignSource)?,key(e)?))
+    }).collect::<Result<BTreeMap<_,_>,NativeNumericAuditError>>()?;
+    let mut candidates=Vec::new();
+    for s in &states{
+        let k=key(s)?;
+        let refuted=s["refuted"].as_bool().ok_or(NativeNumericAuditError::ForeignSource)?;
+        let same_current=s["admissibility_evidence_id"].as_i64().and_then(|id|evidence_ids.get(&id)).is_some_and(|e|*e==k);
+        candidates.push(json!({"target_kind":k.0,"target_id":k.1,"state":s,
+            "reported_refuted":refuted,"same_candidate_current_evidence":same_current,
+            "refutation_requires_semantic_validation":refuted,
+            "retained_in_conservative_envelope":true}));
+    }
+    let open=read(&mut tx,"SELECT to_jsonb(o) FROM execution.semantic_pnf_demand_open_world_state o WHERE demand_id=$1")?;
+    let frontier=read(&mut tx,"SELECT to_jsonb(f) FROM execution.semantic_pnf_frontier_resolution f WHERE demand_id=$1 ORDER BY interface_id")?;
+    let horizon=read(&mut tx,"SELECT to_jsonb(h) FROM execution.semantic_pnf_candidate_evidence_horizon_v1 h WHERE demand_id=$1 ORDER BY target_kind,target_id,horizon")?;
+    let work=read(&mut tx,"SELECT to_jsonb(w) FROM execution.semantic_pnf_consumer_horizon_work_queue w WHERE demand_id=$1 ORDER BY consumer_ref,query_ref,policy_ref,horizon")?;
+    let sufficiency=read(&mut tx,"SELECT to_jsonb(s) FROM execution.semantic_pnf_consumer_sufficiency_current_v1 s WHERE demand_id=$1 ORDER BY consumer_ref,query_ref,policy_ref,horizon")?;
+    let support=read(&mut tx,"WITH objects AS (
+        SELECT source_object_id AS object_id FROM execution.semantic_pnf_demand WHERE demand_id=$1 AND source_object_id IS NOT NULL
+        UNION SELECT target_id FROM execution.semantic_pnf_candidate_universe WHERE demand_id=$1 AND target_kind=1)
+        SELECT jsonb_build_object('object',to_jsonb(o),'region',to_jsonb(r),'token_support',
+          COALESCE((SELECT jsonb_agg(to_jsonb(s) ORDER BY s.token_id) FROM execution.semantic_pnf_object_token_support s WHERE s.object_id=o.object_id),'[]'::jsonb))
+        FROM objects k JOIN execution.semantic_pnf_object o ON o.object_id=k.object_id
+        JOIN execution.semantic_pnf_region r ON r.region_id=o.region_id ORDER BY o.object_id")?;
+    let expected_objects=universe_keys.iter().filter(|k|k.0==1).map(|k|k.1)
+        .chain(demand["source_object_id"].as_i64()).collect::<BTreeSet<_>>();
+    let actual_objects=support.iter().map(|o|o["object"]["object_id"].as_i64().ok_or(NativeNumericAuditError::ForeignSource))
+        .collect::<Result<BTreeSet<_>,_>>()?;
+    if actual_objects!=expected_objects{return Err(NativeNumericAuditError::ForeignSource);}
+    let overflow=read(&mut tx,"SELECT to_jsonb(o) FROM execution.semantic_pnf_proper_name_evidence_overflow o
+        JOIN execution.semantic_pnf_demand d ON d.source_object_id=o.source_object_id
+        JOIN execution.semantic_pnf_region r ON r.region_id=d.source_region_id AND r.run_id=o.run_id AND r.document_id=o.document_id
+        WHERE d.demand_id=$1 ORDER BY o.source_token_id,o.family_lemma_symbol_id")?;
+    // The original owner may use other overflow/debt channels. This field
+    // is specifically the proper-name carrier, never an exhaustive absence proof.
+    let mut packet=json!({"schema":"slr.native-demand-fibre.v1","numeric_run_ref":run,"document_ref":doc,
+        "source_sha256":source_sha,"demand_id":demand_id,"original_demand":demand,"original_region":region,
+        "represented_universe":universe,"candidates":candidates,"constraints":constraints,
+        "historical_evidence":evidence,"current_evidence":current,"current_authority_view_installed":current_installed,
+        "current_authority_guard_usable":authority_usable,"open_world_state":open,
+        "frontier_resolution":frontier,"signed_horizon_tallies":horizon,"consumer_work":work,
+        "consumer_sufficiency_records":sufficiency,"object_token_inverse":support,
+        "proper_name_overflow":overflow,"recorded_universe_exact":true,
+        "semantic_coverage_paid":false,"source_meaning_correspondence_paid":false,
+        "governed_identity_paid":false,"level_three_paid":false,"world_truth_paid":false,
+        "outside_model_discharge_paid":false});
+    // Database JSON may contain non-integer numerics/timestamps. Bind the
+    // exact serialized packet instead of pretending it uses the typed
+    // original-relation digest contract.
+    let digest=hex(&Sha256::digest(serde_json::to_vec(&packet).map_err(|_|NativeNumericAuditError::ForeignSource)?));
+    packet["packet_sha256"]=json!(digest);
+    tx.commit()?;
+    Ok(packet)
+}
+
 /// Exact projection of the *represented* candidate product. Structural
 /// edges are preserved as obligations, not interpreted as refutations.
 /// The full product is a conservative upper envelope of any later

@@ -13,7 +13,7 @@ use sensiblaw_pg_source_store::{
     inspect_native_antecedent_review, native_antecedent_frontier,
     compile_native_source_local_answer,
     audit_original_numeric_identity_for_source_answer, certify_original_focus_identity,
-    reuse_original_binding_and_identity_owners, reopen_native_original_relation_packet, reopen_native_original_relation_packet_with_focus, compare_native_original_relation_reference, query_native_original_relations, query_native_recorded_factor_consumer,
+    reuse_original_binding_and_identity_owners, reopen_native_original_relation_packet, reopen_native_original_relation_packet_with_focus, compare_native_original_relation_reference, query_native_original_relations, query_native_recorded_factor_consumer, query_native_demand_fibre,
     retract_original_numeric_identity_for_source_answer,
     transport_original_numeric_candidates_for_source_answer,
     prepare_native_prefix_recovery, publish_native_prefix_heading_repair, complete_parser_run,
@@ -83,6 +83,11 @@ fn print_json<T:Serialize>(value:&T)->Result<(),String>{
 }
 pub fn run(args:&[String])->Result<(),String>{
     match args {
+        [subcommand,run,doc,source_sha,demand] if subcommand=="demand-fibre"=>{
+            let url=env::var("SENSIBLAW_DATABASE_URL").map_err(|_|"numeric demand fibre requires SENSIBLAW_DATABASE_URL")?;
+            let id=demand.parse::<i64>().map_err(|_|"invalid demand id")?;
+            print_json(&query_native_demand_fibre(&url,run,doc,source_sha,id).map_err(|e|e.to_string())?)
+        }
         [subcommand,run,doc,snapshot,digest,axis] if subcommand=="factor-consumer"=>{
             let url=env::var("SENSIBLAW_DATABASE_URL").map_err(|_|"numeric factor query requires SENSIBLAW_DATABASE_URL")?;
             print_json(&query_native_recorded_factor_consumer(&url,run,doc,snapshot,digest,axis).map_err(|e|e.to_string())?)
