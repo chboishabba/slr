@@ -236,3 +236,5 @@ instructions to run them now.
   integrated #78, #76 and #72 with current-main roadmap retained; committed
   this controlling sprint plan. No implementation campaign run or proof
   promotion. D01 remaining reconciliation and D02–D07 actual welds next.
+
+- 2026-11-26 integration readback: [SLR #79](https://github.com/chboishabba/slr/pull/79) opened as draft against main. Integration merge commit `dc72973d347e7aa77a2ac54c3963a9e85d6a4fd7` is ahead of all four pinned parents, behind each by zero; compare against #78 shows exactly 13 changed paths. All ten non-shared #76/#72 donor paths were reopened at the integrated commit and their blob SHAs matched the corresponding donor heads (10/10). Shared lib exports and roadmap were reconciled rather than copied wholesale. No compilation, kernel acceptance or database execution claimed. GitHub initially reported mergeable=false on PR creation; ancestry was independently verified, review/merge readiness is not claimed. #59 remains a divergent donor, not merged; an attempted multi-path comparison returned 404, so exact file-level disposition remains open.
