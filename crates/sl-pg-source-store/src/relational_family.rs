@@ -137,6 +137,9 @@ pub struct RelationalFamilyProjection {
 pub struct PersistedRelationalFamily {
     pub family_ref:String,
     pub superseded_by:Option<String>,
+    /// A prepared child is not a published replacement.
+    pub prepared_revision_refs:Vec<String>,
+    pub published_parent_transition_refs:Vec<String>,
     pub projection:RelationalFamilyProjection,
     pub durable_comparisons:Vec<DurableRelationalComparison>,
     pub durable_acquisition_queues:Vec<DurableAcquisitionQueue>,
@@ -570,8 +573,10 @@ fn materialize_family(client:&mut impl GenericClient,consumer:&RelationalConsume
         return Err(RelationalFamilyError::ChangedReplay);
     }
     let superseded_by=successor(client,&manifest.family_ref)?;
+    let prepared_revision_refs=client.query("SELECT transition_ref FROM semantic.itir_relational_family_revision WHERE new_family_ref=$1 ORDER BY transition_ref", &[&manifest.family_ref])?.into_iter().map(|r|r.get::<_,String>(0)).collect();
+    let published_parent_transition_refs=client.query("SELECT transition_ref FROM semantic.itir_relational_family_successor WHERE new_family_ref=$1 ORDER BY transition_ref", &[&manifest.family_ref])?.into_iter().map(|r|r.get::<_,String>(0)).collect();
     Ok(PersistedRelationalFamily{
-        family_ref:manifest.family_ref,superseded_by,projection,durable_comparisons,
+        family_ref:manifest.family_ref,superseded_by,prepared_revision_refs,published_parent_transition_refs,projection,durable_comparisons,
         durable_acquisition_queues,residual_review_items,acquisition_lifecycles,
         creates_access_authority:false,applies_external_edit:false,
     })
