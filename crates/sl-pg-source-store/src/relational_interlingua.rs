@@ -332,7 +332,7 @@ fn valid_observation(o:&RelationalObservation)->Result<(),RelationalComparisonEr
     }
     Ok(())
 }
-fn alignment<'a>(left:&str,right:&str,c:&RelationalConsumer,
+pub(crate) fn alignment<'a>(left:&str,right:&str,c:&RelationalConsumer,
     list:&'a [LicensedAlignment])->Option<&'a LicensedAlignment> {
     list.iter().find(|a| {
         a.consumer_ref==c.consumer_ref && present(&a.witness_ref)

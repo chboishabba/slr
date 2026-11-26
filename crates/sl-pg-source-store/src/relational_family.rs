@@ -125,6 +125,7 @@ pub struct RelationalFamilyProjection {
     /// The common part of the exact OBSERVED coordinate inventory, not a
     /// cross-language or world-semantic equivalence certificate.
     pub observed_coordinate_meet:Vec<ObservedCoordinateFibre>,
+    pub declared_transport_meet:DeclaredTransportMeet,
     pub source_sign_ledger:Vec<SourceSignEntry>,
     pub synthesis_candidates:Vec<FamilySynthesisColumn>,
     pub candidate_only:bool,
@@ -207,6 +208,127 @@ pub fn observed_family_meet(sources:&[SelectedRelationalSource])->Vec<ObservedCo
         coordinate,present_in:owners.iter().cloned().collect(),
         not_recorded_in:universe.difference(&owners).cloned().collect(),
     }).collect()
+}
+
+/// Actual finite bidirectional coordinate transport under the existing
+/// consumer's explicitly declared alignments. No inferred transitive
+/// closure, source identity, lexical equivalence or semantic authority.
+/// Distinct source coordinates are retained even when transport matches.
+#[derive(Debug,Clone,PartialEq,Eq,Serialize)]
+pub struct TransportCoordinateMember{
+    pub selector_ref:String,
+    pub source_revision_ref:String,
+    pub coordinate:ObservedCoordinate,
+}
+#[derive(Debug,Clone,PartialEq,Eq,Serialize)]
+pub struct TransportCoordinateMatch{
+    pub from_selector_ref:String,
+    pub to_selector_ref:String,
+    pub from:ObservedCoordinate,
+    pub to:ObservedCoordinate,
+    pub witness_refs:Vec<String>,
+    pub licence_refs:Vec<String>,
+}
+#[derive(Debug,Clone,PartialEq,Eq,Serialize)]
+pub struct TransportCoordinateRow{
+    pub anchor_coordinate:ObservedCoordinate,
+    pub members:Vec<TransportCoordinateMember>,
+    pub matches:Vec<TransportCoordinateMatch>,
+    pub held_selector_refs:Vec<String>,
+    pub holds:Vec<String>,
+    pub complete_declared_coordinate_transport:bool,
+}
+#[derive(Debug,Clone,PartialEq,Eq,Serialize)]
+pub struct DeclaredTransportMeet{
+    pub anchor_selector_ref:String,
+    pub consumer_ref:String,
+    pub rows:Vec<TransportCoordinateRow>,
+    pub required_context_and_pair_debt_refs:Vec<String>,
+    pub candidate_only:bool,
+    pub formal_preservation_paid:bool,
+}
+fn coordinate_match(a:&ObservedCoordinate,b:&ObservedCoordinate,c:&RelationalConsumer)
+    ->Option<(Vec<String>,Vec<String>)>{
+    use crate::relational_interlingua::alignment;
+    if a.axis!=b.axis||a.occurrence!=b.occurrence{return None;}
+    let mut witnesses=BTreeSet::new();
+    let mut licences=BTreeSet::new();
+    let mut match_ref=|x:&str,y:&str,list:&[crate::LicensedAlignment]|{
+        if x==y{return true;}
+        let Some(forward)=alignment(x,y,c,list) else{return false};
+        let Some(reverse)=alignment(y,x,c,list) else{return false};
+        for w in [forward,reverse]{
+            witnesses.insert(w.witness_ref.clone());licences.insert(w.licence_ref.clone());
+        }
+        true
+    };
+    let matched=match a.axis.as_str(){
+        "predicate"=>a.slot==b.slot&&match_ref(&a.value_ref,&b.value_ref,&c.predicate_alignments),
+        "role"=>match_ref(&a.slot,&b.slot,&c.role_alignments)
+            &&match_ref(&a.value_ref,&b.value_ref,&c.filler_alignments),
+        "role_type"=>match_ref(&a.slot,&b.slot,&c.role_alignments)
+            &&match_ref(&a.value_ref,&b.value_ref,&c.type_alignments),
+        "candidate_type"=>a.slot==b.slot&&match_ref(&a.value_ref,&b.value_ref,&c.type_alignments),
+        "context"=>a==b,
+        _=>false,
+    };
+    matched.then(||(witnesses.into_iter().collect(),licences.into_iter().collect()))
+}
+/// The first selector in stable lexical order is a chart only, not a
+/// preferred source. For every anchor coordinate require one forward and
+/// inverse match in each source, then check every cross-source pair
+/// directly. Thus a path A↔B↔C cannot manufacture A↔C, and a many-to-one
+/// alias cannot silently erase a coordinate. Failed rows remain inspectable.
+fn declared_transport_meet(sources:&[SelectedRelationalSource],consumer:&RelationalConsumer,
+    comparisons:&[DirectionalRelationalComparison])->DeclaredTransportMeet{
+    let mut charts=sources.iter().map(|s|(s,observed_coordinates(&s.observation))).collect::<Vec<_>>();
+    charts.sort_by(|a,b|a.0.selector_ref.cmp(&b.0.selector_ref));
+    let (anchor,coordinates)=&charts[0];
+    let mut rows=Vec::new();
+    for coordinate in coordinates{
+        let mut members=Vec::new();
+        let mut held=BTreeSet::new();
+        let mut holds=BTreeSet::new();
+        for (source,source_coords) in &charts{
+            let matching=source_coords.iter().filter(|candidate|coordinate_match(coordinate,candidate,consumer).is_some())
+                .collect::<Vec<_>>();
+            let [candidate]=matching.as_slice() else{
+                held.insert(source.selector_ref.clone());
+                holds.insert(if matching.is_empty(){"missing_bidirectional_coordinate"}else{"ambiguous_bidirectional_coordinate"}.to_owned());
+                continue;
+            };
+            if coordinates.iter().filter(|a|coordinate_match(a,candidate,consumer).is_some()).count()!=1{
+                held.insert(source.selector_ref.clone());holds.insert("noninjective_inverse".into());continue;
+            }
+            members.push(TransportCoordinateMember{selector_ref:source.selector_ref.clone(),
+                source_revision_ref:source.observation.source_revision_ref.clone(),coordinate:(**candidate).clone()});
+        }
+        let mut matches=Vec::new();
+        for a in &members{
+            for b in &members{
+                if a.selector_ref==b.selector_ref{continue;}
+                if let Some((witness_refs,licence_refs))=coordinate_match(&a.coordinate,&b.coordinate,consumer){
+                    matches.push(TransportCoordinateMatch{from_selector_ref:a.selector_ref.clone(),
+                        to_selector_ref:b.selector_ref.clone(),from:a.coordinate.clone(),to:b.coordinate.clone(),
+                        witness_refs,licence_refs});
+                }else{
+                    held.insert(a.selector_ref.clone());held.insert(b.selector_ref.clone());
+                    holds.insert("missing_direct_cross_chart_transport".into());
+                }
+            }
+        }
+        let complete=held.is_empty()&&members.len()==sources.len()
+            &&matches.len()==sources.len()*(sources.len()-1);
+        rows.push(TransportCoordinateRow{anchor_coordinate:coordinate.clone(),members,matches,
+            held_selector_refs:held.into_iter().collect(),holds:holds.into_iter().collect(),
+            complete_declared_coordinate_transport:complete});
+    }
+    let required_context_and_pair_debt_refs=comparisons.iter()
+        .flat_map(|pair|pair.comparison.residuals.iter().map(move |r|
+            format!("{}:{}",pair.comparison.comparison_ref,r.obligation_ref)))
+        .collect::<BTreeSet<_>>().into_iter().collect();
+    DeclaredTransportMeet{anchor_selector_ref:anchor.selector_ref.clone(),consumer_ref:consumer.consumer_ref.clone(),
+        rows,required_context_and_pair_debt_refs,candidate_only:true,formal_preservation_paid:false}
 }
 
 #[derive(Debug,Clone,PartialEq,Eq,Serialize)]
@@ -364,6 +486,7 @@ pub fn project_relational_family(
             &source.observation.source_revision_ref,&graph_ref,&edges,&universe)?);
     }
     let observed_coordinate_meet=observed_family_meet(sources);
+    let declared_transport_meet=declared_transport_meet(sources,consumer,&directed_comparisons);
     let source_sign_ledger=sources.iter().map(|s|SourceSignEntry{
         selector_ref:s.selector_ref.clone(),observation_ref:s.observation.observation_ref.clone(),
         source_revision_ref:s.observation.source_revision_ref.clone(),polarity:s.observation.polarity,
@@ -377,7 +500,7 @@ pub fn project_relational_family(
     Ok(RelationalFamilyProjection{
         schema:"itir.relational-family.v2",consumer_ref:consumer.consumer_ref.clone(),
         sources:sources.to_vec(),directed_comparisons,acquisition_demands,
-        potential_reopening_by_source,observed_coordinate_meet,source_sign_ledger,synthesis_candidates,
+        potential_reopening_by_source,observed_coordinate_meet,declared_transport_meet,source_sign_ledger,synthesis_candidates,
         candidate_only:true,all_live_reading_coverage_paid:false,
         formal_consumer_equivalence_paid:false,source_independence_paid:false,creates_edit_authority:false,
     })
@@ -868,6 +991,29 @@ mod tests{
         let other=get("selector:b","selector:c").comparison.comparison_ref.clone();
         assert!(result.potential_reopening_by_source[0].unrelated_refs_not_reopened.contains(&other));
         assert!(!result.formal_consumer_equivalence_paid);
+    }
+    #[test]
+    fn declared_transport_requires_direct_bijective_cross_chart_evidence(){
+        let a=source("a","p",Polarity::Supports);
+        let b=source("b","q",Polarity::Counters);
+        let c=source("c","r",Polarity::Undetermined);
+        let mut q=consumer();
+        for (left,right) in [("p","q"),("p","r")]{
+            q.predicate_alignments.push(LicensedAlignment{left_ref:left.into(),right_ref:right.into(),
+                witness_ref:format!("w:{left}:{right}"),licence_ref:"declared".into(),
+                consumer_ref:q.consumer_ref.clone(),direction:AlignmentDirection::Symmetric});
+        }
+        let first=project_relational_family(&[a.clone(),b.clone(),c.clone()],&q,"review").unwrap();
+        let row=&first.declared_transport_meet.rows[0];
+        assert!(!row.complete_declared_coordinate_transport);
+        assert!(row.holds.contains(&"missing_direct_cross_chart_transport".into()));
+        q.predicate_alignments.push(LicensedAlignment{left_ref:"q".into(),right_ref:"r".into(),
+            witness_ref:"w:q:r".into(),licence_ref:"declared".into(),consumer_ref:q.consumer_ref.clone(),
+            direction:AlignmentDirection::Symmetric});
+        let next=project_relational_family(&[a,b,c],&q,"review").unwrap();
+        assert!(next.declared_transport_meet.rows[0].complete_declared_coordinate_transport);
+        assert_eq!(next.declared_transport_meet.rows[0].matches.len(),6);
+        assert!(!next.declared_transport_meet.formal_preservation_paid);
     }
     #[test]
     fn grouped_residuals_and_missing_context_survive(){

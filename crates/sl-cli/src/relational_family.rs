@@ -2,7 +2,7 @@
 use sensiblaw_pg_source_store::{
     load_database_config,run_persisted_relational_family,inspect_persisted_relational_family,
     prepare_relational_family_revision,publish_relational_family_revision,inspect_relational_family_revision,
-    apply_persisted_review_command,ReviewAction,ReviewCommand,
+    apply_persisted_review_command,ReviewAction,ReviewCommand,load_rel_acceptance_corpus,
 };
 fn print_json<T:serde::Serialize>(value:&T)->Result<(),String>{
     println!("{}",serde_json::to_string_pretty(value).map_err(|e|e.to_string())?);Ok(())
@@ -10,6 +10,32 @@ fn print_json<T:serde::Serialize>(value:&T)->Result<(),String>{
 pub fn run(args:&[String])->Result<(),String>{
     let config=load_database_config(None).map_err(|e|e.to_string())?;
     match args {
+        [mode,corpus,access] if mode=="acceptance-corpus"=>{
+            let suite=load_rel_acceptance_corpus(&config,corpus).map_err(|e|e.to_string())?;
+            let mut receipts=Vec::new();
+            for case in suite.cases{
+                let left=case.left.selector_ref;
+                let right=case.right.selector_ref;
+                let family=run_persisted_relational_family(&config,&case.consumer.consumer_ref,access,&[left.clone(),right.clone()])
+                    .map_err(|e|format!("{}: {e}",case.case_ref))?;
+                let reopened=inspect_persisted_relational_family(&config,&family.family_ref).map_err(|e|e.to_string())?;
+                if reopened!=family{return Err(format!("{}: exact family reopen mismatch",case.case_ref));}
+                let actual=family.projection.directed_comparisons.iter().find(|p|p.left_selector_ref==left&&p.right_selector_ref==right)
+                    .ok_or("original directed pair missing")?;
+                // Old REL-1C expected labels are historical controls; strict
+                // native projection may expose additional real residuals.
+                let required=case.required_residual_kinds.iter().all(|k|actual.comparison.residuals.iter().any(|r|&r.kind==k));
+                let forbidden=case.forbidden_residual_kinds.iter().any(|k|actual.comparison.residuals.iter().any(|r|&r.kind==k));
+                receipts.push(serde_json::json!({"case_ref":case.case_ref,"purpose":case.purpose_ref,
+                    "legacy_expected_finding":case.expected_finding,
+                    "strict_actual_finding":actual.comparison.finding,
+                    "legacy_required_residuals_present":required,"legacy_forbidden_residual_present":forbidden,
+                    "family":family,"exact_native_family_reopen":true}));
+            }
+            if receipts.is_empty(){return Err("empty persisted acceptance corpus".into());}
+            print_json(&serde_json::json!({"schema":"itir.native-relational-corpus.v1","corpus_ref":corpus,
+                "cases":receipts,"semantic_coverage_paid":false}))
+        },
         [mode,family] if mode=="inspect"=>print_json(&inspect_persisted_relational_family(&config,family).map_err(|e|e.to_string())?),
         [mode,family,old,new] if mode=="prepare-revision"=>print_json(&prepare_relational_family_revision(&config,family,old,new).map_err(|e|e.to_string())?),
         [mode,transition] if mode=="inspect-revision"=>print_json(&inspect_relational_family_revision(&config,transition).map_err(|e|e.to_string())?),
