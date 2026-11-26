@@ -12,6 +12,7 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 pub const RELATIONAL_INTERLINGUA_SCHEMA: &str = "itir.relational-comparison.v1";
+pub const STRICT_RELATIONAL_INTERLINGUA_SCHEMA: &str = "itir.relational-comparison.v2";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all="snake_case")]
@@ -187,6 +188,8 @@ pub enum RelationalComparisonError {
     InvalidRoles,
     #[error("alignment licence is missing or improperly scoped")]
     InvalidLicence,
+    #[error("typed comparison inputs cannot be canonically encoded")]
+    InvalidEncoding,
 }
 /// Transfer an existing candidate-PNF batch into the generic carrier,
 /// without a new parser. The caller chooses which *already persisted*
@@ -637,6 +640,55 @@ pub fn compare_relational_observations(
         proves_independence:false,claim_truth_promoted:false,
     })
 }
+/// Strict consumer-indexed comparison used for newly constructed families.
+/// V1 historical receipts replay unchanged. V2 content-addresses the exact
+/// inputs and records an unobserved required context even when both optional
+/// fields are absent. Absence is never an informational equivalence witness.
+/// Both schemas are candidate-only; V2 does not establish live-fibre closure.
+pub fn compare_relational_observations_strict(
+    left:&RelationalObservation,right:&RelationalObservation,consumer:&RelationalConsumer,
+)->Result<RelationalComparison,RelationalComparisonError>{
+    let mut result=compare_relational_observations(left,right,consumer)?;
+    let a=&left.context;let b=&right.context;
+    for (axis,required,l,r,kind) in [
+        ("scope",consumer.compare_scope,&a.scope_ref,&b.scope_ref,ResidualKind::ScopeMismatch),
+        ("time",consumer.compare_time,&a.time_ref,&b.time_ref,ResidualKind::TimeMismatch),
+        ("modality",consumer.compare_modality,&a.modality_ref,&b.modality_ref,ResidualKind::ModalityMismatch),
+        ("quantifier",consumer.compare_quantifier,&a.quantifier_ref,&b.quantifier_ref,ResidualKind::QuantifierMismatch),
+        ("attribution",consumer.compare_attribution,&a.attribution_ref,&b.attribution_ref,ResidualKind::AttributionMismatch),
+        ("ontology",consumer.compare_ontology,&a.ontology_ref,&b.ontology_ref,ResidualKind::OntologyMismatch),
+        ("language",consumer.compare_language,&a.language_ref,&b.language_ref,ResidualKind::LanguageMismatch),
+    ] {
+        if !required{continue;}
+        let missing=l.as_deref().is_none_or(|v|!present(v))
+            ||r.as_deref().is_none_or(|v|!present(v));
+        if missing{
+            // Preserve the actual original optional coordinates, including
+            // an invalid empty string; do not replace them with made-up data.
+            result.residuals.retain(|res|res.kind!=kind);
+            result.residuals.push(ComparisonResidual{
+                kind,left_ref:l.clone(),right_ref:r.clone(),
+                obligation_ref:format!("consumer:context-unobserved:{axis}"),
+            });
+        }else{
+            for residual in result.residuals.iter_mut().filter(|res|res.kind==kind){
+                residual.obligation_ref=format!("consumer:context-compatibility:{axis}");
+            }
+        }
+    }
+    if !result.residuals.is_empty() && matches!(result.finding,
+        ComparisonFinding::ExactCandidateShape|ComparisonFinding::LicensedCompatible
+        |ComparisonFinding::CompatibleQualification|ComparisonFinding::PolarityConflictCandidate)
+    {
+        result.finding=ComparisonFinding::PartialResidual;
+    }
+    let payload=serde_json::to_string(&(left,right,consumer))
+        .map_err(|_|RelationalComparisonError::InvalidEncoding)?;
+    result.schema=STRICT_RELATIONAL_INTERLINGUA_SCHEMA.into();
+    result.comparison_ref=hash(&[STRICT_RELATIONAL_INTERLINGUA_SCHEMA,&payload]);
+    Ok(result)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -669,6 +721,23 @@ mod tests {
             predicate_alignments:vec![],role_alignments:vec![],
             filler_alignments:vec![],type_alignments:vec![],
         }
+    }
+    #[test] fn strict_missing_context_and_changed_contract_have_exact_identity() {
+        let a=obs("a",SourceFamily::Wikipedia);
+        let b=obs("b",SourceFamily::Biomedical);
+        let mut c=consumer();
+        let legacy=compare_relational_observations(&a,&b,&c).unwrap();
+        let strict=compare_relational_observations_strict(&a,&b,&c).unwrap();
+        assert_eq!(legacy.finding,ComparisonFinding::ExactCandidateShape);
+        assert_eq!(strict.finding,ComparisonFinding::PartialResidual);
+        assert!(strict.residuals.iter().any(|r|r.obligation_ref=="consumer:context-unobserved:time"
+            &&r.left_ref.is_none()&&r.right_ref.is_none()));
+        assert_ne!(legacy.comparison_ref,strict.comparison_ref);
+        c.compare_time=false;
+        let changed=compare_relational_observations_strict(&a,&b,&c).unwrap();
+        assert_ne!(strict.comparison_ref,changed.comparison_ref);
+        assert!(!changed.residuals.iter().any(|r|r.kind==ResidualKind::TimeMismatch));
+        assert_eq!(changed,compare_relational_observations_strict(&a,&b,&c).unwrap());
     }
     #[test] fn cross_family_same_shape_is_candidate_only() {
         let x=compare_relational_observations(

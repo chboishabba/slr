@@ -5,17 +5,20 @@ use std::collections::{BTreeMap,BTreeSet};
 use serde::Serialize;
 use thiserror::Error;
 use postgres::{Client,NoTls};
+use crate::relational_interlingua_store::{RelationalSourceDigests,persist_relational_comparison_on_client};
+use crate::investigation_acquisition_store::ensure_acquisition_obligation_on_client;
 use crate::{
     AcceptanceObservationKind, AcceptanceObservationSelector, DatabaseConfig,
     RelationalObservation, RelationalConsumer, Polarity, ComparisonResidual,
-    RelationalComparison, compare_relational_observations, RelationalComparisonError,
-    DurableRelationalComparison, DurableRelationalError, persist_relational_comparison,
+    RelationalComparison, compare_relational_observations_strict, RelationalComparisonError,
+    DurableRelationalComparison, DurableRelationalError, RELATIONAL_COMPARISON_SQL,
+    STRICT_RELATIONAL_INTERLINGUA_SCHEMA,
     PersistedRelationalObservationRequest, PersistedWikidataObservationRequest,
     PersistedRelationalObservationError, relational_observation_from_checked_persisted_pnf,
     relational_observation_from_persisted_wikidata, load_relational_selection,
     AcceptanceControlStoreError, AcquisitionObligation, InvestigationAcquisitionError,
     InvestigationStoreError, DurableAcquisitionQueue, obligation_from_residual,
-    persist_acquisition_queue, load_acquisition_queue, INVESTIGATION_ACQUISITION_SQL,
+    INVESTIGATION_ACQUISITION_SQL,
     SelectiveReopeningReceipt, selective_reopening,
 };
 
@@ -181,7 +184,7 @@ pub fn project_relational_family(
             let l=&left.observation;let r=&right.observation;
             // Directional licences are not reversed by swapping a label.
             // Evaluate both directions through the existing comparison owner.
-            let comparison=compare_relational_observations(l,r,consumer)?;
+            let comparison=compare_relational_observations_strict(l,r,consumer)?;
             for rev in [&l.source_revision_ref,&r.source_revision_ref]{
                 edges.push((rev.clone(),comparison.comparison_ref.clone()));
             }
@@ -227,7 +230,7 @@ pub fn project_relational_family(
 
 /// Actual PG-backed path. The old pair store owns persistence and replay,
 /// and the existing INV queue owns route/priority state. The operation is
-/// idempotent per immutable pair/obligation, not one family-wide transaction.
+/// atomic across the newly selected comparison family and acquisition queues.
 pub fn run_persisted_relational_family(
     config:&DatabaseConfig,consumer_ref:&str,access_constraint_ref:&str,selector_refs:&[String],
 )->Result<PersistedRelationalFamily,RelationalFamilyError>{
@@ -242,30 +245,36 @@ pub fn run_persisted_relational_family(
     let projection=project_relational_family(&sources,&consumer,access_constraint_ref)?;
     let by_selector=sources.iter().map(|s|(s.selector_ref.as_str(),&s.observation))
         .collect::<BTreeMap<_,_>>();
+    // Keep all new durable pairs and obligation queues in the same snapshot.
+    // Raw source digests are loaded once per distinct revision, not per pair
+    // or per residual. A failed queue/changed replay rolls back the family.
+    let mut client=Client::connect(config.database_url(),NoTls)?;
+    let mut tx=client.transaction()?;
+    tx.batch_execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ; SET LOCAL statement_timeout='90000ms'; SET LOCAL lock_timeout='5000ms'")?;
+    tx.batch_execute(RELATIONAL_COMPARISON_SQL)?;
+    tx.batch_execute(INVESTIGATION_ACQUISITION_SQL)?;
+    let mut digests=RelationalSourceDigests::new(&mut tx)?;
     let mut durable_comparisons=Vec::with_capacity(projection.directed_comparisons.len());
     for pair in &projection.directed_comparisons{
-        let row=persist_relational_comparison(config,by_selector[pair.left_selector_ref.as_str()],
-            by_selector[pair.right_selector_ref.as_str()],&consumer)?;
+        let row=persist_relational_comparison_on_client(&mut tx,&mut digests,
+            by_selector[pair.left_selector_ref.as_str()],
+            by_selector[pair.right_selector_ref.as_str()],&consumer,STRICT_RELATIONAL_INTERLINGUA_SCHEMA)?;
         if row.comparison!=pair.comparison{return Err(RelationalFamilyError::ChangedReplay);}
         durable_comparisons.push(row);
     }
+    let parents=durable_comparisons.iter().map(|p|(p.comparison.comparison_ref.as_str(),p))
+        .collect::<BTreeMap<_,_>>();
     let mut durable_acquisition_queues=Vec::new();
-    if !projection.acquisition_demands.is_empty(){
-        let mut client=Client::connect(config.database_url(),NoTls)?;
-        client.batch_execute(INVESTIGATION_ACQUISITION_SQL)?;
+    // Stable lock order avoids family-dependent queue locking order.
+    let mut demands=projection.acquisition_demands.iter().collect::<Vec<_>>();
+    demands.sort_by(|a,b|a.obligation.obligation_ref.cmp(&b.obligation.obligation_ref));
+    for demand in demands{
+        let parent=parents.get(demand.obligation.comparison_ref.as_str())
+            .ok_or(RelationalFamilyError::ChangedReplay)?;
+        durable_acquisition_queues.push(ensure_acquisition_obligation_on_client(
+            &mut tx,&demand.obligation,parent)?);
     }
-    for demand in &projection.acquisition_demands{
-        // Existing reviewed routes must never be overwritten with an empty
-        // priority frontier during family replay.
-        let queue=match load_acquisition_queue(config,&demand.obligation.obligation_ref)?{
-            Some(existing)=>{
-                if existing.obligation!=demand.obligation{return Err(RelationalFamilyError::ChangedReplay);}
-                existing
-            }
-            None=>persist_acquisition_queue(config,&demand.obligation,&[])?,
-        };
-        durable_acquisition_queues.push(queue);
-    }
+    tx.commit()?;
     Ok(PersistedRelationalFamily{
         projection,durable_comparisons,durable_acquisition_queues,
         creates_access_authority:false,applies_external_edit:false,
@@ -329,6 +338,7 @@ mod tests{
         let mut q=consumer();q.compare_time=true;
         let result=project_relational_family(&[a.clone(),b],&q,"review").unwrap();
         assert_eq!(result.directed_comparisons[0].unobserved_required_context_axes,vec!["time"]);
+        assert!(result.acquisition_demands.iter().any(|d|d.obligation.residual_obligation_ref=="consumer:context-unobserved:time"));
         assert!(result.acquisition_demands.iter().any(|d|d.exact_residuals.len()==3
             &&d.exact_residuals.iter().all(|r|r.kind==ResidualKind::UnalignedType)));
         assert!(project_relational_family(&[a.clone(),a],&q,"review").is_err());

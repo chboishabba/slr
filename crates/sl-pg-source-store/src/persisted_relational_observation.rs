@@ -314,7 +314,7 @@ pub fn relational_observations_from_checked_persisted_batch(
     let (batch, statement) = load_candidate_and_statement(config, batch_ref)?;
     let suffix = format!(":{}", batch.exact_span_ref);
     let run = batch.parser_receipt_ref.strip_prefix("db-parser:")
-        .and_then(|s| s.strip_suffix(&suffix))
+        .and_then(|s| s.strip_suffix(suffix.as_str()))
         .filter(|s| !s.is_empty())
         .ok_or(PersistedRelationalObservationError::MissingNativeParserReceipt)?;
     let evidence = load_parser_evidence_region(config, run, &batch.exact_span_ref)?;
@@ -323,7 +323,7 @@ pub fn relational_observations_from_checked_persisted_batch(
     let source_literal = text.chars().skip(start_char as usize)
         .take((end_char-start_char) as usize).collect::<String>();
     if source.document_ref != statement.document_ref
-        || evidence.source_revision_ref() != statement.source_revision_ref
+        || evidence.source_revision_ref() != statement.source_revision_ref.as_str()
         || source_literal != statement.literal_text
         || !evidence.matches_source_literal(&source_literal)
         || !evidence.matches_observation_coverage(&source_literal)

@@ -150,14 +150,14 @@ pub use relational_interlingua_store::{
     load_relational_comparison,
 };
 pub use relational_interlingua::{
-    RELATIONAL_INTERLINGUA_SCHEMA, SourceFamily as RelationalSourceFamily, RelationalObservation,
+    RELATIONAL_INTERLINGUA_SCHEMA, STRICT_RELATIONAL_INTERLINGUA_SCHEMA, SourceFamily as RelationalSourceFamily, RelationalObservation,
     RoleBinding, RoleTypeHypothesis, RoleTypeDemand, ObservationContext,
     Polarity, RelationalConsumer,
     LicensedAlignment, AlignmentDirection, ComparisonFinding,
     ResidualKind, ComparisonResidual, RelationalComparison,
     RelationalComparisonError, observation_from_candidate_pnf,
     observation_from_native_wikidata,
-    compare_relational_observations,
+    compare_relational_observations, compare_relational_observations_strict,
 };
 pub use candidate_pnf::{
     CandidatePnfBatch, CandidatePnfError, CandidatePnfFactor, CandidatePnfProducer,

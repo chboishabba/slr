@@ -277,3 +277,23 @@ instructions to run them now.
   retraction, JMD ontology/KB qualifier alignment and ITIR facade. Existing
   native predicate syntax is not sufficient to pay any of these by itself.
   No operator campaign requested.
+
+### MC-REL-1 continuation — strict comparison and atomic queue publication
+
+- D03: new v2 strict comparison contract uses the existing v1 comparator,
+  then accounts for each required missing context axis including both-none.
+  Unknown context emits a real consumer residual routed to INV, not just
+  an annotation. Full left/right/consumer payload is content-addressed.
+  Historic v1 comparison IDs and replay remain unchanged.
+- D04/D06: existing REL/INV owners now share one snapshot for a family:
+  exact source content digest cached by revision in that transaction,
+  atomic pair insert/readback plus obligation queues, lock and validate
+  immutable obligation before updating routes, preserve existing Pareto
+  frontier on family replay. A failed replay rolls back the family. The
+  ordinary queue update now verifies the stored reopening receipt and
+  commits it with the acquisition update. This changes no semantic or
+  access authority. Actual PostgreSQL acceptance remains unrun.
+- Added strict missing-context, changed-consumer identity, and acquisition
+  routing assertions; existing pure tests retained. No production proof
+  or kernel claims. The earlier per-pair-only persistence limitation is
+  superseded for the new family path by this atomic transaction.
