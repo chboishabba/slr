@@ -1,5 +1,27 @@
 # C4.11: source-native antecedent review on original SLR S29
 
+## 2026-11-26 — controlling article-content prover max-cut (JMD objective restored)
+
+The deliverable is executable proofs about actual article contents, not a completed antecedent resolver. Original JMD/meta-introspector Lean getter, import, property engine, diagnostic and repair code at [349f9b7](https://github.com/chboishabba/dashi_lean4/tree/349f9b7dd49a7f23bfbd7d9da60416afa5440ccf/DASHI/output-final_aristotle/RequestProject) remains the ontology proof owner. DASHI Agda/Lean are golden; SLR Rust/PostgreSQL production; SensibLaw historical donor only. Keep the original book-local S29 evidence distinct from enwiki Q207 and independently imported Q23505.
+
+Baseline: SLR [b7c765c typed carrier receipt](https://github.com/chboishabba/slr/blob/b7c765c56102ceda56d4e4d745ea360e03717c44/artifacts/gwb/v8-typed-relation-carriers.json) as recorded in 019eac2: focus exact, 30/36 eventuality + 4/4 proposition inverses; 548 unresolved keys, zero current classes/refutations, outside-model open, coverage null. Six historical multi-token mismatches retained; no rewriting. Prior named-topic policy he -> Bush is source-local, not governed identity. Candidate-only binding campaign does not issue semantic coverage or owner evidence. No new execution claimed here.
+
+| Lane | Existing owner / endpoint | Acceptance disposition |
+| --- | --- | --- |
+| A source-local query | GwbSourceLocalConsumer, native source consumer, WikipediaArticleProof | existing structural/policy receipts; actual semantic query proof needed |
+| B identity/dispositions | IdentityEvidenceProduction, VerifiedClassSelection, current focus owner | concrete evidence unpaid; permit independently reviewed deterministic policy, no invented exclusions |
+| C query sufficiency | FactorsThrough, ConsumerFibreRepairExact, all_surviving_readings_agree | nonempty admissible fibre; exact scoped coverage or separating witnesses; no global closure from finite prefix |
+| D event/attribution/negation/time | GwbRelationTransport, GwbTypedSemanticFibre, TemporalDocumentProof | preserve signed residuals, modality, attribution, temporal vs text order; real article answers required |
+| E JMD composition | GwbP5P10ExactWeld, GwbWorldGraphProof, GwbArticleSystemSoundness, original PropertyEngine | independently pinned KB and article alignment; actual theorem instance needed |
+| F persistence | sl-formal-proof-bridge, current owner, Level-3 inverse | authenticated same-binding payment and selective withdrawal; query licence not action authority |
+| G corpus | existing JMD getter and automatic proof programme | original 51-QID corpus; per-revision results including unresolved, no invented fetches |
+| H review | ITIR-US-17, WIKI-US-01..04 / SL-US-38..41 | revision/span and references, candidate-only repair, cross-corpus chronology and discrepancy; no autonomous wiki mutation |
+
+Reverse-solve the licensed consumer through the existing semantic owners; positive query proof can precede globally unique identity if all admissible completions agree. Preserve zero mode, signed residuals and source/revision/time indices. Explicit unresolved is a valid outcome, not a paid positive proof. Run existing local bounded Rust, PostgreSQL and targeted Lean acceptance with positive article-content answers and negative stale/foreign revision, omitted rival, forged evidence, negation/attribution, text-vs-event order and selective withdrawal checks. No CI, no alternate parser, no candidate-only rerun as next P0. Commit raw receipts in existing repo locations only. Source-written, compiled, live executed, independently inspected and kernel accepted must remain separate. Both PRs were unmergeable at baseline; no merge requested.
+
+Companions: [SLR #78](https://github.com/chboishabba/slr/pull/78), [Lean #112](https://github.com/chboishabba/dashi_lean4/pull/112), [ITIR user stories](https://github.com/chboishabba/ITIR-suite/blob/8a784366fe8325c52caa208185e09da95ae6fc79/docs/user_stories.md).
+
+
 ## 2026-11-26 — P0 endpoint priority correction after b7c765c (stop candidate-only campaigns)
 
 The full 13,635,779-character [published typed carrier receipt](https://github.com/chboishabba/slr/blob/b7c765c56102ceda56d4e4d745ea360e03717c44/artifacts/gwb/v8-typed-relation-carriers.json) was independently retrieved and parsed from blob cccf7874c29fbbca4bdd2c296210f8bc80fbfe01. Operator reported 55 source-store tests, CLI/build pass. Three committed candidate passes: 4 factors and 1 object materialized on pass 1, 45 then 1 new numeric candidate objects, final 548 = 378 indexed + 170 outside-index (exact disjoint object-key union). Focus correspondence remains true; 30/36 eventuality numeric factor inverses and 4/4 proposition inverses. Six historical eventuality factors have multi-token role support mismatches (IDs 3014, 2985, 2997, 2984, 3015, 3013); do not rewrite immutable premises or make these six the next standalone P0 campaign. Current 548 numeric keys unresolved, zero admitted current classes, zero semantic refutations; rollback-only projection has 19 classes covering 32 objects, 516 unresolved, 3 conflicts. Outside-model true; coverage witness null. H3/H6 drained and current validity projection exact/reconciled; original readback still reports historical H6 proof revalidation required, which must be resolved using original current-authority owner rather than suppressed. H9 ready but no target, provider-quality occurrence or admitted need (reason 10); no unrelated QID acquisition.
