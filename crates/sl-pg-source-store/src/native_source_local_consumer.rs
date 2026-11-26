@@ -154,6 +154,11 @@ pub fn evaluate_native_source_local_replay(
 ) -> NativeSourceAnswerReplay {
     let same = serde_json::to_value(&current)
         .map(|actual| actual == *prior).unwrap_or(false);
+    // A current unresolved receipt is useful evidence of uncertainty, but
+    // must never license consumption of a positive interpretation.
+    let current_is_positive = current.source_local_policy_inference_paid
+        && current.answer_kind == "DERIVED_UNDER_NAMED_TOPIC_POLICY"
+        && current.answer_value.as_ref().is_some_and(|value| !value.trim().is_empty());
     NativeSourceAnswerReplay {
         schema: "slr-native-source-local-answer-replay-v1",
         result: if same { "CURRENT" } else { "INVALIDATED" },
@@ -161,7 +166,7 @@ pub fn evaluate_native_source_local_replay(
         prior_receipt_ref: prior.get("answer_receipt_ref")
             .and_then(serde_json::Value::as_str).map(str::to_owned),
         original_level_one_source_preserved: true,
-        previous_interpretation_usable: same,
+        previous_interpretation_usable: same && current_is_positive,
         original_level_three_retracted_here: false,
         external_identity_inferred: false,
     }
@@ -215,6 +220,21 @@ mod tests {
         assert_eq!(result.result,"CURRENT");
         assert!(result.previous_interpretation_usable);
         assert!(!result.external_identity_inferred);
+    }
+    #[test] fn unresolved_receipt_replays_without_licensing_interpretation() {
+        let current=sample(None);
+        let prior=serde_json::to_value(&current).unwrap();
+        let result=evaluate_native_source_local_replay(&prior,current);
+        assert_eq!(result.result,"CURRENT");
+        assert!(!result.previous_interpretation_usable);
+        assert!(result.original_level_one_source_preserved);
+    }
+    #[test] fn positive_flag_without_answer_cannot_license_interpretation() {
+        let mut current=sample(None);
+        current.source_local_policy_inference_paid=true;
+        current.answer_kind="DERIVED_UNDER_NAMED_TOPIC_POLICY";
+        let prior=serde_json::to_value(&current).unwrap();
+        assert!(!evaluate_native_source_local_replay(&prior,current).previous_interpretation_usable);
     }
     #[test] fn candidate_change_invalidates_original_answer() {
         let original=sample(Some("Bush"));
