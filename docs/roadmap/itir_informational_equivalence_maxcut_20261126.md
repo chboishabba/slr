@@ -297,3 +297,10 @@ instructions to run them now.
   routing assertions; existing pure tests retained. No production proof
   or kernel claims. The earlier per-pair-only persistence limitation is
   superseded for the new family path by this atomic transaction.
+
+### MC-REL-1 / D05 continuation — JMD original statement inverse
+
+- Companion [Lean #112 commit 1f10108017a5e](https://github.com/chboishabba/dashi_lean4/commit/1f10108017a5e906df35148e109b42659d4468f1) extends the existing original JMD world-graph proof runner, not a new prover. It binds the raw graph and cached EntityData to SHA-256/readback, retains all node and edge ordinals, per-node revision availability, and original matching statement JSON with rank/snak/qualifiers/references (deprecated matches retained as excluded evidence). Positive PKB support requires a nondeprecated direct original import inverse; unsupported edges remain explicit. Reuses JMD's importer and existing checkedWorldPropertySound; no qualifier alignment, article equivalence, historical truth or synchronous-snapshot proof. Kernel and native acceptance not run.
+- D04/D06 hardening: stable comparison/obligation lock order, order-independent bounded family graph reference; existing acquisition priority/route state must validate before extension and old routes cannot silently disappear. Source selection still precedes the publication transaction: source bytes are rechecked, but full parser/selector snapshot replay in that transaction remains an open weld.
+- Static source-table audit: 9/9 actual Rust ordered polarity match arms have exact inverse, all distinct; independent combinatorial oracle covers all family sizes 2–10 and 54 source-local reopening cardinalities (2(n−1) incident directional pairs). This is source inspection/oracle verification, not compiled Rust, PG execution or proof acceptance.
+- D01–D07 remain active; D08 not requested. No product completion claimed.

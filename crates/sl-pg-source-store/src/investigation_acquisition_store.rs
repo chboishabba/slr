@@ -199,7 +199,13 @@ pub fn persist_acquisition_queue(
         .ok_or(InvestigationStoreError::WrongOwner)?;
     validate_owner(obligation,&parent)?;
     tx.batch_execute(INVESTIGATION_ACQUISITION_SQL)?;
-    insert_and_lock_obligation(&mut tx,obligation)?;
+    if !insert_and_lock_obligation(&mut tx,obligation)?{
+        let old=load_acquisition_queue_rows(&mut tx,&obligation.obligation_ref)?
+            .ok_or(InvestigationStoreError::ChangedReplay)?;
+        if old.obligation!=*obligation || old.routes.iter().any(|route|!routes.contains(route)){
+            return Err(InvestigationStoreError::ChangedReplay);
+        }
+    }
     let result=write_routes_and_priority(&mut tx,obligation,routes)?;
     tx.commit()?;
     Ok(result)

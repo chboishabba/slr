@@ -3,6 +3,7 @@
 //! not another ontology, truth authority, or a proof of all-live sufficiency.
 use std::collections::{BTreeMap,BTreeSet};
 use serde::Serialize;
+use sha2::{Digest,Sha256};
 use thiserror::Error;
 use postgres::{Client,NoTls};
 use crate::relational_interlingua_store::{RelationalSourceDigests,persist_relational_comparison_on_client};
@@ -214,8 +215,10 @@ pub fn project_relational_family(
     let mut potential_reopening_by_source=Vec::new();
     // This is a derived cone over this family only, not an actual database
     // retraction, and does not supersede the existing dependency owner.
-    let graph_ref=format!("relational-family:{}:{}",consumer.consumer_ref,
-        directed_comparisons.iter().map(|p|p.comparison.comparison_ref.as_str()).collect::<Vec<_>>().join("|"));
+    let mut graph_keys=directed_comparisons.iter().map(|p|p.comparison.comparison_ref.as_str()).collect::<Vec<_>>();
+    graph_keys.sort_unstable();
+    // Every key is a content digest of its full directional contract.
+    let graph_ref=format!("relational-family:sha256:{:x}",Sha256::digest(graph_keys.join("|").as_bytes()));
     for source in sources{
         potential_reopening_by_source.push(selective_reopening(
             &source.observation.source_revision_ref,&graph_ref,&edges,&universe)?);
@@ -255,7 +258,9 @@ pub fn run_persisted_relational_family(
     tx.batch_execute(INVESTIGATION_ACQUISITION_SQL)?;
     let mut digests=RelationalSourceDigests::new(&mut tx)?;
     let mut durable_comparisons=Vec::with_capacity(projection.directed_comparisons.len());
-    for pair in &projection.directed_comparisons{
+    let mut ordered_pairs=projection.directed_comparisons.iter().collect::<Vec<_>>();
+    ordered_pairs.sort_by(|a,b|a.comparison.comparison_ref.cmp(&b.comparison.comparison_ref));
+    for pair in ordered_pairs{
         let row=persist_relational_comparison_on_client(&mut tx,&mut digests,
             by_selector[pair.left_selector_ref.as_str()],
             by_selector[pair.right_selector_ref.as_str()],&consumer,STRICT_RELATIONAL_INTERLINGUA_SCHEMA)?;
