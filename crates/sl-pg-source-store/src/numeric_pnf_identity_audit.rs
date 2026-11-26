@@ -702,12 +702,18 @@ fn read_focus_owner_binding(url:&str,run:&str,answer:&NativeSourceLocalAnswer)
         // revision, candidate sets and numeric argument, not just audit counts.
         let focus_relation=current_focus_relation_correspondence(&mut tx,run,answer)?;
         let exact_focus_relation=focus_relation.as_ref().is_some_and(|r|r["exact_persisted_correspondence"]==true);
+        // Require a derivation of the SAME persisted numeric factor and slot
+        // under the observed governed witness, not just any document L3 row.
+        let exact_focus_level_three=focus_relation.as_ref().is_some_and(|r|
+            focus_relation_has_witnessed_level_three(r,&audit.observed_accepted_document_witness_ids,
+                &audit.observed_witnessed_level_three_derivation_refs));
         let fence_digest=hex(&Sha256::digest(serde_json::to_vec(&fence).map_err(|_|NativeNumericAuditError::ForeignSource)?));
         let payload=serde_json::json!({"schema":"slr-current-numeric-focus-owner-binding:v1",
             "scope":"existing_original_typed_coverage_and_governed_identity",
             "numeric_run_ref":run,"source_revision_ref":answer.source_revision_ref,
             "source_sha256":answer.source_content_sha256,"focus_span":answer.original_focus_span,
-            "audit":coordinates,"focus_relation_correspondence":focus_relation,"numeric_fence_sha256":fence_digest});
+            "audit":coordinates,"focus_relation_correspondence":focus_relation,
+            "exact_focus_level_three_witnessed":exact_focus_level_three,"numeric_fence_sha256":fence_digest});
         let digest=hex(&Sha256::digest(serde_json::to_vec(&payload).map_err(|_|NativeNumericAuditError::ForeignSource)?));
         let expected=serde_json::json!({"schema":"slr-current-numeric-focus-owner-proof:v1",
             "binding_sha256":digest,"coverage_and_identity_theorem":"Wikidata.Slr.GwbCoreferenceFormalRepair.current_focus_owner_proof_pays_exact_scope",
@@ -720,7 +726,8 @@ fn read_focus_owner_binding(url:&str,run:&str,answer:&NativeSourceLocalAnswer)
             let locator=RefereeReceiptLocator{repo,sha,path,canonical_thread_id};
             if let Ok(receipt)=read_source_bound_referee_receipt(&mut tx,&locator){
                 let value:serde_json::Value=serde_json::from_str(&receipt).map_err(|_|NativeNumericAuditError::ForeignSource)?;
-                authenticated=exact_focus_relation&&value.get("slr_numeric_authority_binding")==Some(&expected);
+                authenticated=exact_focus_relation&&exact_focus_level_three
+                    &&value.get("slr_numeric_authority_binding")==Some(&expected);
             }
         }
         binding=Some(serde_json::json!({"payload":payload,"expected_referee_binding":expected}));
@@ -3705,6 +3712,10 @@ fn reopen_focus_relation_correspondence(
                         .map(|r|(r.get::<_,i16>(0),r.get::<_,i64>(1))).collect::<BTreeSet<_>>();
                     let typed_keys=typed.iter().map(|r|(r.target_kind,r.target_id)).collect::<BTreeSet<_>>();
                     let represented_exact=typed_keys==universe&&typed_keys.len()==typed.len();
+                    let (horizons,classes)=observe_original_resolution_fibre(tx,demand,run,doc)?;
+                    // Raw horizon observations are retained including zero
+                    // and negative signs; stale validity is not repaired here.
+                    let class_projection=project_original_identity_fibre(&horizons,&classes,outside);
                     let arguments=tx.query("SELECT e.factor_id,e.slot_ordinal
                       FROM execution.semantic_pnf_hyperedge e
                       JOIN execution.semantic_pnf_factor f ON f.factor_id=e.factor_id AND f.active
@@ -3725,13 +3736,24 @@ fn reopen_focus_relation_correspondence(
                           .iter().map(|r|(r.get::<_,i16>(0),r.get::<_,String>(1),r.get::<_,Vec<i64>>(2))).collect::<Vec<_>>();
                         let exact=support==expected_support&&exact_numeric_role_inverse(&roles,&expected_roles)
                             &&u64::try_from(slot).ok()==Some(ordinal);
+                        let derivations=tx.query("SELECT DISTINCT d.derivation_ref,a.identity_entity_id,a.identity_witness_ids
+                          FROM execution.semantic_pnf_factor_derivation d
+                          JOIN execution.semantic_pnf_factor_derivation_premise p ON p.derivation_id=d.derivation_id
+                          JOIN execution.semantic_pnf_factor_derivation_argument a ON a.derivation_id=d.derivation_id
+                          WHERE p.factor_id=$1 AND p.premise_ordinal=0 AND a.slot_ordinal=$2
+                            AND a.source_object_id=$3 AND a.identity_entity_id IS NOT NULL
+                            AND d.epistemic_level=3 AND d.derivation_state=2 AND d.authority_class=2
+                          ORDER BY d.derivation_ref,a.identity_entity_id,a.identity_witness_ids",
+                          &[&factor,&slot,&object])?.iter().map(|r|json!({"derivation_ref":r.get::<_,String>(0),
+                            "identity_entity_id":r.get::<_,i64>(1),"identity_witness_ids":r.get::<_,Vec<i64>>(2)})).collect::<Vec<_>>();
                         observed.push(json!({"numeric_factor_id":factor,"slot_ordinal":slot,"support":support,
-                            "roles":roles,"exact_ordered_role_and_support":exact}));
+                            "roles":roles,"exact_ordered_role_and_support":exact,"current_level_three_arguments":derivations}));
                     }
                     let exact_count=observed.iter().filter(|x|x["exact_ordered_role_and_support"]==true).count();
                     numeric.push(json!({"demand_id":demand,"source_object_id":object,"outside_model_possible":outside,
                         "typed_candidate_rows":typed,"represented_keys_exact":represented_exact,
-                        "observed_numeric_arguments":observed,"exact_numeric_argument_count":exact_count}));
+                        "raw_signed_horizon_observations":horizons,"observed_document_identity_classes":classes,
+                        "observed_class_projection_not_coverage":class_projection,"observed_numeric_arguments":observed,"exact_numeric_argument_count":exact_count}));
                 }
                 let exact=revisions.len()==1&&revisions[0]["exact_three_candidate_sets"]==true
                     &&numeric.len()==1&&numeric[0]["exact_numeric_argument_count"]==1&&numeric[0]["represented_keys_exact"]==true;
@@ -3790,6 +3812,22 @@ fn current_focus_relation_correspondence(
     binding["snapshot_ref"]=serde_json::json!(snapshot);
     binding["packet_ref"]=serde_json::json!(key);
     Ok(Some(binding))
+}
+
+// Only the single exact argument of the single original subject can pay
+// this check. Do not accept an unrelated L3 factor with the same witness.
+fn focus_relation_has_witnessed_level_three(
+    relation:&serde_json::Value,witnesses:&[i64],derivations:&[String],
+)->bool{
+    if relation["exact_persisted_correspondence"]!=true||witnesses.len()!=1{return false;}
+    let Some(args)=relation.pointer("/subjects/0/matches/0/numeric_demands/0/observed_numeric_arguments")
+        .and_then(|a|a.as_array())else{return false;};
+    let mut exact=args.iter().filter(|a|a["exact_ordered_role_and_support"]==true);
+    let Some(arg)=exact.next()else{return false;};
+    if exact.next().is_some(){return false;}
+    arg["current_level_three_arguments"].as_array().is_some_and(|rows|rows.iter().any(|row|
+        row["derivation_ref"].as_str().is_some_and(|r|derivations.iter().any(|d|d==r))
+        &&row["identity_witness_ids"].as_array().is_some_and(|ids|ids.iter().any(|id|id.as_i64()==Some(witnesses[0])))))
 }
 
 fn exact_numeric_role_inverse(actual:&[(i16,String,Vec<i64>)],expected:&[(String,i64)])->bool{
@@ -6298,6 +6336,20 @@ pub fn transport_original_numeric_candidates_for_source_answer_with_partition(
 #[cfg(test)]
 mod tests{
     use super::*;
+    #[test]
+    fn level_three_must_be_on_the_exact_original_argument(){
+        let mut r=serde_json::json!({"exact_persisted_correspondence":true,"subjects":[{"matches":[{"numeric_demands":[{
+          "observed_numeric_arguments":[
+            {"exact_ordered_role_and_support":false,"current_level_three_arguments":[{"derivation_ref":"other","identity_witness_ids":[8]}]},
+            {"exact_ordered_role_and_support":true,"current_level_three_arguments":[{"derivation_ref":"focus","identity_witness_ids":[7]}]}
+          ]}]}]}]});
+        assert!(focus_relation_has_witnessed_level_three(&r,&[7],&["focus".into()]));
+        assert!(!focus_relation_has_witnessed_level_three(&r,&[8],&["other".into()]));
+        assert!(!focus_relation_has_witnessed_level_three(&r,&[7],&["other".into()]));
+        assert!(!focus_relation_has_witnessed_level_three(&r,&[7,8],&["focus".into()]));
+        r["exact_persisted_correspondence"]=serde_json::json!(false);
+        assert!(!focus_relation_has_witnessed_level_three(&r,&[7],&["focus".into()]));
+    }
     #[test]
     fn persisted_numeric_role_inverse_requires_exact_order_role_and_token_fibre(){
         let expected=vec![("subject".to_owned(),7),("object".to_owned(),9),("argument".to_owned(),9)];
