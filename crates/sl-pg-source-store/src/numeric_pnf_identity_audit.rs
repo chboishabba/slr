@@ -4228,6 +4228,144 @@ pub fn query_native_original_relations(
         "governed_identity_paid":false,"level_three_paid":false,"world_truth_paid":false}))
 }
 
+/// Exact projection of the *represented* candidate product. Structural
+/// edges are preserved as obligations, not interpreted as refutations.
+/// The full product is a conservative upper envelope of any later
+/// admissible subset of these recorded alternatives. No semantic claim
+/// about omitted readings, existence of admissible readings or world truth.
+fn recorded_factor_consumer_projection(native:&serde_json::Value,axis:&str)
+    ->Result<serde_json::Value,NativeNumericAuditError>{
+    use serde_json::{Value,json};
+    if !matches!(axis,"type_ref"|"referential_type"|"role"|"value"){
+        return Err(NativeNumericAuditError::SourcePolicy);
+    }
+    let packet=&native["packet"];
+    if native["schema"]!="slr-reopened-original-relation-packet-v1"
+        ||native["exact_persisted_packet_readback"]!=true
+        ||native["packet_sha256"].as_str()!=Some(original_relation_digest(packet)?.as_str()){
+        return Err(NativeNumericAuditError::ForeignSource);
+    }
+    let c=&packet["comparison"];
+    let projection=&c["reduction_projection"];
+    let factors=projection["factors"].as_array().ok_or(NativeNumericAuditError::ForeignSource)?;
+    let constraints=projection["constraints"].as_array().ok_or(NativeNumericAuditError::ForeignSource)?;
+    let required=|v:&Value|v.as_str().filter(|s|!s.is_empty()).map(str::to_owned)
+        .ok_or(NativeNumericAuditError::ForeignSource);
+    let mut by_ref=BTreeMap::new();
+    let mut alternatives_seen=BTreeSet::new();
+    for f in factors{
+        let key=required(&f["factor_ref"])?;
+        if by_ref.insert(key,f).is_some(){return Err(NativeNumericAuditError::ForeignSource);}
+    }
+    let mut incidence=BTreeMap::<String,BTreeSet<String>>::new();
+    let mut constraints_seen=BTreeSet::new();
+    for edge in constraints{
+        let key=required(&edge["constraint_ref"])?;
+        // The original reduction can retain repeated constraint occurrences.
+        // Index by ref for navigation; retain every occurrence in the packet.
+        constraints_seen.insert(key.clone());
+        for axis in ["source_factor_refs","target_factor_refs"]{
+            for endpoint in edge[axis].as_array().ok_or(NativeNumericAuditError::ForeignSource)?{
+                let id=required(endpoint)?;
+                if !by_ref.contains_key(&id){return Err(NativeNumericAuditError::ForeignSource);}
+                incidence.entry(id).or_default().insert(key.clone());
+            }
+        }
+    }
+    let mut rows=Vec::with_capacity(factors.len());
+    let mut widths=BTreeMap::<usize,usize>::new();
+    for f in factors{
+        let id=required(&f["factor_ref"])?;
+        let alts=f["alternatives"].as_array().ok_or(NativeNumericAuditError::ForeignSource)?;
+        if alts.is_empty(){return Err(NativeNumericAuditError::ForeignSource);}
+        *widths.entry(alts.len()).or_default()+=1;
+        let mut choices=Vec::with_capacity(alts.len());
+        let mut outcomes=Vec::<Value>::new();
+        for a in alts{
+            let alternative_ref=required(&a["alternative_ref"])?;
+            if !alternatives_seen.insert(alternative_ref.clone()){
+                return Err(NativeNumericAuditError::ForeignSource);
+            }
+            let selected=match axis{
+                "type_ref"=>a.get("type_ref"),
+                "value"=>a.get("value"),
+                _=>a.get("value").and_then(|v|v.get(axis)),
+            };
+            // Missing coordinate and explicit null are distinct.
+            let outcome=match selected{
+                Some(value)=>json!({"present":true,"value":value}),
+                None=>json!({"present":false,"value":Value::Null}),
+            };
+            if !outcomes.contains(&outcome){outcomes.push(outcome.clone());}
+            choices.push(json!({"alternative_ref":alternative_ref,"outcome":outcome}));
+        }
+        let first=&choices[0];
+        let separator=choices.iter().find(|a|a["outcome"]!=first["outcome"])
+            .map(|other|json!({"left":first,"right":other})).unwrap_or(Value::Null);
+        rows.push(json!({
+            "factor_ref":id,"factor_type":f["factor_type"],"closure_state":f["closure_state"],
+            "source_metadata":f["metadata"],"choices":choices,"outcomes":outcomes,
+            "recorded_product_constant":outcomes.len()==1,"represented_separator":separator,
+            "incident_constraint_refs":incidence.get(&id).cloned().unwrap_or_default(),
+            "embedded_constraints":f["constraints"],"residuals":f["residuals"],
+            "admissible_separator_proven":false
+        }));
+    }
+    Ok(json!({"schema":"slr.recorded-factor-consumer.v1","numeric_run_ref":native["numeric_run_ref"],
+        "document_ref":native["document_ref"],"snapshot_ref":native["snapshot_ref"],
+        "packet_sha256":native["packet_sha256"],"source_revision_ref":c["source_revision_ref"],
+        "parser_run_ref":c["parser_run_ref"],"consumer_axis":axis,
+        "factor_count":rows.len(),"alternative_width_histogram":widths,
+        "constraint_occurrence_count":constraints.len(),"distinct_constraint_count":constraints_seen.len(),
+        "rows":rows,"missing_original_tags":packet["missing_original_tags"],
+        "prefix_uncovered_nonwhitespace":packet["prefix_uncovered_nonwhitespace"],
+        "represented_product_projection_exact":true,"outside_model_possible":true,
+        "semantic_coverage_paid":false,"source_meaning_correspondence_paid":false,
+        "governed_identity_paid":false,"level_three_paid":false,"world_truth_paid":false}))
+}
+
+pub fn query_native_recorded_factor_consumer(
+    url:&str,run:&str,doc:&str,snapshot:&str,digest:&str,axis:&str,
+)->Result<serde_json::Value,NativeNumericAuditError>{
+    let native=reopen_native_original_relation_packet(url,run,doc,snapshot,digest)?;
+    recorded_factor_consumer_projection(&native,axis)
+}
+
+#[cfg(test)]
+mod recorded_factor_consumer_tests{
+    use super::*;
+    use serde_json::json;
+    fn packet()->serde_json::Value{
+        let p=json!({"comparison":{"source_revision_ref":"r","parser_run_ref":"p",
+            "reduction_projection":{"factors":[{"factor_ref":"f","factor_type":"argument",
+            "closure_state":"requires_external_resolution","metadata":{},"constraints":[],"residuals":["scope"],
+            "alternatives":[{"alternative_ref":"a","type_ref":"reference","value":{"role":"subject"}},
+                {"alternative_ref":"b","type_ref":"reference","value":{"role":"subject","referential_type":null}}]}],
+            "constraints":[]}},"missing_original_tags":1,"prefix_uncovered_nonwhitespace":0});
+        let digest=original_relation_digest(&p).unwrap();
+        json!({"schema":"slr-reopened-original-relation-packet-v1","exact_persisted_packet_readback":true,
+            "packet_sha256":digest,"packet":p,"numeric_run_ref":"n","document_ref":"d","snapshot_ref":"s"})
+    }
+    #[test]
+    fn recorded_factor_consumer_constant_and_missing_vs_null(){
+        let native=packet();
+        let constant=recorded_factor_consumer_projection(&native,"role").unwrap();
+        assert_eq!(constant["rows"][0]["recorded_product_constant"],true);
+        let varying=recorded_factor_consumer_projection(&native,"referential_type").unwrap();
+        assert_eq!(varying["rows"][0]["recorded_product_constant"],false);
+        assert_eq!(varying["rows"][0]["represented_separator"]["left"]["outcome"]["present"],false);
+        assert_eq!(varying["rows"][0]["represented_separator"]["right"]["outcome"]["present"],true);
+        assert_eq!(varying["rows"][0]["admissible_separator_proven"],false);
+        assert_eq!(varying["semantic_coverage_paid"],false);
+    }
+    #[test]
+    fn recorded_factor_consumer_rejects_changed_original(){
+        let mut native=packet();
+        native["packet"]["comparison"]["reduction_projection"]["factors"][0]["alternatives"][0]["type_ref"]=json!("forged");
+        assert!(recorded_factor_consumer_projection(&native,"type_ref").is_err());
+    }
+}
+
 /// Exact structural comparison against a separately supplied reference.
 /// The comparison input is untrusted: equality does not authenticate its
 /// producer. Ordered arrays retain their order. JSON pointer coordinates

@@ -345,3 +345,19 @@ Native family now evaluates explicitly declared existing bidirectional coordinat
 - ITIR-suite #74 at 0c64bcc47c06: native read-only itir.relational.inspect adapter and controls. No new parser/store or promotion.
 - Run the consolidated script from the Lean checkout with SLR_ROOT, ITIR_ROOT, SENSIBLAW_DATABASE_URL, ITIR_REL_CORPUS_REF and ITIR_REL_ACCESS_CONSTRAINT_REF set to the original local environment. Existing article inputs in .dashi/gwb-source are mandatory. Existing GWB world/M12/S28 inputs can be supplied through the original runner environment. Each native/Lean step bounded to 90 seconds by default; raw receipts and logs retained. Build checkpoint reused only for the recorded binary. Live readbacks are fresh. Exit 3 explicitly means source scope completed but semantic acceptance remains on HOLD, not a successful full implementation.
 - Outstanding: exhaustive live-reading correspondence and actual independent semantic owner witnesses, full article-to-JMD qualified alignment, governed L3 admission/retraction, full ITIR user-story integration. Lean merge reconciliation and actual compiler/kernel/PG acceptance remain unverified. No CI or operator execution performed here.
+
+## 2026-11-27 integrated semantic-proof max-cut — disposition ledger
+
+Approved order: P1 semantic proof engine (D02/D03/D05), P2 governed L3 (D04/D06), P3 product integration (D07), then one D08 campaign. No SensibLaw implementation. Do not infer semantic completeness from recorded rows; distinguish recorded-product upper envelope, admissible subset, outside-model branch and source meaning factorisation.
+
+### P1a recorded factor product projection (source implemented; runtime unverified)
+
+Native `factor-consumer RUN DOC SNAPSHOT PACKET_SHA256 AXIS` reopens original packet, validates content digest, factor/alternative keys and constraint endpoints. Computes exact coordinate images of the recorded product for type, referential type, role and full alternative value without Cartesian enumeration; absent vs explicit null preserved. Carries original factor metadata, embedded constraints, residuals and constraint incidence. Constant image on a nonempty recorded domain is constant on any admissible subset, but does not establish that subset is inhabited or contains all semantic readings. A varying image is a represented separator, not proof of two admissible readings. No exclusion based on structural edges. Historical v8 audit: 927 singleton factors, four five-alternative factors, 574 locally closed, 357 require external resolution; 677 residual occurrences and 975 missing original tags. Raw product cardinality 625; not a live reading count.
+
+| Gate | Disposition | Next exact payment |
+|---|---|---|
+| Exhaustive live semantic fibre | recorded product projection implemented; all-live OPEN | bind native H3/H6/H9 admissibility/overflow to existing complete enumeration or symbolic coverage, outside-model irrelevance, source meaning correspondence |
+| Qualified article/JMD | declared transport and independent graph support implemented; semantic alignment OPEN | exact article proposition/qualifier interpretation with independent statement support; no QID equality shortcut |
+| Governed L3 | existing native admission/retraction/rollback and family lineage inherited; endpoint OPEN | actual independent source-bound semantic owner receipt and current authority, then SQL admission/withdrawal/replay |
+| ITIR | read-only family/relation facade inherited; full journeys OPEN | same native proof graph, existing repair/review/acquisition/route owners, J01–J11 acceptance |
+| Acceptance | not run | local consolidated campaign only after all substantive welds; no all-HOLD pass |
