@@ -2037,12 +2037,37 @@ fn original_lexical_license(s:&str)->bool{
         "a"|"an"|"and"|"as"|"at"|"by"|"for"|"from"|"in"|"into"|"of"|"on"|"or"|"the"|"to"|"with")
 }
 #[derive(Debug,Clone,Serialize)]
+pub struct NativeMorphologyHeadObservation{
+    pub token_id:i64,
+    pub source_span:(i64,i64),
+    pub original_features:Vec<String>,
+    pub shared_observed_features:Vec<&'static str>,
+    pub mismatches:Vec<&'static str>,
+}
+
+fn observe_head_morphology(reference:&[String],head:&NativeMentionToken)->NativeMorphologyHeadObservation{
+    let shared=MORPH_FEATURES.into_iter().filter(|name|{
+        let known=|rows:&[String]|rows.iter().any(|r|r.split_once('=')
+            .is_some_and(|(k,v)|k.eq_ignore_ascii_case(name)&&v.split(',').any(|s|!s.is_empty())));
+        known(reference)&&known(&head.morph)
+    }).collect();
+    NativeMorphologyHeadObservation{
+        token_id:head.id,source_span:(head.start,head.end),original_features:head.morph.clone(),
+        shared_observed_features:shared,mismatches:morphology_mismatches(reference,&head.morph),
+    }
+}
+
+#[derive(Debug,Clone,Serialize)]
 pub struct NativeMentionSpanBinding{
     pub start_char:i64,pub end_char:i64,pub token_ids:Vec<i64>,
     pub original_mention_ref:String,pub factor_type:&'static str,
     pub license_kinds:Vec<&'static str>,pub anchor_pos:String,
     pub exact_object_ids:Vec<i64>,pub unique_dependency_head:Option<i64>,
     pub dependency_head_alternatives:Vec<i64>,
+    pub dependency_head_morphology_fibre:Vec<NativeMorphologyHeadObservation>,
+    pub head_fibre_all_observed_mismatch:bool,
+    pub head_fibre_all_observed_agree:bool,
+    pub head_fibre_semantic_refutation_paid:bool,
     pub accessibility_path:&'static str,pub morphology_mismatches:Vec<&'static str>,
     pub projected_compatible:bool,pub within_original_execution_cap:bool,
     pub persisted_candidate_evidence:usize,
@@ -2184,6 +2209,12 @@ fn original_mention_binding_campaign(
         let head=slice.iter().filter(|t|t.head.is_some_and(|h|h==t.id||!token_ids.contains(&h)))
             .collect::<Vec<_>>();
         let head_alternatives=head.iter().map(|h|h.id).collect::<Vec<_>>();
+        let head_fibre=head.iter().map(|h|observe_head_morphology(&morphology,h)).collect::<Vec<_>>();
+        // Quantify over ALL actual head alternatives, never pick the first
+        // or turn an empty head fibre into vacuous incompatibility.
+        let all_mismatch=!head_fibre.is_empty()&&head_fibre.iter().all(|h|!h.mismatches.is_empty());
+        let all_agree=!head_fibre.is_empty()&&head_fibre.iter().all(|h|
+            h.shared_observed_features.len()==MORPH_FEATURES.len()&&h.mismatches.is_empty());
         let head=if let [h]=head.as_slice(){Some(*h)}else{None};
         let key=(first.region,token_ids.clone());
         let mut objects=support.get(&key).cloned().unwrap_or_default();
@@ -2240,6 +2271,8 @@ fn original_mention_binding_campaign(
             original_mention_ref:format!("mention:{doc}:{}:{}",first.start,last.end),
             factor_type:"semantic.mention_identity",license_kinds:licenses,anchor_pos:first.pos.clone(),
             exact_object_ids:objects,unique_dependency_head:head.map(|h|h.id),dependency_head_alternatives:head_alternatives,
+            dependency_head_morphology_fibre:head_fibre,head_fibre_all_observed_mismatch:all_mismatch,
+            head_fibre_all_observed_agree:all_agree,head_fibre_semantic_refutation_paid:false,
             accessibility_path:path,morphology_mismatches:mismatches,
             projected_compatible:compatible,within_original_execution_cap:false,
             persisted_candidate_evidence:0,

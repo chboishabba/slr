@@ -278,11 +278,50 @@ pub fn run(args:&[String])->Result<(),String>{
             if !last.native_binding_bridge.structural_relation_parity_paid{blockers.push("full_original_relation_parity_unpaid");}
             if last.morphology_head_unobservable_count>0{blockers.push("scalar_morphology_head_residual");}
             if !transported_not_indexed.is_empty(){blockers.push("transported_objects_outside_typed_index_not_refuted");}
+            // Exact current original index families and the represented
+            // numeric universe are different observation coordinates.
+            // Retain every relation-member inverse without inventing
+            // numeric object IDs for eventualities/propositions.
+            let typed_families=readback.original_binding_sets.iter()
+                .filter(|s|s.same_manifestation&&s.reference_factor_revision_ref.starts_with("factor-revision:native-binding-v2:")
+                    &&last.native_binding_bridge.candidate_sets.iter().any(|m|m.candidate_set_ref==s.candidate_set_ref
+                        &&m.referential_type==s.referential_type_ref))
+                .map(|s|serde_json::json!({
+                    "referential_type":s.referential_type_ref,"candidate_set_ref":s.candidate_set_ref,
+                    "full_index_member_count":s.original_index_member_count,"cap_deferred_count":s.original_cap_deferred_count,
+                    "index_query_complete":s.original_index_query_complete,
+                    "members":s.original_members.iter().map(|m|serde_json::json!({
+                        "factor_revision_ref":m.candidate_factor_revision_ref,"factor_ref":m.candidate_factor_ref,
+                        "exact_source_spans":m.original_span_coordinates,"exact_token_ids":m.exact_projection_token_ids,
+                        "inverse_verified":m.native_inverse_matches_snapshot,
+                        "object_ids":m.exact_same_manifestation_numeric_object_ids,
+                        "accessibility_path":m.accessibility_path_ref
+                    })).collect::<Vec<_>>()
+                })).collect::<Vec<_>>();
+            let live_h3=last.original_horizon_observations.iter().filter(|h|h.horizon==3&&!h.refuted)
+                .map(|h|(h.target_kind,h.target_id)).collect::<std::collections::BTreeSet<_>>();
+            let outside_ids=transported_not_indexed.iter().copied().collect::<std::collections::BTreeSet<_>>();
+            let indexed_ids=typed_objects.iter().copied().collect::<std::collections::BTreeSet<_>>();
+            let represented_objects=live_h3.iter().filter(|(kind,_)|*kind==1).map(|(_,id)|*id)
+                .collect::<std::collections::BTreeSet<_>>();
+            let union=indexed_ids.union(&outside_ids).copied().collect::<std::collections::BTreeSet<_>>();
+            let typed_partition=serde_json::json!({
+                "live_object_keys":represented_objects,
+                "indexed_object_keys":indexed_ids,"outside_index_object_keys":outside_ids,
+                "indexed_outside_disjoint":indexed_ids.is_disjoint(&outside_ids),
+                "index_union_exact_live_object_domain":union==represented_objects,
+                "other_live_numeric_keys":live_h3.iter().filter(|(kind,_)|*kind!=1).collect::<Vec<_>>(),
+                "all_kind_index_families":typed_families,
+                "expletive_alternative_retained":last.native_binding_bridge.focus_reference_alternatives.contains(&"expletive_realisation"),
+                "outside_model_possible":last.outside_model_possible,
+                "complete_typed_coverage_paid":false,"semantic_refutation_from_partition_paid":false
+            });
             let typed_dossier=serde_json::json!({
                 "full_index_entity_rivals":rivals,"typed_entity_object_count":typed_objects.len(),
                 "transported_objects_outside_index":transported_not_indexed,
                 "focus_reference_alternatives":last.native_binding_bridge.focus_reference_alternatives,
                 "prospective_identity_classes_not_admitted":projected,
+                "typed_observation_partition":typed_partition,
                 "blockers":blockers,"automatic_semantic_refutation_from_index_absence":false
             });
             // The original read-only audit cannot pay governed identity
