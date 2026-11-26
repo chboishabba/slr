@@ -116,7 +116,7 @@ pub use cache_first::{
 pub use investigation_acquisition_store::{
     INVESTIGATION_ACQUISITION_SQL, DurableAcquisitionQueue,
     InvestigationStoreError, persist_acquisition_queue,
-    load_acquisition_queue, persist_acquisition_update,
+    load_acquisition_queue, persist_acquisition_update, AcquisitionLifecycle, load_acquisition_lifecycle,
 };
 pub use investigation_acquisition::{
     RecordAvailability, AccessDisposition, EvidenceIndependence,

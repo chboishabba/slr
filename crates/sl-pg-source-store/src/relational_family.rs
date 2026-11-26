@@ -11,7 +11,7 @@ use postgres::{Client,GenericClient,NoTls};
 use crate::workbench_projection::acceptance_control_store::load_relational_selection_on_client;
 use crate::workbench_projection::persisted_relational_observation::{relational_observations_from_checked_batch_on_client,relational_observation_from_persisted_wikidata_on_client};
 use crate::relational_interlingua_store::{RelationalSourceDigests,persist_relational_comparison_on_client};
-use crate::investigation_acquisition_store::ensure_acquisition_obligation_on_client;
+use crate::investigation_acquisition_store::{ensure_acquisition_obligation_on_client,load_acquisition_lifecycle_on_client,AcquisitionLifecycle};
 use crate::{
     AcceptanceObservationKind, AcceptanceObservationSelector, DatabaseConfig,
     RelationalObservation, RelationalConsumer, Polarity, ComparisonResidual,
@@ -132,6 +132,7 @@ pub struct PersistedRelationalFamily {
     pub durable_comparisons:Vec<DurableRelationalComparison>,
     pub durable_acquisition_queues:Vec<DurableAcquisitionQueue>,
     pub residual_review_items:Vec<FamilyReviewProjection>,
+    pub acquisition_lifecycles:Vec<AcquisitionLifecycle>,
     /// Existing queues are reloaded; no fabricated routes or access grants.
     pub creates_access_authority:bool,
     pub applies_external_edit:bool,
@@ -410,14 +411,16 @@ pub fn run_persisted_relational_family(
         .collect::<BTreeMap<_,_>>();
     let mut durable_acquisition_queues=Vec::new();
     let mut residual_review_items=Vec::new();
+    let mut acquisition_lifecycles=Vec::new();
     // Stable lock order avoids family-dependent queue locking order.
     let mut demands=projection.acquisition_demands.iter().collect::<Vec<_>>();
     demands.sort_by(|a,b|a.obligation.obligation_ref.cmp(&b.obligation.obligation_ref));
     for demand in demands{
         let parent=parents.get(demand.obligation.comparison_ref.as_str())
             .ok_or(RelationalFamilyError::ChangedReplay)?;
-        durable_acquisition_queues.push(ensure_acquisition_obligation_on_client(
-            &mut tx,&demand.obligation,parent)?);
+        let queue=ensure_acquisition_obligation_on_client(&mut tx,&demand.obligation,parent)?;
+        acquisition_lifecycles.push(load_acquisition_lifecycle_on_client(&mut tx,&queue)?);
+        durable_acquisition_queues.push(queue);
         let item=persist_review_projection_on_tx(&mut tx,&residual_review_item(demand,consumer_ref))?;
         residual_review_items.push(FamilyReviewProjection{
             review_item_ref:item.review_item_ref,obligation_ref:demand.obligation.obligation_ref.clone(),
@@ -430,7 +433,7 @@ pub fn run_persisted_relational_family(
     }
     tx.commit()?;
     Ok(PersistedRelationalFamily{
-        projection,durable_comparisons,durable_acquisition_queues,residual_review_items,
+        projection,durable_comparisons,durable_acquisition_queues,residual_review_items,acquisition_lifecycles,
         creates_access_authority:false,applies_external_edit:false,
     })
 }

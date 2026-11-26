@@ -205,22 +205,115 @@ pub fn persist_acquisition_queue(
         if old.obligation!=*obligation || old.routes.iter().any(|route|!routes.contains(route)){
             return Err(InvestigationStoreError::ChangedReplay);
         }
+        let lifecycle=load_acquisition_lifecycle_on_client(&mut tx,&old)?;
+        if lifecycle.terminal_update.is_some() && (old.routes.len()!=routes.len()
+            || routes.iter().any(|route|!old.routes.contains(route))){
+            return Err(InvestigationStoreError::ChangedReplay);
+        }
     }
     let result=write_routes_and_priority(&mut tx,obligation,routes)?;
     tx.commit()?;
     Ok(result)
 }
 
+/// The obligation is immutable initial demand; lifecycle is derived from
+/// its actual terminal update, not from a stale copy of initial availability.
+#[derive(Debug,Clone,PartialEq,Eq,Serialize,Deserialize)]
+pub struct AcquisitionLifecycle {
+    pub obligation_ref:String,
+    pub effective_availability:RecordAvailability,
+    pub terminal_update:Option<AcquisitionUpdate>,
+    pub reopening:Option<SelectiveReopeningReceipt>,
+    pub effective_executable_frontier_route_refs:Vec<String>,
+}
+pub(crate) fn load_acquisition_lifecycle_on_client(
+    client:&mut impl GenericClient,queue:&DurableAcquisitionQueue,
+)->Result<AcquisitionLifecycle,InvestigationStoreError>{
+    let obligation=&queue.obligation;
+    let rows=client.query(
+        "SELECT acquisition_receipt_ref,packet_sha256,packet_json
+         FROM semantic.investigation_acquisition_update
+         WHERE obligation_ref=$1 ORDER BY acquisition_receipt_ref",
+        &[&obligation.obligation_ref])?;
+    // Legacy multiple terminal receipts are inconsistent, never resolved by
+    // choosing the most recent or by overwriting a receipt.
+    if rows.len()>1{return Err(InvestigationStoreError::ChangedReplay);}
+    let mut lifecycle=AcquisitionLifecycle{
+        obligation_ref:obligation.obligation_ref.clone(),
+        effective_availability:obligation.current_availability,
+        terminal_update:None,reopening:None,
+        effective_executable_frontier_route_refs:queue.priority.executable_frontier_route_refs.clone(),
+    };
+    let reopening_rows=client.query(
+        "SELECT acquisition_receipt_ref,packet_sha256,packet_json,creates_semantic_authority
+         FROM semantic.investigation_selective_reopening WHERE obligation_ref=$1",
+        &[&obligation.obligation_ref])?;
+    let Some(row)=rows.first() else{
+        if !reopening_rows.is_empty(){return Err(InvestigationStoreError::ChangedReplay);}
+        return Ok(lifecycle);
+    };
+    let body:String=row.get(2);
+    let update:AcquisitionUpdate=serde_json::from_str(&body)?;
+    if digest(&body)!=row.get::<_,String>(1)
+        ||update.acquisition_receipt_ref!=row.get::<_,String>(0){
+        return Err(InvestigationStoreError::ChangedReplay);
+    }
+    apply_acquisition_update(obligation,&update)?;
+    match update.after {
+        RecordAvailability::Present=>{
+            let revision=update.acquired_source_revision_ref.as_ref().ok_or(InvestigationStoreError::ChangedReplay)?;
+            if !source_revision_exists(client,revision)?||reopening_rows.len()!=1{
+                return Err(InvestigationStoreError::WrongOwner);
+            }
+            let reopen=&reopening_rows[0];
+            let json:String=reopen.get(2);
+            let receipt:SelectiveReopeningReceipt=serde_json::from_str(&json)?;
+            if reopen.get::<_,String>(0)!=update.acquisition_receipt_ref
+                ||reopen.get::<_,String>(1)!=digest(&json)||reopen.get::<_,bool>(3)
+                ||receipt.creates_semantic_authority||receipt.changed_source_revision_ref!=*revision{
+                return Err(InvestigationStoreError::ChangedReplay);
+            }
+            lifecycle.reopening=Some(receipt);
+        },
+        RecordAvailability::KnownAbsent=>{
+            if !reopening_rows.is_empty(){return Err(InvestigationStoreError::ChangedReplay);}
+        },
+        _=>return Err(InvestigationStoreError::ChangedReplay),
+    }
+    lifecycle.effective_availability=update.after;
+    lifecycle.terminal_update=Some(update);
+    lifecycle.effective_executable_frontier_route_refs.clear();
+    Ok(lifecycle)
+}
+
+pub fn load_acquisition_lifecycle(
+    config:&DatabaseConfig,obligation_ref:&str,
+)->Result<Option<AcquisitionLifecycle>,InvestigationStoreError>{
+    let mut connection=Client::connect(config.database_url(),NoTls)?;
+    let mut tx=connection.transaction()?;
+    tx.batch_execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY; SET LOCAL statement_timeout='90000ms'")?;
+    let Some(queue)=load_acquisition_queue_rows(&mut tx,obligation_ref)? else{return Ok(None)};
+    let mut digests=RelationalSourceDigests::new(&mut tx)?;
+    let parent=load_relational_comparison_on_client(&mut tx,&mut digests,&queue.obligation.comparison_ref)?
+        .ok_or(InvestigationStoreError::WrongOwner)?;
+    validate_owner(&queue.obligation,&parent)?;
+    let result=load_acquisition_lifecycle_on_client(&mut tx,&queue)?;
+    tx.commit()?;
+    Ok(Some(result))
+}
+
 fn source_revision_exists(
     client:&mut impl GenericClient,revision:&str,
 )->Result<bool,postgres::Error>{
-    if client.query_opt(
+    let tables=client.query_one(
+        "SELECT to_regclass('ingest.generic_source_revision')::text,to_regclass('corpus.chat_archive_message')::text",&[])?;
+    if tables.get::<_,Option<String>>(0).is_some() && client.query_opt(
         "SELECT 1 FROM ingest.generic_source_revision
          WHERE source_revision_ref=$1 AND candidate_only=TRUE
            AND creates_semantic_authority=FALSE
            AND applicability_promoted=FALSE AND claim_truth_promoted=FALSE",
         &[&revision])?.is_some(){return Ok(true);}
-    Ok(client.query_opt(
+    Ok(tables.get::<_,Option<String>>(1).is_some() && client.query_opt(
         "SELECT 1 FROM corpus.chat_archive_message
          WHERE source_revision_ref=$1 AND candidate_only=TRUE
            AND creates_semantic_authority=FALSE
@@ -251,6 +344,10 @@ pub fn persist_acquisition_update(
         .ok_or(InvestigationStoreError::WrongOwner)?;
     validate_owner(&queue.obligation,&parent)?;
     apply_acquisition_update(&queue.obligation,update)?;
+    let prior=load_acquisition_lifecycle_on_client(&mut client,&queue)?;
+    if prior.terminal_update.as_ref().is_some_and(|u|u!=update){
+        return Err(InvestigationStoreError::ChangedReplay);
+    }
 
     if update.after==RecordAvailability::Present{
         let revision=update.acquired_source_revision_ref.as_ref()
@@ -280,6 +377,10 @@ pub fn persist_acquisition_update(
     }
 
     if update.after==RecordAvailability::KnownAbsent{
+        let effective=load_acquisition_lifecycle_on_client(&mut client,&queue)?;
+        if effective.terminal_update.as_ref()!=Some(update)||effective.reopening.is_some(){
+            return Err(InvestigationStoreError::ChangedReplay);
+        }
         client.commit()?;
         return Ok(None);
     }
@@ -302,6 +403,10 @@ pub fn persist_acquisition_update(
         &[&update.obligation_ref,&update.acquisition_receipt_ref])?;
     if row.get::<_,String>(0)!=digest(&reopening_json)||row.get::<_,String>(1)!=reopening_json
         ||row.get::<_,bool>(2){return Err(InvestigationStoreError::ChangedReplay);}
+    let effective=load_acquisition_lifecycle_on_client(&mut client,&queue)?;
+    if effective.terminal_update.as_ref()!=Some(update)||effective.reopening.as_ref()!=Some(&reopening){
+        return Err(InvestigationStoreError::ChangedReplay);
+    }
     client.commit()?;
     Ok(Some(reopening))
 }
