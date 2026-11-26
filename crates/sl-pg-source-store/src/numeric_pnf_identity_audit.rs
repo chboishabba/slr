@@ -4274,14 +4274,19 @@ pub fn query_native_demand_fibre(url:&str,run:&str,doc:&str,source_sha:&str,dema
         (read(&mut tx,"SELECT to_jsonb(e) FROM execution.slr_native_current_candidate_evidence_v1 e WHERE demand_id=$1 ORDER BY evidence_id")?,
          tx.query_one("SELECT execution.slr_native_current_authority_usable($1)",&[&demand_id])?.get::<_,bool>(0))
     }else{(Vec::new(),false)};
+    // Demand-level/other neutral atoms may not carry a candidate key.
+    // Preserve those atoms; only use an exact matching key for candidate
+    // refutation provenance. Do not erase the zero/unknown carrier.
     let evidence_ids=current.iter().map(|e|{
-        Ok((e["evidence_id"].as_i64().ok_or(NativeNumericAuditError::ForeignSource)?,key(e)?))
+        Ok((e["evidence_id"].as_i64().ok_or(NativeNumericAuditError::ForeignSource)?,
+            e["target_kind"].as_i64().zip(e["target_id"].as_i64())))
     }).collect::<Result<BTreeMap<_,_>,NativeNumericAuditError>>()?;
+    if evidence_ids.len()!=current.len(){return Err(NativeNumericAuditError::ForeignSource);}
     let mut candidates=Vec::new();
     for s in &states{
         let k=key(s)?;
         let refuted=s["refuted"].as_bool().ok_or(NativeNumericAuditError::ForeignSource)?;
-        let same_current=s["admissibility_evidence_id"].as_i64().and_then(|id|evidence_ids.get(&id)).is_some_and(|e|*e==k);
+        let same_current=s["admissibility_evidence_id"].as_i64().and_then(|id|evidence_ids.get(&id)).is_some_and(|e|*e==Some(k));
         candidates.push(json!({"target_kind":k.0,"target_id":k.1,"state":s,
             "reported_refuted":refuted,"same_candidate_current_evidence":same_current,
             "refutation_requires_semantic_validation":refuted,
@@ -4296,14 +4301,48 @@ pub fn query_native_demand_fibre(url:&str,run:&str,doc:&str,source_sha:&str,dema
         SELECT source_object_id AS object_id FROM execution.semantic_pnf_demand WHERE demand_id=$1 AND source_object_id IS NOT NULL
         UNION SELECT target_id FROM execution.semantic_pnf_candidate_universe WHERE demand_id=$1 AND target_kind=1)
         SELECT jsonb_build_object('object',to_jsonb(o),'region',to_jsonb(r),'token_support',
-          COALESCE((SELECT jsonb_agg(to_jsonb(s) ORDER BY s.token_id) FROM execution.semantic_pnf_object_token_support s WHERE s.object_id=o.object_id),'[]'::jsonb))
+          COALESCE((SELECT jsonb_agg(jsonb_build_object('support',to_jsonb(s),'token',to_jsonb(t)) ORDER BY s.token_id)
+            FROM execution.semantic_pnf_object_token_support s LEFT JOIN execution.semantic_parser_token t ON t.token_id=s.token_id
+            WHERE s.object_id=o.object_id),'[]'::jsonb))
         FROM objects k JOIN execution.semantic_pnf_object o ON o.object_id=k.object_id
         JOIN execution.semantic_pnf_region r ON r.region_id=o.region_id ORDER BY o.object_id")?;
     let expected_objects=universe_keys.iter().filter(|k|k.0==1).map(|k|k.1)
         .chain(demand["source_object_id"].as_i64()).collect::<BTreeSet<_>>();
     let actual_objects=support.iter().map(|o|o["object"]["object_id"].as_i64().ok_or(NativeNumericAuditError::ForeignSource))
         .collect::<Result<BTreeSet<_>,_>>()?;
-    if actual_objects!=expected_objects{return Err(NativeNumericAuditError::ForeignSource);}
+    if actual_objects!=expected_objects||support.iter().any(|o|
+        o["token_support"].as_array().is_none_or(|rows|rows.iter().any(|s|
+            s["token"].is_null()||s["support"]["token_id"]!=s["token"]["token_id"]))){
+        return Err(NativeNumericAuditError::ForeignSource);
+    }
+    // Bind the original source revision and parser run where the existing
+    // active relation packet supplies them; absence remains explicit.
+    let binding_installed:bool=tx.query_one("SELECT to_regclass('execution.slr_native_binding_anchor_projection') IS NOT NULL
+        AND to_regclass('execution.slr_native_relation_reduction') IS NOT NULL",&[])?.get(0);
+    let mut original_source_binding=Value::Null;
+    if binding_installed{
+        let snapshots=tx.query("SELECT DISTINCT snapshot_ref FROM execution.slr_native_binding_anchor_projection
+            WHERE run_ref=$1 AND document_ref=$2 AND active ORDER BY snapshot_ref",&[&run,&doc])?;
+        if snapshots.len()==1{
+            let snapshot:String=snapshots[0].get(0);
+            let packets=tx.query("SELECT relation_ref,payload FROM execution.slr_native_relation_reduction
+                WHERE run_ref=$1 AND document_ref=$2 AND snapshot_ref=$3
+                AND relation_ref LIKE 'native-original-relation-packet:%'",&[&run,&doc,&snapshot])?;
+            if packets.len()==1{
+                let ref_key:String=packets[0].get(0);let relation:Value=packets[0].get(1);
+                let digest=original_relation_digest(&relation)?;
+                if ref_key!=format!("native-original-relation-packet:{digest}"){
+                    return Err(NativeNumericAuditError::ForeignSource);
+                }
+                validate_reopened_relation_packet(&relation,doc,source_sha,&bytes)?;
+                original_source_binding=json!({"snapshot_ref":snapshot,"packet_sha256":digest,
+                    "source_revision_ref":relation["comparison"]["source_revision_ref"],
+                    "parser_run_ref":relation["comparison"]["parser_run_ref"],
+                    "relation_prefix_end_char":relation["comparison"]["prefix_end_char"],
+                    "demand_relation_factor_correspondence_paid":false});
+            }
+        }
+    }
     let overflow=read(&mut tx,"SELECT to_jsonb(o) FROM execution.semantic_pnf_proper_name_evidence_overflow o
         JOIN execution.semantic_pnf_demand d ON d.source_object_id=o.source_object_id
         JOIN execution.semantic_pnf_region r ON r.region_id=d.source_region_id AND r.run_id=o.run_id AND r.document_id=o.document_id
@@ -4317,7 +4356,7 @@ pub fn query_native_demand_fibre(url:&str,run:&str,doc:&str,source_sha:&str,dema
         "current_authority_guard_usable":authority_usable,"open_world_state":open,
         "frontier_resolution":frontier,"signed_horizon_tallies":horizon,"consumer_work":work,
         "consumer_sufficiency_records":sufficiency,"object_token_inverse":support,
-        "proper_name_overflow":overflow,"recorded_universe_exact":true,
+        "proper_name_overflow":overflow,"original_source_binding":original_source_binding,"recorded_universe_exact":true,
         "semantic_coverage_paid":false,"source_meaning_correspondence_paid":false,
         "governed_identity_paid":false,"level_three_paid":false,"world_truth_paid":false,
         "outside_model_discharge_paid":false});
