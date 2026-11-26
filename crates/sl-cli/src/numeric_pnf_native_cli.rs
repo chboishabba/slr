@@ -13,7 +13,7 @@ use sensiblaw_pg_source_store::{
     inspect_native_antecedent_review, native_antecedent_frontier,
     compile_native_source_local_answer,
     audit_original_numeric_identity_for_source_answer, certify_original_focus_identity,
-    reuse_original_binding_and_identity_owners,
+    reuse_original_binding_and_identity_owners, reopen_native_original_relation_packet, compare_native_original_relation_reference,
     retract_original_numeric_identity_for_source_answer,
     transport_original_numeric_candidates_for_source_answer,
     prepare_native_prefix_recovery, publish_native_prefix_heading_repair, complete_parser_run,
@@ -83,6 +83,17 @@ fn print_json<T:Serialize>(value:&T)->Result<(),String>{
 }
 pub fn run(args:&[String])->Result<(),String>{
     match args {
+        [subcommand,run,doc,snapshot,digest] if subcommand=="relation-reopen"=>{
+            let url=env::var("SENSIBLAW_DATABASE_URL").map_err(|_|"numeric relation readback requires SENSIBLAW_DATABASE_URL")?;
+            let receipt=reopen_native_original_relation_packet(&url,run,doc,snapshot,digest).map_err(|e|e.to_string())?;
+            print_json(&receipt)
+        }
+        [subcommand,packet,reference] if subcommand=="relation-compare"=>{
+            let native:serde_json::Value=serde_json::from_slice(&std::fs::read(packet).map_err(|e|e.to_string())?).map_err(|e|e.to_string())?;
+            let reference:serde_json::Value=serde_json::from_slice(&std::fs::read(reference).map_err(|e|e.to_string())?).map_err(|e|e.to_string())?;
+            let receipt=compare_native_original_relation_reference(&native,&reference).map_err(|e|e.to_string())?;
+            print_json(&receipt)
+        }
         [subcommand,source_revision,parser_run,first,count,flag] if subcommand=="direct-stage"&&flag=="--commit"=>{
             let first=first.parse::<usize>().map_err(|_|"invalid first sentence")?;
             let count=count.parse::<usize>().map_err(|_|"invalid sentence budget")?;
@@ -454,7 +465,7 @@ pub fn run(args:&[String])->Result<(),String>{
             print_json(&receipt)
         }
         _=>Err(
-            "numeric-pnf-native usage: direct-inspect SOURCE_REV PARSER_RUN FIRST_SENTENCE MAX_SENTENCES | direct-stage SOURCE_REV PARSER_RUN FIRST_SENTENCE MAX_SENTENCES --commit | prefix-prepare REVIEW PARSER_RUN --inspect|--commit | prefix-repair REVIEW PARSER_RUN --commit | endpoint REVIEW PARSER_RUN --commit | inspect SOURCE_REV PARSER_RUN | plan SOURCE_REV PARSER_RUN | audit S29_REVIEW_ITEM_REF PARSER_RUN | reuse-original S29_REVIEW_ITEM_REF PARSER_RUN | bind S29_REVIEW_ITEM_REF PARSER_RUN MAX_CANDIDATES --commit | bind-campaign S29_REVIEW_ITEM_REF PARSER_RUN MAX_CANDIDATES --commit | retract S29_REVIEW_ITEM_REF PARSER_RUN WITNESS_ID --rollback-probe|--commit | compile SOURCE_REV PARSER_RUN MAX_SENTENCES --commit [--allow-partial-source] (numeric DB URL required for audit/compile, durable source root for compile)".into()
+            "numeric-pnf-native usage: relation-reopen RUN DOCUMENT SNAPSHOT PACKET_SHA256 | relation-compare REOPENED_PACKET_JSON INDEPENDENT_REFERENCE_JSON | direct-inspect SOURCE_REV PARSER_RUN FIRST_SENTENCE MAX_SENTENCES | direct-stage SOURCE_REV PARSER_RUN FIRST_SENTENCE MAX_SENTENCES --commit | prefix-prepare REVIEW PARSER_RUN --inspect|--commit | prefix-repair REVIEW PARSER_RUN --commit | endpoint REVIEW PARSER_RUN --commit | inspect SOURCE_REV PARSER_RUN | plan SOURCE_REV PARSER_RUN | audit S29_REVIEW_ITEM_REF PARSER_RUN | reuse-original S29_REVIEW_ITEM_REF PARSER_RUN | bind S29_REVIEW_ITEM_REF PARSER_RUN MAX_CANDIDATES --commit | bind-campaign S29_REVIEW_ITEM_REF PARSER_RUN MAX_CANDIDATES --commit | retract S29_REVIEW_ITEM_REF PARSER_RUN WITNESS_ID --rollback-probe|--commit | compile SOURCE_REV PARSER_RUN MAX_SENTENCES --commit [--allow-partial-source] (numeric DB URL required for audit/compile, durable source root for compile)".into()
         )
     }
 }

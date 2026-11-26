@@ -3452,6 +3452,150 @@ pub struct NativeOriginalRelationPacketReceipt{
     pub complete_supplied_prefix_relation_parity:bool,
     pub whole_document_parity_paid:bool,
 }
+
+/// Reopen the original immutable relation crosswalk by its exact receipt
+/// coordinates. This does not solve the relations again, change the active
+/// snapshot, or attest the authority of a supplied independent comparator.
+pub fn reopen_native_original_relation_packet(
+    url:&str,run:&str,doc:&str,snapshot:&str,digest:&str,
+)->Result<serde_json::Value,NativeNumericAuditError>{
+    if run.is_empty()||doc.is_empty()||snapshot.is_empty()||digest.len()!=64
+        ||!digest.bytes().all(|x|x.is_ascii_hexdigit()&&!x.is_ascii_uppercase()){
+        return Err(NativeNumericAuditError::ForeignSource);
+    }
+    let mut db=Client::connect(url,NoTls)?;
+    let mut tx=db.transaction()?;
+    tx.batch_execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY; SET LOCAL statement_timeout='90000ms'")?;
+    let key=format!("native-original-relation-packet:{digest}");
+    let row=tx.query_one("SELECT payload FROM execution.slr_native_relation_reduction
+        WHERE run_ref=$1 AND document_ref=$2 AND snapshot_ref=$3 AND relation_ref=$4",
+        &[&run,&doc,&snapshot,&key])?;
+    let packet:serde_json::Value=row.get(0);
+    if original_relation_digest(&packet)?!=digest{return Err(NativeNumericAuditError::ForeignSource);}
+    let src=tx.query_one("SELECT locator,encode(content_sha256,'hex') FROM execution.semantic_parser_source
+        WHERE run_ref=$1 AND document_ref=$2",&[&run,&doc])?;
+    let locator:String=src.get(0);
+    let sha:String=src.get(1);
+    let bytes=std::fs::read(locator).map_err(|_|NativeNumericAuditError::ForeignSource)?;
+    if hex(&Sha256::digest(&bytes))!=sha||doc!=format!("document:sha256:{sha}"){
+        return Err(NativeNumericAuditError::ForeignSource);
+    }
+    validate_reopened_relation_packet(&packet,doc,&sha,&bytes)?;
+    tx.commit()?;
+    Ok(serde_json::json!({
+        "schema":"slr-reopened-original-relation-packet-v1","numeric_run_ref":run,
+        "document_ref":doc,"snapshot_ref":snapshot,"packet_sha256":digest,
+        "packet":packet,"exact_persisted_packet_readback":true,
+        "writes_database":false,"current_snapshot_certified":false,
+        "independent_reference_exact":false,"typed_coverage_paid":false,
+        "governed_identity_paid":false,"whole_document_parity_paid":false
+    }))
+}
+
+fn validate_reopened_relation_packet(
+    packet:&serde_json::Value,doc:&str,sha:&str,bytes:&[u8],
+)->Result<(),NativeNumericAuditError>{
+    let c=&packet["comparison"];
+    let count=c["prefix_end_char"].as_u64().and_then(|n|usize::try_from(n).ok())
+        .ok_or(NativeNumericAuditError::ForeignSource)?;
+    let text=std::str::from_utf8(bytes).map_err(|_|NativeNumericAuditError::ForeignSource)?;
+    let prefix=text.chars().take(count).collect::<String>();
+    if c["schema"]!="slr-original-relation-reference-projection:v1"
+        ||c["scope"]!="supplied_parser_prefix"||c["document_ref"]!=doc||c["source_sha256"]!=sha
+        ||c["source_revision_ref"].as_str().map_or(true,str::is_empty)
+        ||c["parser_run_ref"].as_str().map_or(true,str::is_empty)
+        ||prefix.chars().count()!=count||c["bundle"]["canonical_text"]!=prefix
+        ||packet["candidate_only"]!=true
+        ||packet["missing_original_tags"].as_u64().is_none()
+        ||packet["prefix_uncovered_nonwhitespace"].as_u64().is_none(){
+        return Err(NativeNumericAuditError::ForeignSource);
+    }
+    let atoms=c["bundle"]["atoms"].as_array().ok_or(NativeNumericAuditError::ForeignSource)?;
+    let inverse=packet["atom_token_inverse"].as_object().ok_or(NativeNumericAuditError::ForeignSource)?;
+    let mut atom_ids=BTreeSet::new();let mut token_ids=BTreeSet::new();
+    for a in atoms{
+        let id=a["id"].as_str().ok_or(NativeNumericAuditError::ForeignSource)?;
+        let token=inverse.get(id).and_then(|n|n.as_i64()).filter(|n|*n>0)
+            .ok_or(NativeNumericAuditError::ForeignSource)?;
+        if !atom_ids.insert(id)||!token_ids.insert(token){return Err(NativeNumericAuditError::ForeignSource);}
+    }
+    if atom_ids.len()!=inverse.len(){return Err(NativeNumericAuditError::ForeignSource);}
+    for (i,relation) in c["bundle"]["relations"].as_array().ok_or(NativeNumericAuditError::ForeignSource)?.iter().enumerate(){
+        if relation["id"]!=format!("e{}",i+1){return Err(NativeNumericAuditError::ForeignSource);}
+        for role in relation["roles"].as_array().ok_or(NativeNumericAuditError::ForeignSource)?{
+            if role.get("atom").and_then(|v|v.as_str()).is_some_and(|id|!atom_ids.contains(id)){
+                return Err(NativeNumericAuditError::ForeignSource);
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Exact structural comparison against a separately supplied reference.
+/// The comparison input is untrusted: equality does not authenticate its
+/// producer. Ordered arrays retain their order. JSON pointer coordinates
+/// expose every differing leaf up to the explicit sample budget; the
+/// total is counted even when examples are truncated.
+pub fn compare_native_original_relation_reference(
+    native:&serde_json::Value,reference:&serde_json::Value,
+)->Result<serde_json::Value,NativeNumericAuditError>{
+    use serde_json::Value;
+    if native["schema"]!="slr-reopened-original-relation-packet-v1"
+        ||native["exact_persisted_packet_readback"]!=true{
+        return Err(NativeNumericAuditError::ForeignSource);
+    }
+    let packet=&native["packet"];
+    let comparison=&packet["comparison"];
+    if native["packet_sha256"].as_str()!=Some(original_relation_digest(packet)?.as_str()){
+        return Err(NativeNumericAuditError::ForeignSource);
+    }
+    for k in ["schema","producer_revision","document_ref","source_sha256","source_revision_ref",
+              "parser_run_ref","prefix_end_char","scope"]{
+        if comparison.get(k).is_none()||comparison.get(k)!=reference.get(k){
+            return Err(NativeNumericAuditError::ForeignSource);
+        }
+    }
+    fn diff(path:&str,a:Option<&Value>,b:Option<&Value>,count:&mut usize,examples:&mut Vec<Value>){
+        if a==b{return;}
+        match (a,b){
+            (Some(Value::Object(a)),Some(Value::Object(b)))=>{
+                let keys=a.keys().chain(b.keys()).collect::<BTreeSet<_>>();
+                for k in keys{
+                    let kptr=k.replace('~',"~0").replace('/',"~1");
+                    diff(&format!("{path}/{kptr}"),a.get(k),b.get(k),count,examples);
+                }
+            },
+            (Some(Value::Array(a)),Some(Value::Array(b)))=>{
+                for i in 0..a.len().max(b.len()){
+                    diff(&format!("{path}/{i}"),a.get(i),b.get(i),count,examples);
+                }
+            },
+            _=>{
+                *count+=1;
+                if examples.len()<128{
+                    examples.push(serde_json::json!({"pointer":path,
+                        "native_present":a.is_some(),"reference_present":b.is_some(),
+                        "native":a,"reference":b}));
+                }
+            }
+        }
+    }
+    let mut count=0;let mut examples=Vec::new();
+    diff("",Some(comparison),Some(reference),&mut count,&mut examples);
+    Ok(serde_json::json!({
+        "schema":"slr-native-original-relation-comparison-v1",
+        "packet_sha256":native["packet_sha256"],"snapshot_ref":native["snapshot_ref"],
+        "reference_typed_sha256":original_relation_digest(reference)?,
+        "scope":"supplied_parser_prefix","exact_payload_equality":count==0,
+        "difference_count":count,"difference_examples":examples,
+        "missing_original_tags":packet["missing_original_tags"],
+        "prefix_uncovered_nonwhitespace":packet["prefix_uncovered_nonwhitespace"],
+        "independent_producer_authenticated":false,"typed_coverage_paid":false,
+        "whole_document_parity_paid":false,"governed_identity_paid":false,
+        "writes_database":false
+    }))
+}
+
 fn original_factor_alternative(factor:&str,suffix:&str,typ:&str,value:serde_json::Value,
     declaration:&str,relation:&str)->serde_json::Value{
     serde_json::json!({"alternative_ref":format!("{factor}:{suffix}"),"type_ref":typ,"value":value,
@@ -5896,6 +6040,40 @@ mod tests{
         key.6="proper-name-expansion:999:1".into();
         assert!(bounded_parser_evidence_reference(&BTreeSet::from([key]),16).is_err());
         assert!(bounded_parser_evidence_reference(&BTreeSet::new(),0).is_err());
+    }
+
+
+    #[test]
+    fn original_relation_reopen_preserves_inverse_and_comparison_distinctions(){
+        let packet=serde_json::json!({"comparison":{
+            "schema":"slr-original-relation-reference-projection:v1",
+            "producer_revision":"historical-owner","document_ref":"doc","source_sha256":"sha",
+            "source_revision_ref":"revision","parser_run_ref":"parser","prefix_end_char":2,
+            "scope":"supplied_parser_prefix",
+            "bundle":{"canonical_text":"he","atoms":[{"id":"a1"}],
+            "relations":[{"id":"e1","roles":[{"atom":"a1"}]}]},
+            "reduction_projection":{"factors":[],"constraints":[]}},
+            "atom_token_inverse":{"a1":7},"missing_original_tags":1,
+            "prefix_uncovered_nonwhitespace":0,"candidate_only":true});
+        validate_reopened_relation_packet(&packet,"doc","sha",b"he went").unwrap();
+        assert!(validate_reopened_relation_packet(&packet,"doc","sha",b"we went").is_err());
+        let mut invalid=packet.clone();
+        invalid["atom_token_inverse"]["a2"]=serde_json::json!(8);
+        assert!(validate_reopened_relation_packet(&invalid,"doc","sha",b"he went").is_err());
+        let reopened=serde_json::json!({"schema":"slr-reopened-original-relation-packet-v1",
+            "exact_persisted_packet_readback":true,"packet_sha256":original_relation_digest(&packet).unwrap(),
+            "snapshot_ref":"snapshot","packet":packet});
+        let mut reference=reopened["packet"]["comparison"].clone();
+        let exact=compare_native_original_relation_reference(&reopened,&reference).unwrap();
+        assert_eq!(exact["exact_payload_equality"],true);
+        assert_eq!(exact["independent_producer_authenticated"],false);
+        assert_eq!(exact["typed_coverage_paid"],false);
+        reference["bundle"]["relations"][0]["roles"][0]["atom"]=serde_json::json!("other");
+        let difference=compare_native_original_relation_reference(&reopened,&reference).unwrap();
+        assert_eq!(difference["difference_count"],1);
+        assert_eq!(difference["difference_examples"][0]["pointer"],"/bundle/relations/0/roles/0/atom");
+        reference["parser_run_ref"]=serde_json::json!("foreign");
+        assert!(compare_native_original_relation_reference(&reopened,&reference).is_err());
     }
 
     #[test]
