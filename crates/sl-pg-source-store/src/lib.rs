@@ -11,6 +11,8 @@ mod chronology_contestation_store;
 mod candidate_pnf;
 mod relational_interlingua;
 mod relational_interlingua_store;
+mod relational_family;
+pub use relational_family::*;
 mod scoped_soft_type;
 mod bounded_repair_assessment;
 mod runtime_witness_certificate;

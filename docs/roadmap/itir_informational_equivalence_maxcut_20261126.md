@@ -238,3 +238,42 @@ instructions to run them now.
   promotion. D01 remaining reconciliation and D02–D07 actual welds next.
 
 - 2026-11-26 integration readback: [SLR #79](https://github.com/chboishabba/slr/pull/79) opened as draft against main. Integration merge commit `dc72973d347e7aa77a2ac54c3963a9e85d6a4fd7` is ahead of all four pinned parents, behind each by zero; compare against #78 shows exactly 13 changed paths. All ten non-shared #76/#72 donor paths were reopened at the integrated commit and their blob SHAs matched the corresponding donor heads (10/10). Shared lib exports and roadmap were reconciled rather than copied wholesale. No compilation, kernel acceptance or database execution claimed. GitHub initially reported mergeable=false on PR creation; ancestry was independently verified, review/merge readiness is not claimed. #59 remains a divergent donor, not merged; an attempted multi-path comparison returned 404, so exact file-level disposition remains open.
+
+## 6. Implementation cut MC-REL-1 — native source → relational family → INV
+
+2026-11-26, source implementation only (not native accepted).
+- D02: added checked persisted-batch predicate projection using the existing
+  native parser evidence audit, source UTF-8/digest owner and exact M12
+  factors. All predicate occurrences in a selected batch are enumerated;
+  direct dependency fibres preserve nested predicates, parent coordinates,
+  literal negation and source-local role occurrences without lexical
+  reporting dictionaries. Syntax roles remain syntax, not agent/truth
+  admission. Legacy coarse adapter remains for historical receipt replay.
+- D03: composed existing comparator for both directions of every distinct
+  2–10-source family; reversible nine-state SOURCE polarity classification,
+  explicit missing required context, distinct original selectors and
+  observations. Source polarity is not a reviewed ternary warrant. Actual
+  all-live-reading sufficiency and common-observable proof construction remain
+  open; no 27-state synthesis or semantic equivalence claim from this cut.
+- D04/D06: reuse durable comparison and INV queues for grouped exact
+  residuals; retain all residual coordinates under each existing obligation,
+  preserve already existing routes on replay, derive family-local potential
+  reopening cones with the existing graph function. No routes/authority
+  fabricated, no actual retraction performed. Modeled repair assessment now
+  rejects erasing signed evidence or silently dropping unknowns.
+- D07: native CLI `relational-family CONSUMER_REF ACCESS_CONSTRAINT_REF
+  SELECTOR_REF SELECTOR_REF ...` uses existing typed PG-owned selectors
+  and consumer contracts (currently acceptance/control ownership); no
+  additional JSON control plane. Native comparison rows/INV queues are
+  durable per-pair/per-obligation, not a family-wide atomic commit.
+- Verification prepared: direct nested dependency/negation, invalid head,
+  all-nine source polarity round trips, asymmetric licence, group residual
+  multiplicity, missing context and unrelated reopening, signed-evidence
+  erasure regressions. Not run: no Rust/Lean/PG toolchain in this session.
+- Remaining max-cut: generic source family/provider acquisition and complete
+  numeric factor-to-REL/semantic licensed transport, genuine live-fibre
+  coverage and independent proof construction, reviewed multilingual
+  common-meet/synthesis, complete candidate repair + governed review + actual
+  retraction, JMD ontology/KB qualifier alignment and ITIR facade. Existing
+  native predicate syntax is not sufficient to pay any of these by itself.
+  No operator campaign requested.

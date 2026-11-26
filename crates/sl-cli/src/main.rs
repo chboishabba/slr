@@ -10,6 +10,7 @@ mod waltons;
 mod waltons_live;
 mod pnf_candidate;
 mod pnf_db_checked;
+mod relational_family;
 mod native_antecedent_review;
 mod numeric_pnf_native_cli;
 mod timeline_candidates;
@@ -25,6 +26,7 @@ fn usage() {
 USAGE:
   sensiblaw pnf-candidate TSV_PATH SPAN_REF START_CHAR END_CHAR
   sensiblaw pnf-db-checked PARSER_RUN STATEMENT_REF DOCUMENT_REF SOURCE_REV REGION_REF START_CHAR END_CHAR LITERAL_FILE
+  sensiblaw relational-family CONSUMER_REF ACCESS_CONSTRAINT_REF SELECTOR_REF SELECTOR_REF [SELECTOR_REF ...]
   sensiblaw native-antecedent-review prepare ORIGINAL_C410_RECEIPT.json
   sensiblaw native-antecedent-review inspect REVIEW_ITEM_REF
   sensiblaw native-antecedent-review runs REVIEW_ITEM_REF
@@ -197,6 +199,9 @@ fn run() -> Result<(), String> {
     match args.as_slice() {
         [command, rest @ ..] if command == "pnf-candidate" => {
             pnf_candidate::run(rest)
+        }
+        [command, rest @ ..] if command == "relational-family" => {
+            relational_family::run(rest)
         }
         [command, rest @ ..] if command == "pnf-db-checked" => {
             pnf_db_checked::run(rest)

@@ -789,6 +789,21 @@ fn persist_selector<C: GenericClient>(
     Ok(())
 }
 
+/// Reuse the existing typed control plane for native relational operations.
+pub fn load_relational_selection(
+    config: &DatabaseConfig, consumer_ref: &str, selector_refs: &[String],
+) -> Result<(RelationalConsumer, Vec<AcceptanceObservationSelector>), AcceptanceControlStoreError> {
+    validate_nonempty("consumer_ref",consumer_ref)?;
+    let mut client=Client::connect(config.database_url(),NoTls)?;
+    let mut tx=client.transaction()?;
+    tx.batch_execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY; SET LOCAL statement_timeout='90000ms'")?;
+    let consumer=load_consumer(&mut tx,consumer_ref)?;
+    let selectors=selector_refs.iter().map(|r|load_selector(&mut tx,r))
+        .collect::<Result<Vec<_>,_>>()?;
+    tx.commit()?;
+    Ok((consumer,selectors))
+}
+
 fn load_selector<C: GenericClient>(
     client: &mut C,
     selector_ref: &str,
