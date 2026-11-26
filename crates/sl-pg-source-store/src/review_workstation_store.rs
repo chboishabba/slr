@@ -549,7 +549,7 @@ fn load_refs(
         .collect())
 }
 
-fn load_review_item_with_client(
+pub(crate) fn load_review_item_with_client(
     client: &mut impl GenericClient,
     item_ref: &str,
 ) -> Result<Option<ReviewItem>, ReviewWorkstationStoreError> {

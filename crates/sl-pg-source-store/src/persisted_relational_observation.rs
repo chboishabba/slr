@@ -6,18 +6,18 @@
 //! acceptance packet.
 
 use thiserror::Error;
+use postgres::{Client,GenericClient,NoTls};
 use serde::Serialize;
 use sha2::{Digest,Sha256};
 use std::collections::{BTreeMap,BTreeSet};
 
 use crate::{
-    load_candidate_pnf_batch, load_ontology_diagnostic, load_source_statement,
+    load_candidate_pnf_batch, load_source_statement,
     observation_from_candidate_pnf, observation_from_native_wikidata, CandidatePnfBatch,
     CandidatePnfRole, DatabaseConfig, ObservationContext, RelationalComparisonError,
     RelationalObservation, RelationalSourceFamily, ParserTokenRecord, RoleBinding,
     Polarity, PersistedCandidatePnfBatch, PersistedSourceStatement,
-    ExactSourceSpan, load_parser_evidence_region, audit_candidate_pnf_evidence,
-    load_generic_text_source,
+    ExactSourceSpan, audit_candidate_pnf_evidence,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -75,6 +75,7 @@ pub enum PersistedRelationalObservationError {
     GenericSource(#[from] crate::GenericSourceContentStoreError),
     #[error(transparent)]
     Encoding(#[from] serde_json::Error),
+    #[error(transparent)] Pg(#[from] postgres::Error),
 }
 
 fn load_candidate_and_statement(
@@ -85,6 +86,11 @@ fn load_candidate_and_statement(
         .ok_or(PersistedRelationalObservationError::MissingBatch)?;
     let statement = load_source_statement(config, &batch.statement_ref)?
         .ok_or(PersistedRelationalObservationError::MissingStatement)?;
+    validate_candidate_and_statement(batch,statement)
+}
+
+fn validate_candidate_and_statement(batch:PersistedCandidatePnfBatch,statement:PersistedSourceStatement)
+    ->Result<(PersistedCandidatePnfBatch,PersistedSourceStatement),PersistedRelationalObservationError>{
     if statement.exact_span_ref != batch.exact_span_ref {
         return Err(PersistedRelationalObservationError::WrongSpanOwner);
     }
@@ -142,7 +148,18 @@ pub fn relational_observation_from_persisted_wikidata(
     config: &DatabaseConfig,
     request: &PersistedWikidataObservationRequest,
 ) -> Result<RelationalObservation, PersistedRelationalObservationError> {
-    let read = load_ontology_diagnostic(config, &request.diagnostic_ref)?
+    let mut client=Client::connect(config.database_url(),NoTls)?;
+    let mut tx=client.transaction()?;
+    tx.batch_execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY; SET LOCAL statement_timeout='90000ms'")?;
+    let observation=relational_observation_from_persisted_wikidata_on_client(&mut tx,request)?;
+    tx.commit()?;
+    Ok(observation)
+}
+
+pub(crate) fn relational_observation_from_persisted_wikidata_on_client(
+    client:&mut impl GenericClient,request:&PersistedWikidataObservationRequest,
+)->Result<RelationalObservation,PersistedRelationalObservationError>{
+    let read = crate::wikidata_ontology_review::load_ontology_diagnostic_on_client(client,&request.diagnostic_ref)?
         .ok_or(PersistedRelationalObservationError::MissingDiagnostic)?;
     if read.creates_semantic_authority
         || read.grants_wikidata_edit_authority
@@ -311,15 +328,32 @@ pub fn relational_observations_from_checked_persisted_batch(
     context: &ObservationContext,
     provenance_refs: &[String],
 ) -> Result<CheckedRelationalBatch, PersistedRelationalObservationError> {
-    let (batch, statement) = load_candidate_and_statement(config, batch_ref)?;
+    let mut client=Client::connect(config.database_url(),NoTls)?;
+    let mut tx=client.transaction()?;
+    tx.batch_execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY; SET LOCAL statement_timeout='90000ms'")?;
+    let result=relational_observations_from_checked_batch_on_client(&mut tx,batch_ref,source_family,context,provenance_refs)?;
+    tx.commit()?;
+    Ok(result)
+}
+
+pub(crate) fn relational_observations_from_checked_batch_on_client(
+    client:&mut impl GenericClient,batch_ref:&str,source_family:RelationalSourceFamily,
+    context:&ObservationContext,provenance_refs:&[String],
+)->Result<CheckedRelationalBatch,PersistedRelationalObservationError>{
+    let batch=crate::candidate_pnf_store::load_candidate_pnf_batch_with_client(client,batch_ref)?
+        .ok_or(PersistedRelationalObservationError::MissingBatch)?;
+    let statement=crate::statement_trace_store::load_source_statement_with_client(client,&batch.statement_ref)?
+        .ok_or(PersistedRelationalObservationError::MissingStatement)?;
+    let (batch,statement)=validate_candidate_and_statement(batch,statement)?;
     let suffix = format!(":{}", batch.exact_span_ref);
     let run = batch.parser_receipt_ref.strip_prefix("db-parser:")
         .and_then(|s| s.strip_suffix(suffix.as_str()))
         .filter(|s| !s.is_empty())
         .ok_or(PersistedRelationalObservationError::MissingNativeParserReceipt)?;
-    let evidence = load_parser_evidence_region(config, run, &batch.exact_span_ref)?;
+    let evidence = crate::db_native_parser::load_parser_evidence_region_on_client(client, run, &batch.exact_span_ref)?;
     let (start_char, end_char) = evidence.span();
-    let (source, text) = load_generic_text_source(config, &statement.source_revision_ref)?;
+    if end_char<=start_char {return Err(PersistedRelationalObservationError::CheckedSourceMismatch);}
+    let (source, text) = crate::generic_source_content_store::load_generic_text_source_on_client(client, &statement.source_revision_ref)?;
     let source_literal = text.chars().skip(start_char as usize)
         .take((end_char-start_char) as usize).collect::<String>();
     if source.document_ref != statement.document_ref

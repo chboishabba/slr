@@ -7,7 +7,7 @@
 //! ConstraintSuite,RepairReview}.lean. This Rust bridge is DASHI integration.
 //! A theorem about KB.valid and a checked concrete Wikidata graph are distinct.
 
-use postgres::{Client, NoTls};
+use postgres::{Client, GenericClient, NoTls};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use sensiblaw_core::review_workstation::{
@@ -403,6 +403,16 @@ pub fn load_ontology_diagnostic(
     config:&DatabaseConfig, diagnostic_ref:&str,
 )->Result<Option<OntologyDiagnosticRead>,OntologyReviewError> {
     let mut client=Client::connect(config.database_url(),NoTls)?;
+    let mut tx=client.transaction()?;
+    tx.batch_execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY; SET LOCAL statement_timeout='90000ms'")?;
+    let result=load_ontology_diagnostic_on_client(&mut tx,diagnostic_ref)?;
+    tx.commit()?;
+    Ok(result)
+}
+
+pub(crate) fn load_ontology_diagnostic_on_client(
+    client:&mut impl GenericClient,diagnostic_ref:&str,
+)->Result<Option<OntologyDiagnosticRead>,OntologyReviewError>{
     let Some(row)=client.query_opt(
         "SELECT review_item_ref,source_revision_ref,consumer_scope_ref,
                 source_snapshot_digest_ref,graph_view_ref,checker_owner_ref,
@@ -428,7 +438,7 @@ pub fn load_ontology_diagnostic(
         &packet.producer_run_ref,&packet.producer_output_digest_ref,&scope,
     ]);
     let item_ref:String=row.get(0);
-    let review=crate::load_review_item(config,&item_ref)?
+    let review=crate::review_workstation_store::load_review_item_with_client(client,&item_ref)?
         .ok_or(OntologyReviewError::IdentityConflict)?;
     if diagnostic_ref!=expected
         || item_ref!=format!("review-item:{diagnostic_ref}")
@@ -448,7 +458,7 @@ pub fn load_ontology_diagnostic(
         || row.get::<_,String>(6)!=packet.producer_run_ref
         || row.get::<_,String>(7)!=packet.producer_receipt_ref
     {return Err(OntologyReviewError::IdentityConflict);}
-    let (source,_)=crate::load_generic_text_source(config,&packet.source_revision_ref)?;
+    let (source,_)=crate::generic_source_content_store::load_generic_text_source_on_client(client,&packet.source_revision_ref)?;
     if source.content_digest_ref!=packet.source_snapshot_digest_ref {
         return Err(OntologyReviewError::SnapshotMismatch);
     }

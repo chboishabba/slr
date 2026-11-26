@@ -13,7 +13,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use postgres::{Client, NoTls};
+use postgres::{Client, GenericClient, NoTls};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use thiserror::Error;
@@ -1694,10 +1694,20 @@ pub fn load_parser_evidence_region(
     parser_run_ref: &str,
     region_ref: &str,
 ) -> Result<ParserEvidenceRegion, DbNativeParserError> {
+    let mut client = Client::connect(config.database_url(), NoTls)?;
+    let mut tx=client.transaction()?;
+    tx.batch_execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY; SET LOCAL statement_timeout='90000ms'")?;
+    let evidence=load_parser_evidence_region_on_client(&mut tx,parser_run_ref,region_ref)?;
+    tx.commit()?;
+    Ok(evidence)
+}
+
+pub(crate) fn load_parser_evidence_region_on_client(
+    client:&mut impl GenericClient, parser_run_ref:&str,region_ref:&str,
+)->Result<ParserEvidenceRegion,DbNativeParserError>{
     if parser_run_ref.trim().is_empty() || region_ref.trim().is_empty() {
         return Err(DbNativeParserError::EmptyCoordinate);
     }
-    let mut client = Client::connect(config.database_url(), NoTls)?;
     let job = client.query_opt(
         "SELECT j.compilation_key, j.source_revision_ref,
                 j.region_start_char, j.region_end_char, j.parser_product_key,

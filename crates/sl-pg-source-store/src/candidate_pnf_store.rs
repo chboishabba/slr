@@ -1199,7 +1199,7 @@ pub fn load_candidate_pnf_batch(
 }
 
 pub(crate) fn load_candidate_pnf_batch_with_client(
-    client: &mut Client,
+    client: &mut impl GenericClient,
     batch_ref: &str,
 ) -> Result<Option<PersistedCandidatePnfBatch>, CandidatePnfStoreError> {
     let Some(batch) = client.query_opt(

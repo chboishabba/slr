@@ -5,7 +5,9 @@ use std::collections::{BTreeMap,BTreeSet};
 use serde::Serialize;
 use sha2::{Digest,Sha256};
 use thiserror::Error;
-use postgres::{Client,NoTls};
+use postgres::{Client,GenericClient,NoTls};
+use crate::acceptance_control_store::load_relational_selection_on_client;
+use crate::persisted_relational_observation::{relational_observations_from_checked_batch_on_client,relational_observation_from_persisted_wikidata_on_client};
 use crate::relational_interlingua_store::{RelationalSourceDigests,persist_relational_comparison_on_client};
 use crate::investigation_acquisition_store::ensure_acquisition_obligation_on_client;
 use crate::{
@@ -14,9 +16,7 @@ use crate::{
     RelationalComparison, compare_relational_observations_strict, RelationalComparisonError,
     DurableRelationalComparison, DurableRelationalError, RELATIONAL_COMPARISON_SQL,
     STRICT_RELATIONAL_INTERLINGUA_SCHEMA,
-    PersistedRelationalObservationRequest, PersistedWikidataObservationRequest,
-    PersistedRelationalObservationError, relational_observation_from_checked_persisted_pnf,
-    relational_observation_from_persisted_wikidata, load_relational_selection,
+    PersistedWikidataObservationRequest, PersistedRelationalObservationError,
     AcceptanceControlStoreError, AcquisitionObligation, InvestigationAcquisitionError,
     InvestigationStoreError, DurableAcquisitionQueue, obligation_from_residual,
     INVESTIGATION_ACQUISITION_SQL,
@@ -128,20 +128,20 @@ pub struct PersistedRelationalFamily {
     pub applies_external_edit:bool,
 }
 
-fn checked_observation(config:&DatabaseConfig,s:&AcceptanceObservationSelector)
+fn checked_observation(client:&mut impl GenericClient,s:&AcceptanceObservationSelector)
     ->Result<RelationalObservation,RelationalFamilyError>{
     let required=|x:&Option<String>|x.clone().ok_or(RelationalFamilyError::InvalidSelector);
     match s.kind {
-        AcceptanceObservationKind::CandidatePnf=>Ok(relational_observation_from_checked_persisted_pnf(
-            config,&PersistedRelationalObservationRequest{
-                batch_ref:required(&s.batch_ref)?,
-                selected_predicate_candidate_ref:required(&s.selected_predicate_candidate_ref)?,
-                observation_ref:s.observation_ref.clone(),
-                source_family:s.source_family.ok_or(RelationalFamilyError::InvalidSelector)?,
-                context:s.context.clone(), provenance_refs:s.provenance_refs.clone(),
-            })?),
-        AcceptanceObservationKind::WikidataNative=>Ok(relational_observation_from_persisted_wikidata(
-            config,&PersistedWikidataObservationRequest{
+        AcceptanceObservationKind::CandidatePnf=>{
+            let selected=required(&s.selected_predicate_candidate_ref)?;
+            let batch=relational_observations_from_checked_batch_on_client(client,
+                &required(&s.batch_ref)?,s.source_family.ok_or(RelationalFamilyError::InvalidSelector)?,
+                &s.context,&s.provenance_refs)?;
+            batch.observations.into_iter().find(|o|o.predicate_candidate_ref==selected)
+                .ok_or(RelationalFamilyError::InvalidSelector)
+        },
+        AcceptanceObservationKind::WikidataNative=>Ok(relational_observation_from_persisted_wikidata_on_client(
+            client,&PersistedWikidataObservationRequest{
                 diagnostic_ref:required(&s.diagnostic_ref)?,
                 native_statement_ref:required(&s.native_statement_ref)?,
                 observation_ref:s.observation_ref.clone(),
@@ -241,19 +241,18 @@ pub fn run_persisted_relational_family(
         ||selector_refs.iter().collect::<BTreeSet<_>>().len()!=selector_refs.len()
     {return Err(RelationalFamilyError::InvalidFamily);}
     if access_constraint_ref.trim().is_empty(){return Err(RelationalFamilyError::MissingAccessConstraint);}
-    let (consumer,selectors)=load_relational_selection(config,consumer_ref,selector_refs)?;
+    let mut client=Client::connect(config.database_url(),NoTls)?;
+    let mut tx=client.transaction()?;
+    tx.batch_execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ; SET LOCAL statement_timeout='90000ms'; SET LOCAL lock_timeout='5000ms'")?;
+    let (consumer,selectors)=load_relational_selection_on_client(&mut tx,consumer_ref,selector_refs)?;
     let sources=selectors.iter().map(|s|Ok(SelectedRelationalSource{
-        selector_ref:s.selector_ref.clone(),observation:checked_observation(config,s)?,
+        selector_ref:s.selector_ref.clone(),observation:checked_observation(&mut tx,s)?,
     })).collect::<Result<Vec<_>,RelationalFamilyError>>()?;
     let projection=project_relational_family(&sources,&consumer,access_constraint_ref)?;
     let by_selector=sources.iter().map(|s|(s.selector_ref.as_str(),&s.observation))
         .collect::<BTreeMap<_,_>>();
-    // Keep all new durable pairs and obligation queues in the same snapshot.
-    // Raw source digests are loaded once per distinct revision, not per pair
-    // or per residual. A failed queue/changed replay rolls back the family.
-    let mut client=Client::connect(config.database_url(),NoTls)?;
-    let mut tx=client.transaction()?;
-    tx.batch_execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ; SET LOCAL statement_timeout='90000ms'; SET LOCAL lock_timeout='5000ms'")?;
+    // Selection, parser inverse, Wikidata diagnostic, comparison and queues
+    // use this same snapshot. A failed replay rolls back the family.
     tx.batch_execute(RELATIONAL_COMPARISON_SQL)?;
     tx.batch_execute(INVESTIGATION_ACQUISITION_SQL)?;
     let mut digests=RelationalSourceDigests::new(&mut tx)?;

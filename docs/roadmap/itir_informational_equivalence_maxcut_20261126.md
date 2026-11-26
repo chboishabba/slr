@@ -304,3 +304,7 @@ instructions to run them now.
 - D04/D06 hardening: stable comparison/obligation lock order, order-independent bounded family graph reference; existing acquisition priority/route state must validate before extension and old routes cannot silently disappear. Source selection still precedes the publication transaction: source bytes are rechecked, but full parser/selector snapshot replay in that transaction remains an open weld.
 - Static source-table audit: 9/9 actual Rust ordered polarity match arms have exact inverse, all distinct; independent combinatorial oracle covers all family sizes 2–10 and 54 source-local reopening cardinalities (2(n−1) incident directional pairs). This is source inspection/oracle verification, not compiled Rust, PG execution or proof acceptance.
 - D01–D07 remain active; D08 not requested. No product completion claimed.
+
+### MC-REL-2 — one source/selector/publication snapshot
+
+Reused the existing candidate batch, statement, native parser evidence, generic source, S29 review and Wikidata diagnostic readers through GenericClient. The checked family path now opens its transaction before selecting the consumer and selectors, reconstructs both native parser and native Wikidata observations in that same repeatable-read transaction, then compares and persists REL/INV. No alternate loader or DB schema. Public standalone parser and Wikidata readers also gain read-only snapshot consistency. This addresses the previous split-snapshot source selection seam at implementation level; no native PG acceptance yet.

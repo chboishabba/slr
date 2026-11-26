@@ -797,10 +797,18 @@ pub fn load_relational_selection(
     let mut client=Client::connect(config.database_url(),NoTls)?;
     let mut tx=client.transaction()?;
     tx.batch_execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY; SET LOCAL statement_timeout='90000ms'")?;
-    let consumer=load_consumer(&mut tx,consumer_ref)?;
-    let selectors=selector_refs.iter().map(|r|load_selector(&mut tx,r))
-        .collect::<Result<Vec<_>,_>>()?;
+    let result=load_relational_selection_on_client(&mut tx,consumer_ref,selector_refs)?;
     tx.commit()?;
+    Ok(result)
+}
+
+pub(crate) fn load_relational_selection_on_client(
+    client:&mut impl GenericClient,consumer_ref:&str,selector_refs:&[String],
+)->Result<(RelationalConsumer,Vec<AcceptanceObservationSelector>),AcceptanceControlStoreError>{
+    validate_nonempty("consumer_ref",consumer_ref)?;
+    let consumer=load_consumer(client,consumer_ref)?;
+    let selectors=selector_refs.iter().map(|r|load_selector(client,r))
+        .collect::<Result<Vec<_>,_>>()?;
     Ok((consumer,selectors))
 }
 
