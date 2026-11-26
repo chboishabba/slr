@@ -288,6 +288,42 @@ pub(crate) fn persist_review_projection_item_with_client(
     Ok(loaded)
 }
 
+/// Existing S29 writer reused by source-bound dependent sidecars inside the
+/// *same* caller-owned transaction. Validation and immutable review coordinates
+/// remain owned here; sidecars never reimplement the review schema.
+pub(crate) fn persist_review_projection_on_tx(
+    tx: &mut impl GenericClient,
+    item: &ReviewItem,
+) -> Result<ReviewItem, ReviewWorkstationStoreError> {
+    let item = canonical_review_item_for_persistence(item.clone());
+    item.validate().map_err(|_| ReviewWorkstationStoreError::InvalidDomainObject)?;
+    tx.execute(
+        r#"INSERT INTO semantic.review_item
+            (review_item_ref, semantic_ref, item_kind_ref, reason, current_status_ref,
+             candidate_only, creates_semantic_authority, applicability_promoted, claim_truth_promoted)
+           VALUES ($1,$2,$3,$4,$5,TRUE,FALSE,FALSE,FALSE)
+           ON CONFLICT (review_item_ref) DO NOTHING"#,
+        &[&item.review_item_ref, &item.semantic_ref, &kind_db(item.item_kind),
+          &item.reason, &status_db(item.current_status)],
+    )?;
+    persist_refs(tx,"semantic.review_item_provenance","provenance_ref",
+                 &item.review_item_ref,&item.provenance_refs)?;
+    persist_refs(tx,"semantic.review_item_source","source_ref",
+                 &item.review_item_ref,&item.source_refs)?;
+    let action_refs=item.available_actions.iter()
+        .map(|action|action_db(*action).to_owned()).collect::<Vec<_>>();
+    persist_refs(tx,"semantic.review_item_action","action_ref",
+                 &item.review_item_ref,&action_refs)?;
+    persist_refs(tx,"semantic.review_item_consumer","consumer_ref",
+                 &item.review_item_ref,&item.affected_consumer_refs)?;
+    let stored=load_review_item_with_client(tx,&item.review_item_ref)?
+        .ok_or(ReviewWorkstationStoreError::ExistingRowConflict)?;
+    if !same_review_projection_shape(&item,&stored) {
+        return Err(ReviewWorkstationStoreError::ExistingRowConflict);
+    }
+    Ok(stored)
+}
+
 pub fn persist_review_item(
     config: &DatabaseConfig,
     item: &ReviewItem,

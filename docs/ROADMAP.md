@@ -1,5 +1,7 @@
 # SensibLaw / SLR Production Roadmap
 
+**Active P0 sprint:** [ITIR informational equivalence, wiki repair and automatic proving](roadmap/itir_informational_equivalence_maxcut_20261126.md). This controls the integrated user-story roadmap, donor disposition, phases D01–D08 and consolidated acceptance. Existing GWB and producer-conformance roadmaps remain supporting owner documents.
+
 ## 2026-11-26 — maximum-cut result inspection and exact evidence reopening
 
 The published v8 receipt was independently read in full from 0671a9c and its actual key sets checked (not inferred from counts). Compact derived inspection: [v8-receipt-inspection.json](../../artifacts/gwb/v8-receipt-inspection.json). 378 indexed object IDs and 124 outside-index object IDs are disjoint; their union exactly equals 502 live kind-1 keys; zero refutations. H3 and H9 each have 466 zero-phase and 36 negative-phase keys; signs are not semantic refutations. Actual inverse coverage of original index members: entity 378/378, eventuality 36/36, proposition 4/4. The rollback-only fibre contains 18 classes over 30 objects, 472 unresolved keys including 3 conflicting objects; it does not pay focus identity. Three multihead spans [110,134), [205,215), [916,932) have actual head multiplicities 3,2,2. The source-local focus has zero persisted focus-factor arguments in the rollback probe. No new native runtime or kernel result was executed here.

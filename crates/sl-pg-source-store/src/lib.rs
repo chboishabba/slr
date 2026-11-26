@@ -1,3 +1,7 @@
+mod official_primary_manifestation_document_pnf_overlap;
+pub use official_primary_manifestation_document_pnf_overlap::*;
+mod official_primary_manifestation_coverage_domain;
+pub use official_primary_manifestation_coverage_domain::*;
 mod workbench_projection;
 pub use workbench_projection::*;
 mod cache_first;
@@ -59,6 +63,23 @@ mod transcript_chat_correspondence;
 mod mixed_source_review;
 mod correspondence_review_store;
 mod wikidata_ontology_review;
+mod epistemic_deliberation;
+mod epistemic_deliberation_store;
+pub use epistemic_deliberation_store::{
+    DeliberationSourceSeal, DeliberationEventAnchor, DeliberationSourceInput, PersistedDeliberation, DeliberationStoreError,
+    DELIBERATION_SIDECAR_SQL, validate_deliberation_source_seals,
+    validate_deliberation_event_anchors,
+    persist_deliberation_diagnostic, persist_deliberation_from_source_inputs,
+    persist_deliberation_source_replay_json,
+    load_deliberation_diagnostic_scoped,
+    apply_deliberation_diagnostic_review,
+};
+pub use epistemic_deliberation::{
+    assess_deliberation, project_s29_diagnostic_review_item,
+    DeliberationAssessment, DeliberationError, DeliberationEvent,
+    DeliberationHold, DeliberationJudgement, DeliberationKind,
+    DeliberationPacket, DELIBERATION_SCHEMA,
+};
 mod jmail_adapter;
 mod plain_text_document_adapter;
 mod long_document_ingest_store;
