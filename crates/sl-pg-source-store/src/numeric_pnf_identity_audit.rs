@@ -3545,19 +3545,63 @@ fn validate_reopened_relation_packet(
     }
     let atoms=c["bundle"]["atoms"].as_array().ok_or(NativeNumericAuditError::ForeignSource)?;
     let inverse=packet["atom_token_inverse"].as_object().ok_or(NativeNumericAuditError::ForeignSource)?;
+    let chars=prefix.chars().collect::<Vec<_>>();
     let mut atom_ids=BTreeSet::new();let mut token_ids=BTreeSet::new();
+    let coord=|v:&serde_json::Value|v.as_u64().and_then(|n|usize::try_from(n).ok())
+        .ok_or(NativeNumericAuditError::ForeignSource);
     for a in atoms{
-        let id=a["id"].as_str().ok_or(NativeNumericAuditError::ForeignSource)?;
+        let id=a["id"].as_str().filter(|s|!s.is_empty()).ok_or(NativeNumericAuditError::ForeignSource)?;
         let token=inverse.get(id).and_then(|n|n.as_i64()).filter(|n|*n>0)
             .ok_or(NativeNumericAuditError::ForeignSource)?;
-        if !atom_ids.insert(id)||!token_ids.insert(token){return Err(NativeNumericAuditError::ForeignSource);}
+        let span=a["span"].as_array().filter(|s|s.len()==2).ok_or(NativeNumericAuditError::ForeignSource)?;
+        let start=coord(&span[0])?;let stop=coord(&span[1])?;
+        if start>=stop||stop>chars.len()||a["text"]!=chars[start..stop].iter().collect::<String>()
+            ||!atom_ids.insert(id)||!token_ids.insert(token){return Err(NativeNumericAuditError::ForeignSource);}
     }
     if atom_ids.len()!=inverse.len(){return Err(NativeNumericAuditError::ForeignSource);}
-    for (i,relation) in c["bundle"]["relations"].as_array().ok_or(NativeNumericAuditError::ForeignSource)?.iter().enumerate(){
+    let relations=c["bundle"]["relations"].as_array().ok_or(NativeNumericAuditError::ForeignSource)?;
+    for (i,relation) in relations.iter().enumerate(){
         if relation["id"]!=format!("e{}",i+1){return Err(NativeNumericAuditError::ForeignSource);}
         for role in relation["roles"].as_array().ok_or(NativeNumericAuditError::ForeignSource)?{
-            if role.get("atom").and_then(|v|v.as_str()).is_some_and(|id|!atom_ids.contains(id)){
-                return Err(NativeNumericAuditError::ForeignSource);
+            if role["role"].as_str().map_or(true,str::is_empty){return Err(NativeNumericAuditError::ForeignSource);}
+            match (role.get("atom"),role.get("value")){
+                (Some(atom),None) if atom.as_str().is_some_and(|id|atom_ids.contains(id))=>{},
+                (None,Some(value)) if !value.is_null()=>{},
+                _=>return Err(NativeNumericAuditError::ForeignSource),
+            }
+            match (role.get("span_start"),role.get("span_end")){
+                (None,None)=>{},
+                (Some(a),Some(b)) if coord(a)?<coord(b)?&&coord(b)?<=chars.len()=>{},
+                _=>return Err(NativeNumericAuditError::ForeignSource),
+            }
+        }
+    }
+    // This is referential integrity of the original reduction, not proof of
+    // the truth of any factor, independent producer equality or typed coverage.
+    let reduction=&c["reduction_projection"];
+    let relation_refs=reduction["relation_refs"].as_array().ok_or(NativeNumericAuditError::ForeignSource)?;
+    let mut ref_set=BTreeSet::new();
+    for r in relation_refs{
+        if !ref_set.insert(r.as_str().filter(|s|!s.is_empty()).ok_or(NativeNumericAuditError::ForeignSource)?){
+            return Err(NativeNumericAuditError::ForeignSource);
+        }
+    }
+    if ref_set.len()!=relations.len(){return Err(NativeNumericAuditError::ForeignSource);}
+    let factors=reduction["factors"].as_array().ok_or(NativeNumericAuditError::ForeignSource)?;
+    let mut factor_refs=BTreeSet::new();
+    for f in factors{
+        let id=f["factor_ref"].as_str().filter(|s|!s.is_empty()).ok_or(NativeNumericAuditError::ForeignSource)?;
+        if !factor_refs.insert(id)||!f["metadata"]["relation_ref"].as_str().is_some_and(|r|ref_set.contains(r)){
+            return Err(NativeNumericAuditError::ForeignSource);
+        }
+    }
+    let mut constraint_refs=BTreeSet::new();
+    for constraint in reduction["constraints"].as_array().ok_or(NativeNumericAuditError::ForeignSource)?{
+        let id=constraint["constraint_ref"].as_str().filter(|s|!s.is_empty()).ok_or(NativeNumericAuditError::ForeignSource)?;
+        if !constraint_refs.insert(id){return Err(NativeNumericAuditError::ForeignSource);}
+        for key in ["source_factor_refs","target_factor_refs"]{
+            for endpoint in constraint[key].as_array().ok_or(NativeNumericAuditError::ForeignSource)?{
+                if !endpoint.as_str().is_some_and(|r|factor_refs.contains(r)){return Err(NativeNumericAuditError::ForeignSource);}
             }
         }
     }
@@ -6083,9 +6127,11 @@ mod tests{
             "producer_revision":"historical-owner","document_ref":"doc","source_sha256":"sha",
             "source_revision_ref":"revision","parser_run_ref":"parser","prefix_end_char":2,
             "scope":"supplied_parser_prefix",
-            "bundle":{"canonical_text":"he","atoms":[{"id":"a1"}],
-            "relations":[{"id":"e1","roles":[{"atom":"a1"}]}]},
-            "reduction_projection":{"factors":[],"constraints":[]}},
+            "bundle":{"canonical_text":"he","atoms":[{"id":"a1","span":[0,2],"text":"he"}],
+            "relations":[{"id":"e1","roles":[{"atom":"a1","role":"subject"}]}]},
+            "reduction_projection":{"relation_refs":["r1"],"factors":[
+                {"factor_ref":"f1","metadata":{"relation_ref":"r1"}}],
+                "constraints":[{"constraint_ref":"c1","source_factor_refs":["f1"],"target_factor_refs":["f1"]}]}},
             "atom_token_inverse":{"a1":7},"missing_original_tags":1,
             "prefix_uncovered_nonwhitespace":0,"candidate_only":true});
         validate_reopened_relation_packet(&packet,"doc","sha",b"he went").unwrap();
@@ -6093,6 +6139,22 @@ mod tests{
         let mut invalid=packet.clone();
         invalid["atom_token_inverse"]["a2"]=serde_json::json!(8);
         assert!(validate_reopened_relation_packet(&invalid,"doc","sha",b"he went").is_err());
+        for (pointer,replacement) in [
+            ("/comparison/bundle/atoms/0/text",serde_json::json!("we")),
+            ("/comparison/bundle/atoms/0/span",serde_json::json!([0,3])),
+            ("/comparison/bundle/relations/0/roles/0/atom",serde_json::json!(7)),
+            ("/comparison/bundle/relations/0/roles/0/atom",serde_json::json!("foreign")),
+            ("/comparison/reduction_projection/factors/0/metadata/relation_ref",serde_json::json!("foreign")),
+            ("/comparison/reduction_projection/constraints/0/target_factor_refs",serde_json::json!(["foreign"])),
+        ]{
+            let mut tampered=packet.clone();
+            *tampered.pointer_mut(pointer).unwrap()=replacement;
+            assert!(validate_reopened_relation_packet(&tampered,"doc","sha",b"he went").is_err(),"{pointer}");
+        }
+        let mut unicode=packet.clone();
+        unicode["comparison"]["bundle"]["canonical_text"]=serde_json::json!("é𐀀");
+        unicode["comparison"]["bundle"]["atoms"][0]["text"]=serde_json::json!("é𐀀");
+        validate_reopened_relation_packet(&unicode,"doc","sha","é𐀀 went".as_bytes()).unwrap();
         let reopened=serde_json::json!({"schema":"slr-reopened-original-relation-packet-v1",
             "exact_persisted_packet_readback":true,"packet_sha256":original_relation_digest(&packet).unwrap(),
             "snapshot_ref":"snapshot","packet":packet});
