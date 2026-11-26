@@ -213,6 +213,8 @@ pub fn run(args:&[String])->Result<(),String>{
                         ||step.consumer_horizon_work.nonmonotone_input_residual);
                 let progress=!step.inserted_candidate_ids.is_empty()||step.nominal_head_objects_inserted>0
                     ||step.original_mention_binding_campaign.newly_materialized_span_objects>0
+                    ||step.native_binding_bridge.numeric_relation_factors_inserted>0
+                    ||step.native_binding_bridge.numeric_relation_objects_inserted>0
                     ||step.morphology_observations_inserted>0||step.consumer_horizon_work.h3_processed||step.consumer_horizon_work.h6_processed;
                 passes.push(step);
                 if done||!progress{break;}
@@ -454,20 +456,33 @@ pub fn run(args:&[String])->Result<(),String>{
                         let receipt=transport_original_numeric_candidates_for_source_answer(
                             &numeric_url,&numeric_run,&answer,budget
                         ).map_err(|e|e.to_string())?;
-                        let done=receipt.governed_identity_rollback_probe.is_some();
+                        let done=(receipt.governed_identity_rollback_probe.is_some()||receipt.identity_execution_replay.is_some())
+                            &&(!receipt.consumer_horizon_work.h3_ready_after&&!receipt.consumer_horizon_work.h6_ready_after
+                               ||receipt.consumer_horizon_work.nonmonotone_input_residual);
                         let progress=!receipt.inserted_candidate_ids.is_empty()
                             ||receipt.nominal_head_objects_inserted>0
                             ||receipt.original_mention_binding_campaign.newly_materialized_span_objects>0
-                            ||receipt.morphology_observations_inserted>0;
+                            ||receipt.native_binding_bridge.numeric_relation_factors_inserted>0
+                            ||receipt.native_binding_bridge.numeric_relation_objects_inserted>0
+                            ||receipt.morphology_observations_inserted>0
+                            ||receipt.consumer_horizon_work.h3_processed||receipt.consumer_horizon_work.h6_processed;
                         passes.push(receipt);
                         if done{stop_reason="bounded_execution_drained_governed_probe_completed";break;}
                         if !progress{stop_reason="unresolved_without_execution_progress";break;}
                     }
                     let owner_reuse=reuse_original_binding_and_identity_owners(&numeric_url,&numeric_run,&answer)
                         .map_err(|e|e.to_string())?;
+                    let last=passes.last().ok_or("no native binding pass")?;
+                    let start=i64::try_from(answer.original_focus_span[0]).map_err(|e|e.to_string())?;
+                    let end=i64::try_from(answer.original_focus_span[1]).map_err(|e|e.to_string())?;
+                    let reopened=reopen_native_original_relation_packet_with_focus(
+                        &numeric_url,&numeric_run,&answer.source_document_ref,
+                        &last.native_binding_bridge.snapshot_ref,&last.native_binding_bridge.original_relation_packet.packet_sha256,
+                        Some((start,end))).map_err(|e|e.to_string())?;
                     return print_json(&serde_json::json!({
                         "schema":"slr-native-binding-campaign-v2",
                         "stop_reason":stop_reason,"committed_passes":passes.len(),
+                        "focus_relation_readback":reopened,
                         "passes":passes,"original_owner_reuse":owner_reuse,"focus_identity_paid":false,"typed_coverage_paid":false
                     }));
                 }
