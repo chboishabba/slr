@@ -8,8 +8,8 @@ use crate::review_workstation_store::{install_review_workstation_on_client,persi
 use sha2::{Digest,Sha256};
 use thiserror::Error;
 use postgres::{Client,GenericClient,NoTls};
-use crate::acceptance_control_store::load_relational_selection_on_client;
-use crate::persisted_relational_observation::{relational_observations_from_checked_batch_on_client,relational_observation_from_persisted_wikidata_on_client};
+use crate::workbench_projection::acceptance_control_store::load_relational_selection_on_client;
+use crate::workbench_projection::persisted_relational_observation::{relational_observations_from_checked_batch_on_client,relational_observation_from_persisted_wikidata_on_client};
 use crate::relational_interlingua_store::{RelationalSourceDigests,persist_relational_comparison_on_client};
 use crate::investigation_acquisition_store::ensure_acquisition_obligation_on_client;
 use crate::{

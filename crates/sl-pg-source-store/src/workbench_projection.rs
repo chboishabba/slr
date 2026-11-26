@@ -142,7 +142,7 @@ pub use controversy_investigation_projection::*;
 mod controversy_investigation_error_bridge;
 
 #[path = "acceptance_control_store.rs"]
-mod acceptance_control_store;
+pub(crate) mod acceptance_control_store;
 pub use acceptance_control_store::*;
 
 #[path = "acceptance_reopen_store.rs"]
@@ -150,7 +150,7 @@ mod acceptance_reopen_store;
 pub use acceptance_reopen_store::*;
 
 #[path = "persisted_relational_observation.rs"]
-mod persisted_relational_observation;
+pub(crate) mod persisted_relational_observation;
 pub use persisted_relational_observation::*;
 
 #[path = "reviewed_legal_follow_projection.rs"]
