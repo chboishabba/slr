@@ -282,7 +282,7 @@ pub use numeric_pnf_parser_store::{
 pub use numeric_pnf_identity_audit::{
     audit_original_numeric_identity_for_source_answer, certify_original_focus_identity, NativeFocusIdentityCertification,
     reuse_original_binding_and_identity_owners, OriginalOwnerReuseReceipt,
-    reopen_native_original_relation_packet, reopen_native_original_relation_packet_with_focus, compare_native_original_relation_reference,
+    reopen_native_original_relation_packet, reopen_native_original_relation_packet_with_focus, compare_native_original_relation_reference, query_native_original_relations,
     NativeNumericAuditError, NativeNumericIdentityAudit,
     NumericDemandWorldStatus, NativeNumericRetractionReceipt,
     retract_original_numeric_identity_for_source_answer,

@@ -4142,6 +4142,92 @@ fn validate_reopened_relation_packet(
     Ok(())
 }
 
+/// Query the original numeric relation packet, with every source role,
+/// alternative, factor and constraint retained. Query "all" or an exact
+/// original relation type; no lexical matching, new parser, or semantic
+/// interpretation is introduced. Only the selected recorded prefix is
+/// exhaustive; all surviving semantic readings remain an open obligation.
+pub fn query_native_original_relations(
+    url:&str,run:&str,doc:&str,snapshot:&str,digest:&str,kind:&str,
+)->Result<serde_json::Value,NativeNumericAuditError>{
+    use serde_json::{Value,json};
+    if kind.trim().is_empty(){return Err(NativeNumericAuditError::SourcePolicy);}
+    let native=reopen_native_original_relation_packet(url,run,doc,snapshot,digest)?;
+    let packet=&native["packet"];
+    let c=&packet["comparison"];
+    let bundle=&c["bundle"];
+    let reduction=&c["reduction_projection"];
+    let atoms=bundle["atoms"].as_array().ok_or(NativeNumericAuditError::ForeignSource)?;
+    let relations=bundle["relations"].as_array().ok_or(NativeNumericAuditError::ForeignSource)?;
+    let factors=reduction["factors"].as_array().ok_or(NativeNumericAuditError::ForeignSource)?;
+    let constraints=reduction["constraints"].as_array().ok_or(NativeNumericAuditError::ForeignSource)?;
+    let required=|v:&Value| -> Result<String,NativeNumericAuditError>{
+        v.as_str().filter(|s|!s.is_empty()).map(str::to_owned).ok_or(NativeNumericAuditError::ForeignSource)
+    };
+    let atom_index=atoms.iter().map(|a|Ok((required(&a["id"])?,a)))
+        .collect::<Result<BTreeMap<_,_>,NativeNumericAuditError>>()?;
+    let mut factor_index=BTreeMap::<String,Vec<&Value>>::new();
+    let mut factor_owner=BTreeMap::<String,String>::new();
+    for f in factors{
+        let owner=required(&f["metadata"]["relation_ref"])?;
+        let factor=required(&f["factor_ref"])?;
+        if factor_owner.insert(factor,owner.clone()).is_some(){return Err(NativeNumericAuditError::ForeignSource);}
+        factor_index.entry(owner).or_default().push(f);
+    }
+    let mut constraint_index=BTreeMap::<String,Vec<&Value>>::new();
+    for constraint in constraints{
+        let mut owners=BTreeSet::new();
+        for key in ["source_factor_refs","target_factor_refs"]{
+            for endpoint in constraint[key].as_array().ok_or(NativeNumericAuditError::ForeignSource)?{
+                let owner=factor_owner.get(&required(endpoint)?).ok_or(NativeNumericAuditError::ForeignSource)?;
+                owners.insert(owner.clone());
+            }
+        }
+        for owner in owners{constraint_index.entry(owner).or_default().push(constraint);}
+    }
+    let mut rows=Vec::new();
+    let mut inventory=BTreeMap::<String,usize>::new();
+    let mut accounted=BTreeSet::new();
+    for relation in relations{
+        let relation_kind=required(&relation["type"])?;
+        *inventory.entry(relation_kind.clone()).or_default()+=1;
+        let relation_ref=format!("semantic-relation:{}",original_relation_digest(&json!({"document_ref":doc,"relation":relation}))?);
+        if !accounted.insert(relation_ref.clone()){return Err(NativeNumericAuditError::ForeignSource);}
+        let owned=factor_index.get(&relation_ref).ok_or(NativeNumericAuditError::ForeignSource)?;
+        if kind!="all"&&kind!=relation_kind{continue;}
+        let mut roles=Vec::new();
+        for (ordinal,role) in relation["roles"].as_array().ok_or(NativeNumericAuditError::ForeignSource)?.iter().enumerate(){
+            let (atom,token)=if let Some(id)=role.get("atom"){
+                let id=required(id)?;
+                let atom=atom_index.get(&id).ok_or(NativeNumericAuditError::ForeignSource)?;
+                let token=packet["atom_token_inverse"][&id].as_i64().ok_or(NativeNumericAuditError::ForeignSource)?;
+                (json!(atom),json!(token))
+            }else{(Value::Null,Value::Null)};
+            roles.push(json!({"ordinal":ordinal,"original_role":role,"original_atom":atom,"numeric_token_id":token}));
+        }
+        let debt=owned.iter().flat_map(|f|f["residuals"].as_array().into_iter().flatten())
+            .filter_map(Value::as_str).collect::<BTreeSet<_>>();
+        rows.push(json!({"relation_ref":relation_ref,"original_relation":relation,
+            "role_inverse":roles,"original_factors":owned,
+            "original_constraints":constraint_index.get(&relation_ref).cloned().unwrap_or_default(),
+            "recorded_residuals":debt,"semantic_coverage_paid":false}));
+    }
+    if factor_index.keys().any(|r|!accounted.contains(r))
+        ||accounted.len()!=relations.len(){return Err(NativeNumericAuditError::ForeignSource);}
+    Ok(json!({"schema":"slr.original-relation-query.v1",
+        "numeric_run_ref":run,"document_ref":doc,"snapshot_ref":snapshot,
+        "packet_sha256":digest,"source_sha256":c["source_sha256"],
+        "source_revision_ref":c["source_revision_ref"],"parser_run_ref":c["parser_run_ref"],
+        "scope":c["scope"],"prefix_end_char":c["prefix_end_char"],
+        "missing_original_tags":packet["missing_original_tags"],
+        "prefix_uncovered_nonwhitespace":packet["prefix_uncovered_nonwhitespace"],
+        "query_relation_type":kind,"relation_type_inventory":inventory,
+        "recorded_relation_count":relations.len(),"answer_count":rows.len(),"answers":rows,
+        "exact_persisted_packet_readback":true,"complete_recorded_query":true,
+        "all_live_semantic_readings_covered":false,"outside_model_possible":true,
+        "governed_identity_paid":false,"level_three_paid":false,"world_truth_paid":false}))
+}
+
 /// Exact structural comparison against a separately supplied reference.
 /// The comparison input is untrusted: equality does not authenticate its
 /// producer. Ordered arrays retain their order. JSON pointer coordinates

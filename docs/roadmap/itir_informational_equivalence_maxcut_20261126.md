@@ -327,3 +327,7 @@ Reused the existing candidate batch, statement, native parser evidence, generic 
 - Added cardinality/delta regression, native inspection and candidate review CLI; no ITIR web/MCP adapter or end-to-end native execution yet. All remaining D01–D07 must still be judged against actual golden semantics and original source evidence.
 
 - Family inspection distinguishes prepared inbound revisions from published parent transitions; a candidate child is not evidence of successor publication.
+
+### Native original relation consumer
+
+The existing numeric relation reopen owner now provides a generic recorded-prefix query by exact relation type (or all), retaining the original relation, ordered role occurrence, atom-to-token inverse, factor alternatives, constraints and typed residuals. It checks that all recorded relation owners are accounted for in the factor index, and returns the whole type inventory even for narrower queries. No extra parser, lexical whitelist, or inferred identity. Recorded-query completeness is not semantic live-fibre completeness. CLI: `numeric-pnf-native relation-query RUN DOC SNAPSHOT PACKET_SHA256 RELATION_TYPE_OR_all`. Source-level implementation only.

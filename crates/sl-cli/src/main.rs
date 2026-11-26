@@ -39,6 +39,7 @@ USAGE:
   sensiblaw native-antecedent-review derive REVIEW_ITEM_REF [PARSER_RUN_REF]
   sensiblaw native-antecedent-review answer REVIEW_ITEM_REF [PARSER_RUN_REF]
   sensiblaw native-antecedent-review replay REVIEW_ITEM_REF ANSWER.json [PARSER_RUN_REF]
+  sensiblaw numeric-pnf-native relation-query RUN DOC SNAPSHOT PACKET_SHA256 RELATION_TYPE_OR_all
   sensiblaw numeric-pnf-native inspect ORIGINAL_SOURCE_REV ORIGINAL_SLR_PARSER_RUN
   sensiblaw numeric-pnf-native plan ORIGINAL_SOURCE_REV ORIGINAL_SLR_PARSER_RUN
   sensiblaw numeric-pnf-native compile ORIGINAL_SOURCE_REV ORIGINAL_SLR_PARSER_RUN MAX_SENTENCES --commit
