@@ -698,12 +698,16 @@ fn read_focus_owner_binding(url:&str,run:&str,answer:&NativeSourceLocalAnswer)
         let tables=fence["tables"].as_array_mut().ok_or(NativeNumericAuditError::ForeignSource)?;
         if let Some(oid)=referee_oid{tables.retain(|r|r[0].as_u64()!=Some(oid as u64));}
         let coordinates=serde_json::to_value(&audit).map_err(|_|NativeNumericAuditError::ForeignSource)?;
+        // Current owner authentication must bind the actual persisted role,
+        // revision, candidate sets and numeric argument, not just audit counts.
+        let focus_relation=current_focus_relation_correspondence(&mut tx,run,answer)?;
+        let exact_focus_relation=focus_relation.as_ref().is_some_and(|r|r["exact_persisted_correspondence"]==true);
         let fence_digest=hex(&Sha256::digest(serde_json::to_vec(&fence).map_err(|_|NativeNumericAuditError::ForeignSource)?));
         let payload=serde_json::json!({"schema":"slr-current-numeric-focus-owner-binding:v1",
             "scope":"existing_original_typed_coverage_and_governed_identity",
             "numeric_run_ref":run,"source_revision_ref":answer.source_revision_ref,
             "source_sha256":answer.source_content_sha256,"focus_span":answer.original_focus_span,
-            "audit":coordinates,"numeric_fence_sha256":fence_digest});
+            "audit":coordinates,"focus_relation_correspondence":focus_relation,"numeric_fence_sha256":fence_digest});
         let digest=hex(&Sha256::digest(serde_json::to_vec(&payload).map_err(|_|NativeNumericAuditError::ForeignSource)?));
         let expected=serde_json::json!({"schema":"slr-current-numeric-focus-owner-proof:v1",
             "binding_sha256":digest,"coverage_and_identity_theorem":"Wikidata.Slr.GwbCoreferenceFormalRepair.current_focus_owner_proof_pays_exact_scope",
@@ -716,7 +720,7 @@ fn read_focus_owner_binding(url:&str,run:&str,answer:&NativeSourceLocalAnswer)
             let locator=RefereeReceiptLocator{repo,sha,path,canonical_thread_id};
             if let Ok(receipt)=read_source_bound_referee_receipt(&mut tx,&locator){
                 let value:serde_json::Value=serde_json::from_str(&receipt).map_err(|_|NativeNumericAuditError::ForeignSource)?;
-                authenticated=value.get("slr_numeric_authority_binding")==Some(&expected);
+                authenticated=exact_focus_relation&&value.get("slr_numeric_authority_binding")==Some(&expected);
             }
         }
         binding=Some(serde_json::json!({"payload":payload,"expected_referee_binding":expected}));
@@ -3604,12 +3608,11 @@ fn reopen_focus_relation_correspondence(
                 let mut revisions=Vec::new();
                 for anchor in anchors{
                     let rev:String=anchor.get(0);let native_factor:String=anchor.get(1);let active:bool=anchor.get(2);
-                    let payload=serde_json::to_string(&role).map_err(|_|NativeNumericAuditError::ForeignSource)?;
                     let candidate_exact:bool=tx.query_one("SELECT EXISTS(
                       SELECT 1 FROM algebra.factor_revision_alternative m JOIN algebra.alternative a ON a.alternative_ref=m.alternative_ref
                       WHERE m.factor_revision_ref=$1 AND m.alternative_state_ref='alternative'
                       AND a.type_ref='semantic.argument_candidate' AND a.authority_state_ref='candidate_only'
-                      AND a.value_literal=$2)",&[&rev,&payload])?.get(0);
+                      AND a.value_literal::jsonb=$2::jsonb)",&[&rev,&role])?.get(0);
                     let anchor_current:bool=tx.query_one("SELECT EXISTS(SELECT 1 FROM pnf.factor_anchor
                       WHERE factor_revision_ref=$1 AND document_ref=$2 AND pnf_kind_ref='semantic.argument.subject')",
                       &[&rev,&doc])?.get(0);
@@ -3639,12 +3642,25 @@ fn reopen_focus_relation_correspondence(
                               .iter().map(|r|(r.get::<_,String>(0),r.get::<_,String>(1),r.get::<_,i32>(2))).collect::<Vec<_>>();
                             let ordered=capped.iter().enumerate().map(|(i,(_,f,p,_))|(f.clone(),p.clone(),i as i32)).collect::<Vec<_>>();
                             let suffix=bridge_digest(&(snapshot,&rev,&typ,&access,&compat,&full))?;
-                            let exact=full.iter().take(64).eq(capped.iter())&&stored==ordered
-                                &&count as usize==capped.len()&&stored_sha==bridge_digest(&capped)?
+                            let revisions=full.iter().map(|(r,_,_,_)|r.clone()).collect::<Vec<_>>();
+                            let inverse=tx.query("SELECT p.factor_revision_ref,a.factor_ref,p.token_ids,p.object_ids
+                              FROM execution.slr_native_binding_anchor_projection p
+                              JOIN algebra.factor_revision a ON a.factor_revision_ref=p.factor_revision_ref
+                              WHERE p.run_ref=$1 AND p.document_ref=$2 AND p.snapshot_ref=$3 AND p.active
+                                AND p.factor_revision_ref=ANY($4::text[]) ORDER BY p.factor_revision_ref",
+                              &[&run,&doc,&snapshot,&revisions])?.iter().map(|r|
+                                (r.get::<_,String>(0),r.get::<_,String>(1),r.get::<_,Vec<i64>>(2),r.get::<_,Vec<i64>>(3))).collect::<Vec<_>>();
+                            let expected_inverse=full.iter().map(|(r,f,_,_)|(r.as_str(),f.as_str())).collect::<BTreeSet<_>>();
+                            let actual_inverse=inverse.iter().map(|(r,f,_,_)|(r.as_str(),f.as_str())).collect::<BTreeSet<_>>();
+                            let exact_inverse=expected_inverse==actual_inverse&&inverse.len()==full.len()
+                                &&inverse.iter().all(|(_,_,tokens,_)|!tokens.is_empty());
+                            let exact=exact_inverse&&full.iter().take(64).eq(capped.iter())&&stored==ordered
+                                &&usize::try_from(count).ok()==Some(capped.len())&&stored_sha==bridge_digest(&capped)?
                                 &&stored_build==suffix&&set==format!("binding-set:native-v2:{suffix}")
                                 &&build==format!("binding-build:native-v2:{suffix}");
                             sets.push(json!({"referential_type":typ,"candidate_set_ref":set,"generator_build_ref":build,
                                 "exact_membership":exact,"full_members":full,"persisted_members":stored,
+                                "member_inverse_coordinates":inverse,"exact_member_inverses":exact_inverse,
                                 "cap_deferred_count":full.len().saturating_sub(64)}));
                         }
                     }
@@ -3668,17 +3684,33 @@ fn reopen_focus_relation_correspondence(
                 let expected_roles=reduction["relation"]["roles"].as_array().ok_or(NativeNumericAuditError::ForeignSource)?
                     .iter().map(|r|Ok((r[0].as_str().ok_or(NativeNumericAuditError::ForeignSource)?.to_owned(),
                         r[1].as_i64().ok_or(NativeNumericAuditError::ForeignSource)?))).collect::<Result<Vec<_>,NativeNumericAuditError>>()?;
+                let mut inverse_roles=Vec::new();
+                for binding in cross["original_relation_payload"]["roles"].as_array().ok_or(NativeNumericAuditError::ForeignSource)?{
+                    if let Some(a)=binding["atom"].as_str(){
+                        let name=binding["role"].as_str().ok_or(NativeNumericAuditError::ForeignSource)?;
+                        let id=packet["atom_token_inverse"][a].as_i64().ok_or(NativeNumericAuditError::ForeignSource)?;
+                        inverse_roles.push((name.to_owned(),id));
+                    }
+                }
+                if inverse_roles!=expected_roles||expected_roles.get(ordinal as usize)!=Some(&("subject".to_owned(),token)){
+                    return Err(NativeNumericAuditError::ForeignSource);
+                }
                 let expected_support=expected_roles.iter().map(|(_,id)|*id).collect::<BTreeSet<_>>();
                 let mut numeric=Vec::new();
                 for d in demands{
                     let demand:i64=d.get(0);let object:i64=d.get(1);let outside:bool=d.get(2);
                     let typed=read_original_typed_candidate_rows(tx,demand,None).map_err(|e|NativeNumericAuditError::Database(e.to_string()))?;
+                    let universe=tx.query("SELECT target_kind,target_id FROM execution.semantic_pnf_candidate_universe
+                      WHERE demand_id=$1 ORDER BY target_kind,target_id",&[&demand])?.iter()
+                        .map(|r|(r.get::<_,i16>(0),r.get::<_,i64>(1))).collect::<BTreeSet<_>>();
+                    let typed_keys=typed.iter().map(|r|(r.target_kind,r.target_id)).collect::<BTreeSet<_>>();
+                    let represented_exact=typed_keys==universe&&typed_keys.len()==typed.len();
                     let arguments=tx.query("SELECT e.factor_id,e.slot_ordinal
                       FROM execution.semantic_pnf_hyperedge e
                       JOIN execution.semantic_pnf_factor f ON f.factor_id=e.factor_id AND f.active
                       JOIN execution.semantic_pnf_region r ON r.region_id=f.region_id
                       JOIN execution.semantic_symbol s ON s.symbol_id=e.role_symbol_id
-                      WHERE r.run_ref=$1 AND r.document_ref=$2 AND e.object_id=$3 AND s.symbol_text='subject'
+                      WHERE r.run_ref=$1 AND r.document_ref=$2 AND e.object_id=$3
                       ORDER BY e.factor_id,e.slot_ordinal",&[&run,&doc,&object])?;
                     let mut observed=Vec::new();
                     for arg in arguments{
@@ -3691,19 +3723,18 @@ fn reopen_focus_relation_correspondence(
                           FROM execution.semantic_pnf_hyperedge e JOIN execution.semantic_symbol s ON s.symbol_id=e.role_symbol_id
                           WHERE e.factor_id=$1 ORDER BY e.slot_ordinal",&[&factor])?
                           .iter().map(|r|(r.get::<_,i16>(0),r.get::<_,String>(1),r.get::<_,Vec<i64>>(2))).collect::<Vec<_>>();
-                        let exact= support==expected_support&&roles.len()==expected_roles.len()
-                            &&roles.iter().zip(&expected_roles).enumerate().all(|(i,((s,role,ids),(er,et)))|
-                                usize::try_from(*s).ok()==Some(i)&&role==er&&ids.as_slice()==[*et])
+                        let exact=support==expected_support&&exact_numeric_role_inverse(&roles,&expected_roles)
                             &&u64::try_from(slot).ok()==Some(ordinal);
                         observed.push(json!({"numeric_factor_id":factor,"slot_ordinal":slot,"support":support,
                             "roles":roles,"exact_ordered_role_and_support":exact}));
                     }
                     let exact_count=observed.iter().filter(|x|x["exact_ordered_role_and_support"]==true).count();
                     numeric.push(json!({"demand_id":demand,"source_object_id":object,"outside_model_possible":outside,
-                        "typed_candidate_rows":typed,"observed_numeric_arguments":observed,"exact_numeric_argument_count":exact_count}));
+                        "typed_candidate_rows":typed,"represented_keys_exact":represented_exact,
+                        "observed_numeric_arguments":observed,"exact_numeric_argument_count":exact_count}));
                 }
                 let exact=revisions.len()==1&&revisions[0]["exact_three_candidate_sets"]==true
-                    &&numeric.len()==1&&numeric[0]["exact_numeric_argument_count"]==1;
+                    &&numeric.len()==1&&numeric[0]["exact_numeric_argument_count"]==1&&numeric[0]["represented_keys_exact"]==true;
                 matches.push(json!({"native_relation_ref":native_ref,"source_key":key,"role_ordinal":ordinal,
                     "revisions":revisions,"numeric_demands":numeric,"exact_persisted_correspondence":exact}));
             }
@@ -3719,6 +3750,51 @@ fn reopen_focus_relation_correspondence(
         "missing_original_tags":packet["missing_original_tags"],"independent_relation_parity_paid":false,
         "typed_coverage_paid":false,"governed_identity_paid":false,"level_three_paid":false,
         "whole_document_parity_paid":false,"writes_database":false}))
+}
+
+// Current certification uses exactly the same inverse correspondence as the
+// read-only campaign, not a caller-provided JSON or a rollback-only factor.
+fn current_focus_relation_correspondence(
+    tx:&mut postgres::Transaction<'_>,run:&str,answer:&NativeSourceLocalAnswer,
+)->Result<Option<serde_json::Value>,NativeNumericAuditError>{
+    let installed:bool=tx.query_one("SELECT to_regclass('execution.slr_native_binding_anchor_projection') IS NOT NULL
+        AND to_regclass('execution.slr_native_relation_reduction') IS NOT NULL",&[])?.get(0);
+    if !installed{return Ok(None);}
+    let doc=&answer.source_document_ref;
+    let snapshots=tx.query("SELECT DISTINCT snapshot_ref FROM execution.slr_native_binding_anchor_projection
+        WHERE run_ref=$1 AND document_ref=$2 AND active ORDER BY snapshot_ref",&[&run,doc])?;
+    if snapshots.len()!=1{return Ok(None);}
+    let snapshot:String=snapshots[0].get(0);
+    let rows=tx.query("SELECT relation_ref,payload FROM execution.slr_native_relation_reduction
+        WHERE run_ref=$1 AND document_ref=$2 AND snapshot_ref=$3
+        AND relation_ref LIKE 'native-original-relation-packet:%'",&[&run,doc,&snapshot])?;
+    if rows.len()!=1{return Ok(None);}
+    let key:String=rows[0].get(0);
+    let packet:serde_json::Value=rows[0].get(1);
+    if key!=format!("native-original-relation-packet:{}",original_relation_digest(&packet)?)
+        ||packet["comparison"]["source_revision_ref"]!=answer.source_revision_ref
+        ||packet["comparison"]["parser_run_ref"]!=answer.original_parser_run_ref{
+        return Err(NativeNumericAuditError::ForeignSource);
+    }
+    let source=tx.query_one("SELECT locator,encode(content_sha256,'hex') FROM execution.semantic_parser_source
+        WHERE run_ref=$1 AND document_ref=$2",&[&run,doc])?;
+    let locator:String=source.get(0);let sha:String=source.get(1);
+    let bytes=std::fs::read(locator).map_err(|_|NativeNumericAuditError::ForeignSource)?;
+    if sha!=answer.source_content_sha256||hex(&Sha256::digest(&bytes))!=sha{
+        return Err(NativeNumericAuditError::ForeignSource);
+    }
+    validate_reopened_relation_packet(&packet,doc,&sha,&bytes)?;
+    let start=i64::try_from(answer.original_focus_span[0]).map_err(|_|NativeNumericAuditError::ForeignSource)?;
+    let end=i64::try_from(answer.original_focus_span[1]).map_err(|_|NativeNumericAuditError::ForeignSource)?;
+    let mut binding=reopen_focus_relation_correspondence(tx,run,doc,&snapshot,&packet,start,end)?;
+    binding["snapshot_ref"]=serde_json::json!(snapshot);
+    binding["packet_ref"]=serde_json::json!(key);
+    Ok(Some(binding))
+}
+
+fn exact_numeric_role_inverse(actual:&[(i16,String,Vec<i64>)],expected:&[(String,i64)])->bool{
+    actual.len()==expected.len()&&actual.iter().zip(expected).enumerate().all(|(i,((s,role,ids),(er,et)))|
+        usize::try_from(*s).ok()==Some(i)&&role==er&&ids.as_slice()==[*et])
 }
 
 fn validate_reopened_relation_packet(
@@ -6222,6 +6298,21 @@ pub fn transport_original_numeric_candidates_for_source_answer_with_partition(
 #[cfg(test)]
 mod tests{
     use super::*;
+    #[test]
+    fn persisted_numeric_role_inverse_requires_exact_order_role_and_token_fibre(){
+        let expected=vec![("subject".to_owned(),7),("object".to_owned(),9),("argument".to_owned(),9)];
+        let actual=vec![(0,"subject".to_owned(),vec![7]),(1,"object".to_owned(),vec![9]),(2,"argument".to_owned(),vec![9])];
+        assert!(exact_numeric_role_inverse(&actual,&expected));
+        assert!(!exact_numeric_role_inverse(&actual[..2],&expected));
+        let mut bad=actual.clone();bad.swap(1,2);
+        assert!(!exact_numeric_role_inverse(&bad,&expected));
+        let mut bad=actual.clone();bad[0].2.push(8);
+        assert!(!exact_numeric_role_inverse(&bad,&expected));
+        let mut bad=actual.clone();bad[0].1="object".to_owned();
+        assert!(!exact_numeric_role_inverse(&bad,&expected));
+        let mut bad=actual.clone();bad[0].2=vec![8];
+        assert!(!exact_numeric_role_inverse(&bad,&expected));
+    }
     #[test]
     fn historical_singleton_without_current_projection_is_not_identity(){
         let h=NativeNumericHorizonObservation{target_kind:1,target_id:7,horizon:3,
