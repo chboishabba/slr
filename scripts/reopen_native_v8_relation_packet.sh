@@ -37,11 +37,15 @@ else
   printf '%s\n' "$manifest" > "$checkpoint/manifest.json.tmp"
   mv "$checkpoint/manifest.json.tmp" "$checkpoint/manifest.json"
 fi
-bounded "${cli[@]}" relation-reopen "$run" "$doc" "$snapshot" "$digest" > "$checkpoint/reopened.json.tmp"
+focus_start=$(jq -er '.source_local_answer.original_focus_span[0]' "$endpoint")
+focus_end=$(jq -er '.source_local_answer.original_focus_span[1]' "$endpoint")
+bounded "${cli[@]}" relation-reopen "$run" "$doc" "$snapshot" "$digest" "$focus_start" "$focus_end" > "$checkpoint/reopened.json.tmp"
 jq -e --arg digest "$digest" --arg snapshot "$snapshot" '
   .schema=="slr-reopened-original-relation-packet-v1" and
   .packet_sha256==$digest and .snapshot_ref==$snapshot and
   .exact_persisted_packet_readback==true and .writes_database==false and
+  .focus_correspondence.schema=="slr-native-focus-relation-correspondence-v1" and
+  .focus_correspondence.writes_database==false and .focus_correspondence.governed_identity_paid==false and
   .current_snapshot_certified==false and .typed_coverage_paid==false and
   .governed_identity_paid==false and .whole_document_parity_paid==false
 ' "$checkpoint/reopened.json.tmp" >/dev/null
