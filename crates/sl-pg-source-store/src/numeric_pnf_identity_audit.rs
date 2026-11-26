@@ -2406,6 +2406,95 @@ fn bridge_digest<T:Serialize>(value:&T)->Result<String,NativeNumericAuditError>{
     let bytes=serde_json::to_vec(value).map_err(|_|NativeNumericAuditError::ForeignSource)?;
     Ok(hex(&Sha256::digest(bytes)))
 }
+
+/// Persist the source relation carrier used by the native binding campaign.
+///
+/// The earlier campaign created this carrier only inside the rollback probe.
+/// That was useful for testing derivation/retraction, but it could not pay a
+/// later correspondence check: the persisted role factor had no persisted
+/// numeric argument.  Materialise the same candidate-only relation here,
+/// using the original token/object coordinates.  This is deliberately not an
+/// identity admission: objects stay at promotion level zero and hyperedges
+/// stay unresolved.
+fn materialize_native_numeric_relation_arguments(
+    tx:&mut postgres::Transaction<'_>,run_ref:&str,doc:&str,
+    relations:&[ProjectedRelation],tokens:&BTreeMap<i64,BridgeToken>,
+)->Result<(),NativeNumericAuditError>{
+    let object_kind=tx.query_one(
+        "SELECT execution.ensure_semantic_symbol($1,$2)",&[&14i16,&"parser.role_participant"]
+    )?.get::<_,i64>(0);
+    let eventuality=tx.query_one(
+        "SELECT execution.ensure_semantic_symbol($1,$2)",&[&10i16,&"semantic.eventuality"]
+    )?.get::<_,i64>(0);
+    let mut role_ids=BTreeMap::<String,i64>::new();
+    for relation in relations.iter().filter(|r|r.relation_type=="predicate"){
+        let head=tokens.get(&relation.head_token_id).ok_or(NativeNumericAuditError::ForeignSource)?;
+        let relation_ref=format!("native-projected-relation:{}",bridge_digest(&(run_ref,doc,relation))?);
+        let digest=Sha256::digest(serde_json::to_vec(&(
+            "slr:native-persisted-relation:v1",run_ref,doc,&relation_ref,
+            relation.head_token_id,&relation.roles)).map_err(|_|NativeNumericAuditError::ForeignSource)?);
+        let predicate=tx.query_one(
+            "SELECT execution.ensure_semantic_symbol($1,$2)",&[&11i16,&format!("parser.predicate:{}",head.lemma)]
+        )?.get::<_,i64>(0);
+        let factor=tx.query_opt(
+            "SELECT factor_id FROM execution.semantic_pnf_factor
+             WHERE factor_digest=$1 AND region_id=$2 AND active
+             ORDER BY factor_id LIMIT 1",&[&digest.as_slice(),&head.region])?
+            .map(|r|r.get::<_,i64>(0));
+        let factor=if let Some(factor)=factor{factor}else{
+            tx.query_one(
+                "INSERT INTO execution.semantic_pnf_factor
+                 (factor_digest,region_id,factor_type_symbol_id,predicate_symbol_id,scope_region_id,
+                  temporal_state,modal_state,promotion_level,support_score,active)
+                 VALUES($1,$2,$3,$4,$2,0,0,0,1,TRUE) RETURNING factor_id",
+                &[&digest.as_slice(),&head.region,&eventuality,&predicate])?.get(0)
+        };
+        let mut support=relation.roles.iter().map(|(_,id)|*id).collect::<BTreeSet<_>>();
+        support.insert(relation.head_token_id);
+        for (ordinal,id) in support.iter().enumerate(){
+            tx.execute(
+                "INSERT INTO execution.semantic_pnf_factor_token_support(factor_id,token_id,ordinal)
+                 VALUES($1,$2,$3) ON CONFLICT DO NOTHING",
+                &[&factor,id,&i16::try_from(ordinal).map_err(|_|NativeNumericAuditError::ForeignSource)?])?;
+        }
+        for (ordinal,(role,id)) in relation.roles.iter().enumerate(){
+            let token=tokens.get(id).ok_or(NativeNumericAuditError::ForeignSource)?;
+            let object=tx.query_opt(
+                "SELECT o.object_id FROM execution.semantic_pnf_object o
+                 JOIN execution.semantic_pnf_object_token_support s ON s.object_id=o.object_id
+                 WHERE o.region_id=$1 AND o.active AND s.token_id=$2
+                 ORDER BY o.object_id LIMIT 1",&[&token.region,id])?
+                .map(|r|r.get::<_,i64>(0));
+            let object=if let Some(object)=object{object}else{
+                let object_digest=Sha256::digest(serde_json::to_vec(&(
+                    "slr:native-persisted-role-object:v1",run_ref,doc,id,token.region)).map_err(|_|NativeNumericAuditError::ForeignSource)?);
+                let object=tx.query_one(
+                    "INSERT INTO execution.semantic_pnf_object
+                     (object_digest,region_id,object_kind_symbol_id,head_symbol_id,scope_region_id,
+                      promotion_level,information_gain,representation_cost,ambiguity_cost,promotion_score,active)
+                     VALUES($1,$2,$3,$4,$2,0,1,1,1,0,TRUE) RETURNING object_id",
+                    &[&object_digest.as_slice(),&token.region,&object_kind,&token.lemma_id])?.get(0);
+                tx.execute(
+                    "INSERT INTO execution.semantic_pnf_object_token_support(object_id,token_id,ordinal)
+                     VALUES($1,$2,0) ON CONFLICT DO NOTHING",&[&object,id])?;
+                object
+            };
+            let role_id=if let Some(role_id)=role_ids.get(*role){*role_id}else{
+                let role_id=tx.query_one(
+                    "SELECT execution.ensure_semantic_symbol($1,$2)",&[&12i16,role]
+                )?.get::<_,i64>(0);
+                role_ids.insert((*role).to_owned(),role_id);role_id
+            };
+            tx.execute(
+                "INSERT INTO execution.semantic_pnf_hyperedge
+                 (factor_id,slot_ordinal,role_symbol_id,object_id,resolution_state,required)
+                 VALUES($1,$2,$3,$4,2,TRUE) ON CONFLICT DO NOTHING",
+                &[&factor,&i16::try_from(ordinal).map_err(|_|NativeNumericAuditError::ForeignSource)?,&role_id,&object])?;
+        }
+    }
+    Ok(())
+}
+
 fn materialize_native_binding_bridge(
     tx:&mut postgres::Transaction<'_>,run_ref:&str,doc:&str,sha:&str,
     focus_token:i64,demand:i64,campaign:&NativeMentionBindingCampaign,
@@ -2512,6 +2601,10 @@ fn materialize_native_binding_bridge(
     let (original_relation_packet,original_relation_payload)=assemble_original_relation_packet(
         doc,sha,&source_revision,&parser_run,&prefix,missing_original_tags,uncovered,
         &relation_reductions,question_mode.as_ref())?;
+    // Keep the native numeric relation argument in the committed producer
+    // lane.  The rollback-only probe below remains an independent regression
+    // check; it must not be the sole owner of this Level-1 source carrier.
+    materialize_native_numeric_relation_arguments(tx,run_ref,doc,&relations,&tokens)?;
     let mut anchors=Vec::new();
     for span in &campaign.represented_spans{
         let anchor=bridge_anchor(span.original_mention_ref.clone(),"semantic.mention_identity",
