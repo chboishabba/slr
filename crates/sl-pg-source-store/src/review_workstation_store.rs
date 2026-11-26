@@ -151,6 +151,12 @@ pub fn install_review_workstation_schema(
     config: &DatabaseConfig,
 ) -> Result<(), ReviewWorkstationStoreError> {
     let mut client = Client::connect(config.database_url(), NoTls)?;
+    install_review_workstation_on_client(&mut client)
+}
+
+pub(crate) fn install_review_workstation_on_client(
+    client:&mut impl GenericClient,
+)->Result<(),ReviewWorkstationStoreError>{
     client.batch_execute(
         r#"
         CREATE SCHEMA IF NOT EXISTS semantic;
@@ -463,7 +469,7 @@ fn persist_review_receipt_with_client(
 ) -> Result<(), ReviewWorkstationStoreError> {
     validate_review_receipt(receipt)?;
     let (effect_ref, effect_value_ref) = effect_row(&receipt.effect);
-    client.execute(
+    let inserted=client.execute(
         r#"
         INSERT INTO semantic.review_receipt
           (command_ref, review_item_ref, semantic_ref, reviewer_ref, action_ref,
@@ -482,11 +488,27 @@ fn persist_review_receipt_with_client(
             &effect_value_ref,
         ],
     )?;
-    if let Some(status) = receipt_status_after_effect(&receipt.effect) {
-        client.execute(
-            "UPDATE semantic.review_item SET current_status_ref=$2 WHERE review_item_ref=$1",
-            &[&receipt.review_item_ref, &status],
-        )?;
+    let row=client.query_one(
+        "SELECT review_item_ref,semantic_ref,reviewer_ref,action_ref,effect_ref,effect_value_ref,
+                candidate_only,creates_semantic_authority,applicability_promoted,claim_truth_promoted
+         FROM semantic.review_receipt WHERE command_ref=$1",&[&receipt.command_ref])?;
+    if row.get::<_,String>(0)!=receipt.review_item_ref
+        ||row.get::<_,String>(1)!=receipt.semantic_ref
+        ||row.get::<_,String>(2)!=receipt.reviewer_ref
+        ||row.get::<_,String>(3)!=action_db(receipt.action)
+        ||row.get::<_,String>(4)!=effect_ref
+        ||row.get::<_,Option<String>>(5)!=effect_value_ref
+        ||!row.get::<_,bool>(6)||row.get::<_,bool>(7)||row.get::<_,bool>(8)||row.get::<_,bool>(9){
+        return Err(ReviewWorkstationStoreError::ExistingRowConflict);
+    }
+    // An immutable old command must not overwrite a later review state.
+    if inserted==1 {
+        if let Some(status) = receipt_status_after_effect(&receipt.effect) {
+            client.execute(
+                "UPDATE semantic.review_item SET current_status_ref=$2 WHERE review_item_ref=$1",
+                &[&receipt.review_item_ref, &status],
+            )?;
+        }
     }
     Ok(())
 }

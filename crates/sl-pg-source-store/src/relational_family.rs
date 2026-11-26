@@ -2,7 +2,9 @@
 //! source observations. This is a native candidate read/repair work surface,
 //! not another ontology, truth authority, or a proof of all-live sufficiency.
 use std::collections::{BTreeMap,BTreeSet};
-use serde::Serialize;
+use serde::{Serialize,Deserialize};
+use sensiblaw_core::review_workstation::{ReviewItemKind,ReviewItem,ReviewStatus,ReviewAction};
+use crate::review_workstation_store::{install_review_workstation_on_client,persist_review_projection_on_tx,ReviewWorkstationStoreError};
 use sha2::{Digest,Sha256};
 use thiserror::Error;
 use postgres::{Client,GenericClient,NoTls};
@@ -40,6 +42,7 @@ pub enum RelationalFamilyError {
     #[error(transparent)] Investigation(#[from] InvestigationAcquisitionError),
     #[error(transparent)] InvestigationStore(#[from] InvestigationStoreError),
     #[error(transparent)] Pg(#[from] postgres::Error),
+    #[error(transparent)] Review(#[from] ReviewWorkstationStoreError),
 }
 
 /// Classify the ordered SOURCE polarity pair, not truth or a reviewed ternary
@@ -112,6 +115,11 @@ pub struct RelationalFamilyProjection {
     pub directed_comparisons:Vec<DirectionalRelationalComparison>,
     pub acquisition_demands:Vec<FamilyAcquisitionDemand>,
     pub potential_reopening_by_source:Vec<SelectiveReopeningReceipt>,
+    /// The common part of the exact OBSERVED coordinate inventory, not a
+    /// cross-language or world-semantic equivalence certificate.
+    pub observed_coordinate_meet:Vec<ObservedCoordinateFibre>,
+    pub source_sign_ledger:Vec<SourceSignEntry>,
+    pub synthesis_candidates:Vec<FamilySynthesisColumn>,
     pub candidate_only:bool,
     pub all_live_reading_coverage_paid:bool,
     pub formal_consumer_equivalence_paid:bool,
@@ -123,9 +131,128 @@ pub struct PersistedRelationalFamily {
     pub projection:RelationalFamilyProjection,
     pub durable_comparisons:Vec<DurableRelationalComparison>,
     pub durable_acquisition_queues:Vec<DurableAcquisitionQueue>,
+    pub residual_review_items:Vec<FamilyReviewProjection>,
     /// Existing queues are reloaded; no fabricated routes or access grants.
     pub creates_access_authority:bool,
     pub applies_external_edit:bool,
+}
+
+/// Typed native observable: exact equality only, never string-based entity
+/// resolution. The source observation itself remains the inverse carrier.
+#[derive(Debug,Clone,PartialEq,Eq,PartialOrd,Ord,Serialize,Deserialize)]
+pub struct ObservedCoordinate {
+    pub axis:String,
+    pub slot:String,
+    pub occurrence:u32,
+    pub value_ref:String,
+}
+#[derive(Debug,Clone,PartialEq,Eq,Serialize,Deserialize)]
+pub struct ObservedCoordinateFibre {
+    pub coordinate:ObservedCoordinate,
+    pub present_in:Vec<String>,
+    pub not_recorded_in:Vec<String>,
+}
+fn observed_coordinates(o:&RelationalObservation)->BTreeSet<ObservedCoordinate>{
+    let mut out=BTreeSet::new();
+    let mut put=|axis:&str,slot:&str,occurrence:u32,value:&str|{
+        if !value.trim().is_empty(){out.insert(ObservedCoordinate{
+            axis:axis.into(),slot:slot.into(),occurrence,value_ref:value.into(),
+        });}
+    };
+    put("predicate","predicate",0,&o.predicate_candidate_ref);
+    for role in &o.role_bindings{
+        put("role",&role.role_ref,role.occurrence,&role.filler_candidate_ref);
+    }
+    for typ in &o.role_type_hypotheses{
+        put("role_type",&typ.role_ref,typ.occurrence,&typ.candidate_type_ref);
+    }
+    for typ in &o.candidate_type_refs{put("candidate_type","type",0,typ);}
+    let c=&o.context;
+    for (slot,value) in [("scope",&c.scope_ref),("time",&c.time_ref),
+        ("modality",&c.modality_ref),("quantifier",&c.quantifier_ref),
+        ("attribution",&c.attribution_ref),("ontology",&c.ontology_ref),
+        ("language",&c.language_ref)]{
+        if let Some(value)=value{put("context",slot,0,value);}
+    }
+    out
+}
+
+/// A lossless incidence transpose of the selected observations, indexed by
+/// their immutable selector refs. A common coordinate is present in every
+/// selected row; absent means not recorded, NEVER semantic refutation.
+/// This is the finite source-observer specialization of
+/// ConsumerDescentMinimalObserverExact, not a live semantic enumerator.
+pub fn observed_family_meet(sources:&[SelectedRelationalSource])->Vec<ObservedCoordinateFibre>{
+    let universe=sources.iter().map(|s|s.selector_ref.clone()).collect::<BTreeSet<_>>();
+    let mut incidence=BTreeMap::<ObservedCoordinate,BTreeSet<String>>::new();
+    for s in sources{
+        for coordinate in observed_coordinates(&s.observation){
+            incidence.entry(coordinate).or_default().insert(s.selector_ref.clone());
+        }
+    }
+    incidence.into_iter().map(|(coordinate,owners)|ObservedCoordinateFibre{
+        coordinate,present_in:owners.iter().cloned().collect(),
+        not_recorded_in:universe.difference(&owners).cloned().collect(),
+    }).collect()
+}
+
+#[derive(Debug,Clone,PartialEq,Eq,Serialize)]
+pub struct SourceSignEntry{
+    pub selector_ref:String,
+    pub observation_ref:String,
+    pub source_revision_ref:String,
+    pub polarity:Polarity,
+}
+/// Existing Agda TernaryComparisonSynthesisExact has three possible
+/// synthesis choices for each ordered pair. Here choices are only indices
+/// of a future candidate (not signed proof, verdict, or inferred Z).
+#[derive(Debug,Clone,PartialEq,Eq,Serialize)]
+pub struct FamilySynthesisColumn{
+    pub comparison_ref:String,
+    pub left_selector_ref:String,
+    pub right_selector_ref:String,
+    pub source_polarity_class:SourcePolarityClass,
+    pub possible_synthesis_signs:[i8;3],
+    pub selected_synthesis_sign:Option<i8>,
+    pub requires_independent_interaction_witness:bool,
+}
+
+#[derive(Debug,Clone,PartialEq,Eq,Serialize)]
+pub struct FamilyReviewProjection{
+    pub review_item_ref:String,
+    pub obligation_ref:String,
+    pub comparison_ref:String,
+    pub current_status:String,
+    pub exact_residuals:Vec<ComparisonResidual>,
+    pub source_revision_refs:Vec<String>,
+    pub consumer_ref:String,
+    pub candidate_only:bool,
+}
+fn review_status_tag(status:ReviewStatus)->&'static str{
+    match status{
+        ReviewStatus::Pending=>"pending",ReviewStatus::Accepted=>"accepted",
+        ReviewStatus::Rejected=>"rejected",ReviewStatus::Abstained=>"abstained",
+        ReviewStatus::Qualified=>"qualified",ReviewStatus::Superseded=>"superseded",
+        ReviewStatus::NeedsEvidence=>"needs_evidence",
+    }
+}
+fn residual_review_item(demand:&FamilyAcquisitionDemand,consumer:&str)->ReviewItem{
+    let obligation=&demand.obligation;
+    ReviewItem{
+        review_item_ref:format!("review-item:{}",obligation.obligation_ref),
+        semantic_ref:obligation.obligation_ref.clone(),
+        item_kind:ReviewItemKind::ResearchAcquisition,
+        reason:obligation.target_description.clone(),
+        provenance_refs:vec![obligation.comparison_ref.clone(),obligation.residual_obligation_ref.clone()],
+        source_refs:obligation.source_revision_refs.clone(),
+        current_status:ReviewStatus::Pending,
+        available_actions:vec![ReviewAction::Reject,ReviewAction::Abstain,
+            ReviewAction::Qualify,ReviewAction::Supersede,ReviewAction::RequestEvidence,
+            ReviewAction::OpenSource,ReviewAction::FollowAuthority],
+        affected_consumer_refs:vec![consumer.into()],
+        candidate_only:true,creates_semantic_authority:false,
+        applicability_promoted:false,claim_truth_promoted:false,
+    }
 }
 
 fn checked_observation(client:&mut impl GenericClient,s:&AcceptanceObservationSelector)
@@ -223,10 +350,22 @@ pub fn project_relational_family(
         potential_reopening_by_source.push(selective_reopening(
             &source.observation.source_revision_ref,&graph_ref,&edges,&universe)?);
     }
+    let observed_coordinate_meet=observed_family_meet(sources);
+    let source_sign_ledger=sources.iter().map(|s|SourceSignEntry{
+        selector_ref:s.selector_ref.clone(),observation_ref:s.observation.observation_ref.clone(),
+        source_revision_ref:s.observation.source_revision_ref.clone(),polarity:s.observation.polarity,
+    }).collect();
+    let synthesis_candidates=directed_comparisons.iter().map(|p|FamilySynthesisColumn{
+        comparison_ref:p.comparison.comparison_ref.clone(),left_selector_ref:p.left_selector_ref.clone(),
+        right_selector_ref:p.right_selector_ref.clone(),source_polarity_class:p.source_polarity_class,
+        possible_synthesis_signs:[-1,0,1],selected_synthesis_sign:None,
+        requires_independent_interaction_witness:true,
+    }).collect();
     Ok(RelationalFamilyProjection{
-        schema:"itir.relational-family.v1",consumer_ref:consumer.consumer_ref.clone(),
+        schema:"itir.relational-family.v2",consumer_ref:consumer.consumer_ref.clone(),
         sources:sources.to_vec(),directed_comparisons,acquisition_demands,
-        potential_reopening_by_source,candidate_only:true,all_live_reading_coverage_paid:false,
+        potential_reopening_by_source,observed_coordinate_meet,source_sign_ledger,synthesis_candidates,
+        candidate_only:true,all_live_reading_coverage_paid:false,
         formal_consumer_equivalence_paid:false,source_independence_paid:false,creates_edit_authority:false,
     })
 }
@@ -255,6 +394,7 @@ pub fn run_persisted_relational_family(
     // use this same snapshot. A failed replay rolls back the family.
     tx.batch_execute(RELATIONAL_COMPARISON_SQL)?;
     tx.batch_execute(INVESTIGATION_ACQUISITION_SQL)?;
+    install_review_workstation_on_client(&mut tx)?;
     let mut digests=RelationalSourceDigests::new(&mut tx)?;
     let mut durable_comparisons=Vec::with_capacity(projection.directed_comparisons.len());
     let mut ordered_pairs=projection.directed_comparisons.iter().collect::<Vec<_>>();
@@ -269,6 +409,7 @@ pub fn run_persisted_relational_family(
     let parents=durable_comparisons.iter().map(|p|(p.comparison.comparison_ref.as_str(),p))
         .collect::<BTreeMap<_,_>>();
     let mut durable_acquisition_queues=Vec::new();
+    let mut residual_review_items=Vec::new();
     // Stable lock order avoids family-dependent queue locking order.
     let mut demands=projection.acquisition_demands.iter().collect::<Vec<_>>();
     demands.sort_by(|a,b|a.obligation.obligation_ref.cmp(&b.obligation.obligation_ref));
@@ -277,10 +418,19 @@ pub fn run_persisted_relational_family(
             .ok_or(RelationalFamilyError::ChangedReplay)?;
         durable_acquisition_queues.push(ensure_acquisition_obligation_on_client(
             &mut tx,&demand.obligation,parent)?);
+        let item=persist_review_projection_on_tx(&mut tx,&residual_review_item(demand,consumer_ref))?;
+        residual_review_items.push(FamilyReviewProjection{
+            review_item_ref:item.review_item_ref,obligation_ref:demand.obligation.obligation_ref.clone(),
+            comparison_ref:demand.obligation.comparison_ref.clone(),
+            current_status:review_status_tag(item.current_status).into(),
+            exact_residuals:demand.exact_residuals.clone(),
+            source_revision_refs:demand.obligation.source_revision_refs.clone(),
+            consumer_ref:consumer_ref.into(),candidate_only:true,
+        });
     }
     tx.commit()?;
     Ok(PersistedRelationalFamily{
-        projection,durable_comparisons,durable_acquisition_queues,
+        projection,durable_comparisons,durable_acquisition_queues,residual_review_items,
         creates_access_authority:false,applies_external_edit:false,
     })
 }
@@ -304,6 +454,25 @@ mod tests{
             required_roles:vec![],required_role_types:vec![],compare_scope:false,compare_time:false,
             compare_modality:false,compare_quantifier:false,compare_attribution:false,compare_ontology:false,
             compare_language:false,predicate_alignments:vec![],role_alignments:vec![],filler_alignments:vec![],type_alignments:vec![]}
+    }
+    #[test]
+    fn observed_meet_retains_all_incidence_and_never_forges_synthesis(){
+        let mut a=source("a","p",Polarity::Supports);
+        let mut b=source("b","p",Polarity::Counters);
+        a.observation.context.time_ref=Some("t1".into());
+        b.observation.context.time_ref=Some("t2".into());
+        let q=consumer();
+        let result=project_relational_family(&[a,b],&q,"review").unwrap();
+        let common=result.observed_coordinate_meet.iter().find(|r|r.coordinate.axis=="predicate").unwrap();
+        assert_eq!(common.present_in,vec!["selector:a","selector:b"]);
+        assert!(common.not_recorded_in.is_empty());
+        let diff=result.observed_coordinate_meet.iter().find(|r|r.coordinate.value_ref=="t1").unwrap();
+        assert_eq!(diff.present_in,vec!["selector:a"]);
+        assert_eq!(diff.not_recorded_in,vec!["selector:b"]);
+        assert_eq!(result.source_sign_ledger.len(),2);
+        assert!(result.synthesis_candidates.iter().all(|r|r.selected_synthesis_sign.is_none()
+            &&r.possible_synthesis_signs==[-1,0,1]&&r.requires_independent_interaction_witness));
+        assert!(!result.formal_consumer_equivalence_paid);
     }
     #[test]
     fn all_nine_source_states_roundtrip(){
