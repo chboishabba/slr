@@ -425,6 +425,47 @@ pub fn relational_observation_from_checked_persisted_pnf(
         .ok_or(PersistedRelationalObservationError::MissingPredicate)
 }
 
+
+/// Exact source-local inverse of the existing checked predicate projection.
+/// No QID, title, surface string or grammatical subject establishes identity.
+/// All roles survive; callers can select active-subject candidates separately
+/// from passive patients, mentions and unresolved syntax.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct PredicateParticipantIncidence {
+    pub batch_ref: String,
+    pub source_revision_ref: String,
+    pub source_span_ref: String,
+    pub observation_ref: String,
+    pub predicate_candidate_ref: String,
+    pub role: RoleBinding,
+    pub provenance_refs: Vec<String>,
+}
+
+impl CheckedRelationalBatch {
+    /// Enumerate the original incidence, retaining occurrence and role.
+    pub fn participant_incidence(&self) -> Vec<PredicateParticipantIncidence> {
+        self.observations.iter().flat_map(|o| {
+            o.role_bindings.iter().map(move |role| PredicateParticipantIncidence {
+                batch_ref: self.batch_ref.clone(),
+                source_revision_ref: o.source_revision_ref.clone(),
+                source_span_ref: o.source_span_ref.clone(),
+                observation_ref: o.observation_ref.clone(),
+                predicate_candidate_ref: o.predicate_candidate_ref.clone(),
+                role: role.clone(),
+                provenance_refs: o.provenance_refs.clone(),
+            })
+        }).collect()
+    }
+
+    /// Reverse traversal by an exact persisted factor, not by spelling.
+    pub fn predicates_for_participant(&self, factor_ref: &str)
+        -> Vec<PredicateParticipantIncidence>
+    {
+        self.participant_incidence().into_iter()
+            .filter(|i| i.role.filler_candidate_ref == factor_ref).collect()
+    }
+}
+
 #[cfg(test)]
 mod checked_dependency_tests {
     use super::*;
