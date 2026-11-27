@@ -31,3 +31,9 @@ Use actual independently revision-pinned GWB and GHWB articles, then expand thro
 
 ## Acceptance discipline
 Real source receipts, no synthetic fixture promoted to real-world answer. Require source-to-result-to-source round trips, actor swap/passive/negation/quotation counterexamples, source-order invariance, missing source vs denial, same-source dependence, withdrawal of one support without deleting independent support. Report executable implementation separately from local Rust/SQL and golden kernel acceptance.
+
+## Implementation ledger
+- 1fd282a7be10: CheckedRelationalBatch::participant_incidence and predicates_for_participant expose exact role/factor inverse on existing checked native batches. W01/W02/W05 partial, not entity-resolved. No actor promotion, no corpus execution.
+- Existing CheckedDependencyFibre already validates source bytes, parser parity, direct predicate children, passive syntax and nested local negation. Reuse rather than duplicate.
+- Existing relational_family.rs already owns 2–10 source directed comparisons, nine-state polarity, observed-coordinate incidence, declared transport meet, synthesis, acquisition and selective reopening. W03/W04/W06/W11 integration targets, not new engines.
+- Remaining: real GWB/GHWB source acquisition and batch selection, licensed cross-source referent/event alignment, temporal and legal premise composition, ITIR native exposure, local consolidated acceptance. No native tests executed in this round.
