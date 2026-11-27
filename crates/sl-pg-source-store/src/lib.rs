@@ -536,3 +536,6 @@ mod public_gwb_capstone_manifest_api_tests {
         let _ = std::any::TypeId::of::<GwbTemporalForm>();
     }
 }
+
+/// Independent referee coordinate used by the native query admission endpoint.
+pub use sensiblaw_formal_proof_bridge::RefereeReceiptLocator;
