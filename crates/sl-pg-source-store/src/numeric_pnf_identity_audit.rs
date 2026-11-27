@@ -2426,6 +2426,37 @@ fn persisted_numeric_relation_digest<T:Serialize>(
     )).map_err(|_|NativeNumericAuditError::ForeignSource)?).to_vec())
 }
 
+ // A new immutable carrier is keyed separately from the historical V1
+ // carrier. No old factor, object, hyperedge or derivation is rewritten.
+fn exact_repair_relation_digest<T:Serialize>(
+    run:&str,doc:&str,relation_ref:&str,head:i64,roles:&T,
+)->Result<Vec<u8>,NativeNumericAuditError>{
+    Ok(Sha256::digest(serde_json::to_vec(&(
+        "slr:native-persisted-relation:exact-role-v2",run,doc,relation_ref,head,roles
+    )).map_err(|_|NativeNumericAuditError::ForeignSource)?).to_vec())
+}
+
+fn numeric_relation_inverse_on_tx(
+    tx:&mut postgres::Transaction<'_>,factor:i64,
+    expected:&[(String,i64)],head:i64,
+)->Result<bool,NativeNumericAuditError>{
+    let support=tx.query("SELECT DISTINCT token_id FROM execution.semantic_pnf_factor_token_support
+        WHERE factor_id=$1 ORDER BY token_id",&[&factor])?.iter()
+        .map(|r|r.get::<_,i64>(0)).collect::<BTreeSet<_>>();
+    let mut expected_support=expected.iter().map(|(_,id)|*id).collect::<BTreeSet<_>>();
+    expected_support.insert(head);
+    let roles=tx.query("SELECT e.slot_ordinal,s.symbol_text,
+        ARRAY(SELECT DISTINCT os.token_id FROM execution.semantic_pnf_object_token_support os
+            WHERE os.object_id=e.object_id ORDER BY os.token_id)
+        FROM execution.semantic_pnf_hyperedge e
+        JOIN execution.semantic_symbol s ON s.symbol_id=e.role_symbol_id
+        JOIN execution.semantic_pnf_object o ON o.object_id=e.object_id AND o.active
+        WHERE e.factor_id=$1 ORDER BY e.slot_ordinal",&[&factor])?.iter()
+        .map(|r|(r.get::<_,i16>(0),r.get::<_,String>(1),r.get::<_,Vec<i64>>(2))).collect::<Vec<_>>();
+    Ok(support==expected_support&&exact_numeric_role_inverse(&roles,expected))
+}
+
+
 /// Candidate-only predicate and composition carriers. Reopen existing
 /// immutable factors instead of updating their argument rows on replay.
 /// A source role is not an identity choice: pin the actual focus demand
@@ -2452,7 +2483,7 @@ fn materialize_native_numeric_relation_arguments(
     for relation in relations.iter().filter(|r|matches!(r.relation_type,"predicate"|"composition")){
         let head=tokens.get(&relation.head_token_id).ok_or(NativeNumericAuditError::ForeignSource)?;
         let relation_ref=format!("native-projected-relation:{}",bridge_digest(&(run_ref,doc,relation))?);
-        let digest=persisted_numeric_relation_digest(run_ref,doc,&relation_ref,relation.head_token_id,&relation.roles)?;
+        let mut digest=persisted_numeric_relation_digest(run_ref,doc,&relation_ref,relation.head_token_id,&relation.roles)?;
         let factor_type=if relation.relation_type=="predicate"{eventuality}else{proposition};
         let predicate=relation_symbol(tx,11,&format!("parser.{}:{}",relation.relation_type,head.lemma))?;
         let existing=tx.query_opt("SELECT factor_id,factor_type_symbol_id,predicate_symbol_id,active
@@ -2462,9 +2493,23 @@ fn materialize_native_numeric_relation_arguments(
             if row.get::<_,i64>(1)!=factor_type||row.get::<_,i64>(2)!=predicate||!row.get::<_,bool>(3){
                 return Err(NativeNumericAuditError::ForeignSource);
             }
-            // Old carriers may have unresolved inverse discrepancies; the
-            // exact readback reports those, never rewrites a Level-1 premise.
-            continue;
+            let expected=relation.roles.iter().map(|(r,id)|(r.to_string(),*id)).collect::<Vec<_>>();
+            if numeric_relation_inverse_on_tx(tx,row.get(0),&expected,relation.head_token_id)?{
+                continue;
+            }
+            // Historical V1 is retained verbatim. Only a separately keyed
+            // unresolved L0 candidate may repair its structural inverse.
+            digest=exact_repair_relation_digest(run_ref,doc,&relation_ref,relation.head_token_id,&relation.roles)?;
+            if let Some(repaired)=tx.query_opt("SELECT factor_id,factor_type_symbol_id,predicate_symbol_id,active
+                FROM execution.semantic_pnf_factor WHERE factor_digest=$1 AND region_id=$2",
+                &[&digest,&head.region])?{
+                if repaired.get::<_,i64>(1)!=factor_type||repaired.get::<_,i64>(2)!=predicate
+                    ||!repaired.get::<_,bool>(3)
+                    ||!numeric_relation_inverse_on_tx(tx,repaired.get(0),&expected,relation.head_token_id)?{
+                    return Err(NativeNumericAuditError::ForeignSource);
+                }
+                continue;
+            }
         }
         let factor:i64=tx.query_one(
             "INSERT INTO execution.semantic_pnf_factor
@@ -3969,6 +4014,8 @@ fn reopen_typed_relation_member(
         return Err(NativeNumericAuditError::ForeignSource);
     }
     let digest=persisted_numeric_relation_digest(run,doc,&native_ref,head,&expected_roles)?;
+    let repair_digest=exact_repair_relation_digest(run,doc,&native_ref,head,&expected_roles)?;
+    let digests=vec![digest,repair_digest];
     let rows=tx.query("SELECT f.factor_id,typ.symbol_text,pred.symbol_text,lemma.symbol_text
         FROM execution.semantic_pnf_factor f
         JOIN execution.semantic_pnf_region r ON r.region_id=f.region_id
@@ -3977,8 +4024,8 @@ fn reopen_typed_relation_member(
         JOIN execution.semantic_parser_token t ON t.token_id=$4 AND t.run_ref=r.run_ref AND t.document_ref=r.document_ref
             AND t.representation_version=2
         JOIN execution.semantic_symbol lemma ON lemma.symbol_id=t.lemma_symbol_id
-        WHERE f.factor_digest=$1 AND r.run_ref=$2 AND r.document_ref=$3 AND f.region_id=$5 AND f.active
-        ORDER BY f.factor_id",&[&digest,&run,&doc,&head,&region])?;
+        WHERE f.factor_digest=ANY($1::bytea[]) AND r.run_ref=$2 AND r.document_ref=$3 AND f.region_id=$5 AND f.active
+        ORDER BY f.factor_id",&[&digests,&run,&doc,&head,&region])?;
     let mut numeric=Vec::new();
     for row in rows{
         let id:i64=row.get(0);let stored_type:String=row.get(1);let predicate:String=row.get(2);let lemma:String=row.get(3);
@@ -3991,10 +4038,11 @@ fn reopen_typed_relation_member(
             WHERE e.factor_id=$1 ORDER BY e.slot_ordinal",&[&id])?.iter().map(|r|
                 (r.get::<_,i16>(0),r.get::<_,String>(1),r.get::<_,Vec<i64>>(2))).collect::<Vec<_>>();
         let exact=stored_type==factor_type&&predicate==format!("parser.{kind}:{lemma}")
-            &&support==expected_support&&exact_numeric_role_inverse(&roles,&expected_roles);
+            &&support==expected_support&&exact_numeric_role_inverse(&roles,&expected_roles)
+            &&numeric_relation_inverse_on_tx(tx,id,&expected_roles,head)?;
         numeric.push(json!({"numeric_factor_id":id,"support":support,"roles":roles,"exact":exact}));
     }
-    let exact=numeric.len()==1&&numeric[0]["exact"]==true;
+    let exact=numeric.iter().filter(|n|n["exact"]==true).count()==1;
     Ok(json!({"factor_revision_ref":revision,"source_key":native_ref,"original_root_factor_ref":original_root,
         "source_link_count":1,"exact_numeric_factor_inverse":exact,"numeric_factors":numeric,
         "semantic_disposition":"unresolved"}))
