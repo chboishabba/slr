@@ -4235,13 +4235,23 @@ pub fn query_native_original_relations(
 /// Read-only, one MVCC snapshot; no admission or frontier mutation.
 pub fn query_native_demand_fibre(url:&str,run:&str,doc:&str,source_sha:&str,demand_id:i64)
     ->Result<serde_json::Value,NativeNumericAuditError>{
+    let mut db=Client::connect(url,NoTls)?;
+    let mut tx=db.transaction()?;
+    tx.batch_execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY; SET LOCAL statement_timeout='90000ms'")?;
+    let packet=query_native_demand_fibre_tx(&mut tx,run,doc,source_sha,demand_id)?;
+    tx.commit()?;
+    Ok(packet)
+}
+
+/// Reopen the exact original fibre inside an existing admission transaction.
+/// This is an observation, never a proof of coverage or admission authority.
+pub fn query_native_demand_fibre_tx(tx:&mut postgres::Transaction<'_>,run:&str,doc:&str,source_sha:&str,demand_id:i64)
+    ->Result<serde_json::Value,NativeNumericAuditError>{
     use serde_json::{Value,json};
     if demand_id<=0||run.trim().is_empty()||doc.trim().is_empty()||source_sha.len()!=64{
         return Err(NativeNumericAuditError::ForeignSource);
     }
-    let mut db=Client::connect(url,NoTls)?;
-    let mut tx=db.transaction()?;
-    tx.batch_execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY; SET LOCAL statement_timeout='90000ms'")?;
+
     let source=tx.query_one("SELECT locator,encode(content_sha256,'hex') FROM execution.semantic_parser_source WHERE run_ref=$1 AND document_ref=$2",&[&run,&doc])?;
     let locator:String=source.get(0);let actual_sha:String=source.get(1);
     let bytes=std::fs::read(&locator).map_err(|_|NativeNumericAuditError::ForeignSource)?;
@@ -4256,8 +4266,8 @@ pub fn query_native_demand_fibre(url:&str,run:&str,doc:&str,source_sha:&str,dema
     let read=|tx:&mut postgres::Transaction<'_>,sql:&str|->Result<Vec<Value>,NativeNumericAuditError>{
         Ok(tx.query(sql,&[&demand_id])?.iter().map(|r|r.get::<_,Value>(0)).collect())
     };
-    let universe=read(&mut tx,"SELECT to_jsonb(u) FROM execution.semantic_pnf_candidate_universe u WHERE demand_id=$1 ORDER BY target_kind,target_id")?;
-    let states=read(&mut tx,"SELECT to_jsonb(s) FROM execution.semantic_pnf_candidate_state_v1 s WHERE demand_id=$1 ORDER BY target_kind,target_id")?;
+    let universe=read(tx,"SELECT to_jsonb(u) FROM execution.semantic_pnf_candidate_universe u WHERE demand_id=$1 ORDER BY target_kind,target_id")?;
+    let states=read(tx,"SELECT to_jsonb(s) FROM execution.semantic_pnf_candidate_state_v1 s WHERE demand_id=$1 ORDER BY target_kind,target_id")?;
     let key=|v:&Value|->Result<(i64,i64),NativeNumericAuditError>{
         Ok((v["target_kind"].as_i64().ok_or(NativeNumericAuditError::ForeignSource)?,
             v["target_id"].as_i64().ok_or(NativeNumericAuditError::ForeignSource)?))
@@ -4267,11 +4277,11 @@ pub fn query_native_demand_fibre(url:&str,run:&str,doc:&str,source_sha:&str,dema
     if universe_keys!=state_keys||universe_keys.len()!=universe.len()||state_keys.len()!=states.len(){
         return Err(NativeNumericAuditError::ForeignSource);
     }
-    let constraints=read(&mut tx,"SELECT to_jsonb(c) FROM execution.semantic_pnf_demand_constraint c WHERE demand_id=$1 ORDER BY ordinal")?;
-    let evidence=read(&mut tx,"SELECT to_jsonb(e) FROM execution.semantic_pnf_candidate_evidence e WHERE demand_id=$1 ORDER BY evidence_id")?;
+    let constraints=read(tx,"SELECT to_jsonb(c) FROM execution.semantic_pnf_demand_constraint c WHERE demand_id=$1 ORDER BY ordinal")?;
+    let evidence=read(tx,"SELECT to_jsonb(e) FROM execution.semantic_pnf_candidate_evidence e WHERE demand_id=$1 ORDER BY evidence_id")?;
     let current_installed:bool=tx.query_one("SELECT to_regclass('execution.slr_native_current_candidate_evidence_v1') IS NOT NULL AND to_regprocedure('execution.slr_native_current_authority_usable(bigint)') IS NOT NULL",&[])?.get(0);
     let (current,authority_usable)=if current_installed{
-        (read(&mut tx,"SELECT to_jsonb(e) FROM execution.slr_native_current_candidate_evidence_v1 e WHERE demand_id=$1 ORDER BY evidence_id")?,
+        (read(tx,"SELECT to_jsonb(e) FROM execution.slr_native_current_candidate_evidence_v1 e WHERE demand_id=$1 ORDER BY evidence_id")?,
          tx.query_one("SELECT execution.slr_native_current_authority_usable($1)",&[&demand_id])?.get::<_,bool>(0))
     }else{(Vec::new(),false)};
     // Demand-level/other neutral atoms may not carry a candidate key.
@@ -4292,12 +4302,12 @@ pub fn query_native_demand_fibre(url:&str,run:&str,doc:&str,source_sha:&str,dema
             "refutation_requires_semantic_validation":refuted,
             "retained_in_conservative_envelope":true}));
     }
-    let open=read(&mut tx,"SELECT to_jsonb(o) FROM execution.semantic_pnf_demand_open_world_state o WHERE demand_id=$1")?;
-    let frontier=read(&mut tx,"SELECT to_jsonb(f) FROM execution.semantic_pnf_frontier_resolution f WHERE demand_id=$1 ORDER BY interface_id")?;
-    let horizon=read(&mut tx,"SELECT to_jsonb(h) FROM execution.semantic_pnf_candidate_evidence_horizon_v1 h WHERE demand_id=$1 ORDER BY target_kind,target_id,horizon")?;
-    let work=read(&mut tx,"SELECT to_jsonb(w) FROM execution.semantic_pnf_consumer_horizon_work_queue w WHERE demand_id=$1 ORDER BY consumer_ref,query_ref,policy_ref,horizon")?;
-    let sufficiency=read(&mut tx,"SELECT to_jsonb(s) FROM execution.semantic_pnf_consumer_sufficiency_current_v1 s WHERE demand_id=$1 ORDER BY consumer_ref,query_ref,policy_ref,horizon")?;
-    let support=read(&mut tx,"WITH objects AS (
+    let open=read(tx,"SELECT to_jsonb(o) FROM execution.semantic_pnf_demand_open_world_state o WHERE demand_id=$1")?;
+    let frontier=read(tx,"SELECT to_jsonb(f) FROM execution.semantic_pnf_frontier_resolution f WHERE demand_id=$1 ORDER BY interface_id")?;
+    let horizon=read(tx,"SELECT to_jsonb(h) FROM execution.semantic_pnf_candidate_evidence_horizon_v1 h WHERE demand_id=$1 ORDER BY target_kind,target_id,horizon")?;
+    let work=read(tx,"SELECT to_jsonb(w) FROM execution.semantic_pnf_consumer_horizon_work_queue w WHERE demand_id=$1 ORDER BY consumer_ref,query_ref,policy_ref,horizon")?;
+    let sufficiency=read(tx,"SELECT to_jsonb(s) FROM execution.semantic_pnf_consumer_sufficiency_current_v1 s WHERE demand_id=$1 ORDER BY consumer_ref,query_ref,policy_ref,horizon")?;
+    let support=read(tx,"WITH objects AS (
         SELECT source_object_id AS object_id FROM execution.semantic_pnf_demand WHERE demand_id=$1 AND source_object_id IS NOT NULL
         UNION SELECT target_id FROM execution.semantic_pnf_candidate_universe WHERE demand_id=$1 AND target_kind=1)
         SELECT jsonb_build_object('object',to_jsonb(o),'region',to_jsonb(r),'token_support',
@@ -4343,7 +4353,7 @@ pub fn query_native_demand_fibre(url:&str,run:&str,doc:&str,source_sha:&str,dema
             }
         }
     }
-    let overflow=read(&mut tx,"SELECT to_jsonb(o) FROM execution.semantic_pnf_proper_name_evidence_overflow o
+    let overflow=read(tx,"SELECT to_jsonb(o) FROM execution.semantic_pnf_proper_name_evidence_overflow o
         JOIN execution.semantic_pnf_demand d ON d.source_object_id=o.source_object_id
         JOIN execution.semantic_pnf_region r ON r.region_id=d.source_region_id AND r.run_id=o.run_id AND r.document_id=o.document_id
         WHERE d.demand_id=$1 ORDER BY o.source_token_id,o.family_lemma_symbol_id")?;
@@ -4365,7 +4375,6 @@ pub fn query_native_demand_fibre(url:&str,run:&str,doc:&str,source_sha:&str,dema
     // original-relation digest contract.
     let digest=hex(&Sha256::digest(serde_json::to_vec(&packet).map_err(|_|NativeNumericAuditError::ForeignSource)?));
     packet["packet_sha256"]=json!(digest);
-    tx.commit()?;
     Ok(packet)
 }
 
