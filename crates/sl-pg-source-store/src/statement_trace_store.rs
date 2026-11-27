@@ -692,7 +692,7 @@ fn observation_event_select(coordinate: &str) -> String {
     )
 }
 
-fn load_source_statement_with_client<C: GenericClient>(
+pub(crate) fn load_source_statement_with_client<C: GenericClient>(
     client: &mut C,
     statement_ref: &str,
 ) -> Result<Option<PersistedSourceStatement>, StatementTraceStoreError> {

@@ -4,7 +4,7 @@
 //! This module adds only the missing provider-neutral source-revision binding
 //! needed by long documents and other content source families.
 
-use postgres::{Client, NoTls};
+use postgres::{Client, GenericClient, NoTls};
 use sensiblaw_core::source_ingest::{IngestRoleClass, SourceFamily, SourceIngestEnvelope};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
@@ -310,7 +310,12 @@ pub fn load_generic_text_source(
     let mut client = Client::connect(config.database_url(), NoTls)?;
     ensure_canonical_schema(&mut client)?;
     client.batch_execute(GENERIC_SOURCE_REVISION_SCHEMA_SQL)?;
+    load_generic_text_source_on_client(&mut client,source_revision_ref)
+}
 
+pub(crate) fn load_generic_text_source_on_client(
+    client:&mut impl GenericClient,source_revision_ref:&str,
+)->Result<(PersistedGenericSourceContent,String),GenericSourceContentStoreError>{
     let row = client.query_one(
         "SELECT
            r.source_ref,

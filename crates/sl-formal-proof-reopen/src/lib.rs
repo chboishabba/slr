@@ -7,7 +7,7 @@
 use sensiblaw_evidential_reopen::{
     sparse_wake, ReverseDependency, SourceCoordinate, SourceCoordinateKind, WakeRequest,
 };
-use sensiblaw_formal_proof_bridge::FormalEvidencePayment;
+use sensiblaw_formal_proof_bridge::{AuthenticatedFormalEvidencePayment, FormalEvidencePayment};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FormalEvidenceReopenPlan {
@@ -17,6 +17,16 @@ pub struct FormalEvidenceReopenPlan {
     pub creates_legal_authority: bool,
     pub applicability_promoted: bool,
     pub claim_truth_promoted: bool,
+}
+
+/// Governed caller entrypoint: the independent referee receipt must have
+/// been checked by the existing formal bridge. The same sparse wake
+/// implementation is reused; no semantic or legal authority is promoted.
+pub fn plan_authenticated_formal_evidence_reopen(
+    payment: &AuthenticatedFormalEvidencePayment,
+    dependencies: &[ReverseDependency],
+) -> FormalEvidenceReopenPlan {
+    plan_formal_evidence_reopen(payment.payment(), dependencies)
 }
 
 /// Reuse the canonical reverse-dependency engine for a newly accepted formal

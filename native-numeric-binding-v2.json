@@ -1,0 +1,6508 @@
+{
+  "schema": "slr-native-candidate-only-transport-v2",
+  "numeric_run_ref": "slr-native-numeric-run:sha256:b165d42870fc0afecdc101ea8919e5c3290b0b53b4556d51b42a9f85ae8e2737",
+  "demand_id": 22165,
+  "source_object_id": 72766,
+  "inserted_candidate_ids": [
+    72754,
+    73261,
+    73265,
+    73268,
+    73273,
+    73275,
+    73280,
+    73282,
+    73284,
+    73288,
+    73291,
+    73294,
+    73297,
+    73299,
+    73302,
+    73303,
+    73308,
+    73309,
+    73311,
+    73312,
+    73314,
+    73357,
+    73358,
+    73359,
+    73360,
+    73361,
+    73362,
+    73363,
+    73364,
+    73365,
+    73366,
+    73367,
+    73368,
+    73369
+  ],
+  "remaining_untransported_count": 0,
+  "represented_candidate_count": 98,
+  "outside_model_possible": true,
+  "complete_typed_coverage_paid": false,
+  "nominal_head_objects_inserted": 0,
+  "nominal_head_token_supports_inserted": 0,
+  "nominal_heads_remaining": 0,
+  "original_h6_evidence_inserted": 0,
+  "morphology_observations_inserted": 34,
+  "candidates_without_morphology_observation": 0,
+  "original_horizon_observations": [
+    {
+      "target_kind": 1,
+      "target_id": 72754,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 72754,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 72754,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 72755,
+      "horizon": 3,
+      "signed_residual": -1,
+      "phase": -1,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 72755,
+      "horizon": 6,
+      "signed_residual": -1,
+      "phase": -1,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 72755,
+      "horizon": 9,
+      "signed_residual": -1,
+      "phase": -1,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 72756,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 72756,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 72756,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 72757,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 72757,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 72757,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 72758,
+      "horizon": 3,
+      "signed_residual": -1,
+      "phase": -1,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 72758,
+      "horizon": 6,
+      "signed_residual": -1,
+      "phase": -1,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 72758,
+      "horizon": 9,
+      "signed_residual": -1,
+      "phase": -1,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 72759,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 72759,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 72759,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 72760,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 72760,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 72760,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 72761,
+      "horizon": 3,
+      "signed_residual": -1,
+      "phase": -1,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 72761,
+      "horizon": 6,
+      "signed_residual": -1,
+      "phase": -1,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 72761,
+      "horizon": 9,
+      "signed_residual": -1,
+      "phase": -1,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73258,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73258,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73258,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73261,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73261,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73261,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73264,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73264,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73264,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73265,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73265,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73265,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73266,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73266,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73266,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73267,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73267,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73267,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73268,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73268,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73268,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73273,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73273,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73273,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73274,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73274,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73274,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73275,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73275,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73275,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73276,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73276,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73276,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73277,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73277,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73277,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73280,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73280,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73280,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73281,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73281,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73281,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73282,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73282,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73282,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73283,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73283,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73283,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73284,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73284,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73284,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73287,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73287,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73287,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73288,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73288,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73288,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73290,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73290,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73290,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73291,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73291,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73291,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73292,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73292,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73292,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73294,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73294,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73294,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73295,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73295,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73295,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73297,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73297,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73297,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73298,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73298,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73298,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73299,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73299,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73299,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73300,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73300,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73300,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73302,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73302,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73302,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73303,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73303,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73303,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73304,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73304,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73304,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73306,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73306,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73306,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73308,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73308,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73308,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73309,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73309,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73309,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73310,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73310,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73310,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73311,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73311,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73311,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73312,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73312,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73312,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73313,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73313,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73313,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73314,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73314,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73314,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73315,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73315,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73315,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73318,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73318,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73318,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73321,
+      "horizon": 3,
+      "signed_residual": -1,
+      "phase": -1,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73321,
+      "horizon": 6,
+      "signed_residual": -1,
+      "phase": -1,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73321,
+      "horizon": 9,
+      "signed_residual": -1,
+      "phase": -1,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73322,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73322,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73322,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73323,
+      "horizon": 3,
+      "signed_residual": -1,
+      "phase": -1,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73323,
+      "horizon": 6,
+      "signed_residual": -1,
+      "phase": -1,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73323,
+      "horizon": 9,
+      "signed_residual": -1,
+      "phase": -1,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73324,
+      "horizon": 3,
+      "signed_residual": -1,
+      "phase": -1,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73324,
+      "horizon": 6,
+      "signed_residual": -1,
+      "phase": -1,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73324,
+      "horizon": 9,
+      "signed_residual": -1,
+      "phase": -1,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73325,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73325,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73325,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73326,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73326,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73326,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73327,
+      "horizon": 3,
+      "signed_residual": -1,
+      "phase": -1,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73327,
+      "horizon": 6,
+      "signed_residual": -1,
+      "phase": -1,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73327,
+      "horizon": 9,
+      "signed_residual": -1,
+      "phase": -1,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73328,
+      "horizon": 3,
+      "signed_residual": -1,
+      "phase": -1,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73328,
+      "horizon": 6,
+      "signed_residual": -1,
+      "phase": -1,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73328,
+      "horizon": 9,
+      "signed_residual": -1,
+      "phase": -1,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73329,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73329,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73329,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73330,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73330,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73330,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73331,
+      "horizon": 3,
+      "signed_residual": -1,
+      "phase": -1,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73331,
+      "horizon": 6,
+      "signed_residual": -1,
+      "phase": -1,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73331,
+      "horizon": 9,
+      "signed_residual": -1,
+      "phase": -1,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73332,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73332,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73332,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73333,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73333,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73333,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73334,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73334,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73334,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73335,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73335,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73335,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73336,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73336,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73336,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73337,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73337,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73337,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73338,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73338,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73338,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73339,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73339,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73339,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73340,
+      "horizon": 3,
+      "signed_residual": -1,
+      "phase": -1,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73340,
+      "horizon": 6,
+      "signed_residual": -1,
+      "phase": -1,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73340,
+      "horizon": 9,
+      "signed_residual": -1,
+      "phase": -1,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73341,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73341,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73341,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73342,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73342,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73342,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73343,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73343,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73343,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73344,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73344,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73344,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73345,
+      "horizon": 3,
+      "signed_residual": -1,
+      "phase": -1,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73345,
+      "horizon": 6,
+      "signed_residual": -1,
+      "phase": -1,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73345,
+      "horizon": 9,
+      "signed_residual": -1,
+      "phase": -1,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73346,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73346,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73346,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73347,
+      "horizon": 3,
+      "signed_residual": -1,
+      "phase": -1,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73347,
+      "horizon": 6,
+      "signed_residual": -1,
+      "phase": -1,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73347,
+      "horizon": 9,
+      "signed_residual": -1,
+      "phase": -1,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73348,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73348,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73348,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73349,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73349,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73349,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73350,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73350,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73350,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73351,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73351,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73351,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73352,
+      "horizon": 3,
+      "signed_residual": -1,
+      "phase": -1,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73352,
+      "horizon": 6,
+      "signed_residual": -1,
+      "phase": -1,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73352,
+      "horizon": 9,
+      "signed_residual": -1,
+      "phase": -1,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73353,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73353,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73353,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73354,
+      "horizon": 3,
+      "signed_residual": -1,
+      "phase": -1,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73354,
+      "horizon": 6,
+      "signed_residual": -1,
+      "phase": -1,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73354,
+      "horizon": 9,
+      "signed_residual": -1,
+      "phase": -1,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73355,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73355,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73355,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73356,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73356,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73356,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73357,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73357,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73357,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73358,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73358,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73358,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73359,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73359,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73359,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73360,
+      "horizon": 3,
+      "signed_residual": -1,
+      "phase": -1,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73360,
+      "horizon": 6,
+      "signed_residual": -1,
+      "phase": -1,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73360,
+      "horizon": 9,
+      "signed_residual": -1,
+      "phase": -1,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73361,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73361,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73361,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73362,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73362,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73362,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73363,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73363,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73363,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73364,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73364,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73364,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73365,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73365,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73365,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73366,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73366,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73366,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73367,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73367,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73367,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73368,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73368,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73368,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73369,
+      "horizon": 3,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73369,
+      "horizon": 6,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    },
+    {
+      "target_kind": 1,
+      "target_id": 73369,
+      "horizon": 9,
+      "signed_residual": 0,
+      "phase": 0,
+      "evidence_count": 2,
+      "active": false,
+      "execution_residual": true,
+      "refuted": false,
+      "strict_preference": false
+    }
+  ],
+  "original_document_identity_observations": [
+    {
+      "object_id": 72754,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 72755,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 72756,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 72757,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 72758,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 72759,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 72760,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 72761,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73258,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73261,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73264,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73265,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73266,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73267,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73268,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73273,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73274,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73275,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73276,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73277,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73280,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73281,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73282,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73283,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73284,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73287,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73288,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73290,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73291,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73292,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73294,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73295,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73297,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73298,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73299,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73300,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73302,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73303,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73304,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73306,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73308,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73309,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73310,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73311,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73312,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73313,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73314,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73315,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73318,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73321,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73322,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73323,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73324,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73325,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73326,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73327,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73328,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73329,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73330,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73331,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73332,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73333,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73334,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73335,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73336,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73337,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73338,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73339,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73340,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73341,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73342,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73343,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73344,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73345,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73346,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73347,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73348,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73349,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73350,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73351,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73352,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73353,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73354,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73355,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73356,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73357,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73358,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73359,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73360,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73361,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73362,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73363,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73364,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73365,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73366,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73367,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73368,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    },
+    {
+      "object_id": 73369,
+      "admitted_entity_ids": [],
+      "admitted_witness_ids": []
+    }
+  ],
+  "original_parser_identity_producer": {
+    "producer_ref": "execution.refresh_numeric_pnf_parser_identity_evidence",
+    "scope": "current_numeric_document_candidate_projection_not_global_coverage",
+    "refreshed_in_rollback_probe": true,
+    "candidate_rows": [
+      {
+        "source_object_id": 73257,
+        "target_object_id": 73315,
+        "witness_kind": 3,
+        "source_token_id": 559051,
+        "target_token_id": 558553,
+        "evidence_ref": "proper-name-expansion:559051:58767",
+        "candidate_count": 1,
+        "evidence_state": 1
+      },
+      {
+        "source_object_id": 73258,
+        "target_object_id": 73276,
+        "witness_kind": 3,
+        "source_token_id": 558572,
+        "target_token_id": 558605,
+        "evidence_ref": "proper-name-expansion:558572:58777",
+        "candidate_count": 4,
+        "evidence_state": 1
+      },
+      {
+        "source_object_id": 73258,
+        "target_object_id": 73292,
+        "witness_kind": 3,
+        "source_token_id": 558572,
+        "target_token_id": 558536,
+        "evidence_ref": "proper-name-expansion:558572:58763",
+        "candidate_count": 4,
+        "evidence_state": 1
+      },
+      {
+        "source_object_id": 73258,
+        "target_object_id": 73303,
+        "witness_kind": 3,
+        "source_token_id": 558572,
+        "target_token_id": 558423,
+        "evidence_ref": "proper-name-expansion:558572:58743",
+        "candidate_count": 4,
+        "evidence_state": 1
+      },
+      {
+        "source_object_id": 73261,
+        "target_object_id": 73312,
+        "witness_kind": 2,
+        "source_token_id": 558503,
+        "target_token_id": 558500,
+        "evidence_ref": "parser-appos:558503:558500",
+        "candidate_count": 1,
+        "evidence_state": 1
+      },
+      {
+        "source_object_id": 73262,
+        "target_object_id": 73315,
+        "witness_kind": 3,
+        "source_token_id": 559056,
+        "target_token_id": 558553,
+        "evidence_ref": "proper-name-expansion:559056:58767",
+        "candidate_count": 1,
+        "evidence_state": 1
+      },
+      {
+        "source_object_id": 73266,
+        "target_object_id": 73315,
+        "witness_kind": 3,
+        "source_token_id": 558625,
+        "target_token_id": 558553,
+        "evidence_ref": "proper-name-expansion:558625:58767",
+        "candidate_count": 1,
+        "evidence_state": 1
+      },
+      {
+        "source_object_id": 73276,
+        "target_object_id": 73258,
+        "witness_kind": 3,
+        "source_token_id": 558605,
+        "target_token_id": 558572,
+        "evidence_ref": "proper-name-expansion:558605:58771",
+        "candidate_count": 4,
+        "evidence_state": 1
+      },
+      {
+        "source_object_id": 73276,
+        "target_object_id": 73292,
+        "witness_kind": 3,
+        "source_token_id": 558605,
+        "target_token_id": 558536,
+        "evidence_ref": "proper-name-expansion:558605:58763",
+        "candidate_count": 4,
+        "evidence_state": 1
+      },
+      {
+        "source_object_id": 73276,
+        "target_object_id": 73303,
+        "witness_kind": 3,
+        "source_token_id": 558605,
+        "target_token_id": 558423,
+        "evidence_ref": "proper-name-expansion:558605:58743",
+        "candidate_count": 4,
+        "evidence_state": 1
+      },
+      {
+        "source_object_id": 73279,
+        "target_object_id": 73315,
+        "witness_kind": 3,
+        "source_token_id": 558818,
+        "target_token_id": 558553,
+        "evidence_ref": "proper-name-expansion:558818:58767",
+        "candidate_count": 1,
+        "evidence_state": 1
+      },
+      {
+        "source_object_id": 73281,
+        "target_object_id": 73315,
+        "witness_kind": 3,
+        "source_token_id": 558574,
+        "target_token_id": 558553,
+        "evidence_ref": "proper-name-expansion:558574:58767",
+        "candidate_count": 1,
+        "evidence_state": 1
+      },
+      {
+        "source_object_id": 73282,
+        "target_object_id": 73311,
+        "witness_kind": 3,
+        "source_token_id": 558527,
+        "target_token_id": 558430,
+        "evidence_ref": "proper-name-expansion:558527:58745",
+        "candidate_count": 2,
+        "evidence_state": 1
+      },
+      {
+        "source_object_id": 73283,
+        "target_object_id": 73315,
+        "witness_kind": 3,
+        "source_token_id": 558706,
+        "target_token_id": 558553,
+        "evidence_ref": "proper-name-expansion:558706:58767",
+        "candidate_count": 1,
+        "evidence_state": 1
+      },
+      {
+        "source_object_id": 73284,
+        "target_object_id": 73304,
+        "witness_kind": 3,
+        "source_token_id": 558520,
+        "target_token_id": 558598,
+        "evidence_ref": "proper-name-expansion:558520:58776",
+        "candidate_count": 2,
+        "evidence_state": 1
+      },
+      {
+        "source_object_id": 73285,
+        "target_object_id": 73315,
+        "witness_kind": 3,
+        "source_token_id": 558856,
+        "target_token_id": 558553,
+        "evidence_ref": "proper-name-expansion:558856:58767",
+        "candidate_count": 1,
+        "evidence_state": 1
+      },
+      {
+        "source_object_id": 73287,
+        "target_object_id": 73315,
+        "witness_kind": 3,
+        "source_token_id": 558607,
+        "target_token_id": 558553,
+        "evidence_ref": "proper-name-expansion:558607:58767",
+        "candidate_count": 1,
+        "evidence_state": 1
+      },
+      {
+        "source_object_id": 73290,
+        "target_object_id": 73315,
+        "witness_kind": 3,
+        "source_token_id": 558656,
+        "target_token_id": 558553,
+        "evidence_ref": "proper-name-expansion:558656:58767",
+        "candidate_count": 1,
+        "evidence_state": 1
+      },
+      {
+        "source_object_id": 73292,
+        "target_object_id": 73258,
+        "witness_kind": 3,
+        "source_token_id": 558536,
+        "target_token_id": 558572,
+        "evidence_ref": "proper-name-expansion:558536:58771",
+        "candidate_count": 4,
+        "evidence_state": 1
+      },
+      {
+        "source_object_id": 73292,
+        "target_object_id": 73276,
+        "witness_kind": 3,
+        "source_token_id": 558536,
+        "target_token_id": 558605,
+        "evidence_ref": "proper-name-expansion:558536:58777",
+        "candidate_count": 4,
+        "evidence_state": 1
+      },
+      {
+        "source_object_id": 73292,
+        "target_object_id": 73303,
+        "witness_kind": 3,
+        "source_token_id": 558536,
+        "target_token_id": 558423,
+        "evidence_ref": "proper-name-expansion:558536:58743",
+        "candidate_count": 4,
+        "evidence_state": 1
+      },
+      {
+        "source_object_id": 73299,
+        "target_object_id": 73315,
+        "witness_kind": 3,
+        "source_token_id": 558488,
+        "target_token_id": 558553,
+        "evidence_ref": "proper-name-expansion:558488:58767",
+        "candidate_count": 1,
+        "evidence_state": 1
+      },
+      {
+        "source_object_id": 73300,
+        "target_object_id": 73295,
+        "witness_kind": 2,
+        "source_token_id": 558556,
+        "target_token_id": 558540,
+        "evidence_ref": "parser-appos:558556:558540",
+        "candidate_count": 1,
+        "evidence_state": 1
+      },
+      {
+        "source_object_id": 73301,
+        "target_object_id": 73315,
+        "witness_kind": 3,
+        "source_token_id": 559047,
+        "target_token_id": 558553,
+        "evidence_ref": "proper-name-expansion:559047:58767",
+        "candidate_count": 1,
+        "evidence_state": 1
+      },
+      {
+        "source_object_id": 73303,
+        "target_object_id": 73258,
+        "witness_kind": 3,
+        "source_token_id": 558423,
+        "target_token_id": 558572,
+        "evidence_ref": "proper-name-expansion:558423:58771",
+        "candidate_count": 4,
+        "evidence_state": 1
+      },
+      {
+        "source_object_id": 73303,
+        "target_object_id": 73276,
+        "witness_kind": 3,
+        "source_token_id": 558423,
+        "target_token_id": 558605,
+        "evidence_ref": "proper-name-expansion:558423:58777",
+        "candidate_count": 4,
+        "evidence_state": 1
+      },
+      {
+        "source_object_id": 73303,
+        "target_object_id": 73292,
+        "witness_kind": 3,
+        "source_token_id": 558423,
+        "target_token_id": 558536,
+        "evidence_ref": "proper-name-expansion:558423:58763",
+        "candidate_count": 4,
+        "evidence_state": 1
+      },
+      {
+        "source_object_id": 73304,
+        "target_object_id": 73284,
+        "witness_kind": 3,
+        "source_token_id": 558598,
+        "target_token_id": 558520,
+        "evidence_ref": "proper-name-expansion:558598:58759",
+        "candidate_count": 2,
+        "evidence_state": 1
+      },
+      {
+        "source_object_id": 73311,
+        "target_object_id": 73282,
+        "witness_kind": 3,
+        "source_token_id": 558430,
+        "target_token_id": 558527,
+        "evidence_ref": "proper-name-expansion:558430:58760",
+        "candidate_count": 2,
+        "evidence_state": 1
+      },
+      {
+        "source_object_id": 73316,
+        "target_object_id": 73315,
+        "witness_kind": 3,
+        "source_token_id": 559139,
+        "target_token_id": 558553,
+        "evidence_ref": "proper-name-expansion:559139:58767",
+        "candidate_count": 1,
+        "evidence_state": 1
+      },
+      {
+        "source_object_id": 73319,
+        "target_object_id": 73315,
+        "witness_kind": 3,
+        "source_token_id": 559162,
+        "target_token_id": 558553,
+        "evidence_ref": "proper-name-expansion:559162:58767",
+        "candidate_count": 1,
+        "evidence_state": 1
+      },
+      {
+        "source_object_id": 73343,
+        "target_object_id": 73304,
+        "witness_kind": 4,
+        "source_token_id": 558602,
+        "target_token_id": 558598,
+        "evidence_ref": "parser-appos:558602:558598",
+        "candidate_count": 1,
+        "evidence_state": 1
+      },
+      {
+        "source_object_id": 73344,
+        "target_object_id": 73345,
+        "witness_kind": 2,
+        "source_token_id": 558592,
+        "target_token_id": 558588,
+        "evidence_ref": "parser-appos:558592:558588",
+        "candidate_count": 1,
+        "evidence_state": 1
+      },
+      {
+        "source_object_id": 73346,
+        "target_object_id": 73348,
+        "witness_kind": 2,
+        "source_token_id": 558586,
+        "target_token_id": 558578,
+        "evidence_ref": "parser-appos:558586:558578",
+        "candidate_count": 1,
+        "evidence_state": 1
+      },
+      {
+        "source_object_id": 73352,
+        "target_object_id": 73354,
+        "witness_kind": 2,
+        "source_token_id": 558568,
+        "target_token_id": 558563,
+        "evidence_ref": "parser-appos:558568:558563",
+        "candidate_count": 1,
+        "evidence_state": 1
+      },
+      {
+        "source_object_id": 73355,
+        "target_object_id": 73295,
+        "witness_kind": 4,
+        "source_token_id": 558550,
+        "target_token_id": 558540,
+        "evidence_ref": "parser-appos:558550:558540",
+        "candidate_count": 1,
+        "evidence_state": 1
+      },
+      {
+        "source_object_id": 73366,
+        "target_object_id": 73299,
+        "witness_kind": 4,
+        "source_token_id": 558457,
+        "target_token_id": 558488,
+        "evidence_ref": "parser-appos:558488:558457",
+        "candidate_count": 1,
+        "evidence_state": 1
+      }
+    ],
+    "name_overflow_rows": 0,
+    "admission_executed": false
+  },
+  "document_identity_fibre": {
+    "admitted_classes": {},
+    "unresolved_keys": [
+      [
+        1,
+        72754
+      ],
+      [
+        1,
+        72755
+      ],
+      [
+        1,
+        72756
+      ],
+      [
+        1,
+        72757
+      ],
+      [
+        1,
+        72758
+      ],
+      [
+        1,
+        72759
+      ],
+      [
+        1,
+        72760
+      ],
+      [
+        1,
+        72761
+      ],
+      [
+        1,
+        73258
+      ],
+      [
+        1,
+        73261
+      ],
+      [
+        1,
+        73264
+      ],
+      [
+        1,
+        73265
+      ],
+      [
+        1,
+        73266
+      ],
+      [
+        1,
+        73267
+      ],
+      [
+        1,
+        73268
+      ],
+      [
+        1,
+        73273
+      ],
+      [
+        1,
+        73274
+      ],
+      [
+        1,
+        73275
+      ],
+      [
+        1,
+        73276
+      ],
+      [
+        1,
+        73277
+      ],
+      [
+        1,
+        73280
+      ],
+      [
+        1,
+        73281
+      ],
+      [
+        1,
+        73282
+      ],
+      [
+        1,
+        73283
+      ],
+      [
+        1,
+        73284
+      ],
+      [
+        1,
+        73287
+      ],
+      [
+        1,
+        73288
+      ],
+      [
+        1,
+        73290
+      ],
+      [
+        1,
+        73291
+      ],
+      [
+        1,
+        73292
+      ],
+      [
+        1,
+        73294
+      ],
+      [
+        1,
+        73295
+      ],
+      [
+        1,
+        73297
+      ],
+      [
+        1,
+        73298
+      ],
+      [
+        1,
+        73299
+      ],
+      [
+        1,
+        73300
+      ],
+      [
+        1,
+        73302
+      ],
+      [
+        1,
+        73303
+      ],
+      [
+        1,
+        73304
+      ],
+      [
+        1,
+        73306
+      ],
+      [
+        1,
+        73308
+      ],
+      [
+        1,
+        73309
+      ],
+      [
+        1,
+        73310
+      ],
+      [
+        1,
+        73311
+      ],
+      [
+        1,
+        73312
+      ],
+      [
+        1,
+        73313
+      ],
+      [
+        1,
+        73314
+      ],
+      [
+        1,
+        73315
+      ],
+      [
+        1,
+        73318
+      ],
+      [
+        1,
+        73321
+      ],
+      [
+        1,
+        73322
+      ],
+      [
+        1,
+        73323
+      ],
+      [
+        1,
+        73324
+      ],
+      [
+        1,
+        73325
+      ],
+      [
+        1,
+        73326
+      ],
+      [
+        1,
+        73327
+      ],
+      [
+        1,
+        73328
+      ],
+      [
+        1,
+        73329
+      ],
+      [
+        1,
+        73330
+      ],
+      [
+        1,
+        73331
+      ],
+      [
+        1,
+        73332
+      ],
+      [
+        1,
+        73333
+      ],
+      [
+        1,
+        73334
+      ],
+      [
+        1,
+        73335
+      ],
+      [
+        1,
+        73336
+      ],
+      [
+        1,
+        73337
+      ],
+      [
+        1,
+        73338
+      ],
+      [
+        1,
+        73339
+      ],
+      [
+        1,
+        73340
+      ],
+      [
+        1,
+        73341
+      ],
+      [
+        1,
+        73342
+      ],
+      [
+        1,
+        73343
+      ],
+      [
+        1,
+        73344
+      ],
+      [
+        1,
+        73345
+      ],
+      [
+        1,
+        73346
+      ],
+      [
+        1,
+        73347
+      ],
+      [
+        1,
+        73348
+      ],
+      [
+        1,
+        73349
+      ],
+      [
+        1,
+        73350
+      ],
+      [
+        1,
+        73351
+      ],
+      [
+        1,
+        73352
+      ],
+      [
+        1,
+        73353
+      ],
+      [
+        1,
+        73354
+      ],
+      [
+        1,
+        73355
+      ],
+      [
+        1,
+        73356
+      ],
+      [
+        1,
+        73357
+      ],
+      [
+        1,
+        73358
+      ],
+      [
+        1,
+        73359
+      ],
+      [
+        1,
+        73360
+      ],
+      [
+        1,
+        73361
+      ],
+      [
+        1,
+        73362
+      ],
+      [
+        1,
+        73363
+      ],
+      [
+        1,
+        73364
+      ],
+      [
+        1,
+        73365
+      ],
+      [
+        1,
+        73366
+      ],
+      [
+        1,
+        73367
+      ],
+      [
+        1,
+        73368
+      ],
+      [
+        1,
+        73369
+      ]
+    ],
+    "conflicting_objects": [],
+    "refuted_keys": [],
+    "outside_model_possible": true
+  },
+  "original_cross_resource_needs": [],
+  "structural_binding": {
+    "canonical_source_reopened": true,
+    "focus_quotation_depth": 0,
+    "focus_paragraph_index": 6,
+    "observations": [
+      {
+        "target_kind": 1,
+        "target_id": 72754,
+        "exact_head_token_id": 558445,
+        "parser_pos": "PRON",
+        "first_char": 157,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 2,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "entity_factor_type_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 72755,
+        "exact_head_token_id": 558561,
+        "parser_pos": "PRON",
+        "first_char": 3605,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 5,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "entity_factor_type_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 72756,
+        "exact_head_token_id": 558609,
+        "parser_pos": "PRON",
+        "first_char": 3824,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 6,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "entity_factor_type_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 72757,
+        "exact_head_token_id": 558649,
+        "parser_pos": "PRON",
+        "first_char": 4032,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 6,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "entity_factor_type_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 72758,
+        "exact_head_token_id": 558675,
+        "parser_pos": "PRON",
+        "first_char": 4160,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 6,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "entity_factor_type_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 72759,
+        "exact_head_token_id": 558672,
+        "parser_pos": "PRON",
+        "first_char": 4144,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 6,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "entity_factor_type_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 72760,
+        "exact_head_token_id": 558720,
+        "parser_pos": "PRON",
+        "first_char": 4375,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 6,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "entity_factor_type_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 72761,
+        "exact_head_token_id": 558702,
+        "parser_pos": "PRON",
+        "first_char": 4287,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 6,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "entity_factor_type_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73258,
+        "exact_head_token_id": 558572,
+        "parser_pos": "PROPN",
+        "first_char": 3656,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 5,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73261,
+        "exact_head_token_id": 558503,
+        "parser_pos": "PROPN",
+        "first_char": 2385,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 3,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73264,
+        "exact_head_token_id": 558617,
+        "parser_pos": "PROPN",
+        "first_char": 3866,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 6,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73265,
+        "exact_head_token_id": 558530,
+        "parser_pos": "NOUN",
+        "first_char": 2526,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 4,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73266,
+        "exact_head_token_id": 558625,
+        "parser_pos": "PROPN",
+        "first_char": 3920,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 6,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73267,
+        "exact_head_token_id": 558548,
+        "parser_pos": "PROPN",
+        "first_char": 2595,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 4,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73268,
+        "exact_head_token_id": 558511,
+        "parser_pos": "PROPN",
+        "first_char": 2401,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 3,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73273,
+        "exact_head_token_id": 558498,
+        "parser_pos": "PROPN",
+        "first_char": 2355,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 3,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73274,
+        "exact_head_token_id": 558559,
+        "parser_pos": "NUM",
+        "first_char": 2659,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 4,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "entity_factor_type_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73275,
+        "exact_head_token_id": 558456,
+        "parser_pos": "NOUN",
+        "first_char": 217,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 2,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73276,
+        "exact_head_token_id": 558605,
+        "parser_pos": "PROPN",
+        "first_char": 3805,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 6,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73277,
+        "exact_head_token_id": 558557,
+        "parser_pos": "NOUN",
+        "first_char": 2652,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 4,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73280,
+        "exact_head_token_id": 558441,
+        "parser_pos": "PROPN",
+        "first_char": 102,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 2,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73281,
+        "exact_head_token_id": 558574,
+        "parser_pos": "PROPN",
+        "first_char": 3669,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 5,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73282,
+        "exact_head_token_id": 558527,
+        "parser_pos": "PROPN",
+        "first_char": 2507,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 4,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73283,
+        "exact_head_token_id": 558706,
+        "parser_pos": "PROPN",
+        "first_char": 4310,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 6,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73284,
+        "exact_head_token_id": 558520,
+        "parser_pos": "PROPN",
+        "first_char": 2476,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 4,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73287,
+        "exact_head_token_id": 558607,
+        "parser_pos": "PROPN",
+        "first_char": 3818,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 6,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73288,
+        "exact_head_token_id": 558427,
+        "parser_pos": "VERB",
+        "first_char": 54,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 2,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "entity_factor_type_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73290,
+        "exact_head_token_id": 558656,
+        "parser_pos": "PROPN",
+        "first_char": 4061,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 6,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73291,
+        "exact_head_token_id": 558414,
+        "parser_pos": "NUM",
+        "first_char": 0,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 0,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "entity_factor_type_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73292,
+        "exact_head_token_id": 558536,
+        "parser_pos": "PROPN",
+        "first_char": 2550,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 4,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73294,
+        "exact_head_token_id": 558450,
+        "parser_pos": "PROPN",
+        "first_char": 187,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 2,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73295,
+        "exact_head_token_id": 558540,
+        "parser_pos": "PROPN",
+        "first_char": 2563,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 4,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73297,
+        "exact_head_token_id": 558474,
+        "parser_pos": "NUM",
+        "first_char": 2281,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 3,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "entity_factor_type_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73298,
+        "exact_head_token_id": 558622,
+        "parser_pos": "PROPN",
+        "first_char": 3894,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 6,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73299,
+        "exact_head_token_id": 558488,
+        "parser_pos": "PROPN",
+        "first_char": 2327,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 3,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73300,
+        "exact_head_token_id": 558556,
+        "parser_pos": "PROPN",
+        "first_char": 2641,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 4,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73302,
+        "exact_head_token_id": 558434,
+        "parser_pos": "NOUN",
+        "first_char": 91,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 2,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73303,
+        "exact_head_token_id": 558423,
+        "parser_pos": "PROPN",
+        "first_char": 41,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 2,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73304,
+        "exact_head_token_id": 558598,
+        "parser_pos": "PROPN",
+        "first_char": 3774,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 6,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73306,
+        "exact_head_token_id": 558684,
+        "parser_pos": "ADV",
+        "first_char": 4195,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 6,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "entity_factor_type_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73308,
+        "exact_head_token_id": 558492,
+        "parser_pos": "PROPN",
+        "first_char": 2335,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 3,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73309,
+        "exact_head_token_id": 558415,
+        "parser_pos": "NUM",
+        "first_char": 10,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 2,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "entity_factor_type_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73310,
+        "exact_head_token_id": 558594,
+        "parser_pos": "NUM",
+        "first_char": 3748,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 5,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "entity_factor_type_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73311,
+        "exact_head_token_id": 558430,
+        "parser_pos": "PROPN",
+        "first_char": 71,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 2,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73312,
+        "exact_head_token_id": 558500,
+        "parser_pos": "PROPN",
+        "first_char": 2372,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 3,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73313,
+        "exact_head_token_id": 558732,
+        "parser_pos": "PROPN",
+        "first_char": 4435,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 6,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73314,
+        "exact_head_token_id": 558533,
+        "parser_pos": "PROPN",
+        "first_char": 2537,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 4,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73315,
+        "exact_head_token_id": 558553,
+        "parser_pos": "PROPN",
+        "first_char": 2627,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 4,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73318,
+        "exact_head_token_id": 558584,
+        "parser_pos": "NUM",
+        "first_char": 3709,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 5,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "entity_factor_type_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73321,
+        "exact_head_token_id": 558745,
+        "parser_pos": "NOUN",
+        "first_char": 4514,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 6,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73322,
+        "exact_head_token_id": 558741,
+        "parser_pos": "NOUN",
+        "first_char": 4493,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 6,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73323,
+        "exact_head_token_id": 558738,
+        "parser_pos": "NOUN",
+        "first_char": 4476,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 6,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73324,
+        "exact_head_token_id": 558727,
+        "parser_pos": "NOUN",
+        "first_char": 4419,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 6,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73325,
+        "exact_head_token_id": 558724,
+        "parser_pos": "NOUN",
+        "first_char": 4399,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 6,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73326,
+        "exact_head_token_id": 558718,
+        "parser_pos": "NOUN",
+        "first_char": 4368,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 6,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73327,
+        "exact_head_token_id": 558711,
+        "parser_pos": "NOUN",
+        "first_char": 4338,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 6,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73328,
+        "exact_head_token_id": 558708,
+        "parser_pos": "NOUN",
+        "first_char": 4317,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 6,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73329,
+        "exact_head_token_id": 558700,
+        "parser_pos": "NOUN",
+        "first_char": 4275,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 6,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73330,
+        "exact_head_token_id": 558690,
+        "parser_pos": "NOUN",
+        "first_char": 4223,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 6,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73331,
+        "exact_head_token_id": 558682,
+        "parser_pos": "NOUN",
+        "first_char": 4184,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 6,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73332,
+        "exact_head_token_id": 558670,
+        "parser_pos": "PROPN",
+        "first_char": 4136,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 6,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73333,
+        "exact_head_token_id": 558669,
+        "parser_pos": "PROPN",
+        "first_char": 4129,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 6,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73334,
+        "exact_head_token_id": 558667,
+        "parser_pos": "NOUN",
+        "first_char": 4117,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 6,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73335,
+        "exact_head_token_id": 558664,
+        "parser_pos": "NOUN",
+        "first_char": 4100,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 6,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73336,
+        "exact_head_token_id": 558646,
+        "parser_pos": "NOUN",
+        "first_char": 4017,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 6,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73337,
+        "exact_head_token_id": 558643,
+        "parser_pos": "NOUN",
+        "first_char": 4002,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 6,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73338,
+        "exact_head_token_id": 558640,
+        "parser_pos": "NOUN",
+        "first_char": 3985,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 6,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73339,
+        "exact_head_token_id": 558631,
+        "parser_pos": "NOUN",
+        "first_char": 3942,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 6,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73340,
+        "exact_head_token_id": 558626,
+        "parser_pos": "NOUN",
+        "first_char": 3925,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 6,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73341,
+        "exact_head_token_id": 558618,
+        "parser_pos": "NOUN",
+        "first_char": 3870,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 6,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73342,
+        "exact_head_token_id": 558606,
+        "parser_pos": "PROPN",
+        "first_char": 3815,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 6,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73343,
+        "exact_head_token_id": 558602,
+        "parser_pos": "NOUN",
+        "first_char": 3796,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 6,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73344,
+        "exact_head_token_id": 558592,
+        "parser_pos": "PROPN",
+        "first_char": 3741,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 5,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73345,
+        "exact_head_token_id": 558588,
+        "parser_pos": "PROPN",
+        "first_char": 3722,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 5,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73346,
+        "exact_head_token_id": 558586,
+        "parser_pos": "PROPN",
+        "first_char": 3714,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 5,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73347,
+        "exact_head_token_id": 558582,
+        "parser_pos": "PROPN",
+        "first_char": 3702,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 5,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73348,
+        "exact_head_token_id": 558578,
+        "parser_pos": "PROPN",
+        "first_char": 3688,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 5,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73349,
+        "exact_head_token_id": 558577,
+        "parser_pos": "PROPN",
+        "first_char": 3680,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 5,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73350,
+        "exact_head_token_id": 558576,
+        "parser_pos": "PROPN",
+        "first_char": 3675,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 5,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73351,
+        "exact_head_token_id": 558573,
+        "parser_pos": "PROPN",
+        "first_char": 3666,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 5,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73352,
+        "exact_head_token_id": 558568,
+        "parser_pos": "NOUN",
+        "first_char": 3635,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 5,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73353,
+        "exact_head_token_id": 558565,
+        "parser_pos": "PROPN",
+        "first_char": 3623,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 5,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73354,
+        "exact_head_token_id": 558563,
+        "parser_pos": "NOUN",
+        "first_char": 3613,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 5,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73355,
+        "exact_head_token_id": 558550,
+        "parser_pos": "NOUN",
+        "first_char": 2615,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 4,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73356,
+        "exact_head_token_id": 558537,
+        "parser_pos": "PROPN",
+        "first_char": 2560,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 4,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73357,
+        "exact_head_token_id": 558524,
+        "parser_pos": "PROPN",
+        "first_char": 2497,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 4,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73358,
+        "exact_head_token_id": 558522,
+        "parser_pos": "PROPN",
+        "first_char": 2492,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 4,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73359,
+        "exact_head_token_id": 558517,
+        "parser_pos": "PROPN",
+        "first_char": 2465,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 4,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73360,
+        "exact_head_token_id": 558515,
+        "parser_pos": "NOUN",
+        "first_char": 2454,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 4,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73361,
+        "exact_head_token_id": 558505,
+        "parser_pos": "NOUN",
+        "first_char": 2389,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 3,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73362,
+        "exact_head_token_id": 558494,
+        "parser_pos": "PROPN",
+        "first_char": 2349,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 3,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73363,
+        "exact_head_token_id": 558487,
+        "parser_pos": "PROPN",
+        "first_char": 2317,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 3,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73364,
+        "exact_head_token_id": 558485,
+        "parser_pos": "NOUN",
+        "first_char": 2303,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 3,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73365,
+        "exact_head_token_id": 558471,
+        "parser_pos": "PROPN",
+        "first_char": 2260,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 3,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73366,
+        "exact_head_token_id": 558457,
+        "parser_pos": "PROPN",
+        "first_char": 2215,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 3,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73367,
+        "exact_head_token_id": 558453,
+        "parser_pos": "PROPN",
+        "first_char": 213,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 2,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73368,
+        "exact_head_token_id": 558424,
+        "parser_pos": "PROPN",
+        "first_char": 51,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 2,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      },
+      {
+        "target_kind": 1,
+        "target_id": 73369,
+        "exact_head_token_id": 558419,
+        "parser_pos": "PROPN",
+        "first_char": 26,
+        "same_sentence": false,
+        "quotation_depth": 0,
+        "paragraph_index": 2,
+        "quotation_boundary_observed": false,
+        "accessibility_residual": "clause_reporting_and_mention_factor_correspondence_unpaid"
+      }
+    ],
+    "typed_factor_coverage_paid": false
+  },
+  "original_h9_readiness": {
+    "related_demands": [
+      {
+        "demand_id": 22152,
+        "source_object_id": 72754,
+        "semantic_target_occurrences": 0,
+        "provider_quality_entity_occurrences": 0,
+        "ready_h9_work_items": 0,
+        "matched_contract_rows": 0,
+        "admitted_external_need_rows": 0
+      },
+      {
+        "demand_id": 22153,
+        "source_object_id": 72755,
+        "semantic_target_occurrences": 0,
+        "provider_quality_entity_occurrences": 0,
+        "ready_h9_work_items": 0,
+        "matched_contract_rows": 0,
+        "admitted_external_need_rows": 0
+      },
+      {
+        "demand_id": 22154,
+        "source_object_id": 72756,
+        "semantic_target_occurrences": 0,
+        "provider_quality_entity_occurrences": 0,
+        "ready_h9_work_items": 0,
+        "matched_contract_rows": 0,
+        "admitted_external_need_rows": 0
+      },
+      {
+        "demand_id": 22155,
+        "source_object_id": 72757,
+        "semantic_target_occurrences": 0,
+        "provider_quality_entity_occurrences": 0,
+        "ready_h9_work_items": 0,
+        "matched_contract_rows": 0,
+        "admitted_external_need_rows": 0
+      },
+      {
+        "demand_id": 22156,
+        "source_object_id": 72758,
+        "semantic_target_occurrences": 0,
+        "provider_quality_entity_occurrences": 0,
+        "ready_h9_work_items": 0,
+        "matched_contract_rows": 0,
+        "admitted_external_need_rows": 0
+      },
+      {
+        "demand_id": 22157,
+        "source_object_id": 72759,
+        "semantic_target_occurrences": 0,
+        "provider_quality_entity_occurrences": 0,
+        "ready_h9_work_items": 0,
+        "matched_contract_rows": 0,
+        "admitted_external_need_rows": 0
+      },
+      {
+        "demand_id": 22158,
+        "source_object_id": 72760,
+        "semantic_target_occurrences": 0,
+        "provider_quality_entity_occurrences": 0,
+        "ready_h9_work_items": 0,
+        "matched_contract_rows": 0,
+        "admitted_external_need_rows": 0
+      },
+      {
+        "demand_id": 22159,
+        "source_object_id": 72761,
+        "semantic_target_occurrences": 0,
+        "provider_quality_entity_occurrences": 0,
+        "ready_h9_work_items": 0,
+        "matched_contract_rows": 0,
+        "admitted_external_need_rows": 0
+      },
+      {
+        "demand_id": 22165,
+        "source_object_id": 72766,
+        "semantic_target_occurrences": 0,
+        "provider_quality_entity_occurrences": 0,
+        "ready_h9_work_items": 0,
+        "matched_contract_rows": 0,
+        "admitted_external_need_rows": 0
+      }
+    ],
+    "original_admission_rows": [],
+    "provider_execution_performed": false
+  },
+  "governed_identity_rollback_probe": {
+    "admission_owner": "execution.admit_numeric_pnf_parser_identity_evidence",
+    "level_three_owner": "execution.refresh_numeric_pnf_supported_identity_substitution_derivations",
+    "admitted_source_witness_count": 13,
+    "candidate_class_projection": {
+      "admitted_classes": {
+        "69": [
+          73299,
+          73366
+        ],
+        "70": [
+          73295,
+          73300,
+          73355
+        ],
+        "73": [
+          73352,
+          73354
+        ],
+        "74": [
+          73346,
+          73348
+        ],
+        "76": [
+          73344,
+          73345
+        ],
+        "77": [
+          73304,
+          73343
+        ],
+        "79": [
+          73261,
+          73312
+        ]
+      },
+      "unresolved_keys": [
+        [
+          1,
+          72754
+        ],
+        [
+          1,
+          72755
+        ],
+        [
+          1,
+          72756
+        ],
+        [
+          1,
+          72757
+        ],
+        [
+          1,
+          72758
+        ],
+        [
+          1,
+          72759
+        ],
+        [
+          1,
+          72760
+        ],
+        [
+          1,
+          72761
+        ],
+        [
+          1,
+          73258
+        ],
+        [
+          1,
+          73264
+        ],
+        [
+          1,
+          73265
+        ],
+        [
+          1,
+          73266
+        ],
+        [
+          1,
+          73267
+        ],
+        [
+          1,
+          73268
+        ],
+        [
+          1,
+          73273
+        ],
+        [
+          1,
+          73274
+        ],
+        [
+          1,
+          73275
+        ],
+        [
+          1,
+          73276
+        ],
+        [
+          1,
+          73277
+        ],
+        [
+          1,
+          73280
+        ],
+        [
+          1,
+          73281
+        ],
+        [
+          1,
+          73282
+        ],
+        [
+          1,
+          73283
+        ],
+        [
+          1,
+          73284
+        ],
+        [
+          1,
+          73287
+        ],
+        [
+          1,
+          73288
+        ],
+        [
+          1,
+          73290
+        ],
+        [
+          1,
+          73291
+        ],
+        [
+          1,
+          73292
+        ],
+        [
+          1,
+          73294
+        ],
+        [
+          1,
+          73297
+        ],
+        [
+          1,
+          73298
+        ],
+        [
+          1,
+          73302
+        ],
+        [
+          1,
+          73303
+        ],
+        [
+          1,
+          73306
+        ],
+        [
+          1,
+          73308
+        ],
+        [
+          1,
+          73309
+        ],
+        [
+          1,
+          73310
+        ],
+        [
+          1,
+          73311
+        ],
+        [
+          1,
+          73313
+        ],
+        [
+          1,
+          73314
+        ],
+        [
+          1,
+          73315
+        ],
+        [
+          1,
+          73318
+        ],
+        [
+          1,
+          73321
+        ],
+        [
+          1,
+          73322
+        ],
+        [
+          1,
+          73323
+        ],
+        [
+          1,
+          73324
+        ],
+        [
+          1,
+          73325
+        ],
+        [
+          1,
+          73326
+        ],
+        [
+          1,
+          73327
+        ],
+        [
+          1,
+          73328
+        ],
+        [
+          1,
+          73329
+        ],
+        [
+          1,
+          73330
+        ],
+        [
+          1,
+          73331
+        ],
+        [
+          1,
+          73332
+        ],
+        [
+          1,
+          73333
+        ],
+        [
+          1,
+          73334
+        ],
+        [
+          1,
+          73335
+        ],
+        [
+          1,
+          73336
+        ],
+        [
+          1,
+          73337
+        ],
+        [
+          1,
+          73338
+        ],
+        [
+          1,
+          73339
+        ],
+        [
+          1,
+          73340
+        ],
+        [
+          1,
+          73341
+        ],
+        [
+          1,
+          73342
+        ],
+        [
+          1,
+          73347
+        ],
+        [
+          1,
+          73349
+        ],
+        [
+          1,
+          73350
+        ],
+        [
+          1,
+          73351
+        ],
+        [
+          1,
+          73353
+        ],
+        [
+          1,
+          73356
+        ],
+        [
+          1,
+          73357
+        ],
+        [
+          1,
+          73358
+        ],
+        [
+          1,
+          73359
+        ],
+        [
+          1,
+          73360
+        ],
+        [
+          1,
+          73361
+        ],
+        [
+          1,
+          73362
+        ],
+        [
+          1,
+          73363
+        ],
+        [
+          1,
+          73364
+        ],
+        [
+          1,
+          73365
+        ],
+        [
+          1,
+          73367
+        ],
+        [
+          1,
+          73368
+        ],
+        [
+          1,
+          73369
+        ]
+      ],
+      "conflicting_objects": [],
+      "refuted_keys": [],
+      "outside_model_possible": true
+    },
+    "covered_unique_entity_id": null,
+    "level_three_refs_new_in_probe": [],
+    "level_three_rows_after_refresh": 0,
+    "immutable_level_one_preserved": true,
+    "rollback_preserved_prior_level_three": true,
+    "rollback_preserved_prior_candidate_classes": true,
+    "persisted": false,
+    "focus_identity_paid": false
+  }
+}

@@ -192,6 +192,8 @@ pub enum FormalProofBridgeError {
     ResultKindMismatch,
     #[error("evidence is not independently kernel-certified")]
     UncertifiedEvidence,
+    #[error("independent referee receipt absent, insufficiently bound, or writable by consumer")]
+    UnauthenticatedRefereeReceipt,
     #[error("route receipts never pay formal obligations")]
     RouteIsNotProof,
     #[error("upstream obligation is missing or closed")]
@@ -438,13 +440,224 @@ pub fn persist_route_receipt(database_url: &str, route: &FormalProofRouteReceipt
     Ok(())
 }
 
+/// Exact locator in the existing ITIR PostgreSQL referee store. No caller
+/// supplied certification payload or second receipt store is accepted here.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RefereeReceiptLocator {
+    pub repo: String,
+    pub sha: String,
+    pub path: String,
+    pub canonical_thread_id: String,
+}
+
+impl RefereeReceiptLocator {
+    fn validate(&self) -> Result<(), FormalProofBridgeError> {
+        let valid_component = |s: &str| !s.is_empty() && s.bytes().all(|b|
+            b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-' | b'.'));
+        let parts: Vec<_> = self.repo.split('/').collect();
+        if parts.len() != 2 || !parts.iter().all(|s| valid_component(s) && *s != "." && *s != "..")
+            || self.sha.len() != 40 || !self.sha.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+            || !self.path.split('/').all(|p| valid_component(p) && p != "." && p != "..")
+            || !(self.path.ends_with(".lean") || self.path.ends_with(".agda"))
+            || self.canonical_thread_id.trim().is_empty() {
+            return Err(FormalProofBridgeError::UnauthenticatedRefereeReceipt);
+        }
+        Ok(())
+    }
+}
+
+/// Shared independent referee-store boundary. This never authenticates
+/// a caller-supplied JSON object or authorizes a numeric mutation.
+fn require_read_only_referee_store(tx:&mut Transaction<'_>)->Result<(),FormalProofBridgeError>{
+    let exists: bool = tx.query_one(
+        "SELECT to_regclass('formal.referee_receipt') IS NOT NULL", &[])?.get(0);
+    if !exists { return Err(FormalProofBridgeError::UnauthenticatedRefereeReceipt); }
+    let read_only: bool = tx.query_one(
+        "SELECT has_table_privilege(current_user,'formal.referee_receipt','SELECT')
+         AND NOT EXISTS(SELECT 1 FROM pg_roles r
+           WHERE (pg_has_role(current_user,r.oid,'MEMBER')
+               OR pg_has_role(session_user,r.oid,'MEMBER')) AND (
+             r.rolsuper OR has_table_privilege(r.oid,'formal.referee_receipt','INSERT,UPDATE,DELETE,TRUNCATE,TRIGGER')
+             OR has_any_column_privilege(r.oid,'formal.referee_receipt','INSERT,UPDATE')
+             OR has_schema_privilege(r.oid,'formal','CREATE')))",
+        &[])?.get(0);
+    if !read_only { return Err(FormalProofBridgeError::UnauthenticatedRefereeReceipt); }
+    Ok(())
+}
+
+/// Read the existing source-bound kernel receipt, including any independently
+/// issued domain binding, in the caller's transaction. Domain consumers must
+/// compare their exact binding themselves. Return text to preserve the
+/// original bridge's postgres feature set.
+pub fn read_source_bound_referee_receipt(
+    tx:&mut Transaction<'_>,locator:&RefereeReceiptLocator,
+)->Result<String,FormalProofBridgeError>{
+    locator.validate()?;
+    require_read_only_referee_store(tx)?;
+    let row=tx.query_opt("SELECT r.receipt_json::text FROM formal.referee_receipt r
+       WHERE r.repo=$1 AND r.sha=$2 AND r.path=$3 AND r.canonical_thread_id=$4
+         AND r.receipt_json @> jsonb_build_object(
+          'status','verified','kernel_handoff_eligible',true,
+          'authority_kind','isolated_kernel_check','candidate_only',false,'establishes_proof',true,
+          'handoff',jsonb_build_object('subject_commit',$2::text,'authority_kind','isolated_kernel_check',
+              'candidate_only',false,'establishes_proof',true),
+          'reference_binding',jsonb_build_object('repo',$1::text,'sha',$2::text,'path',$3::text,
+              'canonical_thread_id',$4::text,'authenticated_local_referee',true))
+         AND NOT EXISTS(SELECT 1 FROM unnest(ARRAY['source_digest','artifact_digest','checker_digest','dependency_digest']) k(key)
+           WHERE jsonb_typeof(r.receipt_json->'handoff'->k.key) IS DISTINCT FROM 'string'
+              OR COALESCE(length(r.receipt_json->'handoff'->>k.key),0)=0)",
+       &[&locator.repo,&locator.sha,&locator.path,&locator.canonical_thread_id])?;
+    row.map(|r|r.get(0)).ok_or(FormalProofBridgeError::UnauthenticatedRefereeReceipt)
+}
+
+/// Read the original ITIR #58 table, with the exact SLR premise binding
+/// extension issued by an independent referee. The original source-only
+/// receipt is insufficient. This consumer must have no direct/inherited
+/// or SET ROLE write permission on that table or CREATE on its schema.
+/// The trusted PostgreSQL administrator and referee issuance procedure
+/// remain the deployment trust boundary.
+fn require_authenticated_referee_receipt(
+    tx: &mut Transaction<'_>, locator: &RefereeReceiptLocator,
+    demand: &FormalProofDemand, evidence: &FormalEvidenceReceiptInput,
+) -> Result<(), FormalProofBridgeError> {
+    locator.validate()?;
+    // Strict binding is exact even when the optional DA51 coordinate
+    // is absent. The historical compatibility validator permits extras.
+    if demand.da51_address != evidence.da51_address {
+        return Err(FormalProofBridgeError::Da51Mismatch);
+    }
+    require_read_only_referee_store(tx)?;
+    // Bind the complete immutable premise coordinates. The original ITIR
+    // handoff flags and binding are necessary independently of the new
+    // demand-specific extension. Missing or non-boolean flags fail closed.
+    let exact: bool = tx.query_one(
+        "SELECT EXISTS(SELECT 1 FROM formal.referee_receipt r
+          WHERE r.repo=$1 AND r.sha=$2 AND r.path=$3 AND r.canonical_thread_id=$4
+          AND r.receipt_json @> jsonb_build_object(
+            'status','verified','kernel_handoff_eligible',true,
+            'authority_kind','isolated_kernel_check','candidate_only',false,'establishes_proof',true,
+            'handoff',jsonb_build_object('subject_commit',$2::text,'authority_kind','isolated_kernel_check',
+              'candidate_only',false,'establishes_proof',true,'artifact_digest',$12::text),
+            'reference_binding',jsonb_build_object('repo',$1::text,'sha',$2::text,'path',$3::text,
+              'canonical_thread_id',$4::text,'authenticated_local_referee',true))
+          AND jsonb_typeof(r.receipt_json #> '{handoff,source_digest}')='string'
+          AND length(r.receipt_json #>> '{handoff,source_digest}')>0
+          AND jsonb_typeof(r.receipt_json #> '{handoff,checker_digest}')='string'
+          AND length(r.receipt_json #>> '{handoff,checker_digest}')>0
+          AND jsonb_typeof(r.receipt_json #> '{handoff,dependency_digest}')='string'
+          AND length(r.receipt_json #>> '{handoff,dependency_digest}')>0
+          AND r.receipt_json->'slr_premise_binding'=jsonb_build_object(
+             'demand_ref',$5::text,'obligation_ref',$6::text,'consumer_ref',$7::text,
+             'pnf_revision_ref',$8::text,'statement_digest',$9::text,'result_kind',$10::text,
+             'source_revisions',$11::text[],'artifact_digest',$12::text,
+             'checker_revision',$13::text,'dependencies',$14::text[],
+             'residual_ref',$15::text,'proposition_ref',$16::text,'da51_address',$17::text,
+             'artifact_ref',$18::text,'source_revision',$19::text,'evidence_ref',$20::text,
+             'producer',$21::text,'checker',$22::text,'statement_language',$23::text,
+             'target_prover',$24::text,'dependent_refs',$25::text[]))",
+        &[&locator.repo,&locator.sha,&locator.path,&locator.canonical_thread_id,
+          &demand.demand_ref,&demand.obligation_ref,&demand.consumer_ref,&demand.pnf_revision_ref,
+          &demand.statement_digest,&demand.requested_result_kind,&demand.source_revision_refs,
+          &evidence.artifact_digest,&evidence.checker_revision,&evidence.dependencies,
+          &demand.residual_ref,&demand.proposition_ref,&demand.da51_address,&evidence.artifact_ref,
+          &evidence.source_revision,&evidence.evidence_ref,&evidence.producer,&evidence.checker,
+          &demand.statement_language,&demand.target_prover,&demand.dependent_refs])?.get(0);
+    if !exact { return Err(FormalProofBridgeError::UnauthenticatedRefereeReceipt); }
+    Ok(())
+}
+
+/// Checked readback is a distinct opaque type; a caller-created legacy
+/// FormalEvidencePayment cannot substitute for a checked referee receipt.
+/// It is still a formal-premise receipt, not current numeric identity,
+/// coverage, or authority-debt reconciliation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AuthenticatedFormalEvidencePayment {
+    payment: FormalEvidencePayment,
+    locator: RefereeReceiptLocator,
+}
+
+impl AuthenticatedFormalEvidencePayment {
+    #[must_use]
+    pub fn payment(&self) -> &FormalEvidencePayment { &self.payment }
+    #[must_use]
+    pub fn locator(&self) -> &RefereeReceiptLocator { &self.locator }
+}
+
+/// Strict production entrypoint. An independently issued exact demand
+/// binding must already exist in the original referee store. This pays
+/// only the formal premise; it does not close a numeric identity demand.
+pub fn persist_authenticated_formal_evidence(
+    database_url: &str, evidence: &FormalEvidenceReceiptInput,
+    locator: &RefereeReceiptLocator,
+) -> Result<AuthenticatedFormalEvidencePayment, FormalProofBridgeError> {
+    let payment = persist_formal_evidence_inner(database_url, evidence, Some(locator))?;
+    Ok(AuthenticatedFormalEvidencePayment { payment, locator: locator.clone() })
+}
+
+/// Reopen existing immutable bridge evidence/payment and the independently
+/// stored referee row in one serializable snapshot. A historical payment
+/// or a copied authentication result is never enough on its own.
+pub fn reopen_authenticated_formal_evidence(
+    database_url: &str, evidence_ref: &str, locator: &RefereeReceiptLocator,
+) -> Result<AuthenticatedFormalEvidencePayment, FormalProofBridgeError> {
+    require_non_empty("evidence_ref", evidence_ref)?;
+    let mut client = Client::connect(database_url, NoTls)?;
+    let mut tx = client.transaction()?;
+    tx.batch_execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE READ ONLY")?;
+    let checked = reopen_authenticated_formal_evidence_tx(&mut tx, evidence_ref, locator)?;
+    tx.commit()?;
+    Ok(checked)
+}
+
+/// Transaction-local JMD/DASHI formal evidence adapter. The caller owns
+/// the serializable transaction and its domain-specific current-state gate.
+/// This authenticates a formal premise only, never numeric identity.
+/// Do not reuse the return value across transactions for admission.
+pub fn reopen_authenticated_formal_evidence_tx(
+    tx: &mut Transaction<'_>, evidence_ref: &str, locator: &RefereeReceiptLocator,
+) -> Result<AuthenticatedFormalEvidencePayment, FormalProofBridgeError> {
+    require_non_empty("evidence_ref", evidence_ref)?;
+    let isolation: String = tx.query_one("SHOW transaction_isolation", &[])?.get(0);
+    if isolation != "serializable" {
+        return Err(FormalProofBridgeError::UnauthenticatedRefereeReceipt);
+    }
+    let evidence = load_evidence_tx(tx, evidence_ref)?;
+    let demand = load_demand_tx(tx, &evidence.demand_ref)?;
+    require_existing_inputs(tx, &demand)?;
+    let expected = validate_formal_evidence_payment(&demand, &evidence)?;
+    require_authenticated_referee_receipt(tx, locator, &demand, &evidence)?;
+    let payment = load_payment_tx(tx, evidence_ref)?;
+    if !payment_replay_matches(&payment, &expected) {
+        return Err(FormalProofBridgeError::ExistingRowConflict);
+    }
+    Ok(AuthenticatedFormalEvidencePayment { payment, locator: locator.clone() })
+}
+
+/// Historical structural transport/replay ABI. Its returned payment is
+/// not evidence of independent referee authentication. New governed
+/// consumers must use persist_authenticated_formal_evidence instead.
 pub fn persist_and_validate_formal_evidence(database_url: &str, evidence: &FormalEvidenceReceiptInput) -> Result<FormalEvidencePayment, FormalProofBridgeError> {
+    persist_formal_evidence_inner(database_url, evidence, None)
+}
+
+fn persist_formal_evidence_inner(database_url: &str, evidence: &FormalEvidenceReceiptInput,
+    locator: Option<&RefereeReceiptLocator>,
+) -> Result<FormalEvidencePayment, FormalProofBridgeError> {
     evidence.validate()?;
     let mut client = Client::connect(database_url, NoTls)?;
     let mut tx = client.transaction()?;
-    tx.batch_execute(FORMAL_PROOF_BRIDGE_SQL)?;
+    if locator.is_some() {
+        tx.batch_execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")?;
+    }
+    // Explicit install_schema owns schema setup for the strict runtime
+    // role; do not require DDL rights on each authenticated payment.
+    if locator.is_none() { tx.batch_execute(FORMAL_PROOF_BRIDGE_SQL)?; }
     let demand = load_demand_tx(&mut tx, &evidence.demand_ref)?;
     let payment = validate_formal_evidence_payment(&demand, evidence)?;
+    if let Some(locator) = locator {
+        require_existing_inputs(&mut tx, &demand)?;
+        require_authenticated_referee_receipt(&mut tx, locator, &demand, evidence)?;
+    }
     tx.execute(
         r#"INSERT INTO formal_bridge.evidence
         (evidence_ref,demand_ref,obligation_ref,da51_address,producer,artifact_ref,artifact_digest,statement_digest,checker,checker_revision,source_revision,result_kind,certification_state,dependencies,establishes_formal_premise,creates_legal_authority,applicability_promoted,claim_truth_promoted)
@@ -482,6 +695,24 @@ mod tests {
         FormalEvidenceReceiptInput {
             evidence_ref: "evidence:1".into(), demand_ref: "formal-demand:1".into(), obligation_ref: "obligation:1".into(), da51_address: Some("0xDA51831100800000".into()), producer: "lean-kernel".into(), artifact_ref: "artifact:1".into(), artifact_digest: "sha256:artifact".into(), statement_digest: "sha256:statement-a".into(), checker: "lean".into(), checker_revision: "lean:head".into(), source_revision: "source:1".into(), result_kind: "formal-proof".into(), certification_state: "kernel-certified".into(), dependencies: vec![], establishes_formal_premise: true, creates_legal_authority: false, applicability_promoted: false, claim_truth_promoted: false,
         }
+    }
+
+    #[test]
+    fn referee_locator_refuses_unpinned_and_traversal_coordinates() {
+        let valid = RefereeReceiptLocator {
+            repo: "owner/proofs".into(), sha: "a".repeat(40),
+            path: "DASHI/Proof.lean".into(), canonical_thread_id: "thread:1".into(),
+        };
+        assert!(valid.validate().is_ok());
+        let mut foreign = valid.clone();
+        foreign.path = "../Proof.lean".into();
+        assert!(foreign.validate().is_err());
+        foreign = valid.clone();
+        foreign.sha = "main".into();
+        assert!(foreign.validate().is_err());
+        foreign = valid.clone();
+        foreign.canonical_thread_id.clear();
+        assert!(foreign.validate().is_err());
     }
 
     #[test]

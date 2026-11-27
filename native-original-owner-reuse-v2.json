@@ -1,0 +1,1180 @@
+{
+  "schema": "slr-native-original-binding-owner-reuse-v1",
+  "source_revision_ref": "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+  "source_sha256": "7ff2ec8ffe6243871ad682e7d7060fe3b84025fb15dbe229154d7aa7f6a72b30",
+  "same_manifestation_document_ref": "document:sha256:7ff2ec8ffe6243871ad682e7d7060fe3b84025fb15dbe229154d7aa7f6a72b30",
+  "source_content_equal_compiler_documents": [
+    "document:540585a75fb92e5e4dd32691063eedb81eb936759e604e0f042bcb289951ab5f",
+    "document:sha256:7ff2ec8ffe6243871ad682e7d7060fe3b84025fb15dbe229154d7aa7f6a72b30"
+  ],
+  "original_binding_owner_available": true,
+  "original_binding_sets": [
+    {
+      "document_ref": "document:sha256:7ff2ec8ffe6243871ad682e7d7060fe3b84025fb15dbe229154d7aa7f6a72b30",
+      "same_manifestation": true,
+      "reference_factor_ref": "factor:native-binding:ba6706b38f32d0c60146f531aa1dd9a52080c9141f98b90133e561f04c1df430",
+      "reference_factor_revision_ref": "factor-revision:native-binding:ba6706b38f32d0c60146f531aa1dd9a52080c9141f98b90133e561f04c1df430",
+      "candidate_set_ref": "binding-set:native:1b2061d30da5a4bed0eef375f941387ab779b220149a669f2eff6f10422358a0",
+      "generator_build_ref": "binding-build:native:1b2061d30da5a4bed0eef375f941387ab779b220149a669f2eff6f10422358a0",
+      "referential_type_ref": "entity_reference",
+      "accessibility_declaration_ref": "binding-accessibility:document-structural:v0_3",
+      "compatibility_declaration_ref": "binding-compatibility:pnf-kind-morphology:v0_3",
+      "original_persisted_member_count": 18,
+      "original_index_matches_persisted_members": true,
+      "original_index_prefix_matches_full_query": true,
+      "original_index_query_complete": true,
+      "original_index_member_count": 18,
+      "original_cap_deferred_count": 0,
+      "original_exclusion_summaries": [],
+      "original_members": [
+        {
+          "candidate_factor_ref": "factor:native-binding:15ff73a118f355066ab31a6a9b61c24e6b308e7e70b409c575f2917027ad0630",
+          "candidate_factor_revision_ref": "factor-revision:native-binding:15ff73a118f355066ab31a6a9b61c24e6b308e7e70b409c575f2917027ad0630",
+          "accessibility_path_ref": "same_sentence",
+          "distance_tokens": 1,
+          "original_span_coordinates": [
+            [
+              54,
+              67
+            ],
+            [
+              2537,
+              2548
+            ]
+          ],
+          "exact_same_manifestation_numeric_object_ids": []
+        },
+        {
+          "candidate_factor_ref": "factor:native-binding:1734c943f6736c22bc5d99aa3a46d230a5566ab569ada05c9752b4c09012935d",
+          "candidate_factor_revision_ref": "factor-revision:native-binding:1734c943f6736c22bc5d99aa3a46d230a5566ab569ada05c9752b4c09012935d",
+          "accessibility_path_ref": "same_sentence",
+          "distance_tokens": 1,
+          "original_span_coordinates": [
+            [
+              51,
+              53
+            ],
+            [
+              54,
+              58
+            ],
+            [
+              102,
+              107
+            ],
+            [
+              2215,
+              2220
+            ],
+            [
+              2389,
+              2397
+            ],
+            [
+              2454,
+              2462
+            ],
+            [
+              2537,
+              2542
+            ],
+            [
+              2560,
+              2562
+            ],
+            [
+              2563,
+              2567
+            ],
+            [
+              2652,
+              2657
+            ],
+            [
+              3666,
+              3668
+            ],
+            [
+              3669,
+              3673
+            ],
+            [
+              3756,
+              3764
+            ],
+            [
+              3815,
+              3817
+            ],
+            [
+              3818,
+              3822
+            ]
+          ],
+          "exact_same_manifestation_numeric_object_ids": []
+        },
+        {
+          "candidate_factor_ref": "factor:native-binding:2b8f101fc53dd2dc0a076570cccf25a781f11d9b3cd8e602f9492b087c554061",
+          "candidate_factor_revision_ref": "factor-revision:native-binding:2b8f101fc53dd2dc0a076570cccf25a781f11d9b3cd8e602f9492b087c554061",
+          "accessibility_path_ref": "same_sentence",
+          "distance_tokens": 1,
+          "original_span_coordinates": [
+            [
+              51,
+              53
+            ],
+            [
+              54,
+              58
+            ],
+            [
+              102,
+              107
+            ],
+            [
+              2215,
+              2220
+            ],
+            [
+              2389,
+              2397
+            ],
+            [
+              2454,
+              2462
+            ],
+            [
+              2537,
+              2542
+            ],
+            [
+              2560,
+              2562
+            ],
+            [
+              2563,
+              2567
+            ],
+            [
+              2652,
+              2657
+            ],
+            [
+              3666,
+              3668
+            ],
+            [
+              3669,
+              3673
+            ],
+            [
+              3756,
+              3764
+            ],
+            [
+              3815,
+              3817
+            ],
+            [
+              3818,
+              3822
+            ]
+          ],
+          "exact_same_manifestation_numeric_object_ids": []
+        },
+        {
+          "candidate_factor_ref": "factor:native-binding:38887d5bcd388a885460d7903394e4a615fe7c89e06fae0b74515d37c003a07c",
+          "candidate_factor_revision_ref": "factor-revision:native-binding:38887d5bcd388a885460d7903394e4a615fe7c89e06fae0b74515d37c003a07c",
+          "accessibility_path_ref": "same_sentence",
+          "distance_tokens": 1,
+          "original_span_coordinates": [
+            [
+              51,
+              53
+            ],
+            [
+              54,
+              58
+            ],
+            [
+              102,
+              107
+            ],
+            [
+              2215,
+              2220
+            ],
+            [
+              2389,
+              2397
+            ],
+            [
+              2454,
+              2462
+            ],
+            [
+              2537,
+              2542
+            ],
+            [
+              2560,
+              2562
+            ],
+            [
+              2563,
+              2567
+            ],
+            [
+              2652,
+              2657
+            ],
+            [
+              3666,
+              3668
+            ],
+            [
+              3669,
+              3673
+            ],
+            [
+              3756,
+              3764
+            ],
+            [
+              3815,
+              3817
+            ],
+            [
+              3818,
+              3822
+            ]
+          ],
+          "exact_same_manifestation_numeric_object_ids": []
+        },
+        {
+          "candidate_factor_ref": "factor:native-binding:63eac1c61a0bb190a0d2e81cfe005c84a72e7318f8519ed78727aae942706949",
+          "candidate_factor_revision_ref": "factor-revision:native-binding:63eac1c61a0bb190a0d2e81cfe005c84a72e7318f8519ed78727aae942706949",
+          "accessibility_path_ref": "same_sentence",
+          "distance_tokens": 1,
+          "original_span_coordinates": [
+            [
+              51,
+              53
+            ],
+            [
+              54,
+              58
+            ],
+            [
+              102,
+              107
+            ],
+            [
+              2215,
+              2220
+            ],
+            [
+              2389,
+              2397
+            ],
+            [
+              2454,
+              2462
+            ],
+            [
+              2537,
+              2542
+            ],
+            [
+              2560,
+              2562
+            ],
+            [
+              2563,
+              2567
+            ],
+            [
+              2652,
+              2657
+            ],
+            [
+              3666,
+              3668
+            ],
+            [
+              3669,
+              3673
+            ],
+            [
+              3756,
+              3764
+            ],
+            [
+              3815,
+              3817
+            ],
+            [
+              3818,
+              3822
+            ]
+          ],
+          "exact_same_manifestation_numeric_object_ids": []
+        },
+        {
+          "candidate_factor_ref": "factor:native-binding:9336219a989b30b4cf0b34d61b3f510789314deb06250eb0495efd030a175c01",
+          "candidate_factor_revision_ref": "factor-revision:native-binding:9336219a989b30b4cf0b34d61b3f510789314deb06250eb0495efd030a175c01",
+          "accessibility_path_ref": "same_sentence",
+          "distance_tokens": 1,
+          "original_span_coordinates": [
+            [
+              51,
+              53
+            ],
+            [
+              54,
+              58
+            ],
+            [
+              102,
+              107
+            ],
+            [
+              2215,
+              2220
+            ],
+            [
+              2389,
+              2397
+            ],
+            [
+              2454,
+              2462
+            ],
+            [
+              2537,
+              2542
+            ],
+            [
+              2560,
+              2562
+            ],
+            [
+              2563,
+              2567
+            ],
+            [
+              2652,
+              2657
+            ],
+            [
+              3666,
+              3668
+            ],
+            [
+              3669,
+              3673
+            ],
+            [
+              3756,
+              3764
+            ],
+            [
+              3815,
+              3817
+            ],
+            [
+              3818,
+              3822
+            ]
+          ],
+          "exact_same_manifestation_numeric_object_ids": []
+        },
+        {
+          "candidate_factor_ref": "factor:native-binding:a2e724c70f413ab2fbb674fd7cc5ea3cf37d05581f63e2cec5b8849363563e2e",
+          "candidate_factor_revision_ref": "factor-revision:native-binding:a2e724c70f413ab2fbb674fd7cc5ea3cf37d05581f63e2cec5b8849363563e2e",
+          "accessibility_path_ref": "same_sentence",
+          "distance_tokens": 1,
+          "original_span_coordinates": [
+            [
+              51,
+              53
+            ],
+            [
+              54,
+              58
+            ],
+            [
+              102,
+              107
+            ],
+            [
+              2215,
+              2220
+            ],
+            [
+              2389,
+              2397
+            ],
+            [
+              2454,
+              2462
+            ],
+            [
+              2537,
+              2542
+            ],
+            [
+              2560,
+              2562
+            ],
+            [
+              2563,
+              2567
+            ],
+            [
+              2652,
+              2657
+            ],
+            [
+              3666,
+              3668
+            ],
+            [
+              3669,
+              3673
+            ],
+            [
+              3756,
+              3764
+            ],
+            [
+              3815,
+              3817
+            ],
+            [
+              3818,
+              3822
+            ]
+          ],
+          "exact_same_manifestation_numeric_object_ids": []
+        },
+        {
+          "candidate_factor_ref": "factor:native-binding:a677af799edd352597056382d29b88ccec25460085813becf6ea07ead64dfe61",
+          "candidate_factor_revision_ref": "factor-revision:native-binding:a677af799edd352597056382d29b88ccec25460085813becf6ea07ead64dfe61",
+          "accessibility_path_ref": "same_sentence",
+          "distance_tokens": 1,
+          "original_span_coordinates": [
+            [
+              51,
+              53
+            ],
+            [
+              54,
+              58
+            ],
+            [
+              102,
+              107
+            ],
+            [
+              2215,
+              2220
+            ],
+            [
+              2389,
+              2397
+            ],
+            [
+              2454,
+              2462
+            ],
+            [
+              2537,
+              2542
+            ],
+            [
+              2560,
+              2562
+            ],
+            [
+              2563,
+              2567
+            ],
+            [
+              2652,
+              2657
+            ],
+            [
+              3666,
+              3668
+            ],
+            [
+              3669,
+              3673
+            ],
+            [
+              3756,
+              3764
+            ],
+            [
+              3815,
+              3817
+            ],
+            [
+              3818,
+              3822
+            ]
+          ],
+          "exact_same_manifestation_numeric_object_ids": []
+        },
+        {
+          "candidate_factor_ref": "factor:native-binding:b104e2f38f2cd71d0544a7092412b7aa52ca8748f46e830e0a6ea0d198664c58",
+          "candidate_factor_revision_ref": "factor-revision:native-binding:b104e2f38f2cd71d0544a7092412b7aa52ca8748f46e830e0a6ea0d198664c58",
+          "accessibility_path_ref": "same_sentence",
+          "distance_tokens": 1,
+          "original_span_coordinates": [
+            [
+              51,
+              53
+            ],
+            [
+              54,
+              58
+            ],
+            [
+              102,
+              107
+            ],
+            [
+              2215,
+              2220
+            ],
+            [
+              2389,
+              2397
+            ],
+            [
+              2454,
+              2462
+            ],
+            [
+              2537,
+              2542
+            ],
+            [
+              2560,
+              2562
+            ],
+            [
+              2563,
+              2567
+            ],
+            [
+              2652,
+              2657
+            ],
+            [
+              3666,
+              3668
+            ],
+            [
+              3669,
+              3673
+            ],
+            [
+              3756,
+              3764
+            ],
+            [
+              3815,
+              3817
+            ],
+            [
+              3818,
+              3822
+            ]
+          ],
+          "exact_same_manifestation_numeric_object_ids": []
+        },
+        {
+          "candidate_factor_ref": "factor:native-binding:c2c6525ebee1a55fa64727b940ed57c36f454b16fba80d47ca4e349b090dbc39",
+          "candidate_factor_revision_ref": "factor-revision:native-binding:c2c6525ebee1a55fa64727b940ed57c36f454b16fba80d47ca4e349b090dbc39",
+          "accessibility_path_ref": "same_sentence",
+          "distance_tokens": 1,
+          "original_span_coordinates": [
+            [
+              51,
+              53
+            ],
+            [
+              54,
+              58
+            ],
+            [
+              102,
+              107
+            ],
+            [
+              2215,
+              2220
+            ],
+            [
+              2389,
+              2397
+            ],
+            [
+              2454,
+              2462
+            ],
+            [
+              2537,
+              2542
+            ],
+            [
+              2560,
+              2562
+            ],
+            [
+              2563,
+              2567
+            ],
+            [
+              2652,
+              2657
+            ],
+            [
+              3666,
+              3668
+            ],
+            [
+              3669,
+              3673
+            ],
+            [
+              3756,
+              3764
+            ],
+            [
+              3815,
+              3817
+            ],
+            [
+              3818,
+              3822
+            ]
+          ],
+          "exact_same_manifestation_numeric_object_ids": []
+        },
+        {
+          "candidate_factor_ref": "factor:native-binding:c3e000147bb7f9d8882e073542123bf15f06da4614c2145b1f6290ec3c126e6f",
+          "candidate_factor_revision_ref": "factor-revision:native-binding:c3e000147bb7f9d8882e073542123bf15f06da4614c2145b1f6290ec3c126e6f",
+          "accessibility_path_ref": "same_sentence",
+          "distance_tokens": 1,
+          "original_span_coordinates": [
+            [
+              54,
+              67
+            ],
+            [
+              2537,
+              2548
+            ]
+          ],
+          "exact_same_manifestation_numeric_object_ids": []
+        },
+        {
+          "candidate_factor_ref": "factor:native-binding:c76b915431adf6601cdb1d73e41bb1402b3c0976f59625485a6fb0711882e528",
+          "candidate_factor_revision_ref": "factor-revision:native-binding:c76b915431adf6601cdb1d73e41bb1402b3c0976f59625485a6fb0711882e528",
+          "accessibility_path_ref": "same_sentence",
+          "distance_tokens": 1,
+          "original_span_coordinates": [
+            [
+              51,
+              53
+            ],
+            [
+              54,
+              58
+            ],
+            [
+              102,
+              107
+            ],
+            [
+              2215,
+              2220
+            ],
+            [
+              2389,
+              2397
+            ],
+            [
+              2454,
+              2462
+            ],
+            [
+              2537,
+              2542
+            ],
+            [
+              2560,
+              2562
+            ],
+            [
+              2563,
+              2567
+            ],
+            [
+              2652,
+              2657
+            ],
+            [
+              3666,
+              3668
+            ],
+            [
+              3669,
+              3673
+            ],
+            [
+              3756,
+              3764
+            ],
+            [
+              3815,
+              3817
+            ],
+            [
+              3818,
+              3822
+            ]
+          ],
+          "exact_same_manifestation_numeric_object_ids": []
+        },
+        {
+          "candidate_factor_ref": "factor:native-binding:c9331ab4ce43e893dfa9b4f9fbed9dd6cfd1485bc8709bb3aaa20c49ec9c249f",
+          "candidate_factor_revision_ref": "factor-revision:native-binding:c9331ab4ce43e893dfa9b4f9fbed9dd6cfd1485bc8709bb3aaa20c49ec9c249f",
+          "accessibility_path_ref": "same_sentence",
+          "distance_tokens": 1,
+          "original_span_coordinates": [
+            [
+              51,
+              53
+            ],
+            [
+              54,
+              58
+            ],
+            [
+              102,
+              107
+            ],
+            [
+              2215,
+              2220
+            ],
+            [
+              2389,
+              2397
+            ],
+            [
+              2454,
+              2462
+            ],
+            [
+              2537,
+              2542
+            ],
+            [
+              2560,
+              2562
+            ],
+            [
+              2563,
+              2567
+            ],
+            [
+              2652,
+              2657
+            ],
+            [
+              3666,
+              3668
+            ],
+            [
+              3669,
+              3673
+            ],
+            [
+              3756,
+              3764
+            ],
+            [
+              3815,
+              3817
+            ],
+            [
+              3818,
+              3822
+            ]
+          ],
+          "exact_same_manifestation_numeric_object_ids": []
+        },
+        {
+          "candidate_factor_ref": "factor:native-binding:c9d1e59fbafbbdb5eb4ad9b7ba3fa536c5d2be398f43a6e40d902d3a8c765c16",
+          "candidate_factor_revision_ref": "factor-revision:native-binding:c9d1e59fbafbbdb5eb4ad9b7ba3fa536c5d2be398f43a6e40d902d3a8c765c16",
+          "accessibility_path_ref": "same_sentence",
+          "distance_tokens": 1,
+          "original_span_coordinates": [
+            [
+              51,
+              53
+            ],
+            [
+              54,
+              58
+            ],
+            [
+              102,
+              107
+            ],
+            [
+              2215,
+              2220
+            ],
+            [
+              2389,
+              2397
+            ],
+            [
+              2454,
+              2462
+            ],
+            [
+              2537,
+              2542
+            ],
+            [
+              2560,
+              2562
+            ],
+            [
+              2563,
+              2567
+            ],
+            [
+              2652,
+              2657
+            ],
+            [
+              3666,
+              3668
+            ],
+            [
+              3669,
+              3673
+            ],
+            [
+              3756,
+              3764
+            ],
+            [
+              3815,
+              3817
+            ],
+            [
+              3818,
+              3822
+            ]
+          ],
+          "exact_same_manifestation_numeric_object_ids": []
+        },
+        {
+          "candidate_factor_ref": "factor:native-binding:cd84b4f5f35051bd2d7fb91783a43c18e3bb1109f66a4f56e1ffecf762b35ab6",
+          "candidate_factor_revision_ref": "factor-revision:native-binding:cd84b4f5f35051bd2d7fb91783a43c18e3bb1109f66a4f56e1ffecf762b35ab6",
+          "accessibility_path_ref": "same_sentence",
+          "distance_tokens": 1,
+          "original_span_coordinates": [
+            [
+              102,
+              143
+            ]
+          ],
+          "exact_same_manifestation_numeric_object_ids": [
+            73280
+          ]
+        },
+        {
+          "candidate_factor_ref": "factor:native-binding:e125e43aab055df982fca03923648b5dbf1a5fbb1876d61472dbe08dec53def5",
+          "candidate_factor_revision_ref": "factor-revision:native-binding:e125e43aab055df982fca03923648b5dbf1a5fbb1876d61472dbe08dec53def5",
+          "accessibility_path_ref": "same_sentence",
+          "distance_tokens": 1,
+          "original_span_coordinates": [
+            [
+              51,
+              53
+            ],
+            [
+              54,
+              58
+            ],
+            [
+              102,
+              107
+            ],
+            [
+              2215,
+              2220
+            ],
+            [
+              2389,
+              2397
+            ],
+            [
+              2454,
+              2462
+            ],
+            [
+              2537,
+              2542
+            ],
+            [
+              2560,
+              2562
+            ],
+            [
+              2563,
+              2567
+            ],
+            [
+              2652,
+              2657
+            ],
+            [
+              3666,
+              3668
+            ],
+            [
+              3669,
+              3673
+            ],
+            [
+              3756,
+              3764
+            ],
+            [
+              3815,
+              3817
+            ],
+            [
+              3818,
+              3822
+            ]
+          ],
+          "exact_same_manifestation_numeric_object_ids": []
+        },
+        {
+          "candidate_factor_ref": "factor:native-binding:f5314e57683e4329fe43ab1c9d816b43814bef2c153068da771355f0e90452de",
+          "candidate_factor_revision_ref": "factor-revision:native-binding:f5314e57683e4329fe43ab1c9d816b43814bef2c153068da771355f0e90452de",
+          "accessibility_path_ref": "same_sentence",
+          "distance_tokens": 1,
+          "original_span_coordinates": [
+            [
+              51,
+              53
+            ],
+            [
+              54,
+              58
+            ],
+            [
+              102,
+              107
+            ],
+            [
+              2215,
+              2220
+            ],
+            [
+              2389,
+              2397
+            ],
+            [
+              2454,
+              2462
+            ],
+            [
+              2537,
+              2542
+            ],
+            [
+              2560,
+              2562
+            ],
+            [
+              2563,
+              2567
+            ],
+            [
+              2652,
+              2657
+            ],
+            [
+              3666,
+              3668
+            ],
+            [
+              3669,
+              3673
+            ],
+            [
+              3756,
+              3764
+            ],
+            [
+              3815,
+              3817
+            ],
+            [
+              3818,
+              3822
+            ]
+          ],
+          "exact_same_manifestation_numeric_object_ids": []
+        },
+        {
+          "candidate_factor_ref": "factor:native-binding:fb0cba4d13127a9315df88e8468606c393bdd2d228818a5a7fbb93dd575631d6",
+          "candidate_factor_revision_ref": "factor-revision:native-binding:fb0cba4d13127a9315df88e8468606c393bdd2d228818a5a7fbb93dd575631d6",
+          "accessibility_path_ref": "same_sentence",
+          "distance_tokens": 1,
+          "original_span_coordinates": [
+            [
+              51,
+              53
+            ],
+            [
+              54,
+              58
+            ],
+            [
+              102,
+              107
+            ],
+            [
+              2215,
+              2220
+            ],
+            [
+              2389,
+              2397
+            ],
+            [
+              2454,
+              2462
+            ],
+            [
+              2537,
+              2542
+            ],
+            [
+              2560,
+              2562
+            ],
+            [
+              2563,
+              2567
+            ],
+            [
+              2652,
+              2657
+            ],
+            [
+              3666,
+              3668
+            ],
+            [
+              3669,
+              3673
+            ],
+            [
+              3756,
+              3764
+            ],
+            [
+              3815,
+              3817
+            ],
+            [
+              3818,
+              3822
+            ]
+          ],
+          "exact_same_manifestation_numeric_object_ids": []
+        }
+      ]
+    }
+  ],
+  "original_numeric_run_refs": [
+    "slr-native-numeric-run:sha256:b165d42870fc0afecdc101ea8919e5c3290b0b53b4556d51b42a9f85ae8e2737"
+  ],
+  "original_numeric_audits": [
+    {
+      "schema": "slr-original-numeric-pnf-identity-audit-v1",
+      "original_source_relative_answer": "Bush",
+      "original_source_sha256": "7ff2ec8ffe6243871ad682e7d7060fe3b84025fb15dbe229154d7aa7f6a72b30",
+      "original_source_revision_ref": "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+      "numeric_run_ref": "slr-native-numeric-run:sha256:b165d42870fc0afecdc101ea8919e5c3290b0b53b4556d51b42a9f85ae8e2737",
+      "exact_numeric_source_matched": true,
+      "original_focus_token_count": 1,
+      "original_named_person_support_count": 2,
+      "original_named_person_support_unique_statements": 2,
+      "original_bush_supported_numeric_object_count": 2,
+      "exact_numeric_focus_mention_found": true,
+      "native_anaphor_unresolved_demand_ids": [
+        22165
+      ],
+      "numeric_demand_open_world": [
+        {
+          "demand_id": 22165,
+          "source_object_id": 72766,
+          "outside_model_possible": true,
+          "coverage_witness_ref": null,
+          "resource_limited": false,
+          "represented_residual_count": 0,
+          "frontier_unique_object_count": 0,
+          "selected_live_object_id": null,
+          "live_candidate_count": 164,
+          "invalid_refutation_count": 0,
+          "producer_h9_target_occurrence_count": 0,
+          "quality_gated_h9_entity_occurrence_count": 0,
+          "represented_candidate_count": 164,
+          "active_candidate_count": 0,
+          "refuted_candidate_count": 0
+        }
+      ],
+      "resolved_unique_target_from_original_sql": false,
+      "observed_accepted_document_witness_ids": [],
+      "observed_witnessed_level_three_derivation_refs": [],
+      "original_accepted_document_identity_paid": false,
+      "original_level_three_substitution_paid": false,
+      "external_q23505_paid": false,
+      "q207_paid": false,
+      "historical_truth_paid": false,
+      "original_level_one_source_preserved": true,
+      "incomplete_obligations": [
+        "ORIGINAL_TYPED_UNIQUE_AND_OPEN_WORLD_COVERAGE_UNPAID",
+        "ORIGINAL_ACCEPTED_DOCUMENT_IDENTITY_WITNESS_UNPAID",
+        "ORIGINAL_LEVEL_THREE_TRANSACTIONAL_RETRACTION_UNPAID"
+      ]
+    }
+  ],
+  "reusable_binding_set_refs": [
+    "binding-set:native:1b2061d30da5a4bed0eef375f941387ab779b220149a669f2eff6f10422358a0"
+  ],
+  "original_index_complete_is_not_semantic_coverage": true,
+  "writes_database": false,
+  "residuals": [
+    "no_current_accepted_focus_identity_on_exact_manifestation_runs",
+    "no_current_witnessed_focus_level_three_on_exact_manifestation_runs"
+  ]
+}

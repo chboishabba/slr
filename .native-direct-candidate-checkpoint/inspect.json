@@ -1,0 +1,443 @@
+{
+  "schema": "slr-direct-numeric-candidate-slice-v1",
+  "source_revision_ref": "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+  "original_source_sha256": "7ff2ec8ffe6243871ad682e7d7060fe3b84025fb15dbe229154d7aa7f6a72b30",
+  "original_parser_run_ref": "parser-run:sha256:56ea4c0a05c3beb97f05dfe447570c7d753f15d8b8bf76cb86145ca41f8f2d63",
+  "numeric_run_ref": "slr-native-numeric-run:sha256:b165d42870fc0afecdc101ea8919e5c3290b0b53b4556d51b42a9f85ae8e2737",
+  "source_document_ref": "document:sha256:7ff2ec8ffe6243871ad682e7d7060fe3b84025fb15dbe229154d7aa7f6a72b30",
+  "first_sentence": 0,
+  "next_sentence": 1,
+  "represented_sentence_count": 6678,
+  "source_inventory_sha256": "8dbf454745e1cc730295352633421740cf102b63e1ae58692a8eae56ed11f50e",
+  "source_observation_tokens_loaded": 1,
+  "source_full_document_coverage_paid": false,
+  "sentences": [
+    {
+      "sentence_ref": "parser-sentence:8c57cfc9be02a31d32d50b2ac1c2f3820b59be5c09835bae4e6e2d4fafbbb8e5",
+      "original_region_ref": "document-region:source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00:sentence:0:0-2",
+      "original_compilation_key": "sha256:7658ee8b1310b4ada0edd84d05fe63faedfe5b1787016a46c7de84ea3e3b2f20",
+      "start_char": 0,
+      "end_char": 2,
+      "input_sha256": "cb761b1e1857b4adbc9cbaddde73622f8d12dd5eb9650f74c051add7e08f2db1",
+      "token_inverse": [
+        {
+          "original_compilation_key": "sha256:7658ee8b1310b4ada0edd84d05fe63faedfe5b1787016a46c7de84ea3e3b2f20",
+          "original_token_ordinal": 0,
+          "token_ref": "parser-token:fe4b81efb3139cc5e7702bc4903a1263bae330fabb48f5980e9f2b61c42ed9ff",
+          "token_digest": [
+            254,
+            75,
+            129,
+            239,
+            179,
+            19,
+            156,
+            197,
+            231,
+            112,
+            43,
+            196,
+            144,
+            58,
+            18,
+            99,
+            186,
+            227,
+            48,
+            250,
+            187,
+            72,
+            245,
+            152,
+            14,
+            159,
+            43,
+            97,
+            196,
+            46,
+            217,
+            255
+          ],
+          "start_char": 0,
+          "end_char": 2,
+          "orth": "41",
+          "lemma": "41",
+          "pos": "NUM",
+          "tag": "NUM",
+          "dependency": "ROOT",
+          "head_token_ref": "parser-token:fe4b81efb3139cc5e7702bc4903a1263bae330fabb48f5980e9f2b61c42ed9ff",
+          "head_start_char": 0,
+          "head_end_char": 2,
+          "lemma_origin_id": 1,
+          "pos_origin_id": 1,
+          "tag_origin_id": 3,
+          "dependency_origin_id": 1,
+          "morph_json": "{\"NumType\":\"Card\"}",
+          "creates_semantic_authority": false
+        }
+      ],
+      "entity_observations": [
+        {
+          "original_compilation_key": "sha256:7658ee8b1310b4ada0edd84d05fe63faedfe5b1787016a46c7de84ea3e3b2f20",
+          "original_entity_ordinal": 0,
+          "entity_ref": "parser-entity:578e7c324d0869fbb7059804b73da79b1a3ffb56ba7680ba64f54e36e056c422",
+          "entity_digest": [
+            87,
+            142,
+            124,
+            50,
+            77,
+            8,
+            105,
+            251,
+            183,
+            5,
+            152,
+            4,
+            183,
+            61,
+            167,
+            155,
+            26,
+            63,
+            251,
+            86,
+            186,
+            118,
+            128,
+            186,
+            100,
+            245,
+            78,
+            54,
+            224,
+            86,
+            196,
+            34
+          ],
+          "start_char": 0,
+          "end_char": 2,
+          "surface": "41",
+          "label_ref": "CARDINAL",
+          "source_candidate_only": true,
+          "creates_semantic_authority": false
+        }
+      ],
+      "symbol_inverse": [
+        [
+          1,
+          "41"
+        ],
+        [
+          2,
+          "41"
+        ],
+        [
+          2,
+          "amend"
+        ],
+        [
+          2,
+          "begin"
+        ],
+        [
+          2,
+          "cease"
+        ],
+        [
+          2,
+          "commence"
+        ],
+        [
+          2,
+          "except"
+        ],
+        [
+          2,
+          "excluding"
+        ],
+        [
+          2,
+          "if"
+        ],
+        [
+          2,
+          "may"
+        ],
+        [
+          2,
+          "must"
+        ],
+        [
+          2,
+          "never"
+        ],
+        [
+          2,
+          "not"
+        ],
+        [
+          2,
+          "provided"
+        ],
+        [
+          2,
+          "providing"
+        ],
+        [
+          2,
+          "repeal"
+        ],
+        [
+          2,
+          "shall"
+        ],
+        [
+          2,
+          "unless"
+        ],
+        [
+          2,
+          "when"
+        ],
+        [
+          3,
+          "AUX"
+        ],
+        [
+          3,
+          "NUM"
+        ],
+        [
+          3,
+          "VERB"
+        ],
+        [
+          5,
+          "advmod"
+        ],
+        [
+          5,
+          "attr"
+        ],
+        [
+          5,
+          "aux"
+        ],
+        [
+          5,
+          "auxpass"
+        ],
+        [
+          5,
+          "csubj"
+        ],
+        [
+          5,
+          "dobj"
+        ],
+        [
+          5,
+          "mark"
+        ],
+        [
+          5,
+          "nsubj"
+        ],
+        [
+          5,
+          "nsubjpass"
+        ],
+        [
+          5,
+          "obj"
+        ],
+        [
+          5,
+          "oprd"
+        ],
+        [
+          5,
+          "pobj"
+        ],
+        [
+          5,
+          "prep"
+        ],
+        [
+          5,
+          "root"
+        ],
+        [
+          10,
+          "semantic.legal_condition"
+        ],
+        [
+          10,
+          "semantic.legal_exception"
+        ],
+        [
+          10,
+          "semantic.legal_transition"
+        ],
+        [
+          10,
+          "semantic.normative_relation"
+        ],
+        [
+          11,
+          "legal.activation_condition_candidate"
+        ],
+        [
+          11,
+          "legal.amendment"
+        ],
+        [
+          11,
+          "legal.cessation"
+        ],
+        [
+          11,
+          "legal.commencement"
+        ],
+        [
+          11,
+          "legal.commencement_candidate"
+        ],
+        [
+          11,
+          "legal.exception_candidate"
+        ],
+        [
+          11,
+          "legal.repeal"
+        ],
+        [
+          11,
+          "normative.obligation"
+        ],
+        [
+          11,
+          "normative.permission_candidate"
+        ],
+        [
+          11,
+          "normative.prohibition"
+        ],
+        [
+          12,
+          "bearer"
+        ],
+        [
+          12,
+          "condition"
+        ],
+        [
+          12,
+          "conduct"
+        ],
+        [
+          12,
+          "exception"
+        ],
+        [
+          12,
+          "host"
+        ],
+        [
+          12,
+          "legal_object"
+        ],
+        [
+          12,
+          "object"
+        ],
+        [
+          12,
+          "transition"
+        ],
+        [
+          13,
+          "condition_attachment_unresolved"
+        ],
+        [
+          13,
+          "effective_time_unresolved"
+        ],
+        [
+          13,
+          "exception_attachment_unresolved"
+        ],
+        [
+          13,
+          "exception_burden_unresolved"
+        ],
+        [
+          13,
+          "jurisdiction_unresolved"
+        ],
+        [
+          13,
+          "legal_object_identity_unresolved"
+        ],
+        [
+          13,
+          "legal_time_unresolved"
+        ],
+        [
+          13,
+          "modal_sense_unresolved"
+        ],
+        [
+          13,
+          "norm_bearer_unresolved"
+        ],
+        [
+          13,
+          "normative_scope_unresolved"
+        ],
+        [
+          14,
+          "parser.role_participant"
+        ]
+      ],
+      "numeric_tokens": [
+        {
+          "token_id": 1,
+          "orth_id": 1,
+          "lemma_id": 2,
+          "pos_id": 21,
+          "tag_id": 0,
+          "dependency_id": 36,
+          "head_token_id": 1,
+          "morph_set_id": null,
+          "start_char": 0,
+          "end_char": 2
+        }
+      ],
+      "closure": {
+        "objects": [],
+        "factors": [],
+        "demands": [],
+        "measure": {
+          "node_count": 0,
+          "edge_count": 0,
+          "unresolved_count": 0,
+          "boundary_demand_weight": 0.0,
+          "encoded_byte_count": 80,
+          "rule_count": 3,
+          "closure_rounds": 1,
+          "promoted_object_count": 0,
+          "interface_cardinality": 0
+        }
+      },
+      "missing_original_tag_count": 1
+    }
+  ],
+  "sentence_local_database_crossings": 0,
+  "production_parser_token_writes": 0,
+  "candidate_only": true,
+  "governed_identity_paid": false,
+  "level_three_paid": false,
+  "direct_production_activation_paid": false
+}

@@ -7,6 +7,7 @@ rust-version.workspace = true
 
 [dependencies]
 sensiblaw-core = { path = "../sl-core" }
+sensiblaw-pg-source-store = { path = "../sl-pg-source-store" }
 sensiblaw-world-store = { path = "../sl-world-store" }
 sha2 = "0.10"
 thiserror = "1"

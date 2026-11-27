@@ -47,6 +47,10 @@ pub enum RepairAssessmentError {
     MissingWitness,
     #[error("a modeled assessment cannot grant or perform an external source edit")]
     UnauthorizedEdit,
+    #[error("repair erased source support/counter-support or silently discarded unresolved evidence")]
+    EvidenceErasure,
+    #[error("comparison attempted to promote truth, identity, independence or semantic authority")]
+    Promotion,
 }
 fn debt_key(r:&ComparisonResidual)->String{
     // Reproducible, lossless key using all relevant coordinates.
@@ -77,6 +81,24 @@ pub fn assess_bounded_repair(
         || proposal.preservation_producer_ref.trim().is_empty()
         || proposal.rerun_receipt_ref.trim().is_empty()
     {return Err(RepairAssessmentError::MissingWitness);}
+    for comparison in [before,after] {
+        if comparison.creates_semantic_authority || comparison.merges_sources
+            || comparison.proves_independence || comparison.claim_truth_promoted {
+            return Err(RepairAssessmentError::Promotion);
+        }
+    }
+    // A shrinking debt set is not a repair if its improvement was achieved
+    // by dropping a counter-source, support-source, or unexplained unknown.
+    // Unknown may become explicitly classified; existing signed evidence
+    // must remain visible in this modeled comparison.
+    if before.positive_support_refs.iter().any(|r| !after.positive_support_refs.contains(r))
+        || before.counter_support_refs.iter().any(|r| !after.counter_support_refs.contains(r))
+        || before.explicit_unknown_refs.iter().any(|r|
+            !after.explicit_unknown_refs.contains(r)
+            && !after.positive_support_refs.contains(r) && !after.counter_support_refs.contains(r))
+    {
+        return Err(RepairAssessmentError::EvidenceErasure);
+    }
     let x=debts(before);
     let y=debts(after);
     let eliminated=x.difference(&y).cloned().collect::<Vec<_>>();
@@ -154,6 +176,16 @@ mod tests{
         assert!(result.strictly_improves_checked_debt);
         assert_eq!(result.discharged_obligations.len(),1);
         assert!(!result.applies_external_edit);
+    }
+    #[test]fn signed_evidence_cannot_be_erased_to_reduce_debt(){
+        let mut before=compare("a",&["x","y"]);
+        before.counter_support_refs.push("obs:B".into());
+        let after=compare("b",&["y"]);
+        assert_eq!(assess_bounded_repair(&before,&after,&candidate()),
+            Err(RepairAssessmentError::EvidenceErasure));
+        let mut after=after;
+        after.counter_support_refs=before.counter_support_refs.clone();
+        assert!(assess_bounded_repair(&before,&after,&candidate()).unwrap().strictly_improves_checked_debt);
     }
     #[test]fn new_regression_blocks_no_worsening_claim(){
         let result=assess_bounded_repair(&compare("a",&["x"]),

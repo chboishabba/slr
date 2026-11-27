@@ -107,7 +107,7 @@ fn canonicalize_string_set(values: &mut Vec<String>) {
     values.dedup();
 }
 
-fn canonical_review_item_for_persistence(mut item: ReviewItem) -> ReviewItem {
+pub(crate) fn canonical_review_item_for_persistence(mut item: ReviewItem) -> ReviewItem {
     canonicalize_string_set(&mut item.provenance_refs);
     canonicalize_string_set(&mut item.source_refs);
     canonicalize_string_set(&mut item.affected_consumer_refs);
@@ -151,6 +151,12 @@ pub fn install_review_workstation_schema(
     config: &DatabaseConfig,
 ) -> Result<(), ReviewWorkstationStoreError> {
     let mut client = Client::connect(config.database_url(), NoTls)?;
+    install_review_workstation_on_client(&mut client)
+}
+
+pub(crate) fn install_review_workstation_on_client(
+    client:&mut impl GenericClient,
+)->Result<(),ReviewWorkstationStoreError>{
     client.batch_execute(
         r#"
         CREATE SCHEMA IF NOT EXISTS semantic;
@@ -206,7 +212,7 @@ pub fn install_review_workstation_schema(
     Ok(())
 }
 
-fn same_review_projection_shape(expected: &ReviewItem, loaded: &ReviewItem) -> bool {
+pub(crate) fn same_review_projection_shape(expected: &ReviewItem, loaded: &ReviewItem) -> bool {
     expected.review_item_ref == loaded.review_item_ref
         && expected.semantic_ref == loaded.semantic_ref
         && expected.item_kind == loaded.item_kind
@@ -286,6 +292,42 @@ pub(crate) fn persist_review_projection_item_with_client(
         return Err(ReviewWorkstationStoreError::ExistingRowConflict);
     }
     Ok(loaded)
+}
+
+/// Existing S29 writer reused by source-bound dependent sidecars inside the
+/// *same* caller-owned transaction. Validation and immutable review coordinates
+/// remain owned here; sidecars never reimplement the review schema.
+pub(crate) fn persist_review_projection_on_tx(
+    tx: &mut impl GenericClient,
+    item: &ReviewItem,
+) -> Result<ReviewItem, ReviewWorkstationStoreError> {
+    let item = canonical_review_item_for_persistence(item.clone());
+    item.validate().map_err(|_| ReviewWorkstationStoreError::InvalidDomainObject)?;
+    tx.execute(
+        r#"INSERT INTO semantic.review_item
+            (review_item_ref, semantic_ref, item_kind_ref, reason, current_status_ref,
+             candidate_only, creates_semantic_authority, applicability_promoted, claim_truth_promoted)
+           VALUES ($1,$2,$3,$4,$5,TRUE,FALSE,FALSE,FALSE)
+           ON CONFLICT (review_item_ref) DO NOTHING"#,
+        &[&item.review_item_ref, &item.semantic_ref, &kind_db(item.item_kind),
+          &item.reason, &status_db(item.current_status)],
+    )?;
+    persist_refs(tx,"semantic.review_item_provenance","provenance_ref",
+                 &item.review_item_ref,&item.provenance_refs)?;
+    persist_refs(tx,"semantic.review_item_source","source_ref",
+                 &item.review_item_ref,&item.source_refs)?;
+    let action_refs=item.available_actions.iter()
+        .map(|action|action_db(*action).to_owned()).collect::<Vec<_>>();
+    persist_refs(tx,"semantic.review_item_action","action_ref",
+                 &item.review_item_ref,&action_refs)?;
+    persist_refs(tx,"semantic.review_item_consumer","consumer_ref",
+                 &item.review_item_ref,&item.affected_consumer_refs)?;
+    let stored=load_review_item_with_client(tx,&item.review_item_ref)?
+        .ok_or(ReviewWorkstationStoreError::ExistingRowConflict)?;
+    if !same_review_projection_shape(&item,&stored) {
+        return Err(ReviewWorkstationStoreError::ExistingRowConflict);
+    }
+    Ok(stored)
 }
 
 pub fn persist_review_item(
@@ -427,7 +469,7 @@ fn persist_review_receipt_with_client(
 ) -> Result<(), ReviewWorkstationStoreError> {
     validate_review_receipt(receipt)?;
     let (effect_ref, effect_value_ref) = effect_row(&receipt.effect);
-    client.execute(
+    let inserted=client.execute(
         r#"
         INSERT INTO semantic.review_receipt
           (command_ref, review_item_ref, semantic_ref, reviewer_ref, action_ref,
@@ -446,11 +488,27 @@ fn persist_review_receipt_with_client(
             &effect_value_ref,
         ],
     )?;
-    if let Some(status) = receipt_status_after_effect(&receipt.effect) {
-        client.execute(
-            "UPDATE semantic.review_item SET current_status_ref=$2 WHERE review_item_ref=$1",
-            &[&receipt.review_item_ref, &status],
-        )?;
+    let row=client.query_one(
+        "SELECT review_item_ref,semantic_ref,reviewer_ref,action_ref,effect_ref,effect_value_ref,
+                candidate_only,creates_semantic_authority,applicability_promoted,claim_truth_promoted
+         FROM semantic.review_receipt WHERE command_ref=$1",&[&receipt.command_ref])?;
+    if row.get::<_,String>(0)!=receipt.review_item_ref
+        ||row.get::<_,String>(1)!=receipt.semantic_ref
+        ||row.get::<_,String>(2)!=receipt.reviewer_ref
+        ||row.get::<_,String>(3)!=action_db(receipt.action)
+        ||row.get::<_,String>(4)!=effect_ref
+        ||row.get::<_,Option<String>>(5)!=effect_value_ref
+        ||!row.get::<_,bool>(6)||row.get::<_,bool>(7)||row.get::<_,bool>(8)||row.get::<_,bool>(9){
+        return Err(ReviewWorkstationStoreError::ExistingRowConflict);
+    }
+    // An immutable old command must not overwrite a later review state.
+    if inserted==1 {
+        if let Some(status) = receipt_status_after_effect(&receipt.effect) {
+            client.execute(
+                "UPDATE semantic.review_item SET current_status_ref=$2 WHERE review_item_ref=$1",
+                &[&receipt.review_item_ref, &status],
+            )?;
+        }
     }
     Ok(())
 }
@@ -513,7 +571,7 @@ fn load_refs(
         .collect())
 }
 
-fn load_review_item_with_client(
+pub(crate) fn load_review_item_with_client(
     client: &mut impl GenericClient,
     item_ref: &str,
 ) -> Result<Option<ReviewItem>, ReviewWorkstationStoreError> {

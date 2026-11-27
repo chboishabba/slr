@@ -1,3 +1,7 @@
+mod official_primary_manifestation_document_pnf_overlap;
+pub use official_primary_manifestation_document_pnf_overlap::*;
+mod official_primary_manifestation_coverage_domain;
+pub use official_primary_manifestation_coverage_domain::*;
 mod workbench_projection;
 pub use workbench_projection::*;
 mod cache_first;
@@ -7,6 +11,8 @@ mod chronology_contestation_store;
 mod candidate_pnf;
 mod relational_interlingua;
 mod relational_interlingua_store;
+mod relational_family;
+pub use relational_family::*;
 mod scoped_soft_type;
 mod bounded_repair_assessment;
 mod runtime_witness_certificate;
@@ -35,6 +41,21 @@ mod proposition_rows;
 mod reviewed_pnf;
 mod reviewed_source_expansion;
 mod review_workstation_store;
+mod native_antecedent_review;
+mod native_antecedent_frontier;
+mod native_antecedent_named_topic;
+mod native_source_local_consumer;
+mod numeric_pnf_native;
+mod numeric_pnf_operator;
+mod numeric_pnf_source_bridge;
+mod numeric_pnf_owner;
+mod numeric_pnf_sql;
+mod numeric_pnf_parser_plan;
+mod numeric_pnf_parser_store;
+mod numeric_pnf_pipeline;
+mod numeric_pnf_identity_audit;
+mod numeric_pnf_endpoint_replay;
+pub use numeric_pnf_endpoint_replay::{prepare_native_endpoint_replay,NativeEndpointReplaySession,NativeEndpointReplayError};
 mod statement_pnf_spine;
 mod generic_source_compiler;
 mod source_candidate_persistence;
@@ -44,6 +65,23 @@ mod transcript_chat_correspondence;
 mod mixed_source_review;
 mod correspondence_review_store;
 mod wikidata_ontology_review;
+mod epistemic_deliberation;
+mod epistemic_deliberation_store;
+pub use epistemic_deliberation_store::{
+    DeliberationSourceSeal, DeliberationEventAnchor, DeliberationSourceInput, PersistedDeliberation, DeliberationStoreError,
+    DELIBERATION_SIDECAR_SQL, validate_deliberation_source_seals,
+    validate_deliberation_event_anchors,
+    persist_deliberation_diagnostic, persist_deliberation_from_source_inputs,
+    persist_deliberation_source_replay_json,
+    load_deliberation_diagnostic_scoped,
+    apply_deliberation_diagnostic_review,
+};
+pub use epistemic_deliberation::{
+    assess_deliberation, project_s29_diagnostic_review_item,
+    DeliberationAssessment, DeliberationError, DeliberationEvent,
+    DeliberationHold, DeliberationJudgement, DeliberationKind,
+    DeliberationPacket, DELIBERATION_SCHEMA,
+};
 mod jmail_adapter;
 mod plain_text_document_adapter;
 mod long_document_ingest_store;
@@ -78,7 +116,7 @@ pub use cache_first::{
 pub use investigation_acquisition_store::{
     INVESTIGATION_ACQUISITION_SQL, DurableAcquisitionQueue,
     InvestigationStoreError, persist_acquisition_queue,
-    load_acquisition_queue, persist_acquisition_update,
+    load_acquisition_queue, persist_acquisition_update, AcquisitionLifecycle, load_acquisition_lifecycle,
 };
 pub use investigation_acquisition::{
     RecordAvailability, AccessDisposition, EvidenceIndependence,
@@ -112,14 +150,14 @@ pub use relational_interlingua_store::{
     load_relational_comparison,
 };
 pub use relational_interlingua::{
-    RELATIONAL_INTERLINGUA_SCHEMA, SourceFamily as RelationalSourceFamily, RelationalObservation,
+    RELATIONAL_INTERLINGUA_SCHEMA, STRICT_RELATIONAL_INTERLINGUA_SCHEMA, SourceFamily as RelationalSourceFamily, RelationalObservation,
     RoleBinding, RoleTypeHypothesis, RoleTypeDemand, ObservationContext,
     Polarity, RelationalConsumer,
     LicensedAlignment, AlignmentDirection, ComparisonFinding,
     ResidualKind, ComparisonResidual, RelationalComparison,
     RelationalComparisonError, observation_from_candidate_pnf,
     observation_from_native_wikidata,
-    compare_relational_observations,
+    compare_relational_observations, compare_relational_observations_strict,
 };
 pub use candidate_pnf::{
     CandidatePnfBatch, CandidatePnfError, CandidatePnfFactor, CandidatePnfProducer,
@@ -237,6 +275,79 @@ pub use reviewed_pnf::{
     ReviewedPnfMaterializationError, ReviewedPnfMaterializationReceipt, ReviewedPnfRevision,
     ReviewedPnfValidationError,
 };
+pub use numeric_pnf_parser_store::{
+    persist_original_numeric_parser_plan,
+    NumericParserStoreError, NumericParserStoreReceipt,
+};
+pub use numeric_pnf_identity_audit::{
+    audit_original_numeric_identity_for_source_answer, certify_original_focus_identity, NativeFocusIdentityCertification,
+    reuse_original_binding_and_identity_owners, OriginalOwnerReuseReceipt,
+    reopen_native_original_relation_packet, reopen_native_original_relation_packet_with_focus, compare_native_original_relation_reference, query_native_original_relations, query_native_recorded_factor_consumer, query_native_demand_fibre, probe_authenticated_native_query_admission,
+    NativeNumericAuditError, NativeNumericIdentityAudit,
+    NumericDemandWorldStatus, NativeNumericRetractionReceipt,
+    retract_original_numeric_identity_for_source_answer,
+    transport_original_numeric_candidates_for_source_answer, NativeNumericCandidateTransportReceipt,
+    transport_original_numeric_candidates_for_source_answer_with_partition, NativePartitionWakeReceipt,
+};
+pub use numeric_pnf_pipeline::{
+    compile_direct_numeric_candidates,inspect_direct_numeric_source_slice,stage_direct_numeric_source_slice,
+    DirectNumericCandidateSlice,DirectNumericSentenceCandidate,DirectNumericStagingReceipt,
+    run_native_numeric_exact_source_slice, run_native_numeric_prefix_slice, deterministic_numeric_run_ref,
+    NumericPipelineError, NumericPipelineReceipt,
+};
+pub use numeric_pnf_parser_plan::{
+    plan_original_native_numeric_parser, NativeNumericParserTokenPlan,
+    NativeNumericParserEntityPlan,
+    NativeNumericParserSentencePlan, NativeNumericParserPlan,
+    NumericParserPlanError,
+};
+pub use numeric_pnf_sql::{
+    publish_original_numeric_sentence, read_original_numeric_candidate_fibre,
+    NumericMdlWeights,
+    NumericPublishedSentence, NumericSentenceLease, NumericSqlError,
+};
+pub use numeric_pnf_owner::{
+    NumericOwnerKey, NumericOwnerRuntime,
+    NumericOwnerWorkReceipt, NumericWorkBudget,
+};
+pub use numeric_pnf_source_bridge::{
+    load_exact_native_numeric_evidence, prepare_native_prefix_recovery, publish_native_prefix_heading_repair,
+    NativePrefixRecoveryReceipt, NativeNumericSourceError,
+    OriginalNativeNumericEvidence, OriginalNumericSentenceFibre,
+    OriginalNumericRawToken, OriginalNumericRawEntity,
+};
+pub use numeric_pnf_operator::{
+    compose_numeric_sentence_native, strict_numeric_digest,
+    validate_native_numeric_sentence_closure,
+    NativeDemand, NativeFactor, NativeObject, NativeSentenceClosure,
+    NativeSentenceMeasure, NativeSlot, NumericDigestValue,
+    NumericOperatorError, NumericOperatorLexicon, NumericToken,
+};
+pub use numeric_pnf_native::{
+    checked_numeric_proposal_owner, reduce_canonical, typed_canonical_sha256,
+    CandidateFibre, DependencyMode,
+    NativeManifest, NativeReduction, NativeWorkCounter, NumericPnfError,
+};
+pub use native_source_local_consumer::{
+    compile_native_source_local_answer, evaluate_native_source_local_replay,
+    NativeSourceLocalAnswer, NativeSourceAnswerReplay,
+};
+pub use native_antecedent_named_topic::{
+    derive_native_named_topic, NamedTopicMention, NativeNamedTopicInference,
+    NativeNamedTopicError, NAMED_TOPIC_POLICY,
+};
+pub use native_antecedent_frontier::{
+    native_antecedent_frontier, native_antecedent_parser_runs,
+    NativeAntecedentFrontier, NativeAntecedentFrontierError,
+    NativeCandidateNomination, NativeParserRunCoverage,
+};
+pub use native_antecedent_review::{
+    inspect_native_antecedent_review, prepare_native_antecedent_review,
+    validate_native_antecedent_candidate, NativeAntecedentReviewError,
+    NativeAntecedentReviewInspection, NativeAntecedentReviewProposal,
+    NativeAntecedentSourceCandidate, NativeReviewSentence, NativeSourceMention,
+    NativeSourceSpan,
+};
 pub use review_workstation_store::{
     apply_persisted_review_command, install_review_workstation_schema,
     load_review_queue, load_review_item, persist_review_item, persist_review_receipt,
@@ -257,7 +368,9 @@ pub use reviewed_source_expansion::{
 };
 pub use statement_pnf_spine::{
     compile_initial_intake_statement, compile_research_reentry_statement,
-    compile_statement_pnf, review_statement_parse, ParseReviewDisposition,
+    compile_statement_pnf, compile_statement_pnf_with_parser_evidence,
+    compile_db_statement_pnf_checked, DbStatementPnfCheckedError,
+    review_statement_parse, ParseReviewDisposition,
     ReviewedStatementPnf, SourceStatementEnvelope, StatementCandidatePnf,
     StatementOrigin, StatementParseReview, StatementPnfSpineError,
 };
@@ -328,11 +441,13 @@ pub use jmail_adapter::{
 };
 pub use plain_text_document_adapter::{
     build_plain_text_long_document_source, build_plain_text_long_source_with_family,
+    extend_plain_text_heading_exclusions,
     PlainTextDocumentAdapterError, PlainTextSegmentationReceipt,
 };
 pub use long_document_ingest_store::{
     install_long_document_ingest_schema, load_long_document_ingest_receipt,
     load_long_document_regions, load_long_document_structure,
+    load_source_partition_changes, SourcePartitionChange, SourcePartitionInsertedRegion, HeadingPartitionPublication,
     persist_long_document_compilation, persist_long_document_structure,
     LongDocumentIngestStoreError, PersistedLongDocumentIngestReceipt,
     PersistedLongDocumentRegion, PersistedLongDocumentStructureRegion,
@@ -353,13 +468,13 @@ pub use db_native_parser::{
     claim_parser_jobs, complete_parser_run, compilation_key,
     defer_parser_job_retry, enqueue_parser_regions,
     enqueue_parser_regions_with_content_reuse, install_db_native_parser_schema,
-    load_claimed_job_text,
+    load_claimed_job_text, load_parser_evidence_region, audit_candidate_pnf_evidence,
     parser_product_key, parser_run_ref, parser_run_state, persist_parser_residual,
     persist_parser_success, persist_parser_success_with_entities,
     renew_parser_job_lease, start_parser_run, ClaimedParserJob,
     DbNativeParserError, DbNativeParserSnapshot, DbNativeParserWriter, ParserArtifactRecord,
     ParserEnqueueReceipt, ParserEntityRecord, ParserRegionJobSpec, ParserRunReceipt, ParserRunState,
-    ParserTokenRecord,
+    ParserTokenRecord, ParserEvidenceRegion,
     PersistedParserOutputReceipt, DB_NATIVE_PARSER_SCHEMA_SQL,
 };
 pub use db_native_long_document::{
@@ -421,3 +536,6 @@ mod public_gwb_capstone_manifest_api_tests {
         let _ = std::any::TypeId::of::<GwbTemporalForm>();
     }
 }
+
+/// Independent referee coordinate used by the native query admission endpoint.
+pub use sensiblaw_formal_proof_bridge::RefereeReceiptLocator;

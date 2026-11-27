@@ -1,11 +1,55 @@
 # SensibLaw / SLR Production Roadmap
 
-**Production implementation:** `chboishabba/slr`  
-**Golden semantic/reference contracts:** `chboishabba/dashi_agda`
+**Active P0 sprint:** [ITIR informational equivalence, wiki repair and automatic proving](roadmap/itir_informational_equivalence_maxcut_20261126.md). This controls the integrated user-story roadmap, donor disposition, phases D01–D08 and consolidated acceptance. Existing GWB and producer-conformance roadmaps remain supporting owner documents.
 
-SLR is the production SensibLaw runtime. DASHI/Agda is the golden semantic and
-architectural reference. The old Python SensibLaw code remains useful product
-and historical evidence, but it is not the production runtime authority.
+## 2026-11-26 — maximum-cut result inspection and exact evidence reopening
+
+The published v8 receipt was independently read in full from 0671a9c and its actual key sets checked (not inferred from counts). Compact derived inspection: [v8-receipt-inspection.json](../../artifacts/gwb/v8-receipt-inspection.json). 378 indexed object IDs and 124 outside-index object IDs are disjoint; their union exactly equals 502 live kind-1 keys; zero refutations. H3 and H9 each have 466 zero-phase and 36 negative-phase keys; signs are not semantic refutations. Actual inverse coverage of original index members: entity 378/378, eventuality 36/36, proposition 4/4. The rollback-only fibre contains 18 classes over 30 objects, 472 unresolved keys including 3 conflicting objects; it does not pay focus identity. Three multihead spans [110,134), [205,215), [916,932) have actual head multiplicities 3,2,2. The source-local focus has zero persisted focus-factor arguments in the rollback probe. No new native runtime or kernel result was executed here.
+
+Rechecked Agda master f3af3c036c58: QueryFactorisationSufficiency.FactorsThrough is query-indexed, not world coverage; ConsumerFibreRepairExact separation is necessary not sufficient; ProofRelevantIdentityFibres requires admitted witness with matching source/entity/authority and unit multiplicity; IdentityEvidenceProduction disallows proximity and uncorroborated name expansion. Existing formal constructors suffice for the next evidence cut; no new theorem family. SensibLaw main f9c4670e read-only; SLR #5 relation attachment and #62 consumer parity remain donors, not default replacement runtimes.
+
+Implementation pushed: 134c19b reopens exact persisted relation crosswalk from existing execution.slr_native_relation_reduction owner using numeric run/document/snapshot/packet digest, checks original typed digest, immutable raw source bytes and atom inverse, no DB writes. relation-compare accepts an independently supplied comparison packet, requires identical source/producer/scope coordinates and emits exact ordered structural differences (128 examples max; total counted); it cannot authenticate supplied producer or pay authority. ef431df preserves actual per-head morphology feature observations and all-head mismatch/agreement observations with nonempty guard; no head choice or automatic refutation. Endpoint dossier now carries actual all-kind original binding-member inverses, and exact represented-object/index partition. No production promotion. These are source-written, new Rust tests not executed here.
+
+Original TAG residual is genuine: current historical SLR worker scripts/scale1_spacy_json_parser.py artifact_for_doc omits tag; existing original_artifact_tags validates actual original artifact TAG and all inverse coordinates. Do not invent old TAG or silently change old run. An independently versioned refined parser observation would be separate evidence; alternatively prove exact consumer-relative irrelevance where possible. The independent relation reference is still absent. Reopen the packet with:
+```bash
+target/debug/sensiblaw numeric-pnf-native relation-reopen \
+  'slr-native-numeric-run:sha256:b165d42870fc0afecdc101ea8919e5c3290b0b53b4556d51b42a9f85ae8e2737' \
+  'document:sha256:7ff2ec8ffe6243871ad682e7d7060fe3b84025fb15dbe229154d7aa7f6a72b30' \
+  'slr-native-binding-index:v2:ade35c2f34e88f4ad805571dc259f66b186c82c700e6f477c863e172336eb1af' \
+  b48b875c72a98eeac24d5835c4baef28d6d7944deb0acf55cb076ec216df7828
+```
+Original result inspection belongs to the coordinating assistant: operator runs bounded local native commands and publishes actual receipts; assistant reads those receipts and determines the next cut. Do not request the operator to manually interpret results. Still unpaid: independent exact relation reference (including original TAG or explicit consumer-specific proof), actual typed dispositions/coverage across all alternatives, current original focus witness and L3 publication, integrated candidate replay and selective current authority/direct hierarchy activation. No source repair or old staging rerun. No prototype edits, main changes, CI.
+
+## 2026-11-26 — v8 source repair and finite typed projection accepted; governed cut remains
+
+Operator's Lean fix [200d642cc](https://github.com/chboishabba/dashi_lean4/commit/200d642ccab2efdccef1cf80d232cf1e572e15b7) supplies lawful CandidateKey BEq and unfolds the exact checked-refutation predicate; subsequent [fda5cf8](https://github.com/chboishabba/dashi_lean4/commit/fda5cf8f53ff845bb3bc250aa79abfcfbd2d3f3c) scopes maxRecDepth=1000000 to the generated finite theorem. Operator reports formal build and NATIVE_TYPED_EVIDENCE_GOLDEN_OK, repaired proofs no sorryAx. SLR [8bc2f81](https://github.com/chboishabba/slr/commit/8bc2f81) matches the exact generated proof source including recursion option and fixes SQL UNION lane smallint types. Operator reports 50/50 native tests and successful endpoint. Verified published [v8 endpoint packet 0671a9c](https://github.com/chboishabba/slr/blob/0671a9cd7780ccc6f81d19a9467043750031a6e9/native-numeric-binding-v8-endpoint.json), schema slr-native-antecedent-endpoint-v1. The earlier zero-lease blocker is superseded by actual complete prefix readback; its precise repair commit was not separately identified.
+
+**Paid:** original source/parser prefix repair [230,2215) and [2660,3603), 52 added regions in partition 0033b32f…; 76/76 succeeded, both coverage flags true, both gap lists empty, 975 source observations, exact entity membership/inverse; partition already acknowledged for [0,4693). Demand 22165, source object 72766, same original source/revision/parser and focus [4534,4536]. Lean typed projection kernel receipt true, 502 represented = 502 live, zero refuted, all kind 1. H3/H6 represented slice drained; original consumer authority reconciliation true with no durable debt (candidate-only, not governed focus authority). Original rollback probe admitted 71 source witnesses in rollback scope, 18 classes and 3 conflicting objects in probe projection, direct and supported Level-3 derivations with nonvacuous withdrawal/restore; focus identity false, persisted false. Do not confuse probe witness admission with a durable focus witness. Preserve earlier direct candidate acceptance f974e9e separately.
+
+**Exact remaining max-cut after repaired prefix:** dossier blockers original_typed_coverage_witness_unpaid, outside_model_possible, full_original_relation_parity_unpaid, scalar_morphology_head_residual, transported_objects_outside_typed_index_not_refuted. 378 entity-index members (64 retained, 314 deferred), 124 transported objects outside index, 36 eventuality and 4 proposition index members, four reference alternatives including expletive. 502 live object keys in current finite projection are not a complete all-kind live domain; index absence is NOT semantic refutation. Three multihead/headless morphology spans, 975 missing original TAG, 297 reconstructed relations/931 factors, independent reference not supplied; no independent supplied-prefix/whole-document relation parity. Native H9 ready work=1, semantic target/quality/contract/admitted need=0; nonadmission reason 10 recorded, provider not executed. Do not turn ready work into an external need or relabel antecedent as H9 source occurrence. Pay exact consumer-specific need only if actually required.
+
+**Next joined cut:** reuse existing original relation packet/crosswalk and independent reference owner (historical SensibLaw fixtures read-only; golden Agda/Lean, SLR implementation); resolve original TAG/morphology evidence or prove consumer-relative irrelevance, account for every outside-index and nonentity alternative via existing typed evidence/coverage contracts, preserve signed zero and open-world residuals. Use original proof-relevant class fibre, not merely one occurrence or highest score; existing covered_unique_class and CurrentFocusOwnerProof require actual complete coverage, no unresolved/conflicting classes, and independent bound owner evidence. Original focus factor argument and actual persisted supported substitution still unpaid (rollback probe showed one projected subject factor, no focus derivation). Only original witness and exact inverse/authority reconciliation can pay focus L3. Current result remains DERIVED_UNDER_NAMED_TOPIC_POLICY he -> Bush, S29 pending, governed identity/Level-3/external QID false. Do not rerun source repair or accepted one-sentence staging as substitute for remaining evidence.
+
+**Acceptance boundary:** published packet is a successful native endpoint invocation, not integrated v8 campaign acceptance: bounded_identity_parity=null, scoped_admission_parity=[], support_index=null, identity_execution_replay=null; no cold/warm endpoint comparison or full independent relation reference receipt in this packet. Keep integrated campaign, selective current authority publication/restoration and direct hierarchical activation open separately. No new runtime/kernel execution by this reconciliation; original operator receipts are the evidence. No SensibLaw implementation, no main changes, no CI.
+
+**Production implementation:** `chboishabba/slr`  
+**Golden mathematical/formal contracts:** `chboishabba/dashi_agda` and `chboishabba/dashi_lean4`
+
+SLR Rust/PostgreSQL is production; DASHI Agda and Lean are golden contracts.
+The old Python SensibLaw implementation is a deprecated, read-only prototype:
+use its historical provenance, pinned differential fixtures and interface semantics,
+not its runtime execution strategy. No new implementation in SensibLaw.
+PostgreSQL is the durable publication boundary, not a mandatory internal execution bus.
+The controlling [native PNF maximum-cut reconciliation](roadmap/gwb_native_antecedent_s29_review_20261123.md)
+separates legacy compatibility acceptance from golden direct production activation.
+
+## Accepted direct candidate milestone (2026-11-26)
+
+[f974e9e](https://github.com/chboishabba/slr/commit/f974e9e50deaeb68d342eab4632f04772d951afc) records exact bounded one-sentence candidate staging and warm zero recomputation/mutations. Operator reports 50/50 Rust + 1/1 CLI. Preserve this paid scope; v8 is blocked by a reported Lean compile defect, followed by genuine original source-gap repair and typed/governed witness obligations. See the [detailed maximum-cut roadmap](roadmap/gwb_native_antecedent_s29_review_20261123.md). No full direct activation or governed identity is paid.
+
+## Current native PNF execution disposition (2026-11-26)
+
+Direct source-addressed candidate composition, exact codec inverse and candidate staging/reopen are source-written on [SLR #78](https://github.com/chboishabba/slr/pull/78); see the [detailed maximum-cut state](roadmap/gwb_native_antecedent_s29_review_20261123.md). This is not full golden direct production activation. Current authority publication, hierarchy delta transport, independent typed parity/coverage and transactional reconciliation remain unpaid; no Rust/PostgreSQL/kernel acceptance executed here. The deprecated prototype is not a runtime dependency. Preserve the existing compatibility baseline separately.
 
 ## Program invariant
 
@@ -280,7 +324,7 @@ producer and independent comparator for the existing SLR/SensibLaw/ITIR world
 fabric. Integration must not create another canonical parser, PNF engine,
 semantic store, legal truth authority, reviewer, or fleet controller. SLR remains
 the production legal evidence/admission consumer; PostgreSQL is the canonical
-semantic persistence authority; DASHI/Agda is the golden reference; ITIR/MCP
+semantic persistence authority; DASHI Agda/Lean are the golden references; ITIR/MCP
 owns governed operation receipts and `itir-dioxus` M10/M11 owns new production
 user-facing projections. Producer agreement corroborates but does not prove;
 disagreement is preserved as a reviewable obligation.

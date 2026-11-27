@@ -306,7 +306,7 @@ pub fn finalize_db_native_long_document_with_candidate_commit_batch_size(
         return Err(DbNativeLongDocumentError::NotDocumentContentSource);
     }
 
-    let (document, structural) = build_plain_text_long_source_with_family(
+    let (legacy_document, mut structural) = build_plain_text_long_source_with_family(
         &envelope.source_ref,
         &envelope.source_revision_ref,
         &envelope.provider_ref,
@@ -318,15 +318,12 @@ pub fn finalize_db_native_long_document_with_candidate_commit_batch_size(
     )?;
 
     let persisted_structure = load_long_document_structure(config, &source_revision_ref)?;
-    if persisted_structure.len() != document.regions.len() {
-        return Err(DbNativeLongDocumentError::IncompleteDurablePartitionDetail(
-            format!(
-                "structural regions persisted={} reconstructed={}",
-                persisted_structure.len(),
-                document.regions.len()
-            ),
-        ));
-    }
+    let document = crate::long_document_ingest_store::reopen_heading_repaired_structure(
+        &legacy_document, &canonical_text, &persisted_structure,
+    )?;
+    structural.sentence_count = document.regions.iter()
+        .filter(|r| r.kind == DocumentRegionKind::Sentence).count();
+    structural.structural_region_count = document.regions.len();
 
     let attempted_regions = parser_state.succeeded + parser_state.residual;
     if attempted_regions != structural.sentence_count

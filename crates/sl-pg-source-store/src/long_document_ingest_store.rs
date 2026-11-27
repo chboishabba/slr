@@ -7,7 +7,8 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use postgres::{Client, NoTls};
+use postgres::{Client, NoTls, GenericClient};
+use sha2::{Digest, Sha256};
 use sensiblaw_core::source_ingest::{DocumentRegionKind, LongDocumentSource};
 use thiserror::Error;
 
@@ -65,6 +66,41 @@ CREATE TABLE IF NOT EXISTS ingest.lossless_compilation_receipt (
     claim_truth_promoted BOOLEAN NOT NULL,
     parse_failure_deletes_source BOOLEAN NOT NULL
 );
+
+-- The original tables remain the historical legacy partition. New
+-- partitions have their own receipts and assignments, with no legacy
+-- receipt overwrite or interpretation as current coverage.
+CREATE TABLE IF NOT EXISTS ingest.long_document_partition_revision (
+    source_revision_ref TEXT NOT NULL,
+    partition_ref TEXT NOT NULL,
+    previous_partition_ref TEXT,
+    source_digest_ref TEXT NOT NULL,
+    exact_region_count BIGINT NOT NULL CHECK (exact_region_count >= 0),
+    added_region_refs TEXT[] NOT NULL,
+    PRIMARY KEY (source_revision_ref, partition_ref)
+);
+CREATE TABLE IF NOT EXISTS ingest.long_document_partition_head (
+    source_revision_ref TEXT PRIMARY KEY,
+    partition_ref TEXT NOT NULL,
+    FOREIGN KEY (source_revision_ref, partition_ref)
+      REFERENCES ingest.long_document_partition_revision(source_revision_ref, partition_ref)
+);
+CREATE TABLE IF NOT EXISTS ingest.partition_region_compilation_assignment (
+    LIKE ingest.region_compilation_assignment INCLUDING DEFAULTS,
+    partition_ref TEXT NOT NULL,
+    PRIMARY KEY (source_revision_ref, partition_ref, region_ref),
+    FOREIGN KEY (source_revision_ref, partition_ref)
+      REFERENCES ingest.long_document_partition_revision(source_revision_ref, partition_ref),
+    FOREIGN KEY (source_revision_ref, region_ref)
+      REFERENCES ingest.long_document_region(source_revision_ref, region_ref)
+);
+CREATE TABLE IF NOT EXISTS ingest.partition_lossless_compilation_receipt (
+    LIKE ingest.lossless_compilation_receipt INCLUDING DEFAULTS,
+    partition_ref TEXT NOT NULL,
+    PRIMARY KEY (source_revision_ref, partition_ref),
+    FOREIGN KEY (source_revision_ref, partition_ref)
+      REFERENCES ingest.long_document_partition_revision(source_revision_ref, partition_ref)
+);
 "#;
 
 #[derive(Debug, Error)]
@@ -85,6 +121,8 @@ pub enum LongDocumentIngestStoreError {
     ReceiptRoundTripMismatch,
     #[error("persisted long-document structure differs from supplied canonical structure")]
     StoredStructureMismatch,
+    #[error("partition revision changed or current partition is not yet compiled")]
+    PartitionNotCurrent,
 }
 
 
@@ -120,6 +158,8 @@ pub struct PersistedLongDocumentRegion {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PersistedLongDocumentIngestReceipt {
+    /// None denotes the original immutable legacy partition.
+    pub partition_ref: Option<String>,
     pub source_ref: String,
     pub source_revision_ref: String,
     pub region_count: usize,
@@ -225,6 +265,236 @@ pub fn install_long_document_ingest_schema(
 }
 
 
+/// Stable partition identity over source revision and exact structural tuples,
+/// not merely source bytes or the number of regions. Field lengths make the
+/// digest unambiguous; region ordering is canonical and independent of IO.
+fn partition_ref(document: &LongDocumentSource) -> String {
+    let mut h = Sha256::new();
+    fn field(h: &mut Sha256, s: &str) {
+        h.update((s.len() as u64).to_be_bytes());
+        h.update(s.as_bytes());
+    }
+    field(&mut h, "slr-long-document-partition:v1");
+    field(&mut h, &document.ingest.source_revision_ref);
+    field(&mut h, &document.ingest.content_digest_ref);
+    let mut regions = document.regions.iter().collect::<Vec<_>>();
+    regions.sort_by(|a,b| a.region_ref.cmp(&b.region_ref));
+    for r in regions {
+        field(&mut h, &r.region_ref);
+        field(&mut h, if r.parent_region_ref.is_some() { "parent" } else { "root" });
+        field(&mut h, r.parent_region_ref.as_deref().unwrap_or(""));
+        field(&mut h, region_kind_db(r.kind));
+        h.update(r.start_char.to_be_bytes());
+        h.update(r.end_char.to_be_bytes());
+    }
+    format!("long-document-partition:sha256:{:x}", h.finalize())
+}
+
+fn lock_partition(client: &mut impl GenericClient, revision: &str)
+    -> Result<(), LongDocumentIngestStoreError>
+{
+    client.query_one("SELECT pg_advisory_xact_lock(hashtext('slr-long-document-partition:v1'), hashtext($1))", &[&revision])?;
+    Ok(())
+}
+
+fn active_partition(client: &mut impl GenericClient, revision: &str)
+    -> Result<Option<String>, LongDocumentIngestStoreError>
+{
+    Ok(client.query_opt("SELECT partition_ref FROM ingest.long_document_partition_head WHERE source_revision_ref=$1",
+        &[&revision])?.map(|row| row.get(0)))
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct HeadingPartitionPublication {
+    pub source_revision_ref: String,
+    pub source_digest_ref: String,
+    pub previous_partition_ref: String,
+    pub partition_ref: String,
+    pub added_region_refs: Vec<String>,
+    pub exact_region_count: usize,
+    pub candidate_only: bool,
+    pub typed_coverage_paid: bool,
+}
+
+/// Publish a checked additive repair into the existing structural ledger.
+/// Explicitly called by a future integrated prefix runner, not by default
+/// legacy ingestion. Publication and partition head are one transaction.
+/// Caller must complete parser-job and consumer invalidation welds before
+/// using this as a production campaign.
+pub(crate) fn publish_heading_partition(
+    config: &DatabaseConfig,
+    legacy: &LongDocumentSource,
+    canonical_text: &str,
+    selected_paragraph_refs: &[String],
+    parser_run_ref: &str,
+    prefix_end_char: u64,
+) -> Result<HeadingPartitionPublication, LongDocumentIngestStoreError> {
+    let revision = &legacy.ingest.source_revision_ref;
+    let mut db = Client::connect(config.database_url(), NoTls)?;
+    db.batch_execute(LONG_DOCUMENT_INGEST_SCHEMA_SQL)?;
+    let mut tx = db.transaction()?;
+    tx.batch_execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE; SET LOCAL lock_timeout='5000ms'; SET LOCAL statement_timeout='90000ms'")?;
+    lock_partition(&mut tx, revision)?;
+    // The canonical bytes must be reopened from the original source owner,
+    // not supplied as an independent manifestation by the caller.
+    let row = tx.query_one("SELECT c.payload,g.content_digest_ref FROM ingest.generic_source_revision g
+        JOIN corpus.document d ON d.document_ref=g.document_ref
+        JOIN corpus.canonical_content c ON c.canonical_ref=d.canonical_ref
+        WHERE g.source_revision_ref=$1 AND g.source_ref=$2 AND g.candidate_only
+          AND NOT g.creates_semantic_authority AND NOT g.applicability_promoted AND NOT g.claim_truth_promoted",
+        &[&revision, &legacy.ingest.source_ref])?;
+    let bytes: Vec<u8> = row.get(0);
+    let digest: String = row.get(1);
+    if bytes.as_slice() != canonical_text.as_bytes() || digest != legacy.ingest.content_digest_ref {
+        return Err(LongDocumentIngestStoreError::StoredStructureMismatch);
+    }
+    let stored = load_structure_with_client(&mut tx, revision)?;
+    let before = reopen_heading_repaired_structure(legacy, canonical_text, &stored)?;
+    let previous = partition_ref(&before);
+    let head = active_partition(&mut tx, revision)?;
+    if head.as_ref().is_some_and(|r| r != &previous)
+        || (head.is_none() && before.regions.len() != legacy.regions.len()) {
+        return Err(LongDocumentIngestStoreError::PartitionNotCurrent);
+    }
+    let (after, added) = crate::plain_text_document_adapter::extend_plain_text_heading_exclusions(
+        &before, canonical_text, selected_paragraph_refs,
+    ).map_err(|_| LongDocumentIngestStoreError::StoredStructureMismatch)?;
+    let next = partition_ref(&after);
+    let added_refs = added.iter().map(|r| r.region_ref.clone()).collect::<Vec<_>>();
+    // No job may be enqueued on an overlapping old interval. The same
+    // original parser run/coordinates must remain authoritative.
+    let valid_run: bool = tx.query_one("SELECT EXISTS(SELECT 1 FROM ingest.parser_run
+        WHERE parser_run_ref=$1 AND source_revision_ref=$2 AND candidate_only
+          AND NOT creates_semantic_authority AND NOT applicability_promoted AND NOT claim_truth_promoted)",
+        &[&parser_run_ref,&revision])?.get(0);
+    if !valid_run || added.len()>128
+        || added.iter().map(|r| r.end_char-r.start_char).sum::<u64>()>100_000
+        || added.iter().any(|r| r.end_char>prefix_end_char) {
+        return Err(LongDocumentIngestStoreError::StoredStructureMismatch);
+    }
+    // Existing parser enqueue writers share the same source advisory lock.
+    for r in &added {
+        let overlap:bool=tx.query_one("SELECT EXISTS(SELECT 1 FROM ingest.parser_job
+          WHERE parser_run_ref=$1 AND region_start_char<$3 AND region_end_char>$2)",
+          &[&parser_run_ref,&(r.start_char as i64),&(r.end_char as i64)])?.get(0);
+        if overlap { return Err(LongDocumentIngestStoreError::StoredStructureMismatch); }
+    }
+    if !added.is_empty() {
+        if head.is_none() {
+            tx.execute("INSERT INTO ingest.long_document_partition_revision
+                (source_revision_ref,partition_ref,previous_partition_ref,source_digest_ref,exact_region_count,added_region_refs)
+                VALUES($1,$2,NULL,$3,$4,ARRAY[]::text[])",
+                &[&revision,&previous,&digest,&(before.regions.len() as i64)])?;
+        }
+        for r in &added {
+            tx.execute("INSERT INTO ingest.long_document_region
+                (source_revision_ref,source_ref,region_ref,parent_region_ref,region_kind,start_char,end_char,
+                 candidate_only,creates_semantic_authority,claim_truth_promoted)
+                VALUES($1,$2,$3,$4,$5,$6,$7,TRUE,FALSE,FALSE)",
+                &[&revision,&legacy.ingest.source_ref,&r.region_ref,&r.parent_region_ref,
+                  &region_kind_db(r.kind),&(r.start_char as i64),&(r.end_char as i64)])?;
+        }
+        tx.execute("INSERT INTO ingest.long_document_partition_revision
+            (source_revision_ref,partition_ref,previous_partition_ref,source_digest_ref,exact_region_count,added_region_refs)
+            VALUES($1,$2,$3,$4,$5,$6)",
+            &[&revision,&next,&previous,&digest,&(after.regions.len() as i64),&added_refs])?;
+        tx.execute("INSERT INTO ingest.long_document_partition_head(source_revision_ref,partition_ref)
+            VALUES($1,$2) ON CONFLICT(source_revision_ref) DO UPDATE SET partition_ref=EXCLUDED.partition_ref",
+            &[&revision,&next])?;
+    }
+    tx.commit()?;
+    Ok(HeadingPartitionPublication {
+        source_revision_ref: revision.clone(), source_digest_ref:digest,
+        previous_partition_ref:previous, partition_ref:next,
+        added_region_refs:added_refs, exact_region_count:after.regions.len(),
+        candidate_only:true, typed_coverage_paid:false,
+    })
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct SourcePartitionInsertedRegion {
+    pub region_ref: String,
+    pub parent_region_ref: String,
+    pub start_char: i64,
+    pub end_char: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct SourcePartitionChange {
+    pub source_revision_ref: String,
+    pub source_digest_ref: String,
+    pub previous_partition_ref: String,
+    pub partition_ref: String,
+    pub added: Vec<SourcePartitionInsertedRegion>,
+}
+
+/// Exact additive changes in ancestry order. This is the source-side
+/// durable change carrier; the numeric DB acknowledges each partition
+/// separately after enqueueing the original consumer work queue.
+pub fn load_source_partition_changes(
+    config: &DatabaseConfig, revision: &str, digest: &str,
+) -> Result<Vec<SourcePartitionChange>, LongDocumentIngestStoreError> {
+    let mut db=Client::connect(config.database_url(),NoTls)?;
+    let mut tx=db.transaction()?;
+    tx.batch_execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY; SET LOCAL statement_timeout='90000ms'")?;
+    let available:bool=tx.query_one("SELECT to_regclass('ingest.long_document_partition_head') IS NOT NULL", &[])?.get(0);
+    if !available { return Ok(Vec::new()); }
+    let Some(mut head)=active_partition(&mut tx,revision)? else { return Ok(Vec::new()); };
+    let mut changes=Vec::new();
+    let mut visited=BTreeSet::new();
+    let mut child_count=None;
+    loop {
+        if !visited.insert(head.clone()) || visited.len()>128 {
+            return Err(LongDocumentIngestStoreError::PartitionNotCurrent);
+        }
+        let row=tx.query_one("SELECT previous_partition_ref,source_digest_ref,exact_region_count,added_region_refs
+            FROM ingest.long_document_partition_revision WHERE source_revision_ref=$1 AND partition_ref=$2",
+            &[&revision,&head])?;
+        let previous:Option<String>=row.get(0);
+        let source_digest:String=row.get(1);
+        let count:i64=row.get(2);
+        let refs:Vec<String>=row.get(3);
+        if source_digest!=digest || count<0 || child_count.is_some_and(|n|n!=count) {
+            return Err(LongDocumentIngestStoreError::PartitionNotCurrent);
+        }
+        let Some(previous)=previous else {
+            if !refs.is_empty() { return Err(LongDocumentIngestStoreError::PartitionNotCurrent); }
+            break;
+        };
+        if refs.is_empty() || refs.len()>128 || count<refs.len() as i64 {
+            return Err(LongDocumentIngestStoreError::PartitionNotCurrent);
+        }
+        let rows=tx.query("SELECT region_ref,parent_region_ref,start_char,end_char,region_kind,
+            candidate_only,creates_semantic_authority,claim_truth_promoted
+            FROM ingest.long_document_region WHERE source_revision_ref=$1 AND region_ref=ANY($2)
+            ORDER BY start_char,end_char,region_ref",&[&revision,&refs])?;
+        if rows.len()!=refs.len() { return Err(LongDocumentIngestStoreError::PartitionNotCurrent); }
+        let mut added=Vec::new();
+        for row in rows {
+            let region_ref:String=row.get(0);
+            let parent:Option<String>=row.get(1);
+            let start:i64=row.get(2);
+            let end:i64=row.get(3);
+            if start<0 || end<=start || row.get::<_,String>(4)!="sentence"
+                || !row.get::<_,bool>(5)||row.get::<_,bool>(6)||row.get::<_,bool>(7) {
+                return Err(LongDocumentIngestStoreError::PartitionNotCurrent);
+            }
+            added.push(SourcePartitionInsertedRegion{
+                region_ref,parent_region_ref:parent.ok_or(LongDocumentIngestStoreError::PartitionNotCurrent)?,
+                start_char:start,end_char:end,
+            });
+        }
+        child_count=Some(count-refs.len() as i64);
+        changes.push(SourcePartitionChange{source_revision_ref:revision.into(),
+            source_digest_ref:source_digest,previous_partition_ref:previous.clone(),
+            partition_ref:head,added});
+        head=previous;
+    }
+    changes.reverse();
+    tx.commit()?;
+    Ok(changes)
+}
+
 pub fn persist_long_document_structure(
     config: &DatabaseConfig,
     document: &LongDocumentSource,
@@ -236,6 +506,11 @@ pub fn persist_long_document_structure(
     let mut client = Client::connect(config.database_url(), NoTls)?;
     let mut tx = client.transaction()?;
     tx.batch_execute(LONG_DOCUMENT_INGEST_SCHEMA_SQL)?;
+    lock_partition(&mut tx, &document.ingest.source_revision_ref)?;
+    // Legacy preparation cannot append arbitrary rows to a repaired partition.
+    if active_partition(&mut tx, &document.ingest.source_revision_ref)?.is_some() {
+        return Err(LongDocumentIngestStoreError::PartitionNotCurrent);
+    }
 
     let mut persisted = 0usize;
     for region in &document.regions {
@@ -268,6 +543,12 @@ pub fn load_long_document_structure(
 ) -> Result<Vec<PersistedLongDocumentStructureRegion>, LongDocumentIngestStoreError> {
     let mut client = Client::connect(config.database_url(), NoTls)?;
     client.batch_execute(LONG_DOCUMENT_INGEST_SCHEMA_SQL)?;
+    load_structure_with_client(&mut client, source_revision_ref)
+}
+
+fn load_structure_with_client(
+    client: &mut impl GenericClient, source_revision_ref: &str,
+) -> Result<Vec<PersistedLongDocumentStructureRegion>, LongDocumentIngestStoreError> {
     let rows = client.query(
         "SELECT source_ref, region_ref, parent_region_ref, region_kind,
                 start_char, end_char, candidate_only,
@@ -306,6 +587,52 @@ pub fn load_long_document_structure(
             Ok(region)
         })
         .collect()
+}
+
+/// Reconstruct only the explicitly published v1 heading-repair extensions.
+/// The original full structure remains the authority for all legacy IDs;
+/// neither arbitrary extra rows nor a partially published paragraph are valid.
+/// Read-only; this is not a publication or dependency invalidation API.
+pub(crate) fn reopen_heading_repaired_structure(
+    legacy: &LongDocumentSource,
+    canonical_text: &str,
+    stored: &[PersistedLongDocumentStructureRegion],
+) -> Result<LongDocumentSource, LongDocumentIngestStoreError> {
+    let legacy_refs = legacy.regions.iter()
+        .map(|r| r.region_ref.as_str()).collect::<BTreeSet<_>>();
+    let mut parents = BTreeSet::new();
+    for row in stored {
+        if row.source_revision_ref != legacy.ingest.source_revision_ref
+            || row.source_ref != legacy.ingest.source_ref
+            || !row.candidate_only || row.creates_semantic_authority || row.claim_truth_promoted
+        {
+            return Err(LongDocumentIngestStoreError::StoredStructureMismatch);
+        }
+        if !legacy_refs.contains(row.region_ref.as_str()) {
+            let prefix = format!("document-region:{}:sentence:heading-repair-v1:",
+                legacy.ingest.source_revision_ref);
+            if row.region_kind != "sentence" || !row.region_ref.starts_with(&prefix) {
+                return Err(LongDocumentIngestStoreError::StoredStructureMismatch);
+            }
+            parents.insert(row.parent_region_ref.clone()
+                .ok_or(LongDocumentIngestStoreError::StoredStructureMismatch)?);
+        }
+    }
+    let (extended, _) = crate::plain_text_document_adapter::extend_plain_text_heading_exclusions(
+        legacy, canonical_text, &parents.into_iter().collect::<Vec<_>>(),
+    ).map_err(|_| LongDocumentIngestStoreError::StoredStructureMismatch)?;
+    let expected = extended.regions.iter().map(|r| (
+        r.region_ref.as_str(), r.parent_region_ref.as_deref(),
+        region_kind_db(r.kind), r.start_char, r.end_char
+    )).collect::<BTreeSet<_>>();
+    let actual = stored.iter().map(|r| (
+        r.region_ref.as_str(), r.parent_region_ref.as_deref(),
+        r.region_kind.as_str(), r.start_char, r.end_char
+    )).collect::<BTreeSet<_>>();
+    if expected != actual || actual.len() != stored.len() {
+        return Err(LongDocumentIngestStoreError::StoredStructureMismatch);
+    }
+    Ok(extended)
 }
 
 fn ensure_long_document_structure_matches(
@@ -369,12 +696,22 @@ pub fn persist_long_document_compilation(
     let mut client = Client::connect(config.database_url(), NoTls)?;
     let mut tx = client.transaction()?;
     tx.batch_execute(LONG_DOCUMENT_INGEST_SCHEMA_SQL)?;
+    lock_partition(&mut tx, &compilation.source_revision_ref)?;
+    let current = active_partition(&mut tx, &compilation.source_revision_ref)?;
+    let expected = partition_ref(document);
+    if current.as_ref().is_some_and(|r| r != &expected) {
+        return Err(LongDocumentIngestStoreError::PartitionNotCurrent);
+    }
+    let stored_count: i64 = tx.query_one("SELECT count(*)::bigint FROM ingest.long_document_region WHERE source_revision_ref=$1",
+        &[&compilation.source_revision_ref])?.get(0);
+    if stored_count != document.regions.len() as i64 {
+        return Err(LongDocumentIngestStoreError::PartitionNotCurrent);
+    }
 
     for assignment in &compilation.assignments {
         let (disposition, statement_ref, parser_receipt_ref, error_ref) =
             disposition_parts(&assignment.disposition);
-        tx.execute(
-            "INSERT INTO ingest.region_compilation_assignment (
+        let legacy_sql = "INSERT INTO ingest.region_compilation_assignment (
                 source_revision_ref, region_ref, disposition, statement_ref,
                 parser_receipt_ref, error_ref, source_region_preserved,
                 semantic_authority_created, claim_truth_promoted
@@ -386,20 +723,24 @@ pub fn persist_long_document_compilation(
                 error_ref = EXCLUDED.error_ref,
                 source_region_preserved = TRUE,
                 semantic_authority_created = FALSE,
-                claim_truth_promoted = FALSE",
-            &[
-                &compilation.source_revision_ref,
-                &assignment.region_ref,
-                &disposition,
-                &statement_ref,
-                &parser_receipt_ref,
-                &error_ref,
-            ],
-        )?;
+                claim_truth_promoted = FALSE";
+        let mut params: Vec<&(dyn postgres::types::ToSql + Sync)> = vec![
+            &compilation.source_revision_ref, &assignment.region_ref,
+            &disposition, &statement_ref, &parser_receipt_ref, &error_ref,
+        ];
+        if let Some(partition) = &current {
+            let sql = legacy_sql.replace("ingest.region_compilation_assignment", "ingest.partition_region_compilation_assignment")
+                .replace("semantic_authority_created, claim_truth_promoted", "semantic_authority_created, claim_truth_promoted, partition_ref")
+                .replace("TRUE,FALSE,FALSE)", "TRUE,FALSE,FALSE,$7)")
+                .replace("ON CONFLICT (source_revision_ref, region_ref)", "ON CONFLICT (source_revision_ref, partition_ref, region_ref)");
+            params.push(partition);
+            tx.execute(sql.as_str(), &params)?;
+        } else {
+            tx.execute(legacy_sql, &params)?;
+        }
     }
 
-    tx.execute(
-        "INSERT INTO ingest.lossless_compilation_receipt (
+    let legacy_sql = "INSERT INTO ingest.lossless_compilation_receipt (
             source_revision_ref, source_ref, exact_region_count,
             semantic_candidate_region_count, compiled_statement_count,
             parser_residual_count, candidate_pnf_count,
@@ -425,20 +766,30 @@ pub fn persist_long_document_compilation(
             creates_semantic_authority = FALSE,
             applicability_promoted = FALSE,
             claim_truth_promoted = FALSE,
-            parse_failure_deletes_source = FALSE",
-        &[
-            &compilation.source_revision_ref,
-            &compilation.source_ref,
-            &(compilation.exact_region_count as i64),
-            &(compilation.semantic_candidate_region_count as i64),
-            &(compilation.compiled_statement_count as i64),
-            &(compilation.residuals.len() as i64),
-            &(compilation.candidate_pnf_count as i64),
-            &(compilation.transport_or_nonsemantic_region_count as i64),
-            &(compilation.source_region_accounted_count as i64),
-            &(compilation.source_region_loss_count as i64),
-        ],
-    )?;
+            parse_failure_deletes_source = FALSE";
+    let exact_count = compilation.exact_region_count as i64;
+    let semantic_count = compilation.semantic_candidate_region_count as i64;
+    let compiled_count = compilation.compiled_statement_count as i64;
+    let residual_count = compilation.residuals.len() as i64;
+    let pnf_count = compilation.candidate_pnf_count as i64;
+    let transport_count = compilation.transport_or_nonsemantic_region_count as i64;
+    let accounted_count = compilation.source_region_accounted_count as i64;
+    let loss_count = compilation.source_region_loss_count as i64;
+    let mut params: Vec<&(dyn postgres::types::ToSql + Sync)> = vec![
+        &compilation.source_revision_ref, &compilation.source_ref,
+        &exact_count, &semantic_count, &compiled_count, &residual_count,
+        &pnf_count, &transport_count, &accounted_count, &loss_count,
+    ];
+    if let Some(partition) = &current {
+        let sql = legacy_sql.replace("ingest.lossless_compilation_receipt", "ingest.partition_lossless_compilation_receipt")
+            .replace("claim_truth_promoted, parse_failure_deletes_source", "claim_truth_promoted, parse_failure_deletes_source, partition_ref")
+            .replace("TRUE,FALSE,FALSE,FALSE,FALSE", "TRUE,FALSE,FALSE,FALSE,FALSE,$11")
+            .replace("ON CONFLICT (source_revision_ref)", "ON CONFLICT (source_revision_ref, partition_ref)");
+        params.push(partition);
+        tx.execute(sql.as_str(), &params)?;
+    } else {
+        tx.execute(legacy_sql, &params)?;
+    }
     tx.commit()?;
 
     load_long_document_ingest_receipt(config, &compilation.source_revision_ref)
@@ -452,8 +803,10 @@ pub fn load_long_document_regions(
     let mut client = Client::connect(config.database_url(), NoTls)?;
     client.batch_execute(LONG_DOCUMENT_INGEST_SCHEMA_SQL)?;
 
-    let rows = client.query(
-        "SELECT
+    let mut tx = client.transaction()?;
+    lock_partition(&mut tx, source_revision_ref)?;
+    let current = active_partition(&mut tx, source_revision_ref)?;
+    let legacy_sql = "SELECT
            r.source_ref,
            r.region_ref,
            r.parent_region_ref,
@@ -472,9 +825,20 @@ pub fn load_long_document_regions(
            ON a.source_revision_ref = r.source_revision_ref
           AND a.region_ref = r.region_ref
          WHERE r.source_revision_ref = $1
-         ORDER BY r.start_char, r.end_char, r.region_ref",
-        &[&source_revision_ref],
-    )?;
+         ORDER BY r.start_char, r.end_char, r.region_ref";
+    let rows = if let Some(partition) = &current {
+        let sql = legacy_sql.replace("ingest.region_compilation_assignment", "ingest.partition_region_compilation_assignment")
+            .replace("WHERE r.source_revision_ref = $1", "WHERE r.source_revision_ref = $1 AND a.partition_ref=$2");
+        tx.query(sql.as_str(), &[&source_revision_ref, partition])?
+    } else {
+        tx.query(legacy_sql, &[&source_revision_ref])?
+    };
+    let expected: i64 = tx.query_one("SELECT count(*)::bigint FROM ingest.long_document_region WHERE source_revision_ref=$1",
+        &[&source_revision_ref])?.get(0);
+    if current.is_some() && rows.len() as i64 != expected {
+        return Err(LongDocumentIngestStoreError::PartitionNotCurrent);
+    }
+    tx.commit()?;
 
     rows.into_iter()
         .map(|row| {
@@ -543,24 +907,38 @@ pub fn load_long_document_ingest_receipt(
     let mut client = Client::connect(config.database_url(), NoTls)?;
     client.batch_execute(LONG_DOCUMENT_INGEST_SCHEMA_SQL)?;
 
-    let row = client.query_one(
-        "SELECT source_ref, exact_region_count, compiled_statement_count,
+    let mut tx = client.transaction()?;
+    lock_partition(&mut tx, source_revision_ref)?;
+    let current = active_partition(&mut tx, source_revision_ref)?;
+    let legacy_sql = "SELECT source_ref, exact_region_count, compiled_statement_count,
                 parser_residual_count, source_region_loss_count,
                 candidate_only, creates_semantic_authority,
                 applicability_promoted, claim_truth_promoted,
                 parse_failure_deletes_source
          FROM ingest.lossless_compilation_receipt
-         WHERE source_revision_ref = $1",
-        &[&source_revision_ref],
-    )?;
-
-    let assignment_rows = client.query(
-        "SELECT disposition, COUNT(*)::BIGINT
+         WHERE source_revision_ref = $1";
+    let legacy_assignments = "SELECT disposition, COUNT(*)::BIGINT
          FROM ingest.region_compilation_assignment
          WHERE source_revision_ref = $1
-         GROUP BY disposition",
-        &[&source_revision_ref],
-    )?;
+         GROUP BY disposition";
+    let (row, assignment_rows) = if let Some(partition) = &current {
+        let sql = legacy_sql.replace("ingest.lossless_compilation_receipt", "ingest.partition_lossless_compilation_receipt")
+            + " AND partition_ref=$2";
+        let row = tx.query_opt(sql.as_str(), &[&source_revision_ref, partition])?
+            .ok_or(LongDocumentIngestStoreError::PartitionNotCurrent)?;
+        let sql = legacy_assignments.replace("ingest.region_compilation_assignment", "ingest.partition_region_compilation_assignment")
+            .replace("GROUP BY disposition", "AND partition_ref=$2 GROUP BY disposition");
+        (row, tx.query(sql.as_str(), &[&source_revision_ref, partition])?)
+    } else {
+        (tx.query_one(legacy_sql, &[&source_revision_ref])?,
+         tx.query(legacy_assignments, &[&source_revision_ref])?)
+    };
+    let expected: i64 = tx.query_one("SELECT count(*)::bigint FROM ingest.long_document_region WHERE source_revision_ref=$1",
+        &[&source_revision_ref])?.get(0);
+    if row.get::<_,i64>(1) != expected {
+        return Err(LongDocumentIngestStoreError::PartitionNotCurrent);
+    }
+    tx.commit()?;
 
     let counts = assignment_rows
         .into_iter()
@@ -568,6 +946,7 @@ pub fn load_long_document_ingest_receipt(
         .collect::<BTreeMap<_, _>>();
 
     let receipt = PersistedLongDocumentIngestReceipt {
+        partition_ref: current,
         source_ref: row.get(0),
         source_revision_ref: source_revision_ref.to_owned(),
         region_count: row.get::<_, i64>(1) as usize,
@@ -767,5 +1146,79 @@ mod tests {
             validate_partition(&document(), &broken),
             Err(LongDocumentIngestStoreError::IncompleteCoverage)
         ));
+    }
+}
+
+#[cfg(test)]
+mod heading_repair_reopen_tests {
+    use super::*;
+    use crate::{build_plain_text_long_document_source, extend_plain_text_heading_exclusions};
+
+    fn rows(doc: &LongDocumentSource) -> Vec<PersistedLongDocumentStructureRegion> {
+        doc.regions.iter().map(|r| PersistedLongDocumentStructureRegion {
+            source_revision_ref: r.source_revision_ref.clone(),
+            source_ref: doc.ingest.source_ref.clone(),
+            region_ref: r.region_ref.clone(),
+            parent_region_ref: r.parent_region_ref.clone(),
+            region_kind: region_kind_db(r.kind).into(),
+            start_char: r.start_char,
+            end_char: r.end_char,
+            candidate_only: true,
+            creates_semantic_authority: false,
+            claim_truth_promoted: false,
+        }).collect()
+    }
+
+    #[test]
+    fn partition_identity_distinguishes_extension_and_is_order_independent() {
+        let text = "Chapter One\nFirst. Second.\n\nLater.";
+        let (legacy, _) = build_plain_text_long_document_source(
+            "book:fixture", "revision:fixture", "plain", "receipt:fixture",
+            None, None, text,
+        ).unwrap();
+        let parent = legacy.regions.iter()
+            .find(|r| r.kind == DocumentRegionKind::Paragraph).unwrap();
+        let (extended, _) = extend_plain_text_heading_exclusions(
+            &legacy, text, &[parent.region_ref.clone()],
+        ).unwrap();
+        assert_ne!(partition_ref(&legacy), partition_ref(&extended));
+        assert_eq!(legacy.ingest.content_digest_ref, extended.ingest.content_digest_ref);
+        let mut reordered = extended.clone();
+        reordered.regions.reverse();
+        assert_eq!(partition_ref(&extended), partition_ref(&reordered));
+        reordered.regions[0].start_char += 1;
+        assert_ne!(partition_ref(&extended), partition_ref(&reordered));
+    }
+
+    #[test]
+    fn exact_repair_reopens_but_partial_or_forged_partition_fails() {
+        let text = "Chapter One\nFirst. Second.\n\nLater.";
+        let (legacy, _) = build_plain_text_long_document_source(
+            "book:fixture", "revision:fixture", "plain", "receipt:fixture",
+            None, None, text,
+        ).unwrap();
+        let parent = legacy.regions.iter()
+            .find(|r| r.kind == DocumentRegionKind::Paragraph).unwrap();
+        let (extended, added) = extend_plain_text_heading_exclusions(
+            &legacy, text, &[parent.region_ref.clone()],
+        ).unwrap();
+        assert_eq!(added.len(), 3);
+        let original_rows = rows(&legacy);
+        assert_eq!(reopen_heading_repaired_structure(&legacy, text, &original_rows).unwrap(), legacy);
+        let exact = rows(&extended);
+        assert_eq!(reopen_heading_repaired_structure(&legacy, text, &exact).unwrap(), extended);
+
+        let mut partial = exact.clone();
+        partial.pop();
+        assert!(reopen_heading_repaired_structure(&legacy, text, &partial).is_err());
+        let mut foreign = exact.clone();
+        foreign.last_mut().unwrap().parent_region_ref = Some("foreign".into());
+        assert!(reopen_heading_repaired_structure(&legacy, text, &foreign).is_err());
+        let mut shifted = exact.clone();
+        shifted.last_mut().unwrap().start_char += 1;
+        assert!(reopen_heading_repaired_structure(&legacy, text, &shifted).is_err());
+        let mut duplicate = exact.clone();
+        duplicate.push(exact.last().unwrap().clone());
+        assert!(reopen_heading_repaired_structure(&legacy, text, &duplicate).is_err());
     }
 }
