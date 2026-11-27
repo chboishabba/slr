@@ -13,7 +13,7 @@ use sensiblaw_pg_source_store::{
     inspect_native_antecedent_review, native_antecedent_frontier,
     compile_native_source_local_answer,
     audit_original_numeric_identity_for_source_answer, certify_original_focus_identity,
-    reuse_original_binding_and_identity_owners, reopen_native_original_relation_packet, reopen_native_original_relation_packet_with_focus, compare_native_original_relation_reference, query_native_original_relations, query_native_recorded_factor_consumer, query_native_demand_fibre,
+    reuse_original_binding_and_identity_owners, reopen_native_original_relation_packet, reopen_native_original_relation_packet_with_focus, compare_native_original_relation_reference, query_native_original_relations, query_native_recorded_factor_consumer, query_native_demand_fibre, probe_authenticated_native_query_admission, RefereeReceiptLocator,
     retract_original_numeric_identity_for_source_answer,
     transport_original_numeric_candidates_for_source_answer,
     prepare_native_prefix_recovery, publish_native_prefix_heading_repair, complete_parser_run,
@@ -83,6 +83,17 @@ fn print_json<T:Serialize>(value:&T)->Result<(),String>{
 }
 pub fn run(args:&[String])->Result<(),String>{
     match args {
+        [subcommand,run,doc,source_sha,demand,consumer,query,horizon,evidence,repo,sha,path,thread] if subcommand=="probe-query-admission"=>{
+            let url=env::var("SENSIBLAW_DATABASE_URL").map_err(|_|"query admission requires SENSIBLAW_DATABASE_URL")?;
+            let id=demand.parse::<i64>().map_err(|_|"invalid demand id")?;
+            let horizon=horizon.parse::<i16>().map_err(|_|"invalid horizon")?;
+            let locator=RefereeReceiptLocator{
+                repo:repo.clone(),sha:sha.clone(),path:path.clone(),canonical_thread_id:thread.clone(),
+            };
+            print_json(&probe_authenticated_native_query_admission(
+                &url,run,doc,source_sha,id,consumer,query,horizon,evidence,&locator
+            ).map_err(|e|e.to_string())?)
+        }
         [subcommand,run,doc,source_sha,demand] if subcommand=="demand-fibre"=>{
             let url=env::var("SENSIBLAW_DATABASE_URL").map_err(|_|"numeric demand fibre requires SENSIBLAW_DATABASE_URL")?;
             let id=demand.parse::<i64>().map_err(|_|"invalid demand id")?;
