@@ -3893,6 +3893,12 @@ fn reopen_focus_relation_correspondence(
                 let head=reduction["relation"]["head_token_id"].as_i64().ok_or(NativeNumericAuditError::ForeignSource)?;
                 let historical_digest=persisted_numeric_relation_digest(run,doc,&native_ref,head,&expected_roles)?;
                 let repaired_digest=exact_repair_relation_digest(run,doc,&native_ref,head,&expected_roles)?;
+                let region=reduction["relation"]["region"].as_i64().ok_or(NativeNumericAuditError::ForeignSource)?;
+                let lemma:String=tx.query_one("SELECT s.symbol_text FROM execution.semantic_parser_token t
+                    JOIN execution.semantic_symbol s ON s.symbol_id=t.lemma_symbol_id
+                    WHERE t.token_id=$1 AND t.run_ref=$2 AND t.document_ref=$3
+                      AND t.representation_version=2",&[&head,&run,&doc])?.get(0);
+                let expected_predicate=format!("parser.predicate:{lemma}");
                 let mut numeric=Vec::new();
                 for d in demands{
                     let demand:i64=d.get(0);let object:i64=d.get(1);let outside:bool=d.get(2);
@@ -3906,18 +3912,24 @@ fn reopen_focus_relation_correspondence(
                     // Raw horizon observations are retained including zero
                     // and negative signs; stale validity is not repaired here.
                     let class_projection=project_original_identity_fibre(&horizons,&classes,outside);
-                    let arguments=tx.query("SELECT e.factor_id,e.slot_ordinal,f.factor_digest
+                    let arguments=tx.query("SELECT e.factor_id,e.slot_ordinal,f.factor_digest,
+                          f.region_id,typ.symbol_text,pred.symbol_text
                       FROM execution.semantic_pnf_hyperedge e
                       JOIN execution.semantic_pnf_factor f ON f.factor_id=e.factor_id AND f.active
                       JOIN execution.semantic_pnf_region r ON r.region_id=f.region_id
                       JOIN execution.semantic_symbol s ON s.symbol_id=e.role_symbol_id
+                      JOIN execution.semantic_symbol typ ON typ.symbol_id=f.factor_type_symbol_id
+                      JOIN execution.semantic_symbol pred ON pred.symbol_id=f.predicate_symbol_id
                       WHERE r.run_ref=$1 AND r.document_ref=$2 AND e.object_id=$3
                       ORDER BY e.factor_id,e.slot_ordinal",&[&run,&doc,&object])?;
                     let mut observed=Vec::new();
                     for arg in arguments{
                         let factor:i64=arg.get(0);let slot:i16=arg.get(1);
                         let digest:Vec<u8>=arg.get(2);
-                        let exact_owner=digest==historical_digest||digest==repaired_digest;
+                        let exact_owner=(digest==historical_digest||digest==repaired_digest)
+                            &&arg.get::<_,i64>(3)==region
+                            &&arg.get::<_,String>(4)=="semantic.eventuality"
+                            &&arg.get::<_,String>(5)==expected_predicate;
                         let support=tx.query("SELECT DISTINCT token_id FROM execution.semantic_pnf_factor_token_support
                           WHERE factor_id=$1 ORDER BY token_id",&[&factor])?.iter().map(|r|r.get::<_,i64>(0)).collect::<BTreeSet<_>>();
                         let roles=tx.query("SELECT e.slot_ordinal,s.symbol_text,
@@ -4104,11 +4116,13 @@ fn focus_relation_has_witnessed_level_three(
     relation:&serde_json::Value,witnesses:&[i64],derivations:&[String],
 )->bool{
     if relation["exact_persisted_correspondence"]!=true||witnesses.len()!=1{return false;}
-    let Some(args)=relation.pointer("/subjects/0/matches/0/numeric_demands/0/observed_numeric_arguments")
-        .and_then(|a|a.as_array())else{return false;};
+    let Some(demand)=relation.pointer("/subjects/0/matches/0/numeric_demands/0")else{return false;};
+    let Some(args)=demand["observed_numeric_arguments"].as_array()else{return false;};
     let mut exact=args.iter().filter(|a|a["exact_ordered_role_and_support"]==true);
     let Some(arg)=exact.next()else{return false;};
-    if exact.next().is_some(){return false;}
+    if exact.next().is_some()||arg["exact_relation_owner_digest"]!=true
+        ||arg["numeric_factor_id"].as_i64().is_none()
+        ||demand["selected_exact_numeric_factor_id"]!=arg["numeric_factor_id"]{return false;}
     arg["current_level_three_arguments"].as_array().is_some_and(|rows|rows.iter().any(|row|
         row["derivation_ref"].as_str().is_some_and(|r|derivations.iter().any(|d|d==r))
         &&row["identity_witness_ids"].as_array().is_some_and(|ids|ids.iter().any(|id|id.as_i64()==Some(witnesses[0])))))
@@ -7126,14 +7140,21 @@ mod tests{
     #[test]
     fn level_three_must_be_on_the_exact_original_argument(){
         let mut r=serde_json::json!({"exact_persisted_correspondence":true,"subjects":[{"matches":[{"numeric_demands":[{
+          "selected_exact_numeric_factor_id":32,
           "observed_numeric_arguments":[
-            {"exact_ordered_role_and_support":false,"current_level_three_arguments":[{"derivation_ref":"other","identity_witness_ids":[8]}]},
-            {"exact_ordered_role_and_support":true,"current_level_three_arguments":[{"derivation_ref":"focus","identity_witness_ids":[7]}]}
+            {"numeric_factor_id":31,"exact_relation_owner_digest":true,"exact_ordered_role_and_support":false,"current_level_three_arguments":[{"derivation_ref":"other","identity_witness_ids":[8]}]},
+            {"numeric_factor_id":32,"exact_relation_owner_digest":true,"exact_ordered_role_and_support":true,"current_level_three_arguments":[{"derivation_ref":"focus","identity_witness_ids":[7]}]}
           ]}]}]}]});
         assert!(focus_relation_has_witnessed_level_three(&r,&[7],&["focus".into()]));
         assert!(!focus_relation_has_witnessed_level_three(&r,&[8],&["other".into()]));
         assert!(!focus_relation_has_witnessed_level_three(&r,&[7],&["other".into()]));
         assert!(!focus_relation_has_witnessed_level_three(&r,&[7,8],&["focus".into()]));
+        let mut wrong_owner=r.clone();
+        wrong_owner["subjects"][0]["matches"][0]["numeric_demands"][0]["observed_numeric_arguments"][1]["exact_relation_owner_digest"]=serde_json::json!(false);
+        assert!(!focus_relation_has_witnessed_level_three(&wrong_owner,&[7],&["focus".into()]));
+        let mut wrong_selection=r.clone();
+        wrong_selection["subjects"][0]["matches"][0]["numeric_demands"][0]["selected_exact_numeric_factor_id"]=serde_json::json!(31);
+        assert!(!focus_relation_has_witnessed_level_three(&wrong_selection,&[7],&["focus".into()]));
         r["exact_persisted_correspondence"]=serde_json::json!(false);
         assert!(!focus_relation_has_witnessed_level_three(&r,&[7],&["focus".into()]));
     }
