@@ -383,3 +383,20 @@ Historical exact receipt readback (not current native execution): v8 typed-relat
 Next cut remains P1 genuine native interpretation/coverage rather than more generic sidecars: use actual demand state and its original typed policy to establish live membership, independently warranted exclusions, overflow/unknown irrelevance and query factorisation. General qualified article alignment requires a source-to-common-consumer interpretation proof separate from original KB membership. P2 consumes that actual proof via independent referee and existing SQL owners; P3 must connect all existing review/acquisition/repair/formal routing journeys. Do not ask operator to run final campaign yet. No fabricated witness, no promotion from parser candidate state or accepted review alone.
 
 - Final source reconciliation: Lean #112 head 30e97adc5139 follows the original <= horizon semantics rather than inventing a whitelist, and pins native source cut 16c9e5a2fe5d; ITIR #74 head 67dbf358efca. No runtime acceptance. The top-level D01–D08 dispositions have been updated as well as this chronological ledger.
+
+
+## P0 binding correction — existing indexed hyperfabric (2026-11-27)
+
+The shared informational carrier is the existing typed indexed hyperfabric, not a new common-information ontology or store. Predicate roles precede soft type hypotheses; consumer demands generate local constraint pressure, never automatic global retyping. Preserve zero mode, signed residual, original inverse and source/revision/language/context/consumer/time/scale indices.
+
+Body-level audit at Lean #112 30e97adc5139 and SLR #79 2e53ba0c32fb:
+
+| Golden endpoint | Existing native owner | Remaining binding |
+|---|---|---|
+| GwbHyperfabric.restrictionCommutesWithJoin / anyFragmentRetainsOriginalReceipt | relational_interlingua::observation_from_candidate_pnf, observation_from_native_wikidata | Same-source restriction only; cross-source sections must retain independent receipts |
+| RelationalObservedMeet.checkInventory / checkedMembershipSound | relational_family::observed_family_meet | Recorded incidence parity, not live semantic completeness |
+| FiniteConsumer.licenceOfProjectedEnvelope | native source-local consumer and numeric demand fibre | Supply independent coverage, live inhabitant, query factor and source factor |
+| GwbWorldGraph.proofForEdge? / checkedWorldPropertySound / qualifiedYearRowsExact | original Wikidata statement owner and relational_interlingua::observation_from_native_wikidata | Independent EntityData import, exact statement GUID and qualifiers, article interpretation |
+| GwbProofComposition.independentArticleAndKBResultsSound | sl-formal-proof-bridge::persist_authenticated_formal_evidence / reopen_authenticated_formal_evidence | Bind independent results to explicit consumer alignment; payment is not global identity |
+
+Use existing referee authentication and native admission/retraction owners; no Python semantics. Add Finland/UMK/Eurovision collapsed edition/participation, Q27968055 type-order, and English/Finnish divergence as source-bound regression specimens alongside GWB. The three new cases are not yet acquired or executed. Require all eleven ITIR journeys through native Rust interfaces and one consolidated local campaign; no operator run until implementation closure. D01 body audit advanced (selected endpoints only); D03/D05/D06/D07 remain integration-open, D08 unexecuted. No new proof or production acceptance is claimed by this ledger.
