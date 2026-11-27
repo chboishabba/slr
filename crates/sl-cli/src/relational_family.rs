@@ -10,6 +10,16 @@ fn print_json<T:serde::Serialize>(value:&T)->Result<(),String>{
 pub fn run(args:&[String])->Result<(),String>{
     let config=load_database_config(None).map_err(|e|e.to_string())?;
     match args {
+        [mode,revision,batches_path,mentions_path] if mode=="article-actions"=>{
+            let read = |path:&str| -> Result<Vec<String>,String> {
+                let raw=std::fs::read_to_string(path).map_err(|e|e.to_string())?;
+                serde_json::from_str(&raw).map_err(|e|e.to_string())
+            };
+            let batches=read(batches_path)?;
+            let mentions=read(mentions_path)?;
+            print_json(&sensiblaw_pg_source_store::read_recorded_article_actions(
+                &config,revision,&batches,&mentions).map_err(|e|e.to_string())?)
+        },
         [mode,corpus,access] if mode=="acceptance-corpus"=>{
             let suite=load_rel_acceptance_corpus(&config,corpus).map_err(|e|e.to_string())?;
             let mut receipts=Vec::new();
@@ -68,6 +78,6 @@ pub fn run(args:&[String])->Result<(),String>{
                 "candidate_review_status":format!("{:?}",item.current_status),"creates_semantic_authority":false}))
         },
         _ if (4..=12).contains(&args.len())=>print_json(&run_persisted_relational_family(&config,&args[0],&args[1],&args[2..]).map_err(|e|e.to_string())?),
-        _=>Err("usage: relational-family CONSUMER ACCESS SELECTOR SELECTOR ... | licensed-reciprocal FAMILY LEFT RIGHT QUERY EVIDENCE REPO SHA PATH THREAD | reciprocal FAMILY LEFT RIGHT | participant FAMILY FILLER_REF | inspect FAMILY | prepare-revision FAMILY OLD_SELECTOR NEW_SELECTOR | inspect-revision TRANSITION | review-revision TRANSITION COMMAND REVIEWER accept|reject|abstain | publish-revision TRANSITION".into())
+        _=>Err("usage: relational-family CONSUMER ACCESS SELECTOR SELECTOR ... | article-actions REVISION BATCH_REFS_JSON MENTION_REFS_JSON | licensed-reciprocal FAMILY LEFT RIGHT QUERY EVIDENCE REPO SHA PATH THREAD | reciprocal FAMILY LEFT RIGHT | participant FAMILY FILLER_REF | inspect FAMILY | prepare-revision FAMILY OLD_SELECTOR NEW_SELECTOR | inspect-revision TRANSITION | review-revision TRANSITION COMMAND REVIEWER accept|reject|abstain | publish-revision TRANSITION".into())
     }
 }
