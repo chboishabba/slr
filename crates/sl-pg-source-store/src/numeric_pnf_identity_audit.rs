@@ -3890,6 +3890,9 @@ fn reopen_focus_relation_correspondence(
                     return Err(NativeNumericAuditError::ForeignSource);
                 }
                 let expected_support=expected_roles.iter().map(|(_,id)|*id).collect::<BTreeSet<_>>();
+                let head=reduction["relation"]["head_token_id"].as_i64().ok_or(NativeNumericAuditError::ForeignSource)?;
+                let historical_digest=persisted_numeric_relation_digest(run,doc,&native_ref,head,&expected_roles)?;
+                let repaired_digest=exact_repair_relation_digest(run,doc,&native_ref,head,&expected_roles)?;
                 let mut numeric=Vec::new();
                 for d in demands{
                     let demand:i64=d.get(0);let object:i64=d.get(1);let outside:bool=d.get(2);
@@ -3903,7 +3906,7 @@ fn reopen_focus_relation_correspondence(
                     // Raw horizon observations are retained including zero
                     // and negative signs; stale validity is not repaired here.
                     let class_projection=project_original_identity_fibre(&horizons,&classes,outside);
-                    let arguments=tx.query("SELECT e.factor_id,e.slot_ordinal
+                    let arguments=tx.query("SELECT e.factor_id,e.slot_ordinal,f.factor_digest
                       FROM execution.semantic_pnf_hyperedge e
                       JOIN execution.semantic_pnf_factor f ON f.factor_id=e.factor_id AND f.active
                       JOIN execution.semantic_pnf_region r ON r.region_id=f.region_id
@@ -3913,6 +3916,8 @@ fn reopen_focus_relation_correspondence(
                     let mut observed=Vec::new();
                     for arg in arguments{
                         let factor:i64=arg.get(0);let slot:i16=arg.get(1);
+                        let digest:Vec<u8>=arg.get(2);
+                        let exact_owner=digest==historical_digest||digest==repaired_digest;
                         let support=tx.query("SELECT DISTINCT token_id FROM execution.semantic_pnf_factor_token_support
                           WHERE factor_id=$1 ORDER BY token_id",&[&factor])?.iter().map(|r|r.get::<_,i64>(0)).collect::<BTreeSet<_>>();
                         let roles=tx.query("SELECT e.slot_ordinal,s.symbol_text,
@@ -3921,7 +3926,8 @@ fn reopen_focus_relation_correspondence(
                           FROM execution.semantic_pnf_hyperedge e JOIN execution.semantic_symbol s ON s.symbol_id=e.role_symbol_id
                           WHERE e.factor_id=$1 ORDER BY e.slot_ordinal",&[&factor])?
                           .iter().map(|r|(r.get::<_,i16>(0),r.get::<_,String>(1),r.get::<_,Vec<i64>>(2))).collect::<Vec<_>>();
-                        let exact=support==expected_support&&exact_numeric_role_inverse(&roles,&expected_roles)
+                        let exact=exact_owner&&support==expected_support&&exact_numeric_role_inverse(&roles,&expected_roles)
+                            &&numeric_relation_inverse_on_tx(tx,factor,&expected_roles,head)?
                             &&u64::try_from(slot).ok()==Some(ordinal);
                         let derivations=tx.query("SELECT DISTINCT d.derivation_ref,a.identity_entity_id,a.identity_witness_ids
                           FROM execution.semantic_pnf_factor_derivation d
@@ -3934,13 +3940,14 @@ fn reopen_focus_relation_correspondence(
                           &[&factor,&slot,&object])?.iter().map(|r|json!({"derivation_ref":r.get::<_,String>(0),
                             "identity_entity_id":r.get::<_,i64>(1),"identity_witness_ids":r.get::<_,Vec<i64>>(2)})).collect::<Vec<_>>();
                         observed.push(json!({"numeric_factor_id":factor,"slot_ordinal":slot,"support":support,
-                            "roles":roles,"exact_ordered_role_and_support":exact,"current_level_three_arguments":derivations}));
+                            "roles":roles,"exact_relation_owner_digest":exact_owner,"exact_ordered_role_and_support":exact,"current_level_three_arguments":derivations}));
                     }
                     let exact_count=observed.iter().filter(|x|x["exact_ordered_role_and_support"]==true).count();
+                    let selected=if exact_count==1 {observed.iter().find(|x|x["exact_ordered_role_and_support"]==true).map(|x|x["numeric_factor_id"].clone())}else{None};
                     numeric.push(json!({"demand_id":demand,"source_object_id":object,"outside_model_possible":outside,
                         "typed_candidate_rows":typed,"represented_keys_exact":represented_exact,
                         "raw_signed_horizon_observations":horizons,"observed_document_identity_classes":classes,
-                        "observed_class_projection_not_coverage":class_projection,"observed_numeric_arguments":observed,"exact_numeric_argument_count":exact_count}));
+                        "observed_class_projection_not_coverage":class_projection,"observed_numeric_arguments":observed,"exact_numeric_argument_count":exact_count,"selected_exact_numeric_factor_id":selected}));
                 }
                 let exact=revisions.len()==1&&revisions[0]["exact_three_candidate_sets"]==true
                     &&numeric.len()==1&&numeric[0]["exact_numeric_argument_count"]==1&&numeric[0]["represented_keys_exact"]==true;
@@ -4047,8 +4054,9 @@ fn reopen_typed_relation_member(
         numeric.push(json!({"numeric_factor_id":id,"support":support,"roles":roles,"exact":exact}));
     }
     let exact=numeric.iter().filter(|n|n["exact"]==true).count()==1;
+    let selected=if exact {numeric.iter().find(|n|n["exact"]==true).map(|n|n["numeric_factor_id"].clone())}else{None};
     Ok(json!({"factor_revision_ref":revision,"source_key":native_ref,"original_root_factor_ref":original_root,
-        "source_link_count":1,"exact_numeric_factor_inverse":exact,"numeric_factors":numeric,
+        "source_link_count":1,"exact_numeric_factor_inverse":exact,"selected_exact_numeric_factor_id":selected,"numeric_factors":numeric,
         "semantic_disposition":"unresolved"}))
 }
 
