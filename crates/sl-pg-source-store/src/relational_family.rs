@@ -1072,3 +1072,34 @@ pub fn recorded_participant_query(
         "world_truth_paid": false
     })
 }
+
+
+/// Preserve both directional comparisons and their residuals for a selected
+/// source pair. A polarity conflict is not an established contradiction
+/// until semantic correspondence and context have independently been paid.
+pub fn recorded_reciprocal_query(
+    family: &PersistedRelationalFamily, left: &str, right: &str,
+) -> Result<serde_json::Value, RelationalFamilyError> {
+    if left == right { return Err(RelationalFamilyError::InvalidSelector); }
+    let p = &family.projection;
+    let a = p.sources.iter().find(|s| s.selector_ref == left)
+        .ok_or(RelationalFamilyError::InvalidSelector)?;
+    let b = p.sources.iter().find(|s| s.selector_ref == right)
+        .ok_or(RelationalFamilyError::InvalidSelector)?;
+    let f = p.directed_comparisons.iter().find(|c|
+        c.left_selector_ref == left && c.right_selector_ref == right)
+        .ok_or(RelationalFamilyError::ChangedReplay)?;
+    let r = p.directed_comparisons.iter().find(|c|
+        c.left_selector_ref == right && c.right_selector_ref == left)
+        .ok_or(RelationalFamilyError::ChangedReplay)?;
+    Ok(serde_json::json!({
+        "schema": "slr.recorded-reciprocal-query.v1",
+        "family_ref": family.family_ref,
+        "consumer_ref": p.consumer_ref,
+        "left": a, "right": b, "forward": f, "backward": r,
+        "source_polarity_pair": [a.observation.polarity, b.observation.polarity],
+        "all_live_semantic_readings_covered": false,
+        "semantic_equivalence_paid": false,
+        "world_truth_paid": false
+    }))
+}
