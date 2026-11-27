@@ -63,3 +63,11 @@ Gate receipt: actual original pinned source inventory, reciprocal action query o
 - Lean #112 3909afdfd72c: RelationalObservedMeetRunner participant FAMILY_JSON ANSWER_JSON, axiom print for exact membership.
 - W05 recorded inverse source implementation present; kernel/native acceptance not run. W01–04 semantic actor/event identity still unpaid. This is not a new proof transport path.
 - Next exact semantic cut: actual revision-pinned GWB/GHWB native inventories; bind mention-to-referent and event correspondence to original source coordinates and explicit consumer licences, then use existing strict comparison and family synthesis; show independent query coverage or counterexample residual. W07 and W08 remain distinct temporal/KB obligations. No legal gate advancement before real wiki answers.
+
+## Reciprocal consumer weld
+- Lean #112 57ea2a0df909: DocumentQuerySound.bilateralLicensedComparison and reciprocalLicensedComparison compose independent SourceQueryLicence witnesses; no global unique interpretation required.
+- SLR #80 c7d895a2ad5e, 25c0d82cb599: recorded_reciprocal_query and CLI relational-family reciprocal FAMILY LEFT RIGHT reopen durable family and preserve both directional comparisons, original observations, polarity and residuals.
+- Lean #112 e82db4ff3b62, ebb4d3a1894e: RelationalObservedMeet.selectDirectionalExact, checkReciprocalQuery and runner reciprocal FAMILY_JSON ANSWER_JSON check exact selection from reopened family, not semantic validity of stored comparison.
+- Existing declared_transport_meet already checks direct bilateral coordinate matches, injectivity, all ordered cross-chart pairs and preserves held selectors. Do not duplicate. Remaining semantic cut: produce actual source-specific referent/event correspondence and SourceQueryLicence from real article data, then instantiate reciprocalLicensedComparison; independent coverage/factorisation and semantic alignment are not inferred from the recorded projection.
+- Correction: GHWB item is Q23505 (see Lean GwbCoreferenceFormalRepair); earlier phase A Q23685 is incorrect.
+- No native/kernel acceptance executed. 
