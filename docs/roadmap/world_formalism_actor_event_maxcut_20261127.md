@@ -102,3 +102,9 @@ SLR #80 / Lean #112, on the existing #79 substrate. Source implementation only: 
 | Legal gate | Existing law algebra producers/consumer-scoped proof obligations | W01–W08 real wiki gate remains open; no legal expansion/adjudication. |
 
 Acceptance must distinguish written proof from kernel-checked proof, bounded source claim from unrestricted semantic coverage, original source claim from independently checked KB support, and KB support from historical truth. No completion claim for the full P0.
+
+## Article action inventory cut (2026-11-27)
+- e55da2db9c1b: recorded_action_inventory and read_recorded_article_actions reuse checked native PNF region owner in a repeatable-read transaction; retain all predicate observations, exact mention-role matches, active/passive subject candidates, embedded predicate and local negation indicators. Reject mixed revision/digest, duplicate batch/region, empty region selection. Caller-selected region coverage and source-family identity are explicitly unpaid; no actor, assertion or identity promotion.
+- f42a3061585a: relational-family article-actions REVISION BATCH_REFS_JSON MENTION_REFS_JSON (both files JSON arrays of exact native refs); independent runs for GWB and GHWB. No article-subject inference.
+- 8777175f6057: regression for unmatched embedded and negated predicate retention. Source implementation only; local Rust/DB acceptance deferred.
+- Next: actual source-local semantic reading constructors and authenticated scoped answer binding over these inventories, including coordination, passive agency, reported speech and non-entity subject alternatives. Acquire original GHWB source and match independent native inventories to the existing Lean bounded licences; do not treat this syntax inventory as a semantic endpoint. W01/W02 partial; W03–W08 and W11 remain open, W09–W10 gated. Lean #112 merged into main (3e3fef3ffe53); future golden changes require a new branch/PR.
