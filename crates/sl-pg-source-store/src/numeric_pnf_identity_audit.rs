@@ -2569,6 +2569,10 @@ fn materialize_native_numeric_relation_arguments(
                  VALUES($1,$2,$3,$4,2,TRUE)",
                 &[&factor,&i16::try_from(ordinal).map_err(|_|NativeNumericAuditError::ForeignSource)?,&role_id,&object])?;
         }
+        let expected=relation.roles.iter().map(|(role,id)|(role.to_string(),*id)).collect::<Vec<_>>();
+        if !numeric_relation_inverse_on_tx(tx,factor,&expected,relation.head_token_id)?{
+            return Err(NativeNumericAuditError::ForeignSource);
+        }
     }
     Ok((factors_inserted,objects_inserted))
 }
@@ -7084,6 +7088,32 @@ mod tests{
         assert_eq!(persisted_numeric_relation_digest("run","doc","ref",1,&owned).unwrap(),old);
         let mut swapped=owned.clone();swapped.swap(1,2);
         assert_ne!(persisted_numeric_relation_digest("run","doc","ref",1,&swapped).unwrap(),old);
+    }
+    #[test]
+    fn repair_digest_is_separate_and_preserves_order_and_source(){
+        let roles=vec![("head",1i64),("subject",2),("argument",2)];
+        let repaired=exact_repair_relation_digest("run","doc","ref",1,&roles).unwrap();
+        assert_ne!(repaired,persisted_numeric_relation_digest("run","doc","ref",1,&roles).unwrap());
+        let owned=roles.iter().map(|(r,id)|(r.to_string(),*id)).collect::<Vec<_>>();
+        assert_eq!(repaired,exact_repair_relation_digest("run","doc","ref",1,&owned).unwrap());
+        assert_ne!(repaired,exact_repair_relation_digest("run","other","ref",1,&roles).unwrap());
+        let mut swapped=owned.clone();swapped.swap(1,2);
+        assert_ne!(repaired,exact_repair_relation_digest("run","doc","ref",1,&swapped).unwrap());
+    }
+    #[test]
+    fn exact_singleton_role_inverse_rejects_historical_v8_shape(){
+        let expected=vec![("head".to_string(),619776),("subject".to_string(),619769),
+            ("subject".to_string(),619775),("object".to_string(),619782),("argument".to_string(),619782)];
+        let historical=vec![(0,"head".into(),vec![619776]),(1,"subject".into(),vec![619769]),
+            (2,"subject".into(),vec![619775]),(3,"object".into(),vec![619781,619782]),
+            (4,"argument".into(),vec![619781,619782])];
+        assert!(!exact_numeric_role_inverse(&historical,&expected));
+        let exact=expected.iter().enumerate().map(|(i,(r,t))|(i as i16,r.clone(),vec![*t])).collect::<Vec<_>>();
+        assert!(exact_numeric_role_inverse(&exact,&expected));
+        let mut wrong=exact.clone();wrong[1].2=vec![619775];
+        assert!(!exact_numeric_role_inverse(&wrong,&expected));
+        let mut wrong=exact.clone();wrong[2].0=1;
+        assert!(!exact_numeric_role_inverse(&wrong,&expected));
     }
     #[test]
     fn level_three_must_be_on_the_exact_original_argument(){
