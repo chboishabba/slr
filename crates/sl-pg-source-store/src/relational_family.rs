@@ -1030,3 +1030,45 @@ mod tests{
         assert!(project_relational_family(&[a.clone(),a],&q,"review").is_err());
     }
 }
+
+
+/// Query the exact selected source inventory, not all possible readings.
+/// The coordinate retains role and occurrence; no referent alias is inferred.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct RecordedParticipantAnswer {
+    pub selector_ref: String,
+    pub observation_ref: String,
+    pub revision_ref: String,
+    pub predicate_candidate_ref: String,
+    pub coordinate: ObservedCoordinate,
+}
+
+pub fn recorded_participant_query(
+    family: &PersistedRelationalFamily, filler_ref: &str,
+) -> serde_json::Value {
+    let answers: Vec<RecordedParticipantAnswer> = family.projection.sources.iter()
+        .flat_map(|s| s.observation.role_bindings.iter().filter_map(move |r| {
+            if r.filler_candidate_ref != filler_ref { return None; }
+            Some(RecordedParticipantAnswer {
+                selector_ref: s.selector_ref.clone(),
+                observation_ref: s.observation.observation_ref.clone(),
+                revision_ref: s.observation.source_revision_ref.clone(),
+                predicate_candidate_ref: s.observation.predicate_candidate_ref.clone(),
+                coordinate: ObservedCoordinate {
+                    axis: "role".into(), slot: r.role_ref.clone(),
+                    occurrence: r.occurrence, value_ref: r.filler_candidate_ref.clone(),
+                },
+            })
+        })).collect();
+    serde_json::json!({
+        "schema": "slr.recorded-participant-query.v1",
+        "family_ref": family.family_ref,
+        "consumer_ref": family.projection.consumer_ref,
+        "filler_ref": filler_ref,
+        "answers": answers,
+        "selected_source_count": family.projection.sources.len(),
+        "all_live_semantic_readings_covered": false,
+        "governed_identity_paid": false,
+        "world_truth_paid": false
+    })
+}
