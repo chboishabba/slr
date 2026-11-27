@@ -44,6 +44,10 @@ pub enum RelationalFamilyError {
     #[error(transparent)] Pg(#[from] postgres::Error),
     #[error(transparent)] Review(#[from] ReviewWorkstationStoreError),
     #[error(transparent)] Encoding(#[from] serde_json::Error),
+    #[error(transparent)]
+    FormalProof(#[from] sensiblaw_formal_proof_bridge::FormalProofBridgeError),
+    #[error("independent reciprocal query proof is not bound to the current source pair, query and answer")]
+    ReciprocalProofBinding,
     #[error("family or revision transition not found")]
     MissingFamily,
     #[error("revision transition requires the current exact S29 candidate review to be accepted")]
@@ -1102,4 +1106,86 @@ pub fn recorded_reciprocal_query(
         "semantic_equivalence_paid": false,
         "world_truth_paid": false
     }))
+}
+
+
+/// Exact binding of a bounded semantic answer to the existing native source
+/// pair. The independently issued referee receipt, not caller JSON, supplies
+/// the answer and confirms the actual scoped theorem. This read-only weld
+/// does not create an admission path or a new proof store.
+fn reciprocal_proof_binding(
+    family:&PersistedRelationalFamily,left:&str,right:&str,query:&str,
+    statement_digest:&str,evidence_ref:&str,answer:&serde_json::Value,
+)->Result<serde_json::Value,RelationalFamilyError>{
+    use serde_json::json;
+    if query.trim().is_empty()||statement_digest.trim().is_empty()||evidence_ref.trim().is_empty()
+        ||answer.is_null()||family.superseded_by.is_some(){
+        return Err(RelationalFamilyError::ReciprocalProofBinding);
+    }
+    let recorded=recorded_reciprocal_query(family,left,right)?;
+    let p=&family.projection;
+    let a=p.sources.iter().find(|s|s.selector_ref==left).ok_or(RelationalFamilyError::InvalidSelector)?;
+    let b=p.sources.iter().find(|s|s.selector_ref==right).ok_or(RelationalFamilyError::InvalidSelector)?;
+    Ok(json!({
+        "schema":"slr-reciprocal-source-query-binding-v1",
+        "proof_scope":"bounded-source-proposition",
+        "family_ref":family.family_ref,"consumer_ref":p.consumer_ref,"query_ref":query,
+        "left_selector_ref":left,"right_selector_ref":right,
+        "left_source_revision_ref":a.observation.source_revision_ref,
+        "right_source_revision_ref":b.observation.source_revision_ref,
+        "left_observation_ref":a.observation.observation_ref,
+        "right_observation_ref":b.observation.observation_ref,
+        "left_observation_sha256":digest_bytes(&serde_json::to_vec(&a.observation)?),
+        "right_observation_sha256":digest_bytes(&serde_json::to_vec(&b.observation)?),
+        "forward_comparison_ref":recorded["forward"]["comparison"]["comparison_ref"],
+        "backward_comparison_ref":recorded["backward"]["comparison"]["comparison_ref"],
+        "statement_digest":statement_digest,"evidence_ref":evidence_ref,
+        "answer_sha256":digest_bytes(&serde_json::to_vec(answer)?)
+    }))
+}
+
+/// Reopen current native family and the existing independently authenticated
+/// formal evidence in ONE serializable read-only transaction. The exact
+/// domain binding is issued by the trusted referee for the same pair/query.
+/// A checked generic theorem, historical proof or differently scoped answer
+/// cannot pay this query. The existing family lineage is the currentness gate.
+pub fn read_authenticated_reciprocal_query(
+    config:&DatabaseConfig,family_ref:&str,left:&str,right:&str,query:&str,
+    evidence_ref:&str,locator:&sensiblaw_formal_proof_bridge::RefereeReceiptLocator,
+)->Result<serde_json::Value,RelationalFamilyError>{
+    use serde_json::{json,Value};
+    use sensiblaw_formal_proof_bridge::{reopen_authenticated_formal_evidence_tx,
+        read_source_bound_referee_receipt};
+    let mut connection=Client::connect(config.database_url(),NoTls)?;
+    let mut tx=connection.transaction()?;
+    tx.batch_execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE READ ONLY; SET LOCAL statement_timeout='90000ms'")?;
+    let manifest=read_manifest(&mut tx,family_ref)?;
+    let family=read_family_on_client(&mut tx,&manifest)?;
+    let recorded=recorded_reciprocal_query(&family,left,right)?;
+    let checked=reopen_authenticated_formal_evidence_tx(&mut tx,evidence_ref,locator)?;
+    let payment=checked.payment();
+    let referee:Value=serde_json::from_str(&read_source_bound_referee_receipt(&mut tx,locator)?)?;
+    let answer=referee.get("slr_reciprocal_query_answer").ok_or(RelationalFamilyError::ReciprocalProofBinding)?;
+    let binding=reciprocal_proof_binding(&family,left,right,query,&payment.statement_digest,evidence_ref,answer)?;
+    let premise=&referee["slr_premise_binding"];
+    let revisions=premise["source_revisions"].as_array().ok_or(RelationalFamilyError::ReciprocalProofBinding)?;
+    if referee["slr_reciprocal_query_binding"]!=binding
+        ||premise["consumer_ref"]!=family.projection.consumer_ref
+        ||!revisions.contains(&binding["left_source_revision_ref"])
+        ||!revisions.contains(&binding["right_source_revision_ref"])
+        ||!payment.formal_premise_paid||payment.creates_legal_authority
+        ||payment.applicability_promoted||payment.claim_truth_promoted{
+        return Err(RelationalFamilyError::ReciprocalProofBinding);
+    }
+    let result=json!({
+        "schema":"slr.authenticated-bounded-reciprocal-query.v1",
+        "family_ref":family_ref,"query_ref":query,"binding":binding,
+        "answer":answer,"recorded_comparison":recorded,
+        "authenticated_formal_premise":payment,"proof_scope":"bounded-source-proposition",
+        "creates_semantic_authority":false,"all_live_semantic_readings_covered":false,
+        "governed_identity_paid":false,"world_truth_paid":false,
+        "writes_database":false
+    });
+    tx.commit()?;
+    Ok(result)
 }
