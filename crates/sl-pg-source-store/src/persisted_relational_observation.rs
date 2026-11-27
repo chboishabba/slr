@@ -426,6 +426,92 @@ pub fn relational_observation_from_checked_persisted_pnf(
 }
 
 
+/// Source-local query over checked predicate occurrences. The caller supplies
+/// exact mention factors, not resolved person identifiers. Keep every predicate
+/// in the answer (including unlinked ones): absence of a direct role is not
+/// evidence that the person did not act.
+pub fn recorded_action_inventory(batch: &CheckedRelationalBatch, mentions: &[String])
+    -> serde_json::Value {
+    let selected: BTreeSet<&str> = mentions.iter().map(String::as_str).collect();
+    let rows: Vec<_> = batch.observations.iter().map(|o| {
+        let matched: Vec<_> = o.role_bindings.iter().filter(|r|
+            selected.contains(r.filler_candidate_ref.as_str())).collect();
+        let active: Vec<_> = matched.iter().filter(|r|
+            matches!(r.role_ref.as_str(), "syntax:nsubj" | "syntax:csubj")).collect();
+        let passive: Vec<_> = matched.iter().filter(|r|
+            matches!(r.role_ref.as_str(), "syntax:nsubjpass" | "syntax:nsubj:pass" |
+                "syntax:csubjpass" | "syntax:csubj:pass")).collect();
+        let embedded = o.native_metadata_refs.iter().any(|m|
+            m.starts_with("syntax:parent-factor:"));
+        let local_negation = o.native_metadata_refs.iter().any(|m|
+            m.starts_with("syntax:literal-negation-factor:"));
+        serde_json::json!({
+            "original_observation": o,
+            "matched_roles": matched,
+            "active_subject_candidates": active,
+            "passive_subject_candidates": passive,
+            "embedded_predicate": embedded,
+            "local_negation_recorded": local_negation,
+            "actor_attribution_paid": false,
+            "asserted_action_paid": false
+        })
+    }).collect();
+    serde_json::json!({
+        "schema": "slr.recorded-action-inventory.v1",
+        "batch_ref": batch.batch_ref,
+        "source_revision_ref": batch.source_revision_ref,
+        "source_content_digest_ref": batch.source_content_digest_ref,
+        "original_parser_run_ref": batch.original_parser_run_ref,
+        "original_region_ref": batch.original_region_ref,
+        "mention_factor_refs": selected,
+        "predicate_count": rows.len(),
+        "rows": rows,
+        "all_live_semantic_readings_covered": false,
+        "governed_identity_paid": false,
+        "world_truth_paid": false
+    })
+}
+
+/// Reopen a whole list of checked source regions in one snapshot. Reject
+/// revision mixing and duplicate regions rather than silently merging charts.
+/// This is an inventory of recorded syntax, not proof of article completeness.
+pub fn read_recorded_article_actions(config: &DatabaseConfig, revision: &str,
+    batches: &[String], mentions: &[String])
+    -> Result<serde_json::Value, PersistedRelationalObservationError> {
+    if revision.trim().is_empty() || batches.is_empty()
+        || batches.iter().collect::<BTreeSet<_>>().len() != batches.len()
+        || mentions.iter().any(|m| m.trim().is_empty()) {
+        return Err(PersistedRelationalObservationError::CheckedSourceMismatch);
+    }
+    let mut client = Client::connect(config.database_url(), NoTls)?;
+    let mut tx = client.transaction()?;
+    tx.batch_execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY; SET LOCAL statement_timeout='90000ms'")?;
+    let mut regions = BTreeSet::new();
+    let mut rows = Vec::new();
+    let mut digest = None;
+    for batch_ref in batches {
+        let batch = relational_observations_from_checked_batch_on_client(&mut tx,
+            batch_ref, RelationalSourceFamily::Wikipedia, &ObservationContext::default(), &[])?;
+        if batch.source_revision_ref != revision || !regions.insert(batch.original_region_ref.clone())
+            || digest.as_ref().is_some_and(|d| d != &batch.source_content_digest_ref) {
+            return Err(PersistedRelationalObservationError::CheckedSourceMismatch);
+        }
+        digest = Some(batch.source_content_digest_ref.clone());
+        rows.push(recorded_action_inventory(&batch, mentions));
+    }
+    tx.commit()?;
+    Ok(serde_json::json!({
+        "schema": "slr.recorded-article-actions.v1",
+        "source_revision_ref": revision,
+        "source_content_digest_ref": digest,
+        "regions": rows,
+        "article_region_coverage_paid": false,
+        "source_family_verified": false,
+        "semantic_coverage_paid": false,
+        "world_truth_paid": false
+    }))
+}
+
 /// Exact source-local inverse of the existing checked predicate projection.
 /// No QID, title, surface string or grammatical subject establishes identity.
 /// All roles survive; callers can select active-subject candidates separately
