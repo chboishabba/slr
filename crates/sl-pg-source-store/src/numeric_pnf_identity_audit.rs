@@ -4243,6 +4243,94 @@ pub fn query_native_demand_fibre(url:&str,run:&str,doc:&str,source_sha:&str,dema
     Ok(packet)
 }
 
+/// Exact proof-to-original-query-owner rollback probe. No persistent
+/// certificate is published here: the existing durable withdrawal owner
+/// must also invalidate referee-bound certificates when their source or
+/// independent proof changes before persistent publication is enabled.
+/// The independent referee must issue BOTH the formal premise binding and
+/// this exact domain binding; neither the caller nor packet JSON is authority.
+pub fn probe_authenticated_native_query_admission(
+    url:&str,run:&str,doc:&str,source_sha:&str,demand_id:i64,
+    consumer:&str,query:&str,horizon:i16,evidence_ref:&str,
+    locator:&sensiblaw_formal_proof_bridge::RefereeReceiptLocator,
+)->Result<serde_json::Value,NativeNumericAuditError>{
+    use serde_json::{json,Value};
+    use sensiblaw_formal_proof_bridge::{
+        reopen_authenticated_formal_evidence_tx,read_source_bound_referee_receipt,
+    };
+    if consumer.trim().is_empty()||query.trim().is_empty()
+        ||!matches!(horizon,3|6|9)||evidence_ref.trim().is_empty(){
+        return Err(NativeNumericAuditError::ForeignSource);
+    }
+    let mut db=Client::connect(url,NoTls)?;
+    let mut tx=db.transaction()?;
+    tx.batch_execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE; SET LOCAL statement_timeout='90000ms'")?;
+    let packet=query_native_demand_fibre_tx(&mut tx,run,doc,source_sha,demand_id)?;
+    let binding=&packet["original_source_binding"];
+    let revision=binding["source_revision_ref"].as_str().filter(|s|!s.is_empty())
+        .ok_or(NativeNumericAuditError::ForeignSource)?;
+    let packet_digest=packet["packet_sha256"].as_str().ok_or(NativeNumericAuditError::ForeignSource)?;
+    let relation_digest=binding["packet_sha256"].as_str().ok_or(NativeNumericAuditError::ForeignSource)?;
+    if packet["current_authority_view_installed"]!=true||packet["current_authority_guard_usable"]!=true{
+        return Err(NativeNumericAuditError::WitnessNotCurrent);
+    }
+    let authenticated=reopen_authenticated_formal_evidence_tx(&mut tx,evidence_ref,locator)
+        .map_err(|_|NativeNumericAuditError::WitnessNotCurrent)?;
+    let payment=authenticated.payment();
+    let expected=json!({
+        "schema":"slr-native-query-sufficiency-binding-v1",
+        "numeric_run_ref":run,"document_ref":doc,"source_sha256":source_sha,
+        "source_revision_ref":revision,"relation_packet_sha256":relation_digest,
+        "demand_id":demand_id,"demand_packet_sha256":packet_digest,
+        "consumer_ref":consumer,"query_ref":query,"policy_ref":"",
+        "horizon":horizon,"certificate_kind":1,"residual_required":true,
+        "formal_demand_ref":payment.demand_ref,"obligation_ref":payment.obligation_ref,
+        "evidence_ref":evidence_ref,"statement_digest":payment.statement_digest
+    });
+    let raw=read_source_bound_referee_receipt(&mut tx,locator)
+        .map_err(|_|NativeNumericAuditError::WitnessNotCurrent)?;
+    let referee:Value=serde_json::from_str(&raw).map_err(|_|NativeNumericAuditError::ForeignSource)?;
+    if referee.get("slr_numeric_query_binding")!=Some(&expected)
+        ||!payment.formal_premise_paid||payment.creates_legal_authority
+        ||payment.applicability_promoted||payment.claim_truth_promoted{
+        return Err(NativeNumericAuditError::WitnessNotCurrent);
+    }
+    // Refuse foreign consumer scopes even if the referee binding matched.
+    let registered:bool=tx.query_one("SELECT EXISTS(SELECT 1 FROM
+        execution.semantic_pnf_consumer_horizon_work_queue WHERE demand_id=$1
+        AND consumer_ref=$2 AND query_ref=$3 AND policy_ref='' AND horizon=$4)",
+        &[&demand_id,&consumer,&query,&horizon])?.get(0);
+    if !registered{return Err(NativeNumericAuditError::ForeignSource);}
+    let before:bool=tx.query_one("SELECT execution.numeric_pnf_consumer_stop_at_horizon($1,$2,$3,'',$4)",
+        &[&demand_id,&consumer,&query,&horizon])?.get(0);
+    if before{return Err(NativeNumericAuditError::AdmissionProbeInvariant);}
+    let next_revision:i64=tx.query_one("SELECT COALESCE(max(revision),0)+1
+        FROM execution.semantic_pnf_consumer_sufficiency_certificate
+        WHERE demand_id=$1 AND consumer_ref=$2 AND query_ref=$3 AND policy_ref=''
+        AND certificate_kind=1",&[&demand_id,&consumer,&query])?.get(0);
+    let cert_ref=format!("authenticated-native-query:{}:{}",evidence_ref,packet_digest);
+    let certificate_id:i64=tx.query_one("SELECT execution.record_numeric_pnf_consumer_sufficiency(
+        $1,$2,$3,''::text,$4,1::smallint,true,$5,$6,1::smallint)",
+        &[&demand_id,&consumer,&query,&horizon,&cert_ref,&next_revision])?.get(0);
+    let stopped:bool=tx.query_one("SELECT execution.numeric_pnf_consumer_stop_at_horizon($1,$2,$3,'',$4)",
+        &[&demand_id,&consumer,&query,&horizon])?.get(0);
+    if !stopped{return Err(NativeNumericAuditError::AdmissionProbeInvariant);}
+    let withdrawal_revision=next_revision.checked_add(1).ok_or(NativeNumericAuditError::AdmissionProbeInvariant)?;
+    let withdrawal_id:i64=tx.query_one("SELECT execution.record_numeric_pnf_consumer_sufficiency(
+        $1,$2,$3,''::text,$4,1::smallint,true,$5,$6,2::smallint)",
+        &[&demand_id,&consumer,&query,&horizon,&cert_ref,&withdrawal_revision])?.get(0);
+    let after:bool=tx.query_one("SELECT execution.numeric_pnf_consumer_stop_at_horizon($1,$2,$3,'',$4)",
+        &[&demand_id,&consumer,&query,&horizon])?.get(0);
+    if after{return Err(NativeNumericAuditError::RetractionInvariant);}
+    tx.rollback()?;
+    Ok(json!({"schema":"slr-authenticated-native-query-admission-probe-v1",
+        "binding":expected,"formal_premise_authenticated":true,
+        "original_sql_stop_observed":stopped,"original_sql_withdrawal_observed":!after,
+        "rollback_certificate_id":certificate_id,"rollback_withdrawal_id":withdrawal_id,
+        "committed":false,"governed_identity_paid":false,"level_three_paid":false,
+        "policy_authority_paid":false,"world_truth_paid":false}))
+}
+
 /// Reopen the exact original fibre inside an existing admission transaction.
 /// This is an observation, never a proof of coverage or admission authority.
 pub fn query_native_demand_fibre_tx(tx:&mut postgres::Transaction<'_>,run:&str,doc:&str,source_sha:&str,demand_id:i64)
