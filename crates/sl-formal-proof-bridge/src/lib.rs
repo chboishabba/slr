@@ -604,16 +604,32 @@ pub fn reopen_authenticated_formal_evidence(
     let mut client = Client::connect(database_url, NoTls)?;
     let mut tx = client.transaction()?;
     tx.batch_execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE READ ONLY")?;
-    let evidence = load_evidence_tx(&mut tx, evidence_ref)?;
-    let demand = load_demand_tx(&mut tx, &evidence.demand_ref)?;
-    require_existing_inputs(&mut tx, &demand)?;
+    let checked = reopen_authenticated_formal_evidence_tx(&mut tx, evidence_ref, locator)?;
+    tx.commit()?;
+    Ok(checked)
+}
+
+/// Transaction-local JMD/DASHI formal evidence adapter. The caller owns
+/// the serializable transaction and its domain-specific current-state gate.
+/// This authenticates a formal premise only, never numeric identity.
+/// Do not reuse the return value across transactions for admission.
+pub fn reopen_authenticated_formal_evidence_tx(
+    tx: &mut Transaction<'_>, evidence_ref: &str, locator: &RefereeReceiptLocator,
+) -> Result<AuthenticatedFormalEvidencePayment, FormalProofBridgeError> {
+    require_non_empty("evidence_ref", evidence_ref)?;
+    let isolation: String = tx.query_one("SHOW transaction_isolation", &[])?.get(0);
+    if isolation != "serializable" {
+        return Err(FormalProofBridgeError::UnauthenticatedRefereeReceipt);
+    }
+    let evidence = load_evidence_tx(tx, evidence_ref)?;
+    let demand = load_demand_tx(tx, &evidence.demand_ref)?;
+    require_existing_inputs(tx, &demand)?;
     let expected = validate_formal_evidence_payment(&demand, &evidence)?;
-    require_authenticated_referee_receipt(&mut tx, locator, &demand, &evidence)?;
-    let payment = load_payment_tx(&mut tx, evidence_ref)?;
+    require_authenticated_referee_receipt(tx, locator, &demand, &evidence)?;
+    let payment = load_payment_tx(tx, evidence_ref)?;
     if !payment_replay_matches(&payment, &expected) {
         return Err(FormalProofBridgeError::ExistingRowConflict);
     }
-    tx.commit()?;
     Ok(AuthenticatedFormalEvidencePayment { payment, locator: locator.clone() })
 }
 
