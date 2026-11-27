@@ -1,5 +1,14 @@
 # ITIR informational equivalence, wiki repair and automatic proving — P0 sprint
 
+## 2026-11-27 — indexed producer / authenticated query admission cut (source-written)
+
+Lean #112: 7c7ca11 generic subject-indexed source checker; 9a5f8a1 direct original EntityData property and same-statement qualified-year witnesses; a84c47b / 6371c32 exact source observation query; d9d073e indexed-article-kb-check in existing runner; 8da2e6e P9 exact proposition triple alignment under original SourceQueryLicence. Original GWB specialization retained. Generic source observation and independent KB support are not general semantic agreement.
+
+SLR #79: da9e16b implements probe_authenticated_native_query_admission in numeric_pnf_identity_audit.rs; 28af81a / 0f754a2 export original native facade and referee locator; a4b9b03 wires probe-query-admission into existing numeric native CLI. It reopens the original demand packet and authenticated formal evidence in one serializable transaction, requires independently issued exact slr_numeric_query_binding, current authority guard and registered query-only scope, then invokes m095 query sufficiency append/stop/withdrawal and rolls back. No persistent authority, action-policy licence, governed identity, Level-3, or world truth. Zero and other residuals retained. Referee issuance must prove actual query sufficiency; caller JSON and structural Lean observation receipt do not substitute for that proof.
+
+D05: indexed independent producer and generic conditional P9 source implemented; actual semantic source licence/proposition witness and native referee issuance open. D06: executable transaction-local rollback integration implemented; persistent publication, exact dependency invalidation and selective replay open. D07: native CLI route available; actual ITIR facade reconciliation and J01–J11 open. D08: compiler/kernel/DB and consolidated acceptance not run; no CI or new Python semantics. Do not mark complete or request another candidate-only campaign.
+
+
 Date: 2026-11-26. Status: ACTIVE integration baseline; production acceptance OPEN.
 This file is the controlling sprint roadmap. Every implementation commit must
 update the affected deliverable dispositions, exact owner references, and test
