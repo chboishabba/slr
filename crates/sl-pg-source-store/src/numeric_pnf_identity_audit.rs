@@ -2445,6 +2445,9 @@ fn numeric_relation_inverse_on_tx(
         .map(|r|r.get::<_,i64>(0)).collect::<BTreeSet<_>>();
     let mut expected_support=expected.iter().map(|(_,id)|*id).collect::<BTreeSet<_>>();
     expected_support.insert(head);
+    if tx.query_one("SELECT EXISTS(SELECT 1 FROM execution.semantic_pnf_hyperedge e
+        LEFT JOIN execution.semantic_pnf_object o ON o.object_id=e.object_id
+        WHERE e.factor_id=$1 AND o.active IS DISTINCT FROM TRUE)",&[&factor])?.get::<_,bool>(0){return Ok(false);}
     let roles=tx.query("SELECT e.slot_ordinal,s.symbol_text,
         ARRAY(SELECT DISTINCT os.token_id FROM execution.semantic_pnf_object_token_support os
             WHERE os.object_id=e.object_id ORDER BY os.token_id)
