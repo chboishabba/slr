@@ -597,6 +597,40 @@ mod checked_dependency_tests {
     }
 
     #[test]
+    fn article_action_inventory_preserves_unmatched_and_embedded_predicates() {
+        let (tokens,pnf)=fixture();
+        let fibre=CheckedDependencyFibre::new(&tokens,&pnf).unwrap();
+        let observations=["factor:1","factor:5"].iter().map(|predicate|{
+            let (role_bindings,native_metadata_refs)=fibre.project(predicate).unwrap();
+            RelationalObservation {
+                observation_ref:format!("obs:{predicate}"),source_revision_ref:"rev".into(),
+                source_family:RelationalSourceFamily::Wikipedia,source_span_ref:"span:1".into(),
+                parser_or_producer_ref:"parser".into(),predicate_candidate_ref:(*predicate).into(),
+                role_bindings,role_type_hypotheses:vec![],context:ObservationContext::default(),
+                candidate_type_refs:vec![],provenance_refs:vec![],native_metadata_refs,
+                polarity:Polarity::Undetermined,candidate_only:true,creates_semantic_authority:false,
+                claim_truth_promoted:false,
+            }
+        }).collect();
+        let batch=CheckedRelationalBatch {
+            batch_ref:"batch".into(),source_revision_ref:"rev".into(),
+            source_content_digest_ref:"digest".into(),original_parser_run_ref:"run".into(),
+            original_region_ref:"span:1".into(),original_compilation_key:"key".into(),
+            original_token_count:tokens.len(),predicate_candidate_refs:vec!["factor:1".into(),"factor:5".into()],
+            observations,candidate_only:true,semantic_coverage_paid:false,
+        };
+        let result=recorded_action_inventory(&batch,&["factor:0".into()]);
+        assert_eq!(result["predicate_count"],2);
+        let rows=result["rows"].as_array().unwrap();
+        assert_eq!(rows[0]["active_subject_candidates"].as_array().unwrap().len(),1);
+        assert_eq!(rows[1]["matched_roles"].as_array().unwrap().len(),0);
+        assert_eq!(rows[1]["embedded_predicate"],true);
+        assert_eq!(rows[1]["local_negation_recorded"],true);
+        assert!(rows.iter().all(|r| r["actor_attribution_paid"]==false
+            && r["asserted_action_paid"]==false));
+    }
+
+    #[test]
     fn foreign_head_cycle_and_non_predicate_fail_closed() {
         let (mut tokens,batch)=fixture();
         assert!(CheckedDependencyFibre::new(&tokens,&batch).unwrap().project("factor:0").is_err());
