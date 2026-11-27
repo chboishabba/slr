@@ -1,5 +1,6 @@
 use sensiblaw_formal_proof_bridge::{
-    persist_and_validate_formal_evidence, FormalEvidenceReceiptInput,
+    persist_authenticated_formal_evidence, reopen_authenticated_formal_evidence,
+    FormalEvidenceReceiptInput, FormalProofBridgeError, RefereeReceiptLocator,
 };
 
 fn env_ref(name: &str) -> String {
@@ -52,8 +53,27 @@ fn live_mabo_da51_itir_evidence_pays_only_the_exact_formal_premise() {
         claim_truth_promoted: false,
     };
 
-    let payment = persist_and_validate_formal_evidence(&database_url, &evidence)
-        .expect("exact reviewed demand and independently certified evidence must replay/pay");
+    let locator = RefereeReceiptLocator {
+        repo: env_ref("ITIR_MABO_REFEREE_REPO"),
+        sha: env_ref("ITIR_MABO_REFEREE_SHA"),
+        path: env_ref("ITIR_MABO_REFEREE_PATH"),
+        canonical_thread_id: env_ref("ITIR_MABO_REFEREE_THREAD"),
+    };
+    let authenticated = persist_authenticated_formal_evidence(&database_url, &evidence, &locator)
+        .expect("exact independently issued SLR premise binding must replay/pay");
+    let reopened = reopen_authenticated_formal_evidence(&database_url, &evidence.evidence_ref, &locator)
+        .expect("persisted payment must independently reopen its referee receipt");
+    assert_eq!(authenticated, reopened);
+    let payment = authenticated.payment();
+
+    let mut changed = evidence.clone();
+    changed.statement_digest.push_str(":foreign");
+    assert_eq!(persist_authenticated_formal_evidence(&database_url, &changed, &locator),
+        Err(FormalProofBridgeError::StatementDigestMismatch));
+    let mut bad = locator.clone();
+    bad.path = "../foreign.lean".into();
+    assert_eq!(reopen_authenticated_formal_evidence(&database_url, &evidence.evidence_ref, &bad),
+        Err(FormalProofBridgeError::UnauthenticatedRefereeReceipt));
 
     assert_eq!(payment.demand_ref, evidence.demand_ref);
     assert_eq!(payment.obligation_ref, evidence.obligation_ref);

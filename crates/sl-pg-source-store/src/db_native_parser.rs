@@ -97,6 +97,10 @@ CREATE TABLE IF NOT EXISTS ingest.parser_token (
     PRIMARY KEY (compilation_key, token_ordinal)
 );
 
+-- TAG is an optional observation of the original parser artifact, never
+-- inferred from POS. Older products retain NULL and their original identity.
+ALTER TABLE ingest.parser_token ADD COLUMN IF NOT EXISTS original_tag TEXT NULL;
+
 CREATE INDEX IF NOT EXISTS parser_token_span_idx
 ON ingest.parser_token(compilation_key, start_char, end_char);
 
@@ -152,6 +156,8 @@ pub enum DbNativeParserError {
     ParserProductIdentityConflict,
     #[error("parser artifact digest does not match exact JSON bytes")]
     ArtifactDigestMismatch,
+    #[error("original TAG artifact does not match exact normalized token coordinates")]
+    ArtifactTagMismatch,
     #[error("persisted parser output violates candidate-only boundary")]
     PromotionBoundary,
     #[error("parser run cannot complete while queued or leased work remains")]
@@ -526,6 +532,8 @@ pub fn enqueue_parser_regions(
     let mut client = Client::connect(config.database_url(), NoTls)?;
     client.batch_execute(DB_NATIVE_PARSER_SCHEMA_SQL)?;
     let mut tx = client.transaction()?;
+    tx.query_one("SELECT pg_advisory_xact_lock(hashtext('slr-long-document-partition:v1'), hashtext($1))",
+        &[&run.source_revision_ref])?;
     let mut inserted = 0usize;
 
     for region in regions {
@@ -560,6 +568,10 @@ pub fn enqueue_parser_regions(
         )? as usize;
     }
 
+    if inserted>0{
+        tx.execute("UPDATE ingest.parser_run SET status='active',completed_at=NULL
+            WHERE parser_run_ref=$1 AND source_revision_ref=$2",&[&run.parser_run_ref,&run.source_revision_ref])?;
+    }
     tx.commit()?;
     Ok(inserted)
 }
@@ -574,6 +586,8 @@ pub fn enqueue_parser_regions_with_content_reuse(
     let mut client = Client::connect(config.database_url(), NoTls)?;
     client.batch_execute(DB_NATIVE_PARSER_SCHEMA_SQL)?;
     let mut tx = client.transaction()?;
+    tx.query_one("SELECT pg_advisory_xact_lock(hashtext('slr-long-document-partition:v1'), hashtext($1))",
+        &[&run.source_revision_ref])?;
 
     let mut queued_new_job_count = 0usize;
     let mut same_revision_reused_job_count = 0usize;
@@ -705,12 +719,12 @@ pub fn enqueue_parser_regions_with_content_reuse(
                     r#"
                     INSERT INTO ingest.parser_token (
                         compilation_key, token_ordinal, start_char, end_char,
-                        surface, lemma, pos, morph_json, head_ordinal, dependency_ref
+                        surface, lemma, pos, morph_json, head_ordinal, dependency_ref, original_tag
                     )
                     SELECT $1, token_ordinal,
                            start_char - $2 + $3,
                            end_char - $2 + $3,
-                           surface, lemma, pos, morph_json, head_ordinal, dependency_ref
+                           surface, lemma, pos, morph_json, head_ordinal, dependency_ref, original_tag
                     FROM ingest.parser_token
                     WHERE compilation_key=$4
                     ORDER BY token_ordinal
@@ -775,6 +789,13 @@ pub fn enqueue_parser_regions_with_content_reuse(
         }
     }
 
+    // Adding source regions changes completion scope, never parser identity.
+    // Reopen in the same transaction as the original content-reuse writes.
+    if queued_new_job_count>0||cross_revision_reused_job_count>0{
+        tx.execute("UPDATE ingest.parser_run SET status='active',completed_at=NULL
+            WHERE parser_run_ref=$1 AND source_revision_ref=$2",
+            &[&run.parser_run_ref,&run.source_revision_ref])?;
+    }
     tx.commit()?;
     Ok(ParserEnqueueReceipt {
         semantic_region_count: regions.len(),
@@ -954,6 +975,57 @@ pub fn persist_parser_success_with_entities(
     writer.persist_success_with_entities(job, worker_ref, tokens, entities, artifact)
 }
 
+/// Extract optional original TAG observations from the existing immutable
+/// parser artifact. The normalized token rows and wire coordinates must
+/// agree before any TAG is retained. This deliberately accepts no POS
+/// fallback, inferred tag, or tag-only packet detached from the parse.
+fn original_artifact_tags(
+    artifact: Option<&Value>,
+    region_start: u64,
+    tokens: &[ParserTokenRecord],
+) -> Result<Vec<Option<String>>, DbNativeParserError> {
+    let missing=||vec![None;tokens.len()];
+    let Some(rows)=artifact.and_then(|a|a.get("tokens")).and_then(Value::as_array)
+        else{return Ok(missing())};
+    if !rows.iter().any(|r|r.get("tag").is_some_and(|v|!v.is_null())){
+        return Ok(missing());
+    }
+    let mut indexed=BTreeMap::new();
+    for r in rows {
+        let ordinal=r.get("token_ordinal").and_then(Value::as_u64)
+            .ok_or(DbNativeParserError::ArtifactTagMismatch)?;
+        if indexed.insert(ordinal,r).is_some(){return Err(DbNativeParserError::ArtifactTagMismatch);}
+    }
+    if indexed.len()!=tokens.len(){return Err(DbNativeParserError::ArtifactTagMismatch);}
+    tokens.iter().map(|t|{
+        let r=indexed.get(&u64::from(t.token_ordinal))
+            .ok_or(DbNativeParserError::ArtifactTagMismatch)?;
+        let coordinate=|k:&str|r.get(k).and_then(Value::as_u64).and_then(|v|region_start.checked_add(v));
+        let head=match r.get("head_ordinal"){
+            Some(Value::Null)=>None,
+            Some(v)=>Some(v.as_u64().ok_or(DbNativeParserError::ArtifactTagMismatch)?),
+            None=>return Err(DbNativeParserError::ArtifactTagMismatch),
+        };
+        let morphology=t.morph_json.as_deref().map(serde_json::from_str::<Value>).transpose()?;
+        if coordinate("start_char")!=Some(u64::from(t.start_char))
+            || coordinate("end_char")!=Some(u64::from(t.end_char))
+            || r.get("surface").and_then(Value::as_str)!=Some(t.surface.as_str())
+            || r.get("lemma").and_then(Value::as_str)!=Some(t.lemma.as_str())
+            || r.get("pos").and_then(Value::as_str)!=Some(t.pos.as_str())
+            || r.get("dependency_ref").and_then(Value::as_str)!=Some(t.dependency_ref.as_str())
+            || head!=t.head_ordinal.map(u64::from)
+            || r.get("morph").filter(|v|!v.is_null())!=morphology.as_ref(){
+            return Err(DbNativeParserError::ArtifactTagMismatch);
+        }
+        match r.get("tag"){
+            None|Some(Value::Null)=>Ok(None),
+            Some(Value::String(tag)) if tag.is_empty()=>Ok(None),
+            Some(Value::String(tag)) if !tag.trim().is_empty()=>Ok(Some(tag.clone())),
+            _=>Err(DbNativeParserError::ArtifactTagMismatch),
+        }
+    }).collect()
+}
+
 fn persist_parser_success_with_entities_on_client(
     client: &mut Client,
     job: &ClaimedParserJob,
@@ -981,11 +1053,16 @@ fn persist_parser_success_with_entities_on_client(
             ));
         }
     }
+    let mut original_artifact=None;
     if let Some(artifact) = artifact {
         require(&artifact.format_ref)?;
         require(&artifact.content_digest_ref)?;
         if let Some(json) = artifact.artifact_json.as_deref() {
-            let _: Value = serde_json::from_str(json)?;
+            let parsed: Value = serde_json::from_str(json)?;
+            // Only the existing normalized wire artifact format owns TAG.
+            if artifact.format_ref=="application/vnd.sensiblaw.spacy-region+json" {
+                original_artifact=Some(parsed);
+            }
             if sha256_content_ref(json.as_bytes()) != artifact.content_digest_ref {
                 return Err(DbNativeParserError::ArtifactDigestMismatch);
             }
@@ -995,6 +1072,7 @@ fn persist_parser_success_with_entities_on_client(
         }
     }
 
+    let original_tags=original_artifact_tags(original_artifact.as_ref(),job.start_char,tokens)?;
     let mut tx = client.transaction()?;
 
 
@@ -1069,17 +1147,17 @@ fn persist_parser_success_with_entities_on_client(
             r#"
             INSERT INTO ingest.parser_token (
               compilation_key, token_ordinal, start_char, end_char,
-              surface, lemma, pos, morph_json, head_ordinal, dependency_ref
+              surface, lemma, pos, morph_json, head_ordinal, dependency_ref, original_tag
             )
             SELECT $1, token_ordinal, start_char, end_char,
-                   surface, lemma, pos, morph_json, head_ordinal, dependency_ref
+                   surface, lemma, pos, morph_json, head_ordinal, dependency_ref, original_tag
             FROM UNNEST(
               $2::INTEGER[], $3::BIGINT[], $4::BIGINT[],
               $5::TEXT[], $6::TEXT[], $7::TEXT[], $8::TEXT[],
-              $9::INTEGER[], $10::TEXT[]
+              $9::INTEGER[], $10::TEXT[], $11::TEXT[]
             ) AS u(
               token_ordinal, start_char, end_char,
-              surface, lemma, pos, morph_json, head_ordinal, dependency_ref
+              surface, lemma, pos, morph_json, head_ordinal, dependency_ref, original_tag
             )
             "#,
             &[
@@ -1093,6 +1171,7 @@ fn persist_parser_success_with_entities_on_client(
                 &morph_json,
                 &head_ordinals,
                 &dependencies,
+                &original_tags,
             ],
         )?;
     }
@@ -1320,18 +1399,27 @@ pub fn complete_parser_run(
     config: &DatabaseConfig,
     parser_run_ref: &str,
 ) -> Result<ParserRunState, DbNativeParserError> {
-    let state = parser_run_state(config, parser_run_ref)?;
-    if !state.complete {
-        return Err(DbNativeParserError::RunStillActive);
-    }
     let mut client = Client::connect(config.database_url(), NoTls)?;
-    client.execute(
-        "UPDATE ingest.parser_run
-         SET status = 'complete', completed_at = NOW()
-         WHERE parser_run_ref = $1",
-        &[&parser_run_ref],
-    )?;
-    Ok(state)
+    client.batch_execute(DB_NATIVE_PARSER_SCHEMA_SQL)?;
+    let mut tx=client.transaction()?;
+    let revision:String=tx.query_opt("SELECT source_revision_ref FROM ingest.parser_run WHERE parser_run_ref=$1",&[&parser_run_ref])?
+        .ok_or_else(||DbNativeParserError::MissingJob(parser_run_ref.to_owned()))?.get(0);
+    // Share the source partition lock with both enqueue paths and additive
+    // repair. Completion is checked inside that transaction, not before it.
+    tx.query_one("SELECT pg_advisory_xact_lock(hashtext('slr-long-document-partition:v1'),hashtext($1))",&[&revision])?;
+    let rows=tx.query("SELECT status,count(*)::bigint FROM ingest.parser_job WHERE parser_run_ref=$1 GROUP BY status",&[&parser_run_ref])?;
+    let counts=rows.into_iter().map(|row|(row.get::<_,String>(0),row.get::<_,i64>(1) as usize)).collect::<BTreeMap<_,_>>();
+    let queued=*counts.get("queued").unwrap_or(&0);
+    let leased=*counts.get("leased").unwrap_or(&0);
+    let succeeded=*counts.get("succeeded").unwrap_or(&0);
+    let residual=*counts.get("residual").unwrap_or(&0);
+    if queued!=0||leased!=0{return Err(DbNativeParserError::RunStillActive);}
+    tx.execute("UPDATE ingest.parser_run SET status='complete',completed_at=NOW()
+        WHERE parser_run_ref=$1 AND source_revision_ref=$2 AND (status<>'complete' OR completed_at IS NULL)",
+        &[&parser_run_ref,&revision])?;
+    tx.commit()?;
+    Ok(ParserRunState{parser_run_ref:parser_run_ref.to_owned(),queued,leased,succeeded,residual,
+        unattempted_semantic_regions:0,complete:true})
 }
 
 impl DbNativeParserSnapshot {
@@ -1507,9 +1595,392 @@ impl CandidatePnfProducer for DbNativeParserSnapshot {
     }
 }
 
+/// Exact, read-only evidence for a persisted parser region. This is not a
+/// reviewed PNF, a semantic equivalence certificate, or a formal proof.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParserEvidenceRegion {
+    parser_run_ref: String,
+    source_revision_ref: String,
+    region_ref: String,
+    compilation_key: String,
+    start_char: u32,
+    end_char: u32,
+    parser_product_key: Option<String>,
+    parser_family: String,
+    parser_version: String,
+    model_ref: String,
+    config_digest_ref: String,
+    tokens: Vec<ParserTokenRecord>,
+    entities: Vec<ParserEntityRecord>,
+    artifact: Option<ParserArtifactRecord>,
+    candidate_only: bool,
+}
+
+impl ParserEvidenceRegion {
+    #[must_use]
+    pub fn parser_run_ref(&self) -> &str { &self.parser_run_ref }
+    #[must_use]
+    pub fn source_revision_ref(&self) -> &str { &self.source_revision_ref }
+    #[must_use]
+    pub fn region_ref(&self) -> &str { &self.region_ref }
+    #[must_use]
+    pub fn compilation_key(&self) -> &str { &self.compilation_key }
+    #[must_use]
+    pub fn span(&self) -> (u32, u32) { (self.start_char, self.end_char) }
+    #[must_use]
+    pub fn matches_source_literal(&self, literal: &str) -> bool {
+        let expected = parser_product_key(
+            literal, &self.parser_family, &self.parser_version,
+            &self.model_ref, &self.config_digest_ref,
+        );
+        self.parser_product_key.as_deref() == Some(expected.as_str())
+    }
+    /// Exact non-whitespace source coverage by the stored tokens, with token
+    /// surfaces/head ordinals and named-entity spans checked against source.
+    /// This is syntax integrity only, not semantic validity.
+    #[must_use]
+    pub fn matches_observation_coverage(&self, literal: &str) -> bool {
+        if self.start_char >= self.end_char { return false; }
+        let chars = literal.chars().collect::<Vec<_>>();
+        let expected_len = (self.end_char - self.start_char) as usize;
+        if chars.len() != expected_len { return false; }
+        let mut covered = vec![false; expected_len];
+        let ordinals = self.tokens.iter()
+            .map(|token| token.token_ordinal)
+            .collect::<BTreeSet<_>>();
+        if ordinals.len() != self.tokens.len() { return false; }
+        for token in &self.tokens {
+            if token.start_char < self.start_char || token.end_char > self.end_char
+                || token.start_char >= token.end_char
+                || token.head_ordinal.is_some_and(|h| !ordinals.contains(&h))
+            { return false; }
+            let a = (token.start_char - self.start_char) as usize;
+            let b = (token.end_char - self.start_char) as usize;
+            if chars[a..b].iter().collect::<String>() != token.surface { return false; }
+            for idx in a..b {
+                if covered[idx] { return false; }
+                covered[idx] = true;
+            }
+        }
+        for entity in &self.entities {
+            if entity.start_char < self.start_char || entity.end_char > self.end_char
+                || entity.start_char >= entity.end_char
+            { return false; }
+            let a = (entity.start_char - self.start_char) as usize;
+            let b = (entity.end_char - self.start_char) as usize;
+            if chars[a..b].iter().collect::<String>() != entity.surface { return false; }
+        }
+        chars.iter().enumerate().all(|(i, ch)| ch.is_whitespace() || covered[i])
+    }
+    #[must_use]
+    pub fn tokens(&self) -> &[ParserTokenRecord] { &self.tokens }
+    #[must_use]
+    pub fn entities(&self) -> &[ParserEntityRecord] { &self.entities }
+    #[must_use]
+    pub fn artifact(&self) -> Option<&ParserArtifactRecord> { self.artifact.as_ref() }
+    #[must_use]
+    pub fn candidate_only(&self) -> bool { self.candidate_only }
+}
+
+/// Reopen the *original* parser observations, including morphology, dependency
+/// heads and entity annotations, which the coarse CandidatePnfFactor intentionally
+/// does not duplicate. The join fixes run, source revision, region and completed
+/// compilation identity; incomplete/residual regions fail closed.
+///
+/// A caller must separately establish the connection between a candidate PNF
+/// batch and these exact source/run coordinates before using any observation.
+pub fn load_parser_evidence_region(
+    config: &DatabaseConfig,
+    parser_run_ref: &str,
+    region_ref: &str,
+) -> Result<ParserEvidenceRegion, DbNativeParserError> {
+    if parser_run_ref.trim().is_empty() || region_ref.trim().is_empty() {
+        return Err(DbNativeParserError::EmptyCoordinate);
+    }
+    let mut client = Client::connect(config.database_url(), NoTls)?;
+    let job = client.query_opt(
+        "SELECT j.compilation_key, j.source_revision_ref,
+                j.region_start_char, j.region_end_char, j.parser_product_key,
+                r.parser_family, r.parser_version, r.model_ref, r.config_digest_ref
+         FROM ingest.parser_job j
+         JOIN ingest.parser_run r ON r.parser_run_ref = j.parser_run_ref
+         WHERE j.parser_run_ref = $1 AND j.region_ref = $2
+           AND j.source_revision_ref = r.source_revision_ref
+           AND j.status = 'succeeded'
+           AND j.candidate_only = TRUE
+           AND j.creates_semantic_authority = FALSE
+           AND j.applicability_promoted = FALSE
+           AND j.claim_truth_promoted = FALSE
+           AND r.candidate_only = TRUE
+           AND r.creates_semantic_authority = FALSE
+           AND r.applicability_promoted = FALSE
+           AND r.claim_truth_promoted = FALSE",
+        &[&parser_run_ref, &region_ref],
+    )?.ok_or_else(|| DbNativeParserError::MissingJob(
+        format!("{parser_run_ref}:{region_ref}:succeeded-candidate-only")
+    ))?;
+    let compilation_key: String = job.get(0);
+    let source_revision_ref: String = job.get(1);
+    let region_start: i64 = job.get(2);
+    let region_end: i64 = job.get(3);
+    let product_key: Option<String> = job.get(4);
+    let parser_family: String = job.get(5);
+    let parser_version: String = job.get(6);
+    let model_ref: String = job.get(7);
+    let config_digest_ref: String = job.get(8);
+    if region_start < 0 || region_end <= region_start
+        || region_start > u32::MAX as i64 || region_end > u32::MAX as i64
+    { return Err(DbNativeParserError::InvalidRegionSpan); }
+    let token_rows = client.query(
+        "SELECT token_ordinal, start_char, end_char, surface, lemma, pos,
+                morph_json, head_ordinal, dependency_ref
+         FROM ingest.parser_token WHERE compilation_key = $1
+         ORDER BY token_ordinal",
+        &[&compilation_key],
+    )?;
+    let mut tokens = Vec::with_capacity(token_rows.len());
+    for row in token_rows {
+        let ordinal: i32 = row.get(0);
+        let start: i64 = row.get(1);
+        let end: i64 = row.get(2);
+        let head: Option<i32> = row.get(7);
+        if ordinal < 0 || start < 0 || end <= start
+            || start > u32::MAX as i64 || end > u32::MAX as i64
+            || head.is_some_and(|h| h < 0)
+        {
+            return Err(DbNativeParserError::InvalidRegionSpan);
+        }
+        tokens.push(ParserTokenRecord {
+            token_ordinal: ordinal as u32,
+            start_char: start as u32,
+            end_char: end as u32,
+            surface: row.get(3),
+            lemma: row.get(4),
+            pos: row.get(5),
+            morph_json: row.get(6),
+            head_ordinal: head.map(|h| h as u32),
+            dependency_ref: row.get(8),
+        });
+    }
+    let entity_rows = client.query(
+        "SELECT entity_ordinal, start_char, end_char, surface, label_ref
+         FROM ingest.parser_entity WHERE compilation_key = $1
+         ORDER BY entity_ordinal",
+        &[&compilation_key],
+    )?;
+    let mut entities = Vec::with_capacity(entity_rows.len());
+    for row in entity_rows {
+        let ordinal: i32 = row.get(0);
+        let start: i64 = row.get(1);
+        let end: i64 = row.get(2);
+        if ordinal < 0 || start < 0 || end <= start
+            || start > u32::MAX as i64 || end > u32::MAX as i64
+        {
+            return Err(DbNativeParserError::InvalidRegionSpan);
+        }
+        entities.push(ParserEntityRecord {
+            entity_ordinal: ordinal as u32,
+            start_char: start as u32,
+            end_char: end as u32,
+            surface: row.get(3),
+            label_ref: row.get(4),
+        });
+    }
+    let artifact = client.query_opt(
+        "SELECT format_ref, content_digest_ref, artifact_json, object_locator
+         FROM ingest.parser_artifact WHERE compilation_key = $1
+           AND candidate_only = TRUE
+           AND creates_semantic_authority = FALSE
+           AND claim_truth_promoted = FALSE",
+        &[&compilation_key],
+    )?.map(|row| ParserArtifactRecord {
+        format_ref: row.get(0),
+        content_digest_ref: row.get(1),
+        artifact_json: row.get(2),
+        object_locator: row.get(3),
+    });
+    Ok(ParserEvidenceRegion {
+        parser_run_ref: parser_run_ref.to_owned(),
+        source_revision_ref,
+        region_ref: region_ref.to_owned(),
+        compilation_key,
+        start_char: region_start as u32,
+        end_char: region_end as u32,
+        parser_product_key: product_key,
+        parser_family, parser_version, model_ref, config_digest_ref,
+        tokens,
+        entities,
+        artifact,
+        candidate_only: true,
+    })
+}
+
+/// Fail-closed proof-consumer audit: the coarse PNF candidate projection
+/// must agree with *every* overlapping source token in its original parser run.
+/// Rich morphology/head/entity evidence remains in ParserEvidenceRegion, never
+/// silently upgraded to a semantic or legal assertion.
+pub fn audit_candidate_pnf_evidence(
+    source: &ExactSourceSpan,
+    source_revision_ref: &str,
+    batch: &CandidatePnfBatch,
+    evidence: &ParserEvidenceRegion,
+) -> Result<(), CandidatePnfError> {
+    if source.start_char >= source.end_char {
+        return Err(CandidatePnfError::InvalidExactSpan);
+    }
+    if source_revision_ref.is_empty()
+        || evidence.source_revision_ref != source_revision_ref
+        || batch.exact_span_ref != source.span_ref
+        || evidence.region_ref != source.span_ref
+        || evidence.start_char != source.start_char
+        || evidence.end_char != source.end_char
+    {
+        return Err(CandidatePnfError::MissingPersistedParserRegion(source.span_ref.clone()));
+    }
+    if !evidence.candidate_only || batch.proposition_support_paid
+        || batch.applicability_paid || batch.claim_truth_paid
+        || batch.candidates.iter().any(|candidate| !candidate.candidate_only)
+    {
+        return Err(CandidatePnfError::PersistedParserResidual {
+            span_ref: source.span_ref.clone(),
+            error_ref: "candidate-projection-authority-boundary".into(),
+        });
+    }
+    let overlapping = evidence.tokens.iter()
+        .filter(|token| token.start_char < source.end_char
+            && token.end_char > source.start_char)
+        .collect::<Vec<_>>();
+    if overlapping.len() != batch.candidates.len() {
+        return Err(CandidatePnfError::PersistedParserResidual {
+            span_ref: source.span_ref.clone(),
+            error_ref: "candidate-projection-token-count-mismatch".into(),
+        });
+    }
+    for (token, candidate) in overlapping.into_iter().zip(&batch.candidates) {
+        if candidate.candidate_ref != format!(
+            "candidate-pnf-db:{}:{}:{}:{}:{}",
+            evidence.parser_run_ref, source.span_ref, token.token_ordinal,
+            token.start_char, token.end_char,
+        )
+            || candidate.source_start_char != token.start_char
+            || candidate.source_end_char != token.end_char
+            || candidate.surface != token.surface
+            || candidate.lemma != token.lemma
+            || candidate.dependency_ref != token.dependency_ref
+            || candidate.role != role_for(&token.pos, &token.dependency_ref)
+        {
+            return Err(CandidatePnfError::PersistedParserResidual {
+                span_ref: source.span_ref.clone(),
+                error_ref: "candidate-projection-token-mismatch".into(),
+            });
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::CandidatePnfRole;
+
+    #[test]
+    fn exact_original_artifact_tag_is_not_a_pos_fallback() {
+        let token=ParserTokenRecord{token_ordinal:0,start_char:10,end_char:12,surface:"he".into(),
+            lemma:"he".into(),pos:"PRON".into(),morph_json:Some(r#"{"Person":"3"}"#.into()),
+            head_ordinal:Some(0),dependency_ref:"ROOT".into()};
+        let mut artifact=serde_json::json!({"tokens":[{"token_ordinal":0,"start_char":0,"end_char":2,
+            "surface":"he","lemma":"he","pos":"PRON","tag":"PRP","morph":{"Person":"3"},
+            "head_ordinal":0,"dependency_ref":"ROOT"}]});
+        assert_eq!(original_artifact_tags(Some(&artifact),10,&[token.clone()]).unwrap(),vec![Some("PRP".into())]);
+        artifact["tokens"][0]["start_char"]=serde_json::json!(1);
+        assert!(matches!(original_artifact_tags(Some(&artifact),10,&[token.clone()]),Err(DbNativeParserError::ArtifactTagMismatch)));
+        artifact["tokens"][0].as_object_mut().unwrap().remove("tag");
+        assert_eq!(original_artifact_tags(Some(&artifact),10,&[token]).unwrap(),vec![None]);
+    }
+
+    #[test]
+    fn source_bound_candidate_evidence_audit_matches_original_tokens() {
+        let source = ExactSourceSpan {
+            span_ref: "sentence:1".into(), start_char: 0, end_char: 5,
+        };
+        let token = ParserTokenRecord {
+            token_ordinal: 0,
+            start_char: 0, end_char: 5,
+            surface: "Alice".into(), lemma: "Alice".into(), pos: "PROPN".into(),
+            morph_json: Some(r#"{"Number":"Sing"}"#.into()),
+            head_ordinal: Some(0), dependency_ref: "nsubj".into(),
+        };
+        let evidence = ParserEvidenceRegion {
+            parser_run_ref: "run:1".into(),
+            source_revision_ref: "revision:1".into(),
+            region_ref: source.span_ref.clone(),
+            compilation_key: "compilation:1".into(),
+            start_char: 0, end_char: 5,
+            parser_product_key: Some(parser_product_key(
+                "Alice", "spacy", "3.8", "en_core", "cfg:1",
+            )),
+            parser_family: "spacy".into(), parser_version: "3.8".into(),
+            model_ref: "en_core".into(), config_digest_ref: "cfg:1".into(),
+            tokens: vec![token.clone()], entities: Vec::new(),
+            artifact: None, candidate_only: true,
+        };
+        let factor = CandidatePnfFactor {
+            candidate_ref: "candidate-pnf-db:run:1:sentence:1:0:0:5".into(), role: CandidatePnfRole::Actor,
+            source_start_char: token.start_char, source_end_char: token.end_char,
+            surface: token.surface.clone(), lemma: token.lemma.clone(),
+            dependency_ref: token.dependency_ref.clone(), candidate_only: true,
+        };
+        let batch = CandidatePnfBatch {
+            exact_span_ref: source.span_ref.clone(),
+            candidates: vec![factor.clone()],
+            proposition_support_paid: false, applicability_paid: false,
+            claim_truth_paid: false,
+        };
+        assert!(evidence.matches_source_literal("Alice"));
+        assert!(evidence.matches_observation_coverage("Alice"));
+        let mut omitted = evidence.clone();
+        omitted.tokens.clear();
+        assert!(!omitted.matches_observation_coverage("Alice"));
+        let mut forged_head = evidence.clone();
+        forged_head.tokens[0].head_ordinal = Some(99);
+        assert!(!forged_head.matches_observation_coverage("Alice"));
+        let mut forged_surface = evidence.clone();
+        forged_surface.tokens[0].surface = "Alicf".into();
+        assert!(!forged_surface.matches_observation_coverage("Alice"));
+        assert!(!evidence.matches_source_literal("Alice?"));
+        let mut legacy_evidence = evidence.clone();
+        legacy_evidence.parser_product_key = None;
+        assert!(!legacy_evidence.matches_source_literal("Alice"));
+        assert!(audit_candidate_pnf_evidence(&source, "revision:1", &batch, &evidence).is_ok());
+        let mut changed = batch.clone();
+        changed.candidates[0].dependency_ref = "dobj".into();
+        assert!(audit_candidate_pnf_evidence(&source, "revision:1", &changed, &evidence).is_err());
+        let mut missing = batch.clone();
+        missing.candidates.clear();
+        assert!(audit_candidate_pnf_evidence(&source, "revision:1", &missing, &evidence).is_err());
+        let mut forged_id = batch.clone();
+        forged_id.candidates[0].candidate_ref = "candidate:forged".into();
+        assert!(audit_candidate_pnf_evidence(&source, "revision:1", &forged_id, &evidence).is_err());
+        assert!(audit_candidate_pnf_evidence(&source, "revision:changed", &batch, &evidence).is_err());
+        let truncated_source = ExactSourceSpan {
+            span_ref: source.span_ref.clone(), start_char: 0, end_char: 4,
+        };
+        assert!(audit_candidate_pnf_evidence(
+            &truncated_source, "revision:1", &batch, &evidence
+        ).is_err());
+        let mut promoted = batch;
+        promoted.claim_truth_paid = true;
+        assert!(audit_candidate_pnf_evidence(&source, "revision:1", &promoted, &evidence).is_err());
+        let mut wrong_region = evidence;
+        wrong_region.region_ref = "sentence:2".into();
+        assert!(audit_candidate_pnf_evidence(&source, "revision:1", &CandidatePnfBatch {
+            exact_span_ref: source.span_ref.clone(), candidates: vec![factor],
+            proposition_support_paid: false, applicability_paid: false,
+            claim_truth_paid: false,
+        }, &wrong_region).is_err());
+    }
+
+
 
     #[test]
     fn canonical_json_makes_config_digest_order_independent() {

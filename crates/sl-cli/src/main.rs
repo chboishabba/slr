@@ -8,6 +8,11 @@ mod case_follow;
 mod s14_adaptive_fixture;
 mod waltons;
 mod waltons_live;
+mod pnf_candidate;
+mod pnf_db_checked;
+mod native_antecedent_review;
+mod numeric_pnf_native_cli;
+mod timeline_candidates;
 
 use std::env;
 use std::path::PathBuf;
@@ -18,6 +23,19 @@ fn usage() {
         "SensibLaw native CLI
 
 USAGE:
+  sensiblaw pnf-candidate TSV_PATH SPAN_REF START_CHAR END_CHAR
+  sensiblaw pnf-db-checked PARSER_RUN STATEMENT_REF DOCUMENT_REF SOURCE_REV REGION_REF START_CHAR END_CHAR LITERAL_FILE
+  sensiblaw native-antecedent-review prepare ORIGINAL_C410_RECEIPT.json
+  sensiblaw native-antecedent-review inspect REVIEW_ITEM_REF
+  sensiblaw native-antecedent-review runs REVIEW_ITEM_REF
+  sensiblaw native-antecedent-review frontier REVIEW_ITEM_REF [PARSER_RUN_REF]
+  sensiblaw native-antecedent-review derive REVIEW_ITEM_REF [PARSER_RUN_REF]
+  sensiblaw native-antecedent-review answer REVIEW_ITEM_REF [PARSER_RUN_REF]
+  sensiblaw native-antecedent-review replay REVIEW_ITEM_REF ANSWER.json [PARSER_RUN_REF]
+  sensiblaw numeric-pnf-native inspect ORIGINAL_SOURCE_REV ORIGINAL_SLR_PARSER_RUN
+  sensiblaw numeric-pnf-native plan ORIGINAL_SOURCE_REV ORIGINAL_SLR_PARSER_RUN
+  sensiblaw numeric-pnf-native compile ORIGINAL_SOURCE_REV ORIGINAL_SLR_PARSER_RUN MAX_SENTENCES --commit
+  sensiblaw timeline-candidates EVENT_REF
   sensiblaw legal-follow case acquire --citation '[YYYY] COURT N' [options]
   sensiblaw legal-follow cullen pnf --operator-opt-in [--output-dir PATH] [--spacy-model MODEL]
   sensiblaw legal-follow contracts landscape <plan|status|expand|acquire> [--as-at YYYY-MM-DD] [--jurisdiction AU-QLD]
@@ -177,6 +195,21 @@ fn waltons_command(mut args: Vec<String>) -> Result<(), String> {
 fn run() -> Result<(), String> {
     let args = env::args().skip(1).collect::<Vec<_>>();
     match args.as_slice() {
+        [command, rest @ ..] if command == "pnf-candidate" => {
+            pnf_candidate::run(rest)
+        }
+        [command, rest @ ..] if command == "pnf-db-checked" => {
+            pnf_db_checked::run(rest)
+        }
+        [command, rest @ ..] if command == "native-antecedent-review" => {
+            native_antecedent_review::run(rest)
+        }
+        [command, rest @ ..] if command == "numeric-pnf-native" => {
+            numeric_pnf_native_cli::run(rest)
+        }
+        [command, rest @ ..] if command == "timeline-candidates" => {
+            timeline_candidates::run(rest)
+        }
         [domain, matter, rest @ ..] if domain == "legal-follow" && matter == "waltons" => {
             waltons_command(rest.to_vec())
         }
