@@ -1074,6 +1074,31 @@ mod heterogeneous_overlap_tests {
         assert!(inspect_indexed_view_cohort(&[en.clone(),en],"consumer:cohort").is_err());
     }
     #[test]
+    fn native_edition_binding_rejects_unbound_and_duplicate_external_revision() {
+        let (en,_)=fixture();
+        let mut es=en.clone();
+        let revision=format!("source-revision:sha256:{}","a".repeat(64));
+        es["inventory"]["article_revision"]=json!(revision);
+        assert!(indexed_inventory_observations(&es).is_err());
+        es["schema"]=json!("slr.jmd-indexed-world-fibre-receipt.v3");
+        es["edition"]=json!("es");
+        es["site"]=json!("eswiki");
+        es["external_revision"]=json!(25);
+        es["native_revision"]=json!(revision);
+        es["source_unit_ref"]=json!("source:wikipedia:es:Example:revid:25");
+        es["document_ref"]=json!(format!("document:sha256:{}",es["source_sha256"].as_str().unwrap()));
+        es["original_receipt_sha256"]=json!("c".repeat(64));
+        es["binding_creates_semantic_authority"]=json!(false);
+        let out=inspect_indexed_view_cohort(&[en,es.clone()],"consumer:cohort").unwrap();
+        assert_eq!(out["views"][1]["members"][0]["source_ref"],"wikipedia:es:Q9");
+        let mut duplicate=es.clone();
+        duplicate["inventory"]["article_revision"]=json!(format!("source-revision:sha256:{}","d".repeat(64)));
+        duplicate["native_revision"]=duplicate["inventory"]["article_revision"].clone();
+        assert!(inspect_indexed_view_cohort(&[es.clone(),duplicate],"consumer:cohort").is_err());
+        es["site"]=json!("enwiki");
+        assert!(indexed_inventory_observations(&es).is_err());
+    }
+    #[test]
     fn rejects_same_manifestation_and_promotion_and_marks_unavailable() {
         let (mut indexed,mut native)=fixture();
         indexed["inventory"]["article_lanes"]["event_candidates"]=Value::Null;

@@ -47,6 +47,7 @@ def sections(text: str) -> list[dict]:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--revision", required=True)
+    ap.add_argument("--parser-run", required=True, help="Exact persisted parser run; never merge revision histories")
     ap.add_argument("--source", type=Path, required=True)
     ap.add_argument("--output", type=Path, required=True)
     ap.add_argument("--language", required=True)
@@ -59,26 +60,35 @@ def main() -> int:
     # Quote it explicitly because psql variable interpolation is disabled in
     # some operator installations.
     rev = args.revision.replace("'", "''")
+    run = args.parser_run.replace("'", "''")
+    def scoped(sql):
+        return psql_json(sql.replace(":'rev'", "'" + rev + "'").replace(":'run'", "'" + run + "'"))
 
-    meta = psql_json("""
+    meta = scoped("""
       SELECT row_to_json(x) FROM (
         SELECT r.source_ref, r.source_revision_ref, r.document_ref,
                r.content_digest_ref, r.provider_ref,
                COALESCE((SELECT parser_run_ref FROM ingest.parser_job j
                          WHERE j.source_revision_ref=r.source_revision_ref
-                         ORDER BY j.completed_at DESC LIMIT 1), '') AS parser_run_ref
+                         AND j.parser_run_ref=:'run' AND j.status='succeeded'
+                         LIMIT 1), '') AS parser_run_ref
         FROM ingest.generic_source_revision r
         WHERE r.source_revision_ref=:'rev'
       ) x
-    """.replace(":'rev'", "'" + rev + "'"))
+    """)
     if not meta:
         raise SystemExit("native source revision not found")
     if isinstance(meta, list):
         meta = meta[0]
-    if content_sha not in str(meta["content_digest_ref"]):
+    if meta["parser_run_ref"] != args.parser_run:
+        raise SystemExit("requested parser run not found for revision")
+    expected_unit = f"source:wikipedia:{args.language}:{args.title.replace(' ', '_')}:revid:{args.revid}"
+    if meta["source_ref"] != expected_unit:
+        raise SystemExit("source edition/title/revision mismatch")
+    if meta["content_digest_ref"] != f"sha256:{content_sha}":
         raise SystemExit(f"source digest mismatch: {content_sha} != {meta['content_digest_ref']}")
 
-    jobs = psql_json("""
+    jobs = scoped("""
       SELECT COALESCE(jsonb_agg(row_to_json(x) ORDER BY x.region_start_char), '[]'::jsonb)
       FROM (
         SELECT j.region_start_char, j.region_end_char, j.compilation_key,
@@ -89,19 +99,21 @@ def main() -> int:
              ORDER BY t.token_ordinal), '[]'::jsonb)
            FROM ingest.parser_token t WHERE t.compilation_key=j.compilation_key) AS tokens
         FROM ingest.parser_job j
-        WHERE j.source_revision_ref=:'rev' AND j.status='succeeded'
+        WHERE j.source_revision_ref=:'rev' AND j.parser_run_ref=:'run' AND j.status='succeeded'
       ) x
-    """.replace(":'rev'", "'" + rev + "'"))
-    entities = psql_json("""
+    """)
+    entities = scoped("""
       SELECT COALESCE(jsonb_agg(jsonb_build_object(
         'surface',e.surface,'start_char',e.start_char,'end_char',e.end_char,
         'label_ref',e.label_ref,'candidate_only',true,'semantic_promotion',false)
         ORDER BY e.start_char,e.end_char,e.entity_ordinal), '[]'::jsonb)
       FROM ingest.parser_entity e
       JOIN ingest.parser_job j ON j.compilation_key=e.compilation_key
-      WHERE j.source_revision_ref=:'rev' AND j.status='succeeded'
-    """.replace(":'rev'", "'" + rev + "'"))
+      WHERE j.source_revision_ref=:'rev' AND j.parser_run_ref=:'run' AND j.status='succeeded'
+    """)
 
+    if not jobs:
+        raise SystemExit("empty parser run")
     candidates = []
     for index, job in enumerate(jobs):
         start, end = int(job["region_start_char"]), int(job["region_end_char"])

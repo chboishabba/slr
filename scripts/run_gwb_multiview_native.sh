@@ -33,6 +33,7 @@ while IFS= read -r row; do
   member="$(jq -er .indexed_member_ref <<<"$row")"
   revision="$(jq -er .revision <<<"$row")"
   run="$(jq -er .run <<<"$row")"
+  parser_run="$(jq -er '.parser_run_ref // empty' <<<"$row")"
   doc="$(jq -er .document <<<"$row")"
   snapshot="$(jq -er .snapshot <<<"$row")"
   digest="$(jq -er .packet_digest <<<"$row")"
@@ -43,7 +44,7 @@ while IFS= read -r row; do
     python3 tools/bind_gwb_native_receipt.py --edition "$edition" --receipt "$receipt" --output "$bound"
     receipt="$bound"
   fi
-  if [[ "$digest" == native-numeric-chart:missing || "$snapshot" == native-numeric-chart:missing ]]; then
+  if [[ "$run" == native-numeric-chart:missing || "$run" == parser-run:* || "$digest" == native-numeric-chart:missing || "$snapshot" == native-numeric-chart:missing ]]; then
     echo "HOLD: exact native numeric chart missing for $edition" >&2
     exit 3
   fi
@@ -57,12 +58,13 @@ while IFS= read -r row; do
     "$revision" "$run" "$doc" "$snapshot" "$digest" "$batches"
   # Select only a uniquely reopened checked inverse of the explicitly
   # nominated indexed occurrence. A numeric-only row cannot seed this.
-  if ! jq -e --arg member "$member" --arg edition "$edition" '
+  if ! jq -e --arg member "$member" --arg edition "$edition" --arg parser_run "$parser_run" '
     . as $m |
     [.coordinates[] | select(any(.indexed[];.request_ref==$member or .original.event_candidate_ref==$member))] |
     if length!=1 then error("held: indexed occurrence unavailable/ambiguous") else .[0] end |
     if .status!="unique_coordinate_match" or (.native|length)!=1 or
-       .native[0].kind!="checked_predicate" then error("held: checked inverse unavailable/ambiguous")
+       .native[0].kind!="checked_predicate" or
+       ((.native[0].original.checked_observation.parser_or_producer_ref // "") | startswith("db-parser:"+$parser_run+":") | not) then error("held: checked inverse unavailable/ambiguous")
     else {edition:$edition,indexed_member_ref:$member,source_revision_ref:$m.source_revision_ref,
         content_digest_ref:$m.source_content_digest_ref,batch_ref:.native[0].original.batch_ref,
         predicate_candidate_ref:.native[0].original.checked_observation.predicate_candidate_ref}
