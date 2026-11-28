@@ -3,7 +3,7 @@ use sensiblaw_pg_source_store::{
     load_database_config,run_persisted_relational_family,inspect_persisted_relational_family,
     prepare_relational_family_revision,publish_relational_family_revision,inspect_relational_family_revision,
     apply_persisted_review_command,ReviewAction,ReviewCommand,load_rel_acceptance_corpus,
-    seed_relational_pnf_pair,
+    seed_relational_pnf_pair,seed_relational_pnf_pair_scoped,inspect_recorded_family_parity,inspect_family_local_corpus,
 };
 fn print_json<T:serde::Serialize>(value:&T)->Result<(),String>{
     println!("{}",serde_json::to_string_pretty(value).map_err(|e|e.to_string())?);Ok(())
@@ -12,10 +12,9 @@ fn print_json<T:serde::Serialize>(value:&T)->Result<(),String>{
 /// Project the exact native family residuals into the existing proof-search
 /// frontier. Acquisition completion is not semantic payment: it defers the
 /// old residual for reviewed re-entry. No similarity score is a proof input.
-fn family_research_frontier(family:&sensiblaw_pg_source_store::PersistedRelationalFamily)
-    ->Result<serde_json::Value,String>{
-    use sensiblaw_proof_search_loop::{frontier::{ProofFrontier,ProofResidual,ResidualStatus},
-        hypothesis::families_for_frontier};
+fn family_research_frontier_native(family:&sensiblaw_pg_source_store::PersistedRelationalFamily)
+    ->Result<(sensiblaw_proof_search_loop::frontier::ProofFrontier,Vec<serde_json::Value>),String>{
+    use sensiblaw_proof_search_loop::frontier::{ProofFrontier,ProofResidual,ResidualStatus};
     use std::collections::BTreeSet;
     use sha2::{Digest,Sha256};
     use serde_json::json;
@@ -72,6 +71,13 @@ fn family_research_frontier(family:&sensiblaw_pg_source_store::PersistedRelation
                 "lifecycle":l,"requires_reviewed_reentry":deferred}));
         }
     }
+    Ok((frontier,inverse))
+}
+fn family_research_frontier(family:&sensiblaw_pg_source_store::PersistedRelationalFamily)
+    ->Result<serde_json::Value,String>{
+    use sensiblaw_proof_search_loop::{frontier::ResidualStatus,hypothesis::families_for_frontier};
+    use serde_json::json;
+    let (frontier,inverse)=family_research_frontier_native(family)?;
     let residuals:Vec<_>=frontier.residuals.iter().map(|r|json!({
         "residual_ref":r.residual_ref,"proposition_ref":r.proposition_ref,
         "producer_class_ref":r.producer_class_ref,"dependency_refs":r.dependency_refs,
@@ -89,6 +95,164 @@ fn family_research_frontier(family:&sensiblaw_pg_source_store::PersistedRelation
         "candidate_only":true,"formal_consumer_equivalence_paid":false,
         "world_truth_paid":false,"creates_access_authority":false,"writes_database":false,
         "planning_inputs_required":["consumer-owned lexical contexts","declared calibrated values","local index","research world snapshot"]}))
+}
+
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LocalCalibration {
+    family_ref:String,
+    consumer_ref:String,
+    minimum_expected_reduction:u64,
+    hypotheses:std::collections::BTreeMap<String,LocalHypothesisCalibration>,
+}
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LocalHypothesisCalibration {
+    calibration_ref:String,
+    expected_residual_reduction:u64,
+    discriminative_value:u64,
+    authority_fitness:u64,
+    novelty:u64,
+    coverage_gain:u64,
+    local_bytes_read_cost:u64,
+    parser_pnf_cost:u64,
+    semantic_assessment_cost:u64,
+    operator_review_cost:u64,
+    // Explicit additional terms, never inferred evidence or a semantic licence.
+    target_terms:Vec<String>,
+    discriminator_terms:Vec<String>,
+}
+
+/// Local operator-only research over the original persisted text. Without
+/// explicit calibration execute the existing lexical candidate retrieval,
+/// but do not rank it, claim a separator or create executable provider routes.
+fn inspect_local_research(config:&sensiblaw_pg_source_store::DatabaseConfig,
+    family_ref:&str,calibration:Option<LocalCalibration>)->Result<serde_json::Value,String>{
+    use sensiblaw_proof_search_loop::{local::{LocalIndex,LocalDocument},
+        world::ResearchWorldSnapshot,hypothesis::{families_for_frontier,SearchHypothesisKind},
+        planner::{QueryLexicalContext,synthesize_queries,execute_local_candidates,deterministic_query_key},
+        engine::{DeclaredResearchValue,plan_local_frontier_research},
+        frontier::{frontier_pareto,select_frontier_move}};
+    use std::collections::{BTreeMap,BTreeSet};
+    use serde_json::json;
+    let (family,corpus)=inspect_family_local_corpus(config,family_ref).map_err(|e|e.to_string())?;
+    let (frontier,inverse)=family_research_frontier_native(&family)?;
+    let hypotheses=families_for_frontier(&frontier);
+    let mut index=LocalIndex::default();
+    let mut texts=BTreeMap::new();
+    let mut source_manifest=Vec::new();
+    for (source,text) in corpus{
+        source_manifest.push(json!({"document_ref":source.document_ref,"source_revision_ref":source.source_revision_ref,
+            "content_digest_ref":source.content_digest_ref,"source_family":source.source_family_ref}));
+        texts.insert(source.source_revision_ref.clone(),text.clone());
+        index.insert(LocalDocument{document_ref:source.document_ref,source_revision_ref:source.source_revision_ref,
+            jurisdiction_ref:None,court_ref:None,date_ref:None,canonical_text:text,citation_refs:vec![]});
+    }
+    let world=ResearchWorldSnapshot{snapshot_ref:format!("local-family-corpus:{family_ref}"),
+        authority:"experimental_candidate_only",..Default::default()};
+    if let Some(c)=&calibration{
+        let expected:BTreeSet<_>=hypotheses.iter().map(|h|h.hypothesis_ref.as_str()).collect();
+        if c.family_ref!=family_ref||c.consumer_ref!=frontier.consumer_ref||
+            c.hypotheses.keys().map(String::as_str).collect::<BTreeSet<_>>()!=expected{
+            return Err("calibration must bind exactly to the current open hypothesis universe".into());
+        }
+    }
+    let mut contexts=BTreeMap::new();let mut values=BTreeMap::new();
+    let mut seeds=Vec::new();let mut deferred=Vec::new();
+    for h in &hypotheses{
+        let row=inverse.iter().find(|r|r["residual_ref"].as_str()==Some(h.residual_ref.as_str()))
+            .ok_or("missing native inverse")?;
+        let pair=family.projection.directed_comparisons.iter().find(|p|
+            row["comparison_ref"].as_str()==Some(p.comparison.comparison_ref.as_str()))
+            .ok_or("missing native comparison")?;
+        let obs=&family.projection.sources.iter().find(|s|s.selector_ref==pair.left_selector_ref)
+            .ok_or("missing source")?.observation;
+        let owner=obs.parser_or_producer_ref.strip_prefix("db-parser:").ok_or("not a checked native parser")?;
+        let prefix=format!("candidate-pnf-db:{owner}:");
+        let mut parts=obs.predicate_candidate_ref.strip_prefix(prefix.as_str()).ok_or("foreign predicate coordinate")?.split(':');
+        let _ordinal=parts.next().ok_or("missing token ordinal")?.parse::<u32>().map_err(|e|e.to_string())?;
+        let start=parts.next().ok_or("missing span start")?.parse::<usize>().map_err(|e|e.to_string())?;
+        let end=parts.next().ok_or("missing span end")?.parse::<usize>().map_err(|e|e.to_string())?;
+        if end<=start||parts.next().is_some(){return Err("invalid predicate span".into());}
+        let text=texts.get(&obs.source_revision_ref).ok_or("missing original source bytes")?;
+        let literal=text.chars().skip(start).take(end-start).collect::<String>();
+        if literal.chars().count()!=end-start||!literal.chars().any(char::is_alphanumeric){
+            return Err("predicate has no bounded searchable literal".into());
+        }
+        let mut ctx=QueryLexicalContext{target_phrases:vec![literal.clone()],..Default::default()};
+        if let Some(c)=&calibration{
+            let v=&c.hypotheses[&h.hypothesis_ref];
+            if v.calibration_ref.trim().is_empty()||v.target_terms.iter().chain(v.discriminator_terms.iter()).any(|t|t.trim().is_empty()){
+                return Err("invalid declared lexical or calibration coordinate".into());
+            }
+            ctx.target_terms=v.target_terms.clone();
+            match h.kind{
+                SearchHypothesisKind::Support=>ctx.support_terms=v.discriminator_terms.clone(),
+                SearchHypothesisKind::Defeater=>ctx.defeater_terms=v.discriminator_terms.clone(),
+                SearchHypothesisKind::Comparator=>ctx.comparator_terms=v.discriminator_terms.clone(),
+                SearchHypothesisKind::Contradiction=>ctx.contradiction_terms=v.discriminator_terms.clone(),
+                SearchHypothesisKind::AuthorityTreatment=>ctx.treatment_terms=v.discriminator_terms.clone(),
+                SearchHypothesisKind::TerminologyExpansion=>ctx.target_terms.extend(v.discriminator_terms.clone()),
+            }
+            let mut value=DeclaredResearchValue{expected_residual_reduction:v.expected_residual_reduction,
+                discriminative_value:v.discriminative_value,authority_fitness:v.authority_fitness,
+                novelty:v.novelty,coverage_gain:v.coverage_gain,execution_cost:Default::default(),
+                calibration_ref:v.calibration_ref.clone()};
+            value.execution_cost.local_bytes_read_cost=v.local_bytes_read_cost;
+            value.execution_cost.parser_pnf_cost=v.parser_pnf_cost;
+            value.execution_cost.semantic_assessment_cost=v.semantic_assessment_cost;
+            value.execution_cost.operator_review_cost=v.operator_review_cost;
+            values.insert(h.hypothesis_ref.clone(),value);
+        }
+        seeds.push(json!({"hypothesis_ref":h.hypothesis_ref,"source_revision_ref":obs.source_revision_ref,
+            "predicate_candidate_ref":obs.predicate_candidate_ref,"literal":literal,"span":[start,end],
+            "candidate_only":true}));
+        contexts.insert(h.hypothesis_ref.clone(),ctx);
+    }
+    let mut retrieval=Vec::new();
+    let mut queries=BTreeMap::new();
+    for h in &hypotheses{
+        for q in synthesize_queries(h,&contexts[&h.hypothesis_ref],&world){
+            let key=deterministic_query_key(&q);
+            let entry=queries.entry(key).or_insert_with(||(q.clone(),Vec::<String>::new()));
+            entry.1.push(h.hypothesis_ref.clone());
+        }
+    }
+    for (key,(query,owners)) in queries{
+        for x in execute_local_candidates(&index,&[query]){
+            let passages:Vec<_>=x.passages.iter().map(|p|json!({"document_ref":p.document_ref,
+                "source_revision_ref":p.source_revision_ref,"matched_expression_ref":p.matched_expression_ref,
+                "candidate_only":p.candidate_only})).collect();
+            if passages.is_empty(){deferred.extend(owners.iter().cloned());}
+            retrieval.push(json!({"query_key":key,"hypothesis_refs":owners,"passages":passages,
+                "network_requests":x.network_requests,"candidate_only":true}));
+        }
+    }
+    let (planned,pareto,selected)=if let Some(c)=calibration{
+        let moves=plan_local_frontier_research(&frontier,&world,&index,&contexts,&values)
+            .map_err(|e|format!("{e:?}"))?;
+        let candidates:Vec<_>=moves.iter().map(|m|m.frontier_move.clone()).collect();
+        let pareto:Vec<_>=frontier_pareto(&frontier,&candidates,c.minimum_expected_reduction)
+            .iter().map(|m|m.move_.move_ref.clone()).collect();
+        let selected=select_frontier_move(&frontier,&candidates,c.minimum_expected_reduction)
+            .map(|m|m.move_.move_ref.clone());
+        let planned:Vec<_>=moves.iter().map(|m|json!({"move_ref":m.frontier_move.move_.move_ref,
+            "query_key":m.query_key,"target_residual_refs":m.target_residual_refs,
+            "supporting_hypothesis_refs":m.supporting_hypothesis_refs,
+            "declared_calibration_ref":m.frontier_move.move_.calibration_ref,
+            "expected_whole_frontier_reduction":m.frontier_move.expected_whole_frontier_reduction,
+            "candidate_only":true})).collect();
+        (planned,pareto,selected)
+    }else{(vec![],vec![],None)};
+    Ok(json!({"schema":"slr.relational-local-research.v1","family_ref":family_ref,
+        "consumer_ref":frontier.consumer_ref,"frontier_ref":frontier.frontier_ref,
+        "source_manifest":source_manifest,"lexical_seeds":seeds,"retrieval":retrieval,
+        "no_hit_hypothesis_refs":deferred,"planned_moves":planned,"pareto_move_refs":pareto,
+        "selected_move_ref":selected,"scope":"selected persisted generic source revisions only",
+        "calibration_is_operator_declared":true,"candidate_only":true,"network_requests":0,
+        "creates_access_authority":false,"world_truth_paid":false,"formal_consumer_equivalence_paid":false,
+        "writes_database":false,"provider_acquisition_executed":false}))
 }
 
 pub fn run(args:&[String])->Result<(),String>{
@@ -138,6 +302,21 @@ pub fn run(args:&[String])->Result<(),String>{
     }
     let config=load_database_config(None).map_err(|e|e.to_string())?;
     match args {
+        [mode,consumer,left_batch,left_pred,right_batch,right_pred,axes_json] if mode=="seed-pnf-pair-scoped"=>{
+            let axes:Vec<String>=serde_json::from_str(axes_json).map_err(|e|e.to_string())?;
+            let refs:Vec<_>=axes.iter().map(String::as_str).collect();
+            print_json(&seed_relational_pnf_pair_scoped(&config,consumer,left_batch,left_pred,right_batch,right_pred,&refs)
+                .map_err(|e|e.to_string())?)
+        },
+        [mode,family] if mode=="inspect-recorded-parity"=>
+            print_json(&inspect_recorded_family_parity(&config,family).map_err(|e|e.to_string())?),
+        [mode,family] if mode=="inspect-local-research"=>print_json(&inspect_local_research(&config,family,None)?),
+        [mode,family,calibration_path] if mode=="plan-local-research"=>{
+            let file=std::fs::read(calibration_path).map_err(|e|e.to_string())?;
+            if file.len()>4*1024*1024{return Err("calibration packet too large".into());}
+            let calibration:LocalCalibration=serde_json::from_slice(&file).map_err(|e|e.to_string())?;
+            print_json(&inspect_local_research(&config,family,Some(calibration))?)
+        },
         [mode,consumer,left_batch,left_pred,right_batch,right_pred] if mode=="seed-pnf-pair"=>
             print_json(&seed_relational_pnf_pair(&config,consumer,left_batch,left_pred,right_batch,right_pred).map_err(|e|e.to_string())?),
         [mode,revision,batches_path,run,doc,snapshot,digest,observation,consumer,query,evidence,repo,sha,path,thread] if mode=="licensed-semantic"=>{
@@ -257,6 +436,6 @@ pub fn run(args:&[String])->Result<(),String>{
                 "candidate_review_status":format!("{:?}",item.current_status),"creates_semantic_authority":false}))
         },
         _ if (4..=12).contains(&args.len())=>print_json(&run_persisted_relational_family(&config,&args[0],&args[1],&args[2..]).map_err(|e|e.to_string())?),
-        _=>Err("usage: relational-family inspect-heterogeneous-overlap RECEIPT CONSUMER RUN DOC SNAPSHOT DIGEST | inspect-indexed-native-meet RECEIPT CONSUMER REVISION RUN DOC SNAPSHOT DIGEST BATCH_REFS_JSON | inspect-indexed-inventory RECEIPT CONSUMER REQUIRED_LANES_JSON | CONSUMER ACCESS SELECTOR SELECTOR ... | licensed-semantic REVISION BATCH_REFS_JSON RUN DOC SNAPSHOT DIGEST OBSERVATION CONSUMER QUERY EVIDENCE REPO SHA PATH THREAD | predicate-transport REVISION BATCH_REFS_JSON RUN DOC SNAPSHOT DIGEST | semantic-candidates REVISION BATCH_REFS_JSON RUN DOC SNAPSHOT DIGEST | coordinate-meet REVISION BATCH_REFS_JSON RUN DOC SNAPSHOT DIGEST | numeric-action-roles RUN DOC SNAPSHOT DIGEST MENTION_TOKEN_IDS_JSON | article-actions REVISION BATCH_REFS_JSON MENTION_REFS_JSON | licensed-reciprocal FAMILY LEFT RIGHT QUERY EVIDENCE REPO SHA PATH THREAD | reciprocal FAMILY LEFT RIGHT | participant FAMILY FILLER_REF | inspect-research-frontier FAMILY | inspect FAMILY | prepare-revision FAMILY OLD_SELECTOR NEW_SELECTOR | inspect-revision TRANSITION | review-revision TRANSITION COMMAND REVIEWER accept|reject|abstain | publish-revision TRANSITION".into())
+        _=>Err("usage: relational-family inspect-heterogeneous-overlap RECEIPT CONSUMER RUN DOC SNAPSHOT DIGEST | inspect-indexed-native-meet RECEIPT CONSUMER REVISION RUN DOC SNAPSHOT DIGEST BATCH_REFS_JSON | inspect-indexed-inventory RECEIPT CONSUMER REQUIRED_LANES_JSON | CONSUMER ACCESS SELECTOR SELECTOR ... | licensed-semantic REVISION BATCH_REFS_JSON RUN DOC SNAPSHOT DIGEST OBSERVATION CONSUMER QUERY EVIDENCE REPO SHA PATH THREAD | predicate-transport REVISION BATCH_REFS_JSON RUN DOC SNAPSHOT DIGEST | semantic-candidates REVISION BATCH_REFS_JSON RUN DOC SNAPSHOT DIGEST | coordinate-meet REVISION BATCH_REFS_JSON RUN DOC SNAPSHOT DIGEST | numeric-action-roles RUN DOC SNAPSHOT DIGEST MENTION_TOKEN_IDS_JSON | article-actions REVISION BATCH_REFS_JSON MENTION_REFS_JSON | licensed-reciprocal FAMILY LEFT RIGHT QUERY EVIDENCE REPO SHA PATH THREAD | reciprocal FAMILY LEFT RIGHT | participant FAMILY FILLER_REF | seed-pnf-pair-scoped CONSUMER LEFT_BATCH LEFT_PRED RIGHT_BATCH RIGHT_PRED AXES_JSON | inspect-recorded-parity FAMILY | inspect-local-research FAMILY | plan-local-research FAMILY CALIBRATION_JSON_PATH | inspect-research-frontier FAMILY | inspect FAMILY | prepare-revision FAMILY OLD_SELECTOR NEW_SELECTOR | inspect-revision TRANSITION | review-revision TRANSITION COMMAND REVIEWER accept|reject|abstain | publish-revision TRANSITION".into())
     }
 }
