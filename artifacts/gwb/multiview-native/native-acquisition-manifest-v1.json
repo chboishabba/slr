@@ -61,6 +61,30 @@
       "indexed_jmd_receipt": "artifacts/gwb/multiview-native/acquired/en-indexed-world-fibre.json",
       "indexed_jmd_kernel_marker": "INDEXED_WORLD_FIBRE_KERNEL_OK",
       "status": "native-and-jmd-indexed-receipt-kernel-accepted"
+    },
+    {
+      "edition": "abstract",
+      "source_ref": "source:abstract-wikipedia:Q207:revid:23871",
+      "source_revision_ref": "source-revision:abstractwiki:revid:23871",
+      "document_ref": "document:sha256:7cf3c6bbe5a0a90dd13a067e5c99ed276d50d75fdc3ade2532a5e5d0b599f1e2",
+      "canonical_sha256": "7cf3c6bbe5a0a90dd13a067e5c99ed276d50d75fdc3ade2532a5e5d0b599f1e2",
+      "provider_ref": "provider:wikimedia:abstract-wikipedia-api",
+      "acquisition_receipt_ref": "acquisition:abstractwiki:Q207:revid:23871:sha256:7cf3c6bbe5a0a90dd13a067e5c99ed276d50d75fdc3ade2532a5e5d0b599f1e2",
+      "content_model": "abstractwiki",
+      "media_type": "application/json",
+      "parser_run_ref": null,
+      "parser_model": null,
+      "parser_jobs": 0,
+      "candidate_factor_count": 0,
+      "parser_residual_regions": 0,
+      "candidate_only": true,
+      "creates_semantic_authority": false,
+      "claim_truth_promoted": false,
+      "constructor_receipt": "artifacts/gwb/multiview-native/acquired/Q207-abstract-constructor-receipt.json",
+      "constructor_source": "artifacts/gwb/multiview-native/acquired/Q207-abstract-constructor.json",
+      "indexed_jmd_receipt": null,
+      "indexed_jmd_kernel_marker": null,
+      "status": "native-structured-source-persisted-jmd-prose-lane-held"
     }
   ],
   "existing_native_book_source": {
@@ -69,6 +93,6 @@
     "canonical_sha256": "7ff2ec8ffe6243871ad682e7d7060fe3b84025fb15dbe229154d7aa7f6a72b30",
     "status": "preexisting-book-pdf"
   },
-  "next_required": "Recover or produce native numeric relation packets for the three article revisions, then run scripts/run_gwb_multiview_native.sh with artifacts/gwb/multiview-native/gwb-native-view-inputs-v1.json; exact checked predicate batches and inverse receipts are now persisted.",
-  "status": "native-acquisition-and-jmd-indexing-accepted-cross-view-numeric-chart-held"
+  "next_required": "For abstract: implement/check constructor-level JMD receipt and any native constructor projection; do not run prose parser or claim cross-view semantic parity.",
+  "status": "native-multiview-sources-persisted-abstract-structured-lane-held"
 }
