@@ -671,6 +671,106 @@ pub fn inspect_heterogeneous_predicate_overlap(receipt:&serde_json::Value,
         "licensed_crosswalk_count":0,"original_checker_replayed":false,"writes_database":false}))
 }
 
+
+/// Reverse-solve one selected heterogeneous candidate through the two
+/// original source charts. This consumes the existing feature index and
+/// exact indexed/native coordinate meet, not another similarity engine.
+/// A common feature is a retrieval witness only. The selected pair cannot
+/// create a SourceQueryLicence, semantic alignment or source independence.
+pub fn select_heterogeneous_native_pair(receipt:&serde_json::Value,
+    article_transport:&serde_json::Value, other_transport:&serde_json::Value,
+    other_predicates:&serde_json::Value,consumer:&str,
+    indexed_member:&str,other_relation:&str)->Result<serde_json::Value,IndexedObservationError>{
+    use serde_json::{json,Value};
+    use sha2::{Digest,Sha256};
+    let bad=||IndexedObservationError::InvalidReceipt;
+    if indexed_member.trim().is_empty()||other_relation.trim().is_empty(){return Err(bad());}
+    let overlap=inspect_heterogeneous_predicate_overlap(receipt,other_predicates,consumer)?;
+    let article=inspect_indexed_native_predicate_meet(receipt,article_transport,consumer)?;
+    let meet=&other_transport["source_coordinate_meet"];
+    if other_transport["schema"]!="slr.predicate-role-transport.v1"
+        ||other_transport["semantic_coverage_paid"]!=false||other_transport["world_truth_paid"]!=false
+        ||meet["schema"]!="slr.article-numeric-coordinate-meet.v1"
+        ||meet["source_revision_ref"]!=overlap["right_source"]["revision"]
+        ||meet["source_content_digest_ref"]!=format!("sha256:{}",overlap["right_source"]["sha256"].as_str().ok_or_else(bad)?)
+        ||meet["common_current_authority_snapshot"]!=false
+        ||meet["numeric_original"]["packet_sha256"]!=other_predicates["packet_sha256"]
+        ||meet["numeric_original"]["numeric_run_ref"]!=other_predicates["numeric_run_ref"]
+        ||meet["numeric_original"]["snapshot_ref"]!=other_predicates["snapshot_ref"]
+        ||overlap["left_source"]["sha256"]==overlap["right_source"]["sha256"]{
+        return Err(bad());
+    }
+    let members=|key:&str,id:&str|->Result<(usize,Value),IndexedObservationError>{
+        let mut matches=overlap[key].as_array().ok_or_else(bad)?.iter().enumerate()
+            .filter(|(_,m)|m["member_ref"]==id);
+        let (i,m)=matches.next().ok_or_else(bad)?;
+        if matches.next().is_some(){return Err(bad());}
+        Ok((i,m.clone()))
+    };
+    let (li,left)=members("left_members",indexed_member)?;
+    let (ri,right)=members("right_members",other_relation)?;
+    // A pair may share several feature groups, but one group does not
+    // choose a globally unique match. Preserve both posting-list degrees.
+    let contains=|g:&Value,key:&str,i:usize|g[key].as_array().is_some_and(|a|
+        a.iter().any(|n|n.as_u64()==Some(i as u64)));
+    let shared:Vec<_>=overlap["feature_groups"].as_array().ok_or_else(bad)?.iter()
+        .filter(|g|contains(g,"left_members",li)&&contains(g,"right_members",ri))
+        .map(|g|json!({"axis":g["axis"],"value":g["value"],
+            "left_posting_count":g["left_members"].as_array().map(Vec::len),
+            "right_posting_count":g["right_members"].as_array().map(Vec::len),
+            "status":g["status"],"semantic_alignment_paid":false})).collect();
+    let mut left_inverse=Vec::new();
+    for row in article["coordinates"].as_array().ok_or_else(bad)?{
+        let indexed=row["indexed"].as_array().ok_or_else(bad)?;
+        if !indexed.iter().any(|m|m["request_ref"]==indexed_member){continue;}
+        for n in row["native"].as_array().ok_or_else(bad)?{
+            if n["kind"]=="checked_predicate"{
+                left_inverse.push(json!({"coordinate_status":row["status"],
+                    "indexed_count":indexed.len(),"native_count":row["native"].as_array().ok_or_else(bad)?.len(),
+                    "batch_ref":n["original"]["batch_ref"],
+                    "predicate_candidate_ref":n["original"]["checked_observation"]["predicate_candidate_ref"],
+                    "observation":n["original"]["checked_observation"],"original_transport":n["original"]}));
+            }
+        }
+    }
+    let mut right_inverse=Vec::new();
+    for row in other_transport["checked_predicates"].as_array().ok_or_else(bad)?{
+        for alt in row["numeric_alternatives"].as_array().ok_or_else(bad)?{
+            if alt["numeric_relation"]["relation_ref"]!=other_relation{continue;}
+            // Both readbacks must refer to the identical original relation
+            // and role inverse, not merely a matching label or numeric ID.
+            if alt["numeric_relation"]["original_relation"]!=right["original"]["original_relation"]
+                ||alt["numeric_relation"]["role_inverse"]!=right["original"]["role_inverse"]{return Err(bad());}
+            right_inverse.push(json!({"batch_ref":row["batch_ref"],
+                "predicate_candidate_ref":row["checked_observation"]["predicate_candidate_ref"],
+                "observation":row["checked_observation"],"original_transport":row,
+                "selected_numeric_alternative":alt}));
+        }
+    }
+    let mut holds=Vec::new();
+    if shared.is_empty(){holds.push("no_shared_retrieval_feature");}
+    if left_inverse.len()!=1||left_inverse[0]["coordinate_status"]!="unique_coordinate_match"
+        ||left_inverse[0]["indexed_count"]!=1||left_inverse[0]["native_count"]!=1{
+        holds.push("article_checked_predicate_inverse_not_unique");
+    }
+    if right_inverse.len()!=1{holds.push("other_checked_predicate_inverse_not_unique");}
+    let exact_coords=|rows:&[Value]|rows.iter().all(|r|
+        ["batch_ref","predicate_candidate_ref"].iter().all(|k|r[*k].as_str().is_some_and(|s|!s.is_empty())));
+    if !exact_coords(&left_inverse)||!exact_coords(&right_inverse){return Err(bad());}
+    let ready=holds.is_empty();
+    let digest=format!("sha256:{:x}",Sha256::digest(serde_json::to_vec(&(
+        &overlap["left_receipt_digest"],&overlap["right_receipt_digest"],consumer,indexed_member,other_relation,
+        &left_inverse,&right_inverse,&shared)).map_err(|_|bad())?));
+    Ok(json!({"schema":"slr.heterogeneous-native-selection.v1","consumer_ref":consumer,
+        "selection_ref":format!("selection:{digest}"),"left_source":overlap["left_source"],
+        "right_source":overlap["right_source"],"left_member":left,"right_member":right,
+        "shared_features":shared,"left_inverse":left_inverse,"right_inverse":right_inverse,
+        "holds":holds,"candidate_selector_ready":ready,"candidate_only":true,
+        "semantic_alignment_paid":false,"source_independence_paid":false,
+        "formal_consumer_equivalence_paid":false,"world_truth_paid":false,
+        "original_checker_replayed":false,"writes_database":false}))
+}
+
 #[cfg(test)]
 mod indexed_inventory_tests {
     use super::*;
