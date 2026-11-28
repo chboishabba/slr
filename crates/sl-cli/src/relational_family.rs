@@ -257,6 +257,139 @@ fn inspect_local_research(config:&sensiblaw_pg_source_store::DatabaseConfig,
         "writes_database":false,"provider_acquisition_executed":false}))
 }
 
+
+fn diagnostic_lane(kind:&sensiblaw_pg_source_store::ResidualKind,unobserved_context:bool,
+    recorded_transport:bool)->(&'static str,&'static str){
+    use sensiblaw_pg_source_store::ResidualKind::*;
+    if unobserved_context{return ("unavailable_observation","reopen_native_context_producers");}
+    match kind{
+        UnalignedPredicate|UnalignedRoleFiller if recorded_transport=>
+            ("recorded_correspondence_unlicensed","consumer_factorisation_or_semantic_review"),
+        UnalignedPredicate|UnalignedRoleFiller|UnalignedType=>
+            ("correspondence_ambiguity","typed_candidate_retrieval_and_discriminator"),
+        MissingRequiredRole|MissingRoleTypeEvidence=>
+            ("unavailable_observation","reopen_native_role_evidence"),
+        MissingProvenance=>("provenance_gap","reopen_source_owner"),
+        RoleTypeContractPressure=>("semantic_discriminator","consumer_role_type_review"),
+        UnresolvedPolarity=>("semantic_discriminator","signed_source_reading_review"),
+        ScopeMismatch|TimeMismatch|ModalityMismatch|QuantifierMismatch|
+        AttributionMismatch|OntologyMismatch|LanguageMismatch=>
+            ("context_discriminator","consumer_context_review"),
+    }
+}
+
+/// Mabo-style source -> observation -> comparison -> exact residual ->
+/// obligation/review/hypothesis/route ancestry, derived from the existing
+/// reopened family only. This is a workbench projection, not another store,
+/// formal demand constructor, search scheduler or access authority.
+fn family_investigation_projection(family:&sensiblaw_pg_source_store::PersistedRelationalFamily)
+    ->Result<serde_json::Value,String>{
+    use sensiblaw_pg_source_store::{route_frontier_dispositions,potential_reopening_cone};
+    use sensiblaw_proof_search_loop::hypothesis::families_for_frontier;
+    use std::collections::{BTreeMap,BTreeSet};
+    use serde_json::json;
+    let (frontier,inverse)=family_research_frontier_native(family)?;
+    let hypotheses=families_for_frontier(&frontier);
+    let p=&family.projection;
+    let mut edges=BTreeSet::<(String,String,String)>::new();
+    let mut edge=|from:&str,to:&str,relation:&str|{
+        edges.insert((from.to_owned(),to.to_owned(),relation.to_owned()));
+    };
+    for s in &p.sources{
+        edge(&s.observation.source_revision_ref,&s.observation.observation_ref,"source_observation");
+        edge(&s.observation.observation_ref,&s.selector_ref,"observation_selector");
+    }
+    for pair in &p.directed_comparisons{
+        edge(&pair.left_selector_ref,&pair.comparison.comparison_ref,"left_input");
+        edge(&pair.right_selector_ref,&pair.comparison.comparison_ref,"right_input");
+    }
+    let mut rows=Vec::new();
+    let mut counts=BTreeMap::<&str,usize>::new();
+    let mut routes=BTreeMap::new();
+    for q in &family.durable_acquisition_queues{
+        let disposition=route_frontier_dispositions(&q.obligation,&q.routes).map_err(|e|e.to_string())?;
+        if routes.insert(q.obligation.obligation_ref.as_str(),(q,disposition)).is_some(){
+            return Err("duplicate durable acquisition queue".into());
+        }
+    }
+    for item in &inverse{
+        let residual_ref=item["residual_ref"].as_str().ok_or("missing residual ref")?;
+        let comparison_ref=item["comparison_ref"].as_str().ok_or("missing comparison ref")?;
+        let ordinal=item["ordinal"].as_u64().ok_or("missing residual ordinal")? as usize;
+        let pair=p.directed_comparisons.iter().find(|c|c.comparison.comparison_ref==comparison_ref)
+            .ok_or("missing comparison")?;
+        let r=pair.comparison.residuals.get(ordinal).ok_or("missing residual")?;
+        let obligation_ref=item["obligation"]["obligation_ref"].as_str().ok_or("missing obligation")?;
+        let (queue,dispositions)=routes.get(obligation_ref).ok_or("missing durable queue")?;
+        let mut reviews=family.residual_review_items.iter().filter(|v|
+            v.obligation_ref==obligation_ref && v.comparison_ref==comparison_ref && v.exact_residuals.contains(r));
+        let review=reviews.next().ok_or("missing exact review")?;
+        if reviews.next().is_some()||!review.candidate_only{return Err("ambiguous or promoted review".into());}
+        let lifecycle=family.acquisition_lifecycles.iter().find(|l|l.obligation_ref==obligation_ref)
+            .ok_or("missing lifecycle")?;
+        let unobserved=r.obligation_ref.strip_prefix("consumer:context-unobserved:")
+            .is_some_and(|axis|pair.unobserved_required_context_axes.iter().any(|a|a==axis));
+        let transport:Vec<_>=p.declared_transport_meet.rows.iter()
+            .filter(|row|row.complete_declared_coordinate_transport)
+            .flat_map(|row|row.matches.iter())
+            .filter(|m|m.from_selector_ref==pair.left_selector_ref && m.to_selector_ref==pair.right_selector_ref
+                && r.left_ref.as_deref()==Some(m.from.value_ref.as_str())
+                && r.right_ref.as_deref()==Some(m.to.value_ref.as_str())
+                && matches!(m.from.axis.as_str(),"predicate"|"role"))
+            .collect();
+        let (lane,next_owner)=diagnostic_lane(&r.kind,unobserved,!transport.is_empty());
+        *counts.entry(lane).or_default()+=1;
+        edge(comparison_ref,residual_ref,"exact_comparison_residual");
+        edge(residual_ref,obligation_ref,"residual_requires_investigation");
+        edge(obligation_ref,&review.review_item_ref,"obligation_review");
+        for q in &queue.routes{edge(obligation_ref,&q.route_ref,"candidate_route");}
+        let related_hypotheses:Vec<_>=hypotheses.iter().filter(|h|h.residual_ref==residual_ref)
+            .map(|h|{edge(residual_ref,&h.hypothesis_ref,"candidate_hypothesis");h.hypothesis_ref.clone()}).collect();
+        let route_state=if family.superseded_by.is_some(){"superseded_family"}
+            else if lifecycle.terminal_update.is_some(){"terminal_acquisition_requires_reviewed_reentry"}
+            else if queue.routes.is_empty(){"no_candidate_routes"}
+            else if lifecycle.effective_executable_frontier_route_refs.is_empty(){"no_executable_frontier_routes"}
+            else{"executable_candidates_require_governed_dispatch"};
+        rows.push(json!({"residual_ref":residual_ref,"comparison_ref":comparison_ref,
+            "ordinal":ordinal,"left_selector_ref":pair.left_selector_ref,"right_selector_ref":pair.right_selector_ref,
+            "exact_residual":r,"obligation_ref":obligation_ref,"review":review,
+            "lifecycle":lifecycle,"diagnostic_lane":lane,"suggested_existing_producer":next_owner,
+            "recorded_transport_matches":transport,"hypothesis_refs":related_hypotheses,
+            "route_state":route_state,"route_dispositions":dispositions,
+            "formal_route_eligible":false,"candidate_only":true,"residual_paid":false}));
+    }
+    drop(edge);
+    let deps:Vec<_>=edges.iter().map(|(a,b,_)|(a.clone(),b.clone())).collect();
+    let sources:BTreeSet<_>=p.sources.iter().map(|s|s.observation.source_revision_ref.as_str()).collect();
+    let cones=sources.into_iter().map(|s|potential_reopening_cone(s,&deps))
+        .collect::<Result<Vec<_>,_>>().map_err(|e|e.to_string())?;
+    let graph_edges:Vec<_>=edges.into_iter().map(|(a,b,r)|json!({"from_ref":a,"to_ref":b,"relation":r})).collect();
+    Ok(json!({"schema":"slr.relational-investigation.v1","family_ref":family.family_ref,
+        "consumer_ref":p.consumer_ref,"frontier_ref":frontier.frontier_ref,
+        "superseded_by":family.superseded_by,"gap_rows":rows,"gap_counts":counts,
+        "dependency_edges":graph_edges,"potential_reopening_cones":cones,
+        "existing_source_reopening":p.potential_reopening_by_source,
+        "derived_only":true,"challengeable":true,"candidate_only":true,
+        "creates_graph_edges":false,"creates_actual_reopening":false,
+        "formal_consumer_equivalence_paid":false,"world_truth_paid":false,
+        "creates_access_authority":false,"provider_acquisition_executed":false,
+        "writes_database":false}))
+}
+
+#[cfg(test)]
+mod investigation_diagnostic_tests{
+    use super::*;
+    use sensiblaw_pg_source_store::ResidualKind::*;
+    #[test]
+    fn recorded_match_routes_to_factorisation_not_formal_or_semantic_payment(){
+        assert_eq!(diagnostic_lane(&UnalignedPredicate,false,true).0,"recorded_correspondence_unlicensed");
+        assert_eq!(diagnostic_lane(&UnalignedPredicate,false,false).0,"correspondence_ambiguity");
+        assert_eq!(diagnostic_lane(&TimeMismatch,true,false).0,"unavailable_observation");
+        assert_eq!(diagnostic_lane(&TimeMismatch,false,false).0,"context_discriminator");
+        assert_eq!(diagnostic_lane(&UnresolvedPolarity,false,false).0,"semantic_discriminator");
+    }
+}
+
 pub fn run(args:&[String])->Result<(),String>{
     // Local operator-only receipt inspection; no DB or authority access.
     if let [mode,receipt_path,consumer,required_json]=args{
@@ -309,6 +442,10 @@ pub fn run(args:&[String])->Result<(),String>{
             let refs:Vec<_>=axes.iter().map(String::as_str).collect();
             print_json(&seed_relational_pnf_pair_scoped(&config,consumer,left_batch,left_pred,right_batch,right_pred,&refs)
                 .map_err(|e|e.to_string())?)
+        },
+        [mode,family] if mode=="inspect-investigation"=>{
+            let reopened=inspect_persisted_relational_family(&config,family).map_err(|e|e.to_string())?;
+            print_json(&family_investigation_projection(&reopened)?)
         },
         [mode,family] if mode=="inspect-recorded-parity"=>
             print_json(&inspect_recorded_family_parity(&config,family).map_err(|e|e.to_string())?),
@@ -438,6 +575,6 @@ pub fn run(args:&[String])->Result<(),String>{
                 "candidate_review_status":format!("{:?}",item.current_status),"creates_semantic_authority":false}))
         },
         _ if (4..=12).contains(&args.len())=>print_json(&run_persisted_relational_family(&config,&args[0],&args[1],&args[2..]).map_err(|e|e.to_string())?),
-        _=>Err("usage: relational-family inspect-heterogeneous-overlap RECEIPT CONSUMER RUN DOC SNAPSHOT DIGEST | inspect-indexed-native-meet RECEIPT CONSUMER REVISION RUN DOC SNAPSHOT DIGEST BATCH_REFS_JSON | inspect-indexed-inventory RECEIPT CONSUMER REQUIRED_LANES_JSON | CONSUMER ACCESS SELECTOR SELECTOR ... | licensed-semantic REVISION BATCH_REFS_JSON RUN DOC SNAPSHOT DIGEST OBSERVATION CONSUMER QUERY EVIDENCE REPO SHA PATH THREAD | predicate-transport REVISION BATCH_REFS_JSON RUN DOC SNAPSHOT DIGEST | semantic-candidates REVISION BATCH_REFS_JSON RUN DOC SNAPSHOT DIGEST | coordinate-meet REVISION BATCH_REFS_JSON RUN DOC SNAPSHOT DIGEST | numeric-action-roles RUN DOC SNAPSHOT DIGEST MENTION_TOKEN_IDS_JSON | article-actions REVISION BATCH_REFS_JSON MENTION_REFS_JSON | licensed-reciprocal FAMILY LEFT RIGHT QUERY EVIDENCE REPO SHA PATH THREAD | reciprocal FAMILY LEFT RIGHT | participant FAMILY FILLER_REF | seed-pnf-pair-scoped CONSUMER LEFT_BATCH LEFT_PRED RIGHT_BATCH RIGHT_PRED AXES_JSON | inspect-recorded-parity FAMILY | inspect-local-research FAMILY | plan-local-research FAMILY CALIBRATION_JSON_PATH | inspect-research-frontier FAMILY | inspect FAMILY | prepare-revision FAMILY OLD_SELECTOR NEW_SELECTOR | inspect-revision TRANSITION | review-revision TRANSITION COMMAND REVIEWER accept|reject|abstain | publish-revision TRANSITION".into())
+        _=>Err("usage: relational-family inspect-heterogeneous-overlap RECEIPT CONSUMER RUN DOC SNAPSHOT DIGEST | inspect-indexed-native-meet RECEIPT CONSUMER REVISION RUN DOC SNAPSHOT DIGEST BATCH_REFS_JSON | inspect-indexed-inventory RECEIPT CONSUMER REQUIRED_LANES_JSON | CONSUMER ACCESS SELECTOR SELECTOR ... | licensed-semantic REVISION BATCH_REFS_JSON RUN DOC SNAPSHOT DIGEST OBSERVATION CONSUMER QUERY EVIDENCE REPO SHA PATH THREAD | predicate-transport REVISION BATCH_REFS_JSON RUN DOC SNAPSHOT DIGEST | semantic-candidates REVISION BATCH_REFS_JSON RUN DOC SNAPSHOT DIGEST | coordinate-meet REVISION BATCH_REFS_JSON RUN DOC SNAPSHOT DIGEST | numeric-action-roles RUN DOC SNAPSHOT DIGEST MENTION_TOKEN_IDS_JSON | article-actions REVISION BATCH_REFS_JSON MENTION_REFS_JSON | licensed-reciprocal FAMILY LEFT RIGHT QUERY EVIDENCE REPO SHA PATH THREAD | reciprocal FAMILY LEFT RIGHT | participant FAMILY FILLER_REF | seed-pnf-pair-scoped CONSUMER LEFT_BATCH LEFT_PRED RIGHT_BATCH RIGHT_PRED AXES_JSON | inspect-investigation FAMILY | inspect-recorded-parity FAMILY | inspect-local-research FAMILY | plan-local-research FAMILY CALIBRATION_JSON_PATH | inspect-research-frontier FAMILY | inspect FAMILY | prepare-revision FAMILY OLD_SELECTOR NEW_SELECTOR | inspect-revision TRANSITION | review-revision TRANSITION COMMAND REVIEWER accept|reject|abstain | publish-revision TRANSITION".into())
     }
 }
