@@ -1,0 +1,164 @@
+{
+    "Z1K1": "Z2",
+    "Z2K1": {
+        "Z1K1": "Z6",
+        "Z6K1": "Z27299"
+    },
+    "Z2K2": {
+        "Z1K1": "Z8",
+        "Z8K1": [
+            "Z17",
+            {
+                "Z1K1": "Z17",
+                "Z17K1": "Z6001",
+                "Z17K2": "Z27299K1",
+                "Z17K3": {
+                    "Z1K1": "Z12",
+                    "Z12K1": [
+                        "Z11",
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1002",
+                            "Z11K2": "item"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1787",
+                            "Z11K2": "elemento"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1830",
+                            "Z11K2": "項目"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1004",
+                            "Z11K2": "élément"
+                        }
+                    ]
+                }
+            },
+            {
+                "Z1K1": "Z17",
+                "Z17K1": "Z6092",
+                "Z17K2": "Z27299K2",
+                "Z17K3": {
+                    "Z1K1": "Z12",
+                    "Z12K1": [
+                        "Z11",
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1002",
+                            "Z11K2": "property"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1787",
+                            "Z11K2": "predicato"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1830",
+                            "Z11K2": "プロパティ"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1004",
+                            "Z11K2": "propriété"
+                        }
+                    ]
+                }
+            }
+        ],
+        "Z8K2": "Z40",
+        "Z8K3": [
+            "Z20",
+            "Z28763",
+            "Z29143"
+        ],
+        "Z8K4": [
+            "Z14",
+            "Z27302"
+        ],
+        "Z8K5": "Z27299"
+    },
+    "Z2K3": {
+        "Z1K1": "Z12",
+        "Z12K1": [
+            "Z11",
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1002",
+                "Z11K2": "Wikidata item has claim?"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1787",
+                "Z11K2": "elemento Wikidata ha dichiarazione?"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1830",
+                "Z11K2": "ウィキデータ項目に主張があるか？"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1004",
+                "Z11K2": "l'élément Wikidata a-t-il une déclaration ?"
+            }
+        ]
+    },
+    "Z2K4": {
+        "Z1K1": "Z32",
+        "Z32K1": [
+            "Z31",
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1002",
+                "Z31K2": [
+                    "Z6",
+                    "statement in WD item?",
+                    "Wikidata item has statement?",
+                    "item has property"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1787",
+                "Z31K2": [
+                    "Z6",
+                    "elemento Wikidata ha proprietà?",
+                    "dichiarazione in elemento Wikidata?",
+                    "proprietà in elemento Wikidata?"
+                ]
+            }
+        ]
+    },
+    "Z2K5": {
+        "Z1K1": "Z12",
+        "Z12K1": [
+            "Z11",
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1002",
+                "Z11K2": "Tells if Wikidata item has more than zero statements for the selected property. Returns true even if statement value is \"unknown\" or \"novalue\"."
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1787",
+                "Z11K2": "Controlla se l'elemento Wikidata ha almeno una dichiarazione con la proprietà selezionata, anche se il valore è \"sconosciuto\" o \"nessun valore\""
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1830",
+                "Z11K2": "選択されたプロパティに対してWikidata項目に0より多い文があるかどうかを示します。文の値が「不明」または「値なし」の場合でもtrueを返します。"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1004",
+                "Z11K2": "indique si l'élément Wikidata possède plus de zéro énoncé pour la propriété sélectionnée. Renvoie vrai même si la valeur de l'énoncé est « inconnue » ou « aucune valeur »."
+            }
+        ]
+    }
+}

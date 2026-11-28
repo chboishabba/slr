@@ -1,0 +1,159 @@
+{
+    "Z1K1": "Z2",
+    "Z2K1": {
+        "Z1K1": "Z6",
+        "Z6K1": "Z36270"
+    },
+    "Z2K2": {
+        "Z1K1": "Z8",
+        "Z8K1": [
+            "Z17",
+            {
+                "Z1K1": "Z17",
+                "Z17K1": "Z6091",
+                "Z17K2": "Z36270K1",
+                "Z17K3": {
+                    "Z1K1": "Z12",
+                    "Z12K1": [
+                        "Z11",
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1002",
+                            "Z11K2": "QID"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1025",
+                            "Z11K2": "identyfikator Q (QID)"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1830",
+                            "Z11K2": "QID"
+                        }
+                    ]
+                }
+            },
+            {
+                "Z1K1": "Z17",
+                "Z17K1": "Z60",
+                "Z17K2": "Z36270K2",
+                "Z17K3": {
+                    "Z1K1": "Z12",
+                    "Z12K1": [
+                        "Z11",
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1002",
+                            "Z11K2": "preferred language"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1025",
+                            "Z11K2": "preferowany język"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1830",
+                            "Z11K2": "優先言語"
+                        }
+                    ]
+                }
+            }
+        ],
+        "Z8K2": "Z6",
+        "Z8K3": [
+            "Z20",
+            "Z36271",
+            "Z36272",
+            "Z36273",
+            "Z40918",
+            "Z37505",
+            "Z38853"
+        ],
+        "Z8K4": [
+            "Z14",
+            "Z41573"
+        ],
+        "Z8K5": "Z36270"
+    },
+    "Z2K3": {
+        "Z1K1": "Z12",
+        "Z12K1": [
+            "Z11",
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1002",
+                "Z11K2": "label text for item in lang or ltd fallback or QID"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1025",
+                "Z11K2": "etykieta elem. w podanym jęz., jęz. zast. lub QID"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1830",
+                "Z11K2": "指定言語または限定フォールバック言語での項目ラベル、なければQID"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1004",
+                "Z11K2": "libellé dans cette langue, sinon fallback ou QID"
+            }
+        ]
+    },
+    "Z2K4": {
+        "Z1K1": "Z32",
+        "Z32K1": [
+            "Z31",
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1002",
+                "Z31K2": [
+                    "Z6",
+                    "label text for item in given language or fallback"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1025",
+                "Z31K2": [
+                    "Z6",
+                    "etykieta elementu w podanym języku, języku zastępczym lub QID",
+                    "etykieta dla danego lang, ltd lub QID"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1830",
+                "Z31K2": [
+                    "Z6",
+                    "なければQID",
+                    "項目ラベルを取得"
+                ]
+            }
+        ]
+    },
+    "Z2K5": {
+        "Z1K1": "Z12",
+        "Z12K1": [
+            "Z11",
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1002",
+                "Z11K2": "Returns the label of the item specified by the QID in the best (first listed) language on the fallback list for the requested language until mul. If none found, return QID."
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1025",
+                "Z11K2": "Zwraca etykietę elementu określonego przez QID w pierwszym pasującym języku z listy języków zastępczych dla wskazanego języka (aż do „mul”). Jeśli nie znaleziono etykiety, zwraca identyfikator QID."
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1830",
+                "Z11K2": "QIDで指定された項目のラベルを、要求された言語のフォールバック一覧にある言語のうち、最初に見つかった言語で返す。ラベルが見つからない場合はQIDを返す。"
+            }
+        ]
+    }
+}

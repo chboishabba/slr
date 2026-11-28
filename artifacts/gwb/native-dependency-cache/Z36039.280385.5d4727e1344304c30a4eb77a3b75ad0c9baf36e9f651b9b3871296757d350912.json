@@ -1,0 +1,39 @@
+{
+    "Z1K1": "Z2",
+    "Z2K1": {
+        "Z1K1": "Z6",
+        "Z6K1": "Z36039"
+    },
+    "Z2K2": {
+        "Z1K1": "Z14",
+        "Z14K1": "Z36038",
+        "Z14K3": {
+            "Z1K1": "Z16",
+            "Z16K1": "Z600",
+            "Z16K2": "function Z36038( Z36038K1, Z36038K2 ) {\n\tconst mid = Z36038K1.Z310K1;\n\tconst html = `\u003Cext-wikilambda-image mid=\"${mid}\" alt=\"${Z36038K2}\" size=\"thumb\" /\u003E`;\n\treturn new ZObject(\n\t\tnew Map( [\n\t     [ \"Z1K1\", { Z1K1: \"Z9\", Z9K1: \"Z89\" } ],\n\t     [ \"Z89K1\", html ] ] ) );\n}"
+        }
+    },
+    "Z2K3": {
+        "Z1K1": "Z12",
+        "Z12K1": [
+            "Z11",
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1002",
+                "Z11K2": "return a ext-wikilambda-image tag"
+            }
+        ]
+    },
+    "Z2K4": {
+        "Z1K1": "Z32",
+        "Z32K1": [
+            "Z31"
+        ]
+    },
+    "Z2K5": {
+        "Z1K1": "Z12",
+        "Z12K1": [
+            "Z11"
+        ]
+    }
+}

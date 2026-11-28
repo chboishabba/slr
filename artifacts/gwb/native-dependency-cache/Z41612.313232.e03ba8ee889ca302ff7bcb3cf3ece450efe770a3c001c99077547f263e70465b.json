@@ -1,0 +1,39 @@
+{
+    "Z1K1": "Z2",
+    "Z2K1": {
+        "Z1K1": "Z6",
+        "Z6K1": "Z41612"
+    },
+    "Z2K2": {
+        "Z1K1": "Z14",
+        "Z14K1": "Z41064",
+        "Z14K3": {
+            "Z1K1": "Z16",
+            "Z16K1": "Z600",
+            "Z16K2": "const zobjRef = zid =\u003E ({ \"Z1K1\": \"Z9\", \"Z9K1\": zid });\nconst zobj = (typeZID, props) =\u003E new ZObject(new Map(props), zobjRef(typeZID));\nfunction Z41064( Z41064K1, Z41064K2 ) {\n\tif (Z41064K2.Z89K1.length === 0) return Z41064K2;\n\treturn zobj(\"Z89\", [\n\t\t[ \"Z89K1\", `\u003Ctr valign=\"top\"\u003E\u003Ctd style=\"font-weight:bold\"\u003E${Z41064K1.Z89K1}\u003C/td\u003E\u003Ctd\u003E${Z41064K2.Z89K1}\u003C/td\u003E\u003C/tr\u003E` ],\n\t]);\n}"
+        }
+    },
+    "Z2K3": {
+        "Z1K1": "Z12",
+        "Z12K1": [
+            "Z11",
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1002",
+                "Z11K2": "custom infobox row, JS"
+            }
+        ]
+    },
+    "Z2K4": {
+        "Z1K1": "Z32",
+        "Z32K1": [
+            "Z31"
+        ]
+    },
+    "Z2K5": {
+        "Z1K1": "Z12",
+        "Z12K1": [
+            "Z11"
+        ]
+    }
+}

@@ -1,0 +1,377 @@
+{
+    "Z1K1": "Z2",
+    "Z2K1": {
+        "Z1K1": "Z6",
+        "Z6K1": "Z6091"
+    },
+    "Z2K2": {
+        "Z1K1": "Z4",
+        "Z4K1": "Z6091",
+        "Z4K2": [
+            "Z3",
+            {
+                "Z1K1": "Z3",
+                "Z3K1": "Z6",
+                "Z3K2": "Z6091K1",
+                "Z3K3": {
+                    "Z1K1": "Z12",
+                    "Z12K1": [
+                        "Z11",
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1002",
+                            "Z11K2": "Wikidata item id"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1430",
+                            "Z11K2": "Wikidata-Datenobjekt-ID"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1004",
+                            "Z11K2": "identifiant de l'élément Wikidata (Q-ID)"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1672",
+                            "Z11K2": "維基數據項目ID"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1001",
+                            "Z11K2": "معرّف عنصر ويكي بيانات"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1787",
+                            "Z11K2": "ID elemento Wikidata"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1820",
+                            "Z11K2": "विकिडेटा आयटम ID"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1062",
+                            "Z11K2": "identifikátor položky Wikidat"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1851",
+                            "Z11K2": "รหัสระบุไอเทมวิกิสนเทศ"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1157",
+                            "Z11K2": "Wikidata-item-identificatiecode"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1830",
+                            "Z11K2": "ウィキデータ項目ID"
+                        }
+                    ]
+                },
+                "Z3K4": {
+                    "Z1K1": "Z40",
+                    "Z40K1": "Z42"
+                }
+            }
+        ],
+        "Z4K3": "Z101",
+        "Z4K4": "Z19316",
+        "Z4K7": [
+            "Z46"
+        ],
+        "Z4K8": [
+            "Z64"
+        ]
+    },
+    "Z2K3": {
+        "Z1K1": "Z12",
+        "Z12K1": [
+            "Z11",
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1002",
+                "Z11K2": "Wikidata item reference"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1430",
+                "Z11K2": "Wikidata-Datenobjekt-Referenz"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1078",
+                "Z11K2": "Referensi butir Wikidata"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1186",
+                "Z11K2": "התייחסות לפריט ויקינתונים"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1592",
+                "Z11K2": "Wikidata objekt-id"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1011",
+                "Z11K2": "উইকিউপাত্ত আইটেম উল্লেখ"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1004",
+                "Z11K2": "référence de l'élément Wikidata"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1005",
+                "Z11K2": "Ссылка на элемент Викиданных"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1672",
+                "Z11K2": "維基數據項目參照"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1001",
+                "Z11K2": "إحالة لعنصر ويكي بيانات"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1787",
+                "Z11K2": "Riferimento a elemento Wikidata"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1827",
+                "Z11K2": "κωδικός αντικειμένου των Wikidata"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1820",
+                "Z11K2": "विकिडेटा आयटम संदर्भ"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1851",
+                "Z11K2": "การอ้างอิงไอเทมวิกิสนเทศ"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1062",
+                "Z11K2": "Reference na položku Wikidat"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1830",
+                "Z11K2": "ウィキデータ項目参照"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1025",
+                "Z11K2": "odwołanie do elementu Wikidanych"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1157",
+                "Z11K2": "Wikidata-itemverwijzing"
+            }
+        ]
+    },
+    "Z2K4": {
+        "Z1K1": "Z32",
+        "Z32K1": [
+            "Z31",
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1592",
+                "Z31K2": [
+                    "Z6",
+                    "qid",
+                    "wikidata qid",
+                    "Wikidata objekt id"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1002",
+                "Z31K2": [
+                    "Z6",
+                    "qid",
+                    "wikidata qid",
+                    "reference to wikidata qid",
+                    "reference to qid",
+                    "reference to qitem"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1011",
+                "Z31K2": [
+                    "Z6",
+                    "উইকিডাটা আইডি",
+                    "উইকিউপাত্ত আইডি"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1787",
+                "Z31K2": [
+                    "Z6",
+                    "qid",
+                    "qid Wikidata",
+                    "riferimento a qid",
+                    "collegamento a qid",
+                    "collegamento a elemento Wikidata"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1827",
+                "Z31K2": [
+                    "Z6",
+                    "κωδικός αναφοράς αντικειμένου των Wikidata"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1820",
+                "Z31K2": [
+                    "Z6",
+                    "विकिडेटा qid"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1062",
+                "Z31K2": [
+                    "Z6",
+                    "QID",
+                    "Wikidata QID"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1830",
+                "Z31K2": [
+                    "Z6",
+                    "ウィキデータqid",
+                    "Wikidata項目参照"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1025",
+                "Z31K2": [
+                    "Z6",
+                    "Wikidane",
+                    "QID",
+                    "odwołanie do QID z Wikidanych",
+                    "Wikidata qid",
+                    "odwołanie do QID",
+                    "odwołanie do elementu Q z Wikidanych"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1157",
+                "Z31K2": [
+                    "Z6",
+                    "QID",
+                    "Wikidata QID",
+                    "verwijzing naar Wikidata-QID",
+                    "verwijzing naar QID",
+                    "verwijzing naar Qitem"
+                ]
+            }
+        ]
+    },
+    "Z2K5": {
+        "Z1K1": "Z12",
+        "Z12K1": [
+            "Z11",
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1002",
+                "Z11K2": "A link to a Wikidata item, using the item's Wikidata ID (QID)"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1430",
+                "Z11K2": "Link auf ein Wikidata-Datenobjekt über die ID des Datenobjekts auf Wikidata (QID)"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1078",
+                "Z11K2": "Pranala menuju butir Wikidata, menggunakan identitas butir Wikidata (QID)"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1592",
+                "Z11K2": "Identifierare för objekt i Wikidata."
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1011",
+                "Z11K2": "একটি আইটেমের উইকিউপাত্ত আইডি ব্যবহার করে উইকিউপাত্ত আইটেমের সাথে সংযোগ। "
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1004",
+                "Z11K2": "un lien vers un élément Wikidata, en utilisant l'ID Wikidata (Q-ID) de l'élément"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1672",
+                "Z11K2": "維基數據項目的連結，使用項目的維基數據ID (QID)"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1001",
+                "Z11K2": "وصلة لعنصر ويكي بيانات باستعمال معرّف عنصر ويكي بيانات (QID)"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1787",
+                "Z11K2": "Un collegamento ad un elemento Wikidata tramite il suo ID Wikidata (QID)"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1820",
+                "Z11K2": "विकिडेटा के किसी आयटम की विकिडेटा ID (QID) की मदद से आयटम की कड़ी"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1851",
+                "Z11K2": "การลิงก์ไปไอเทมวิกิสนเทศโดยใช้ตัวระบุวิกิสนเทศ (QID)"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1062",
+                "Z11K2": "odkaz na položku Wikidat pomocí jejího identifikátoru (QID)"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1830",
+                "Z11K2": "ウィキデータ項目へのリンク（項目のウィキデータID（QID）を使用）"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1025",
+                "Z11K2": "Link do elementu w Wikidanych, wykorzystujący identyfikator elementu w Wikidanych (QID, identyfikator Q)"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1157",
+                "Z11K2": "Een link naar een Wikidata-item, waarbij de Wikidata-identificatiecode (QID) van het item wordt gebruikt"
+            }
+        ]
+    }
+}

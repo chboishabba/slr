@@ -1,0 +1,50 @@
+{
+    "Z1K1": "Z2",
+    "Z2K1": {
+        "Z1K1": "Z6",
+        "Z6K1": "Z41481"
+    },
+    "Z2K2": {
+        "Z1K1": "Z20",
+        "Z20K1": "Z41476",
+        "Z20K2": {
+            "Z1K1": "Z7",
+            "Z7K1": "Z41476",
+            "Z41476K1": {
+                "Z1K1": "Z89",
+                "Z89K1": "\u003Cul\u003E\u003Cli\u003Eabc\u003C/li\u003E\u003Cli\u003E123\u003C/li\u003E\u003C/ul\u003E"
+            }
+        },
+        "Z20K3": {
+            "Z1K1": "Z7",
+            "Z7K1": "Z877",
+            "Z877K2": {
+                "Z1K1": "Z89",
+                "Z89K1": "\u003Cul style=\"line-height:inherit;list-style:none none;margin:0;\"\u003E\u003Cli style=\"margin-bottom:0;\"\u003Eabc\u003C/li\u003E\u003Cli style=\"margin-bottom:0;\"\u003E123\u003C/li\u003E\u003C/ul\u003E"
+            }
+        }
+    },
+    "Z2K3": {
+        "Z1K1": "Z12",
+        "Z12K1": [
+            "Z11",
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1002",
+                "Z11K2": "\u003Cul\u003E\u003Cli\u003Eabc\u003C/li\u003E\u003Cli\u003E123\u003C/li\u003E\u003C/ul\u003E"
+            }
+        ]
+    },
+    "Z2K4": {
+        "Z1K1": "Z32",
+        "Z32K1": [
+            "Z31"
+        ]
+    },
+    "Z2K5": {
+        "Z1K1": "Z12",
+        "Z12K1": [
+            "Z11"
+        ]
+    }
+}

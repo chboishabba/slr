@@ -1,0 +1,60 @@
+{
+    "Z1K1": "Z2",
+    "Z2K1": {
+        "Z1K1": "Z6",
+        "Z6K1": "Z39132"
+    },
+    "Z2K2": {
+        "Z1K1": "Z20",
+        "Z20K1": "Z37464",
+        "Z20K2": {
+            "Z1K1": "Z7",
+            "Z7K1": "Z32965",
+            "Z32965K1": {
+                "Z1K1": "Z6091",
+                "Z6091K1": "Q11081"
+            },
+            "Z32965K2": {
+                "Z1K1": "Z6091",
+                "Z6091K1": "Q12136"
+            },
+            "Z32965K3": "Z1002"
+        },
+        "Z20K3": {
+            "Z1K1": "Z7",
+            "Z7K1": "Z877",
+            "Z877K2": {
+                "Z1K1": "Z89",
+                "Z89K1": "An Alzheimer\u0026apos;s disease is a \u003Ca href=\"https://abstract.wikipedia.org/wiki/Q12136\"\u003Edisease\u003C/a\u003E."
+            }
+        }
+    },
+    "Z2K3": {
+        "Z1K1": "Z12",
+        "Z12K1": [
+            "Z11",
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1002",
+                "Z11K2": "[en] \"An Alzheimer's disease is a [[disease]].\""
+            }
+        ]
+    },
+    "Z2K4": {
+        "Z1K1": "Z32",
+        "Z32K1": [
+            "Z31"
+        ]
+    },
+    "Z2K5": {
+        "Z1K1": "Z12",
+        "Z12K1": [
+            "Z11",
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1002",
+                "Z11K2": "(nevermind that this is ungrammatical and Z32962 should be used instead). Z32965 uses this function to mark up to HTML, but since there is a text clash, may link the first instance of \"disease\"."
+            }
+        ]
+    }
+}

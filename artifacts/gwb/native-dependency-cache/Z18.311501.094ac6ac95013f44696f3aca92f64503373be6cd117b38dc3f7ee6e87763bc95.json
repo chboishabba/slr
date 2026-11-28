@@ -1,0 +1,409 @@
+{
+    "Z1K1": "Z2",
+    "Z2K1": {
+        "Z1K1": "Z6",
+        "Z6K1": "Z18"
+    },
+    "Z2K2": {
+        "Z1K1": "Z4",
+        "Z4K1": "Z18",
+        "Z4K2": [
+            "Z3",
+            {
+                "Z1K1": "Z3",
+                "Z3K1": "Z6",
+                "Z3K2": "Z18K1",
+                "Z3K3": {
+                    "Z1K1": "Z12",
+                    "Z12K1": [
+                        "Z11",
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1002",
+                            "Z11K2": "key id"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1025",
+                            "Z11K2": "identyfikator argumentu"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1011",
+                            "Z11K2": "নির্দেশক পরিচয়"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1645",
+                            "Z11K2": "键标识符"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1830",
+                            "Z11K2": "キー識別子"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1592",
+                            "Z11K2": "argument-id"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1186",
+                            "Z11K2": "מזהה מפתח"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1430",
+                            "Z11K2": "Schlüssel-ID"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1113",
+                            "Z11K2": "key id"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1078",
+                            "Z11K2": "ID argumen"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1157",
+                            "Z11K2": "identificatiecode sleutel"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1672",
+                            "Z11K2": "鍵識別碼"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1004",
+                            "Z11K2": "identifiant de la clé"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1005",
+                            "Z11K2": "идентификатор ключа"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1664",
+                            "Z11K2": "identificatorul cheii"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1787",
+                            "Z11K2": "ID della chiave"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1001",
+                            "Z11K2": "معرّف مفتاح"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1820",
+                            "Z11K2": "कुँजी पहचानकर्ता"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1062",
+                            "Z11K2": "identifikátor klíče"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1823",
+                            "Z11K2": "идентификатор на ключа"
+                        }
+                    ]
+                }
+            }
+        ],
+        "Z4K3": "Z118"
+    },
+    "Z2K3": {
+        "Z1K1": "Z12",
+        "Z12K1": [
+            "Z11",
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1002",
+                "Z11K2": "Argument reference"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1025",
+                "Z11K2": "odwołanie do argumentu"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1592",
+                "Z11K2": "Argumentreferens"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1011",
+                "Z11K2": "আর্গুমেন্ট তথ্যসূত্র"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1430",
+                "Z11K2": "Argumentreferenz"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1830",
+                "Z11K2": "引数参照"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1186",
+                "Z11K2": "התייחסות לארגומנט"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1048",
+                "Z11K2": "Tham chiếu đối số"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1004",
+                "Z11K2": "référence d'argument"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1157",
+                "Z11K2": "argumentreferentie"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1003",
+                "Z11K2": "Referencia de argumento"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1237",
+                "Z11K2": "Bağımsız değişken referansı"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1113",
+                "Z11K2": "Argument reference"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1851",
+                "Z11K2": "การอ้างอิงอาร์กิวเมนต์"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1078",
+                "Z11K2": "Referensi argumen"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1645",
+                "Z11K2": "参数引用"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1672",
+                "Z11K2": "引數參照"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1014",
+                "Z11K2": "Ntụaka arụmaụka"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1381",
+                "Z11K2": "Referência de argumento"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1005",
+                "Z11K2": "Ссылка на аргумент"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1664",
+                "Z11K2": "Referință de argument"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1001",
+                "Z11K2": "إحالة وسيط"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1787",
+                "Z11K2": "Riferimento ad argomento"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1820",
+                "Z11K2": "तर्क संदर्भ"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1062",
+                "Z11K2": "Reference na argument"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1823",
+                "Z11K2": "Референция към аргумент"
+            }
+        ]
+    },
+    "Z2K4": {
+        "Z1K1": "Z32",
+        "Z32K1": [
+            "Z31",
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1851",
+                "Z31K2": [
+                    "Z6",
+                    "การอ้างอิงตัวแปรรับเข้า"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1820",
+                "Z31K2": [
+                    "Z6",
+                    "तर्क सन्दर्भ"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1062",
+                "Z31K2": [
+                    "Z6",
+                    "Argument",
+                    "Odkaz na argument"
+                ]
+            }
+        ]
+    },
+    "Z2K5": {
+        "Z1K1": "Z12",
+        "Z12K1": [
+            "Z11",
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1002",
+                "Z11K2": "A link to an input to a Z7/Function call, or placeholder for one."
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1025",
+                "Z11K2": "Odwołanie do wejścia, które zostało przekazane w wywołaniu funkcji (Z7)"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1592",
+                "Z11K2": "koppling till en funktions indata, eller en platshållare"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1011",
+                "Z11K2": "Z7/ফাংশন কলের ইনপুটের সংযোগ, অথবা তার স্থানধারক"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1430",
+                "Z11K2": "Link zu einer Eingabe für einen Funktionsaufruf oder Platzhalter dafür"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1830",
+                "Z11K2": "Z7/関数呼び出し入力へのリンク、またはそのプレースホルダー。"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1157",
+                "Z11K2": "een link naar een ingang voor een Z7/aanroep van functie of een tijdelijke aanduiding ervoor"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1048",
+                "Z11K2": "Liên kết đến một đối số đầu vào trong một lời gọi hàm (Z7)"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1113",
+                "Z11K2": "A link to an input to a Z7/Function call, or placeholder for one."
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1851",
+                "Z11K2": "การเชื่อมไปยังสิ่งที่รับเข้าในการ Z7/เรียกใช้ฟังก์ชัน หรือเป็นตัวแสดงแทนให้"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1078",
+                "Z11K2": "Sebuah tautan ke masukan untuk suatu Z7/Panggilan fungsi, atau sebuah penampung untuk nilai masukan"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1186",
+                "Z11K2": "קישור לקלט ל־Z7/קריאה לפונקציה, או ממלא מקום של זה."
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1014",
+                "Z11K2": "Njikọ na ntinye aka na oku Z7/ọrụ, ma ọ bụ ebe nchekwa maka otu"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1381",
+                "Z11K2": "Um link para uma entrada para uma Z7/Chamada de função, ou um espaço reservado para uma."
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1004",
+                "Z11K2": "un lien vers une entrée d'un appel Z7/fonction, ou un espace réservé pour cette entrée."
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1005",
+                "Z11K2": "Ссылка на ввод на Z7/Вызов функции или её заменитель."
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1664",
+                "Z11K2": "O legătură către o valoare de intrare a unui Z7/Apel de funcție, sau un spațiu rezervat pentru unul."
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1001",
+                "Z11K2": "رابط بين مُدخل ما وبين استدعاء Z7/دالة، أو عنصر مكان لواحد."
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1787",
+                "Z11K2": "Un collegamento ad un ingresso ad una Funzione, o un rimpiazzamento per un ingresso"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1820",
+                "Z11K2": "एक Z7/फ़ंक्शन कॉल की एक कड़ी, या फिर उसके लिए एक प्लेसहोल्डर।"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1062",
+                "Z11K2": "Odkaz na nějaký vstup volání Z7/Funkce, popř. místo pro něj"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1823",
+                "Z11K2": "Връзка към вход за Z7/Извикване на функция или заместител за такава."
+            }
+        ]
+    }
+}

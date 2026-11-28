@@ -1,0 +1,916 @@
+{
+    "Z1K1": "Z2",
+    "Z2K1": {
+        "Z1K1": "Z6",
+        "Z6K1": "Z14"
+    },
+    "Z2K2": {
+        "Z1K1": "Z4",
+        "Z4K1": "Z14",
+        "Z4K2": [
+            "Z3",
+            {
+                "Z1K1": "Z3",
+                "Z3K1": "Z8",
+                "Z3K2": "Z14K1",
+                "Z3K3": {
+                    "Z1K1": "Z12",
+                    "Z12K1": [
+                        "Z11",
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1002",
+                            "Z11K2": "function"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1025",
+                            "Z11K2": "funkcja"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1011",
+                            "Z11K2": "ফাংশন"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1083",
+                            "Z11K2": "کرنی"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1657",
+                            "Z11K2": "ਕਰਨੀ"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1645",
+                            "Z11K2": "函数"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1062",
+                            "Z11K2": "funkce"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1592",
+                            "Z11K2": "funktion"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1186",
+                            "Z11K2": "פונקציה"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1430",
+                            "Z11K2": "Funktion"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1113",
+                            "Z11K2": "function (Z14K1)"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1625",
+                            "Z11K2": "lefa"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1157",
+                            "Z11K2": "functie"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1078",
+                            "Z11K2": "fungsi"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1672",
+                            "Z11K2": "函式"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1004",
+                            "Z11K2": "fonction"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1005",
+                            "Z11K2": "функция"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1664",
+                            "Z11K2": "funcție"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1001",
+                            "Z11K2": "دالة"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1820",
+                            "Z11K2": "फ़ंक्शन"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1787",
+                            "Z11K2": "funzione"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1844",
+                            "Z11K2": "punsiyon"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1823",
+                            "Z11K2": "функция"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1762",
+                            "Z11K2": "pali"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1830",
+                            "Z11K2": "関数"
+                        }
+                    ]
+                }
+            },
+            {
+                "Z1K1": "Z3",
+                "Z3K1": "Z1",
+                "Z3K2": "Z14K2",
+                "Z3K3": {
+                    "Z1K1": "Z12",
+                    "Z12K1": [
+                        "Z11",
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1002",
+                            "Z11K2": "composition"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1025",
+                            "Z11K2": "złożenie funkcji"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1011",
+                            "Z11K2": "ফাংশন প্রণয়ন"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1083",
+                            "Z11K2": "مسودہ"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1657",
+                            "Z11K2": "ਮਸੌਦਾ"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1645",
+                            "Z11K2": "组合"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1062",
+                            "Z11K2": "kompozice"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1592",
+                            "Z11K2": "sammansättning"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1186",
+                            "Z11K2": "הרכבה"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1430",
+                            "Z11K2": "Komposition"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1113",
+                            "Z11K2": "composition"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1625",
+                            "Z11K2": "fanambarana"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1157",
+                            "Z11K2": "compositie"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1078",
+                            "Z11K2": "komposisi"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1004",
+                            "Z11K2": "composition"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1005",
+                            "Z11K2": "композиция"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1664",
+                            "Z11K2": "compoziție"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1001",
+                            "Z11K2": "تركيب"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1820",
+                            "Z11K2": "रचना"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1787",
+                            "Z11K2": "composizione"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1844",
+                            "Z11K2": "komposisyon"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1823",
+                            "Z11K2": "композиция"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1830",
+                            "Z11K2": "合成"
+                        }
+                    ]
+                }
+            },
+            {
+                "Z1K1": "Z3",
+                "Z3K1": "Z16",
+                "Z3K2": "Z14K3",
+                "Z3K3": {
+                    "Z1K1": "Z12",
+                    "Z12K1": [
+                        "Z11",
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1002",
+                            "Z11K2": "code"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1025",
+                            "Z11K2": "kod źródłowy"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1011",
+                            "Z11K2": "কোড"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1083",
+                            "Z11K2": "کوڈ"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1657",
+                            "Z11K2": "ਕੋਡ"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1645",
+                            "Z11K2": "代码"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1062",
+                            "Z11K2": "zdrojový kód"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1592",
+                            "Z11K2": "kod"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1186",
+                            "Z11K2": "קוד"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1430",
+                            "Z11K2": "Code"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1113",
+                            "Z11K2": "code"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1625",
+                            "Z11K2": "kaody"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1157",
+                            "Z11K2": "code"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1078",
+                            "Z11K2": "kode"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1672",
+                            "Z11K2": "程式碼"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1004",
+                            "Z11K2": "code"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1005",
+                            "Z11K2": "код"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1664",
+                            "Z11K2": "cod"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1001",
+                            "Z11K2": "نص برمجي"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1820",
+                            "Z11K2": "कोड"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1787",
+                            "Z11K2": "codice"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1844",
+                            "Z11K2": "kodigo"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1823",
+                            "Z11K2": "код"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1830",
+                            "Z11K2": "コード"
+                        }
+                    ]
+                }
+            },
+            {
+                "Z1K1": "Z3",
+                "Z3K1": "Z6",
+                "Z3K2": "Z14K4",
+                "Z3K3": {
+                    "Z1K1": "Z12",
+                    "Z12K1": [
+                        "Z11",
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1002",
+                            "Z11K2": "built-in"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1025",
+                            "Z11K2": "wbudowana"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1011",
+                            "Z11K2": "অভ্যন্তরীণ ফাংশন"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1083",
+                            "Z11K2": "بنیادی"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1657",
+                            "Z11K2": "ਬੁਨਿਆਦੀ"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1645",
+                            "Z11K2": "内置"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1062",
+                            "Z11K2": "vestavěná"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1592",
+                            "Z11K2": "inbyggd"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1186",
+                            "Z11K2": "מובנה"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1430",
+                            "Z11K2": "integriert"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1113",
+                            "Z11K2": "built-in"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1625",
+                            "Z11K2": "ampahany mitambatra"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1157",
+                            "Z11K2": "ingebouwd"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1078",
+                            "Z11K2": "terbina"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1672",
+                            "Z11K2": "內建"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1004",
+                            "Z11K2": " intégré"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1005",
+                            "Z11K2": "встроенная"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1664",
+                            "Z11K2": "integrată"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1001",
+                            "Z11K2": "مدمج"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1820",
+                            "Z11K2": "बिल्ट-इन"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1787",
+                            "Z11K2": "integrato"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1844",
+                            "Z11K2": "nakapaloob"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1823",
+                            "Z11K2": "вграден"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1830",
+                            "Z11K2": "ビルトイン"
+                        }
+                    ]
+                }
+            }
+        ],
+        "Z4K3": "Z114"
+    },
+    "Z2K3": {
+        "Z1K1": "Z12",
+        "Z12K1": [
+            "Z11",
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1002",
+                "Z11K2": "Implementation"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1025",
+                "Z11K2": "implementacja"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1592",
+                "Z11K2": "Implementering"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1011",
+                "Z11K2": "বাস্তবায়ন"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1430",
+                "Z11K2": "Implementierung"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1083",
+                "Z11K2": "چلائی"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1657",
+                "Z11K2": "ਚਲਾਈ"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1576",
+                "Z11K2": "efektivigo"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1062",
+                "Z11K2": "Implementace"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1830",
+                "Z11K2": "実装"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1709",
+                "Z11K2": "Implementācija"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1186",
+                "Z11K2": "מימוש"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1048",
+                "Z11K2": "Thực hiện"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1157",
+                "Z11K2": "implementatie"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1227",
+                "Z11K2": "Implementering"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1004",
+                "Z11K2": "implémentation"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1332",
+                "Z11K2": "Реалізація"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1113",
+                "Z11K2": "Implementation"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1625",
+                "Z11K2": "Antsipiriham-pamaritana"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1381",
+                "Z11K2": "Implementação"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1051",
+                "Z11K2": "toteutus"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1851",
+                "Z11K2": "การนำไปปฏิบัติ"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1787",
+                "Z11K2": "Implementazione"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1078",
+                "Z11K2": "Implementasi"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1645",
+                "Z11K2": "实现"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1672",
+                "Z11K2": "實作"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1827",
+                "Z11K2": "υλοποίηση"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1003",
+                "Z11K2": "Implementación"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1099",
+                "Z11K2": "Implementéierung"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1014",
+                "Z11K2": "Mmejụpụta"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1037",
+                "Z11K2": "Implementação"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1005",
+                "Z11K2": "Реализация"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1664",
+                "Z11K2": "Implementare"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1001",
+                "Z11K2": "تنفيذ"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1820",
+                "Z11K2": "कार्यान्वयन"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1597",
+                "Z11K2": "Tətbiqetmə"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1207",
+                "Z11K2": "амалисозӣ"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1844",
+                "Z11K2": "Implementasyon"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1823",
+                "Z11K2": "Имплементация"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1199",
+                "Z11K2": "Implementation"
+            }
+        ]
+    },
+    "Z2K4": {
+        "Z1K1": "Z32",
+        "Z32K1": [
+            "Z31",
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1851",
+                "Z31K2": [
+                    "Z6",
+                    "การทำให้เกิดผล"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1078",
+                "Z31K2": [
+                    "Z6",
+                    "Penerapan"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1672",
+                "Z31K2": [
+                    "Z6",
+                    "實現"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1664",
+                "Z31K2": [
+                    "Z6",
+                    "Implementări"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1597",
+                "Z31K2": [
+                    "Z6",
+                    "Həyatakeçirmə",
+                    "İmplementasiya"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1025",
+                "Z31K2": [
+                    "Z6",
+                    "implementacja funkcji"
+                ]
+            }
+        ]
+    },
+    "Z2K5": {
+        "Z1K1": "Z12",
+        "Z12K1": [
+            "Z11",
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1002",
+                "Z11K2": "An implementation of a Z8/Function which can be checked as working through its Z20/Test cases, and if working, can be used in a Z7/Function call."
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1025",
+                "Z11K2": "Implementacja funkcji (Z8), która może być przetestowana (Z20) i wywołana (Z7), jeśli jest poprawna."
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1011",
+                "Z11K2": "Z8/ফাংশনের পরিণতকারী; (Z7/ফাংশন কল দিয়ে ব্যবহার)|(শুদ্ধতা Z20/পরীক্ষা ক্ষেত্র দিয়ে নিশ্চিত) করা যায়"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1576",
+                "Z11K2": "efektivigo de Z8/funkcio kiu povas esti testita tra siaj Z20/provkazoj kaj uzita en Z7/funkciovoko"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1062",
+                "Z11K2": "Konkrétní implementace dané Z8/Funkce"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1430",
+                "Z11K2": "Implementierung einer Funktion, die in einem Funktionsaufruf genutzt werden kann"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1048",
+                "Z11K2": "Sự hiện thực hoá một hàm (Z8) được kiểm thử bằng cách gọi (Z7) trong các kịch bản kiểm thử (Z20)"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1004",
+                "Z11K2": "L'implémentation d'une Z8/fonction validée par un Z20/cas de test utilisé dans un Z7/appel de fonction."
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1113",
+                "Z11K2": "An implementation of a Z8/Function which can be checked as working through its Z20/Test cases and if"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1381",
+                "Z11K2": "Uma implementação de uma Z8/Função que pode ser verificada como funcional através de seus Z20/Casos de teste e, se estiver funcionando, pode ser usada em uma Z7/Chamada de função."
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1851",
+                "Z11K2": "การนำ Z8/ฟังก์ชัน ไปปฏิบัติ ตรวจว่าใช้ได้ด้วย Z20/ชุดทดสอบ และใช้ Z7/เรียกฟังก์ชัน หากใช้ได้"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1078",
+                "Z11K2": "Implementasi dari suatu Fungsi yang bisa diperiksa melalui Kasus ujinya dan jika bekerja ia bisa digunakan dalam suatu Panggilan fungsi"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1157",
+                "Z11K2": "implementatie van Z8/functie die kan worden getest via Z20/tests en gebruikt in Z7/functie-aanroep"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1003",
+                "Z11K2": "Una implementación de una Z8/Función que puede ser verificada como funcionando a través de sus Z20/Casos de prueba y, si funciona, puede ser usada en una Z7/Llamada de función."
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1014",
+                "Z11K2": "Mmejuputa atumatu Z8/Ọrụ nke enwere ike ịlele ka ọ na-arụ ọrụ site na Z20/Nnwale ya ma ọ bụrụ na ọna arụ ọrụ  enwere ike iji ọrụ na oku Z7/."
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1664",
+                "Z11K2": "O implementare a unei Z8/Funcții care poate fi verificată ca funcționând prin intermediul Z20/Cazurilor sale de test și, dacă funcționează, poate fi utilizată într-un Z7/Apel de funcție."
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1001",
+                "Z11K2": "تنفيذ Z8/للدالة يمكن فحص عمله من خلال حالات Z20/اختباره، ويتحدد بذلك إن كان ممكنًا للاستخدام في استدعاء Z7/الدالة."
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1820",
+                "Z11K2": "किसी Z8/फ़ंक्शन का कार्यान्वयन जिसकी Z20/परीक्षण के मामलों से काम करने की योग्यता जाँची जा सकती है, और अगर योग्य हो तो Z7/फ़ंक्शन कॉल में प्रयोग किया जा सकता है।"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1844",
+                "Z11K2": "Isang implementasyon ng isang Z8/Punsiyon na maaaring suriin bilang gumagana sa pamamagitan ng mga Z20/Kaso ng pagsubok at kung gumagana ay maaaring gamitin sa isang Z7/Tawag sa punsiyon."
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1823",
+                "Z11K2": "Имплементация на Z8/Функция, която може да се провери дали работи чрез своите Z20/Тестови случаи и ако работи, може да се използва в Z7/Извикване на функция."
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1199",
+                "Z11K2": "An implementation of a Z8/Function which can be checked as working through its Z20/Test cases, and if working, can be used in a Z7/Function call."
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1830",
+                "Z11K2": "Z20/テストケースを通して動作することを確認できる、Z8/関数の実装。もし動作していれば、Z7/関数呼び出しの中で使用することができます。"
+            }
+        ]
+    }
+}

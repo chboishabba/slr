@@ -1,0 +1,191 @@
+{
+    "Z1K1": "Z2",
+    "Z2K1": {
+        "Z1K1": "Z6",
+        "Z6K1": "Z37726"
+    },
+    "Z2K2": {
+        "Z1K1": "Z8",
+        "Z8K1": [
+            "Z17",
+            {
+                "Z1K1": "Z17",
+                "Z17K1": "Z89",
+                "Z17K2": "Z37726K1",
+                "Z17K3": {
+                    "Z1K1": "Z12",
+                    "Z12K1": [
+                        "Z11",
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1002",
+                            "Z11K2": "initial fragment"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1025",
+                            "Z11K2": "początkowy fragment"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1830",
+                            "Z11K2": "元のフラグメント"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1062",
+                            "Z11K2": "počáteční fragment"
+                        }
+                    ]
+                }
+            },
+            {
+                "Z1K1": "Z17",
+                "Z17K1": "Z6091",
+                "Z17K2": "Z37726K2",
+                "Z17K3": {
+                    "Z1K1": "Z12",
+                    "Z12K1": [
+                        "Z11",
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1002",
+                            "Z11K2": "QID to replace link to"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1025",
+                            "Z11K2": "QID odnośnika do zastąpienia"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1830",
+                            "Z11K2": "置換されるリンクのQID"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1062",
+                            "Z11K2": "odkazované QID, které se má nahradit tučným písmem"
+                        }
+                    ]
+                }
+            }
+        ],
+        "Z8K2": "Z89",
+        "Z8K3": [
+            "Z20",
+            "Z37727"
+        ],
+        "Z8K4": [
+            "Z14",
+            "Z37728"
+        ],
+        "Z8K5": "Z37726"
+    },
+    "Z2K3": {
+        "Z1K1": "Z12",
+        "Z12K1": [
+            "Z11",
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1002",
+                "Z11K2": "replace specific Abstract Wikipedia link with bold"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1025",
+                "Z11K2": "zamiana linku Abstract Wiki do QID na pogrubienie"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1004",
+                "Z11K2": "remplacer le lien vers l'item par du gras"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1830",
+                "Z11K2": "特定の抽象ウィキペディアリンクを太字に置換"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1062",
+                "Z11K2": "nahradit jeden odkaz Abstraktní Wikipedie tučným"
+            }
+        ]
+    },
+    "Z2K4": {
+        "Z1K1": "Z32",
+        "Z32K1": [
+            "Z31",
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1025",
+                "Z31K2": [
+                    "Z6",
+                    "zastąp link do QID pogrubieniem w Abstrakcyjnej Wikipedii",
+                    "zamiana linku Abstrakcyjnej Wikipedii do QID na pogrubienie"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1002",
+                "Z31K2": [
+                    "Z6",
+                    "bold title",
+                    "bold subject of article",
+                    "replace Abstract Wikipedia link to QID with bold"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1830",
+                "Z31K2": [
+                    "Z6",
+                    "太字タイトル",
+                    "タイトルを太字",
+                    "記事の主題を太字"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1062",
+                "Z31K2": [
+                    "Z6",
+                    "ztučnit název",
+                    "tučný název"
+                ]
+            }
+        ]
+    },
+    "Z2K5": {
+        "Z1K1": "Z12",
+        "Z12K1": [
+            "Z11",
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1002",
+                "Z11K2": "Intended as a wrapper for the first fragment in an article to replace a self-link with bolding the title item."
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1025",
+                "Z11K2": "Funkcja opakowująca pierwszy fragment artykułu, zastępująca odnośnik do samego siebie pogrubieniem etykiety opisywanego elementu."
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1004",
+                "Z11K2": "utilisé pour respecter les conventions de résumé introductif, où le titre de l'article est en gras"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1830",
+                "Z11K2": "記事の最初のフラグメント用のラッパーとして、記事自身へのリンクをタイトル項目の太字表記に置き換えるための関数。"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1062",
+                "Z11K2": "Určeno pro obalení prvního fragmentu článku, kde se odkaz na sebe vymění za ztučnění subjektu článku."
+            }
+        ]
+    }
+}

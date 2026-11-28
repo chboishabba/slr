@@ -1,0 +1,145 @@
+{
+    "Z1K1": "Z2",
+    "Z2K1": {
+        "Z1K1": "Z6",
+        "Z6K1": "Z6030"
+    },
+    "Z2K2": {
+        "Z1K1": "Z4",
+        "Z4K1": "Z6030",
+        "Z4K2": [
+            "Z3",
+            {
+                "Z1K1": "Z3",
+                "Z3K1": "Z6030",
+                "Z3K2": "Z6030K1",
+                "Z3K3": {
+                    "Z1K1": "Z12",
+                    "Z12K1": [
+                        "Z11",
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1002",
+                            "Z11K2": "identity"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1787",
+                            "Z11K2": "identità"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1430",
+                            "Z11K2": "Identität"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1004",
+                            "Z11K2": "identité"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1157",
+                            "Z11K2": "identiteit"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1830",
+                            "Z11K2": "識別子"
+                        }
+                    ]
+                },
+                "Z3K4": "Z41"
+            }
+        ],
+        "Z4K3": "Z101"
+    },
+    "Z2K3": {
+        "Z1K1": "Z12",
+        "Z12K1": [
+            "Z11",
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1002",
+                "Z11K2": "Wikidata entity part"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1787",
+                "Z11K2": "Parte di entità Wikidata"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1430",
+                "Z11K2": "Wikidata-Entitätsteil"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1004",
+                "Z11K2": "partie d'entité Wikidata"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1062",
+                "Z11K2": "Část entity Wikidat"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1157",
+                "Z11K2": "Wikidata-entiteitsonderdeel"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1830",
+                "Z11K2": "ウィキデータのエンティティ構成要素"
+            }
+        ]
+    },
+    "Z2K4": {
+        "Z1K1": "Z32",
+        "Z32K1": [
+            "Z31"
+        ]
+    },
+    "Z2K5": {
+        "Z1K1": "Z12",
+        "Z12K1": [
+            "Z11",
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1002",
+                "Z11K2": "Enumeration type for the values (Z6031-Z6038) of the 'props' parameter described at https://www.wikidata.org/w/api.php?action=help\u0026modules=wbgetentities"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1787",
+                "Z11K2": "Enumerazione per i valori (Z6031-Z6038) dei parametri descritti in https://www.wikidata.org/w/api.php?action=help\u0026modules=wbgetentities"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1430",
+                "Z11K2": "Aufzählung der Werte für den Props-Parameter"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1004",
+                "Z11K2": "type d'énumération pour les valeurs (Z6031-Z6038) du paramètre « props » décrit sur https://www.wikidata.org/w/api.php?action=help\u0026modules=wbgetentities"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1062",
+                "Z11K2": "Výčtový typ pro hodnoty (Z6031–Z6038) parametru „props“ popsaného na https://www.wikidata.org/w/api.php?action=help\u0026modules=wbgetentities"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1157",
+                "Z11K2": "Enumeratietype voor de waarden (Z6031-Z6038) van de parameter ‘props’, zoals beschreven op https://www.wikidata.org/w/api.php?action=help\u0026modules=wbgetentities\n"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1830",
+                "Z11K2": "wbgetentities の props パラメータで使用される値（Z6031～Z6038）の列挙型。"
+            }
+        ]
+    }
+}

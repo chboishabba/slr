@@ -1,0 +1,70 @@
+{
+    "Z1K1": "Z2",
+    "Z2K1": {
+        "Z1K1": "Z6",
+        "Z6K1": "Z33329"
+    },
+    "Z2K2": {
+        "Z1K1": "Z14",
+        "Z14K1": "Z33328",
+        "Z14K2": {
+            "Z1K1": "Z7",
+            "Z7K1": "Z27873",
+            "Z27873K1": {
+                "Z1K1": "Z7",
+                "Z7K1": "Z27926",
+                "Z27926K1": [
+                    "Z89",
+                    {
+                        "Z1K1": "Z18",
+                        "Z18K1": "Z33328K1"
+                    },
+                    {
+                        "Z1K1": "Z18",
+                        "Z18K1": "Z33328K2"
+                    },
+                    {
+                        "Z1K1": "Z7",
+                        "Z7K1": "Z27926",
+                        "Z27926K1": {
+                            "Z1K1": "Z18",
+                            "Z18K1": "Z33328K3"
+                        }
+                    }
+                ]
+            },
+            "Z27873K2": "table",
+            "Z27873K3": [
+                "Z6",
+                "style"
+            ],
+            "Z27873K4": [
+                "Z6",
+                "background-color:var(--background-color-interactive-subtle,#F8F9FA);border:1px solid var(--border-color-base,#A2A9B1);border-spacing:3px;clear:inline-end;float: inline-end;margin:0.5em 0 0.5em 1em;padding:0.2em;width:250px;"
+            ]
+        }
+    },
+    "Z2K3": {
+        "Z1K1": "Z12",
+        "Z12K1": [
+            "Z11",
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1002",
+                "Z11K2": "create HTML table fragment, composition"
+            }
+        ]
+    },
+    "Z2K4": {
+        "Z1K1": "Z32",
+        "Z32K1": [
+            "Z31"
+        ]
+    },
+    "Z2K5": {
+        "Z1K1": "Z12",
+        "Z12K1": [
+            "Z11"
+        ]
+    }
+}

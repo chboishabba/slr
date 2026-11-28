@@ -1,0 +1,52 @@
+{
+    "Z1K1": "Z2",
+    "Z2K1": {
+        "Z1K1": "Z6",
+        "Z6K1": "Z37645"
+    },
+    "Z2K2": {
+        "Z1K1": "Z20",
+        "Z20K1": "Z37644",
+        "Z20K2": {
+            "Z1K1": "Z7",
+            "Z7K1": "Z37644",
+            "Z37644K1": {
+                "Z1K1": "Z6091",
+                "Z6091K1": "Q90"
+            },
+            "Z37644K2": "city",
+            "Z37644K3": "Z1002"
+        },
+        "Z20K3": {
+            "Z1K1": "Z7",
+            "Z7K1": "Z877",
+            "Z877K2": {
+                "Z1K1": "Z89",
+                "Z89K1": "\u003Ctr\u003E\u003Ctd colspan=\"2\" align=\"center\" style=\"--infobox-accent-hue:264deg;background-color:oklch(from var(--background-color-success-subtle,#DFF2EB) calc(0.8*l + 0.15) calc(c + 0.05) var(--infobox-accent-hue,264deg));font-weight: bold;\"\u003EParis\u003C/td\u003E\u003C/tr\u003E"
+            }
+        }
+    },
+    "Z2K3": {
+        "Z1K1": "Z12",
+        "Z12K1": [
+            "Z11",
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1002",
+                "Z11K2": "Infobox section Paris"
+            }
+        ]
+    },
+    "Z2K4": {
+        "Z1K1": "Z32",
+        "Z32K1": [
+            "Z31"
+        ]
+    },
+    "Z2K5": {
+        "Z1K1": "Z12",
+        "Z12K1": [
+            "Z11"
+        ]
+    }
+}
