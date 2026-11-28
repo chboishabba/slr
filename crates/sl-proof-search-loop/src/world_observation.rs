@@ -814,7 +814,12 @@ pub fn inspect_indexed_view_cohort(receipts:&[serde_json::Value],consumer:&str)
         }else{"en"};
         let rev=receipt["inventory"]["article_revision"].as_str().ok_or_else(bad)?;
         let sha=receipt["source_sha256"].as_str().ok_or_else(bad)?;
-        if !identities.insert((edition,rev,sha)){return Err(bad());}
+        // A repeated edition/revision is not another independent view,
+        // even if a caller supplies conflicting bytes or projection digests.
+        if edition=="en"&&receipt["schema"]=="slr.jmd-indexed-world-fibre-receipt.v1"
+            &&rev.strip_prefix("enwiki-revid:").and_then(|s|s.parse::<u64>().ok())
+                .filter(|n|*n>0).is_none(){return Err(bad());}
+        if !identities.insert((edition,rev)){return Err(bad());}
         let receipt_digest=format!("sha256:{:x}",Sha256::digest(serde_json::to_vec(receipt).map_err(|_|bad())?));
         let lane="article_lanes:event_candidates";
         let available=receipt["inventory"]["article_lanes"].get("event_candidates").is_some()
@@ -1042,6 +1047,9 @@ mod heterogeneous_overlap_tests {
         assert!(held["views"][1]["event_count"].is_null());
         fi["site"]=json!("enwiki");
         assert!(inspect_indexed_view_cohort(&[en.clone(),fi],"consumer:cohort").is_err());
+        let mut conflicting=en.clone();
+        conflicting["source_sha256"]=json!("d".repeat(64));
+        assert!(inspect_indexed_view_cohort(&[en.clone(),conflicting],"consumer:cohort").is_err());
         assert!(inspect_indexed_view_cohort(&[en.clone(),en],"consumer:cohort").is_err());
     }
     #[test]
