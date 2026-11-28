@@ -142,3 +142,23 @@ Do not treat arbitrary inhabited Prop fields in older reviewed structures as pro
 - 89e207ea0099: CLI predicate-transport and semantic-candidates; 1fa9f1c0f488: regression for unrelated predicate sharing a participant, passive patient, content scope, signed/outside retention.
 - c70fd1a61eb5: read_authenticated_source_semantic_query reuses existing formal bridge referee reopen, binds full reconstructed candidate receipt digest, selected original predicate row digest, revision, consumer/query, statement/evidence and answer digest. Reject foreign observation, duplicate selection, changed binding, nonmatching consumer/revision and promoting payment. Regression written for changed answer/residual. 12bcf3ce17385: CLI licensed-semantic REVISION BATCH_REFS_JSON RUN DOC SNAPSHOT DIGEST OBSERVATION CONSUMER QUERY EVIDENCE REPO SHA PATH THREAD.
 - Bounded historical source-query read, not shared current-authority snapshot, durable admission or proof of all-live closure. Actual independent referee issuance must bind the exact domain statement to checked source meaning, not merely sign caller-authored JSON. Remaining P0: construct original source-specific live reading constraints and factorisation, explicit real GHWB and JMD ingestion, reciprocal licensed source comparison and actual current admission/withdrawal, then legal premise algebra. No CI; compilation and consolidated local acceptance pending.
+
+## Generic-first correction (supersedes GWB-specific attachment expansion)
+GWB/GHWB and the nine archived predicate offsets are acceptance fixtures only; do not extend controlled clause tables as core semantics. Existing Lean WorldSemanticFibre actor/scope fields are one consumer instance, not universal world ontology. Original JMD import/checker attribution remains meta-introspector; SLR owns production semantics, ITIR projection only.
+
+Acceptance stories: ITIR-US-17, SL-US-15/16/19/20/21, WIKI-US-04 / SL-US-41 in ITIR-suite docs/user_stories.md; ITIR #17 federated typed world, #56 generic fibre ontology, #74 native inspection; SLR #24 normalized WorldObservation, #25 adaptive frontier/reentry, #42 chronology, #55 heterogeneous comparison. These are source owners, not blanket claims of merged or accepted work.
+
+| Generic goal | Existing owner / next weld |
+|---|---|
+| G1 representation transport | SectionedProjection, native coordinate_meet; preserve distinct chart IDs and inverse residuals |
+| G2 dependent incidence | predicate_role_transport is a language instance; generalize only against additional real chart types |
+| G3 refinement | Agda SemanticCandidateResidualBidiExact and existing native demand horizons; exact evidence-based exclusions still needed |
+| G4 descent | Agda ConsumerDescentMinimalObserverExact / Lean FiniteConsumerCertificate; require actual live coverage |
+| G5 discriminator | DiscriminatorSynthesisExact, existing acquisition frontier and #25 adaptive reentry |
+| G6 reciprocal correspondence | existing relational family and reciprocalLicensedComparison; independent source licences, no string equality promotion |
+| G7 signed composition | native nine-state polarity, Lean signed support; preserve zero/conflict |
+| G8 temporal/world composition | chronology_contestation_store, latent_world, ITIR timeline; text order != event time |
+| G9 native execution | existing Rust/SQL; inspect-source-fibre path-free bounded batch refs, 2ab080ed7c2f |
+| G10 acceptance | JMD indexed world fibre runner (Lean #125 6249aacbcf70, f601014995ff); ITIR #74 source_fibre facade eb183165d6b9 + test 031bb0fce2d5; actual arbitrary root article and EntityData replay pending |
+
+Next prioritize a real inspectable receipt: original pinned EntityData -> checked arbitrary-QID article -> full recorded members and source spans -> native PNF fibre -> ITIR timeline/proposition view. No new GWB-specific proof obligations. Do not conflate the JMD inventory and native fibre receipts before their actual source bindings are checked. Independent Wikidata properties remain original recorded statements, not cross-source alignment or historical truth. Need live source acquisition, actual compilation and end-to-end receipt inspection, additional non-GWB corpus and timeline UI hookup. No CI. All recent source changes execution-unobserved.
