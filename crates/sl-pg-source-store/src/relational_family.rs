@@ -1200,3 +1200,94 @@ pub fn read_authenticated_reciprocal_query(
     tx.commit()?;
     Ok(result)
 }
+
+
+/// Bind the exact candidate receipt and one original predicate/query to the
+/// independently issued bounded answer. Receipt digest is over the complete
+/// reconstructed native JSON, including outside-model and residual lanes.
+fn source_semantic_proof_binding(receipt:&serde_json::Value,revision:&str,
+    observation:&str,consumer:&str,query:&str,statement_digest:&str,evidence_ref:&str,
+    answer:&serde_json::Value)->Result<serde_json::Value,RelationalFamilyError>{
+    use serde_json::json;
+    if [revision,observation,consumer,query,statement_digest,evidence_ref].iter()
+        .any(|s|s.trim().is_empty()) || answer.is_null()
+        ||receipt["schema"]!="slr.source-semantic-candidate-fragments.v1"
+        ||receipt["original_transport"]["source_coordinate_meet"]["source_revision_ref"]!=revision{
+        return Err(RelationalFamilyError::ReciprocalProofBinding);
+    }
+    let rows=receipt["rows"].as_array().ok_or(RelationalFamilyError::ReciprocalProofBinding)?;
+    let mut selected=rows.iter().filter(|r|
+        r["original_predicate_transport"]["checked_observation"]["observation_ref"]==observation);
+    let row=selected.next().ok_or(RelationalFamilyError::ReciprocalProofBinding)?;
+    if selected.next().is_some(){return Err(RelationalFamilyError::ReciprocalProofBinding);}
+    Ok(json!({"schema":"slr-source-semantic-query-binding-v1",
+        "proof_scope":"bounded-source-predicate-query","source_revision_ref":revision,
+        "observation_ref":observation,"consumer_ref":consumer,"query_ref":query,
+        "candidate_receipt_sha256":digest_bytes(&serde_json::to_vec(receipt)?),
+        "predicate_row_sha256":digest_bytes(&serde_json::to_vec(row)?),
+        "statement_digest":statement_digest,"evidence_ref":evidence_ref,
+        "answer_sha256":digest_bytes(&serde_json::to_vec(answer)?)}))
+}
+
+/// Reopen immutable source candidate receipt, then existing formal evidence.
+/// The source producers use independent read snapshots: this is a bounded
+/// historical source answer, not a current shared authority snapshot or a
+/// durable semantic admission. Referee must issue the exact domain binding.
+pub fn read_authenticated_source_semantic_query(
+    config:&DatabaseConfig,revision:&str,batches:&[String],run:&str,doc:&str,
+    snapshot:&str,digest:&str,observation:&str,consumer:&str,query:&str,
+    evidence_ref:&str,locator:&sensiblaw_formal_proof_bridge::RefereeReceiptLocator,
+)->Result<serde_json::Value,RelationalFamilyError>{
+    use serde_json::{json,Value};
+    use sensiblaw_formal_proof_bridge::{reopen_authenticated_formal_evidence_tx,
+        read_source_bound_referee_receipt};
+    let receipt=crate::read_article_semantic_candidates(config,revision,batches,run,doc,snapshot,digest)?;
+    let mut connection=Client::connect(config.database_url(),NoTls)?;
+    let mut tx=connection.transaction()?;
+    tx.batch_execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE READ ONLY; SET LOCAL statement_timeout='90000ms'")?;
+    let checked=reopen_authenticated_formal_evidence_tx(&mut tx,evidence_ref,locator)?;
+    let payment=checked.payment();
+    let referee:Value=serde_json::from_str(&read_source_bound_referee_receipt(&mut tx,locator)?)?;
+    let answer=referee.get("slr_source_semantic_query_answer").ok_or(RelationalFamilyError::ReciprocalProofBinding)?;
+    let binding=source_semantic_proof_binding(&receipt,revision,observation,consumer,query,
+        &payment.statement_digest,evidence_ref,answer)?;
+    let premise=&referee["slr_premise_binding"];
+    let revisions=premise["source_revisions"].as_array().ok_or(RelationalFamilyError::ReciprocalProofBinding)?;
+    if referee["slr_source_semantic_query_binding"]!=binding
+        ||premise["consumer_ref"]!=consumer
+        ||!revisions.contains(&json!(revision))
+        ||!payment.formal_premise_paid||payment.creates_legal_authority
+        ||payment.applicability_promoted||payment.claim_truth_promoted{
+        return Err(RelationalFamilyError::ReciprocalProofBinding);
+    }
+    let result=json!({"schema":"slr.authenticated-bounded-source-semantic-query.v1",
+        "binding":binding,"answer":answer,"candidate_receipt":receipt,
+        "formal_premise_paid":true,"reopen_refs":payment.reopen_refs,
+        "common_current_authority_snapshot":false,"creates_semantic_authority":false,
+        "all_live_semantic_readings_covered":false,"governed_identity_paid":false,
+        "world_truth_paid":false,"writes_database":false});
+    tx.commit()?;
+    Ok(result)
+}
+
+#[cfg(test)]
+mod source_semantic_binding_tests {
+    use super::*;
+    use serde_json::json;
+    #[test]
+    fn exact_predicate_and_answer_binding_changes_on_residual_or_answer_change(){
+        let receipt=json!({"schema":"slr.source-semantic-candidate-fragments.v1",
+            "original_transport":{"source_coordinate_meet":{"source_revision_ref":"rev"}},
+            "rows":[{"original_predicate_transport":{"checked_observation":{"observation_ref":"obs"}},
+                "outside_model_possible":true}]});
+        let bind=|r:&serde_json::Value,a:&serde_json::Value|
+            source_semantic_proof_binding(r,"rev","obs","consumer","query","stmt","ev",a).unwrap();
+        let a=json!({"sign":0});
+        let baseline=bind(&receipt,&a);
+        assert_ne!(baseline,bind(&receipt,&json!({"sign":1})));
+        let mut changed=receipt.clone();
+        changed["rows"][0]["outside_model_possible"]=json!(false);
+        assert_ne!(baseline,bind(&changed,&a));
+        assert!(source_semantic_proof_binding(&receipt,"rev","foreign","consumer","query","stmt","ev",&a).is_err());
+    }
+}
