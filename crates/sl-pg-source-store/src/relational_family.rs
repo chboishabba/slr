@@ -1478,6 +1478,11 @@ fn signed_pair_delta(left:Option<SignedViewSupport>,right:Option<SignedViewSuppo
 /// Only the bounded signed answer is compared, not all-language coverage.
 pub fn read_authenticated_view_cohort(config:&DatabaseConfig,family_ref:&str,query:&str,
     requests:&[ViewPairEvidence])->Result<serde_json::Value,RelationalFamilyError>{
+    read_view_cohort_snapshot(config,family_ref,query,requests).map(|(_,cohort)|cohort)
+}
+
+fn read_view_cohort_snapshot(config:&DatabaseConfig,family_ref:&str,query:&str,
+    requests:&[ViewPairEvidence])->Result<(PersistedRelationalFamily,serde_json::Value),RelationalFamilyError>{
     use serde_json::{json,Value};
     let valid=|s:&str|!s.trim().is_empty()&&s.len()<=2048&&!s.contains('\0');
     if !valid(family_ref)||!valid(query)||requests.len()>45{
@@ -1559,7 +1564,152 @@ pub fn read_authenticated_view_cohort(config:&DatabaseConfig,family_ref:&str,que
         "creates_semantic_authority":false,"source_independence_paid":false,
         "world_truth_paid":false,"writes_database":false});
     tx.commit()?;
-    Ok(result)
+    Ok((family,result))
+}
+
+
+/// Canonical length-prefixed domain-separated digest. Sort object keys
+/// recursively even when serde_json is compiled with preserve_order.
+fn context_digest(domain:&str,value:&serde_json::Value)->Result<String,RelationalFamilyError>{
+    fn canonical(v:&serde_json::Value)->serde_json::Value{
+        use serde_json::Value;
+        match v{
+            Value::Object(m)=>{
+                let ordered:BTreeMap<_,_>=m.iter().map(|(k,v)|(k.clone(),canonical(v))).collect();
+                Value::Object(ordered.into_iter().collect())
+            },
+            Value::Array(a)=>Value::Array(a.iter().map(canonical).collect()),
+            _=>v.clone()
+        }
+    }
+    let bytes=serde_json::to_vec(&canonical(value))?;
+    let mut h=Sha256::new();
+    h.update((domain.len() as u64).to_be_bytes());h.update(domain.as_bytes());
+    h.update((bytes.len() as u64).to_be_bytes());h.update(bytes);
+    Ok(format!("sha256:{:x}",h.finalize()))
+}
+
+/// A query-scoped, noncanonical projection over the existing native family
+/// and authenticated cohort. No new state store or lossy claim promotion.
+/// All exact residuals, review/lifecycle coordinates and source context
+/// remain inline; the large original observations, route bodies and proof
+/// readbacks remain in the canonical owners and are replay-bound by digest.
+fn context_capsule(family:&PersistedRelationalFamily,cohort:&serde_json::Value,
+    requests:&[ViewPairEvidence])->Result<serde_json::Value,RelationalFamilyError>{
+    use serde_json::{json,Value};
+    let full=json!({"family":family,"cohort":cohort});
+    let family_json=&full["family"];
+    let family_digest=context_digest("slr.context.family.v1",family_json)?;
+    let full_digest=context_digest("slr.context.full.v1",&full)?;
+    let sources=family.projection.sources.iter().map(|s|{
+        let o=serde_json::to_value(&s.observation)?;
+        Ok(json!({"selector_ref":s.selector_ref,"observation_ref":s.observation.observation_ref,
+            "source_revision_ref":s.observation.source_revision_ref,"source_family":o["source_family"],
+            "context":o["context"],"polarity":o["polarity"],"provenance_refs":o["provenance_refs"],
+            "observation_digest":context_digest("slr.context.observation.v1",&o)?}))
+    }).collect::<Result<Vec<Value>,RelationalFamilyError>>()?;
+    let mut residuals=Vec::new();
+    for pair in &family.projection.directed_comparisons{
+        for (ordinal,r) in pair.comparison.residuals.iter().enumerate(){
+            let inverse=serde_json::to_value(r)?;
+            let demands:Vec<_>=family.projection.acquisition_demands.iter().filter(|d|
+                d.obligation.comparison_ref==pair.comparison.comparison_ref&&d.exact_residuals.contains(r))
+                .map(|d|d.obligation.obligation_ref.as_str()).collect();
+            if demands.len()!=1{return Err(RelationalFamilyError::ChangedReplay);}
+            // Same occurrence identity as the existing investigation frontier.
+            let ref_id=digest_bytes(&serde_json::to_vec(&(&pair.comparison.comparison_ref,ordinal,r))?);
+            residuals.push(json!({"residual_coordinate_digest":ref_id,
+                "comparison_ref":pair.comparison.comparison_ref,"ordinal":ordinal,
+                "left_selector_ref":pair.left_selector_ref,"right_selector_ref":pair.right_selector_ref,
+                "exact_residual":inverse,"acquisition_obligation_ref":demands[0]}));
+        }
+    }
+    let reviews=family.residual_review_items.iter().map(|r|json!({
+        "review_item_ref":r.review_item_ref,"obligation_ref":r.obligation_ref,
+        "comparison_ref":r.comparison_ref,"current_status":r.current_status,
+        "source_revision_refs":r.source_revision_refs})).collect::<Vec<_>>();
+    let lifecycles=family.acquisition_lifecycles.iter().map(|l|json!({
+        "obligation_ref":l.obligation_ref,"effective_availability":l.effective_availability,
+        "terminal_update":l.terminal_update,"reopening":l.reopening,
+        "effective_executable_frontier_route_refs":l.effective_executable_frontier_route_refs
+    })).collect::<Vec<_>>();
+    let queues=family.durable_acquisition_queues.iter().map(|q|json!({
+        "obligation_ref":q.obligation.obligation_ref,
+        "route_refs":q.routes.iter().map(|r|r.route_ref.as_str()).collect::<Vec<_>>()
+    })).collect::<Vec<_>>();
+    let mut pairs=Vec::new();
+    for pair in cohort["pairs"].as_array().ok_or(RelationalFamilyError::ChangedReplay)?{
+        let proof=&pair["authenticated_pair"];
+        pairs.push(json!({"pair_ref":pair["pair_ref"],"left_selector_ref":pair["left_selector_ref"],
+            "right_selector_ref":pair["right_selector_ref"],"forward_comparison_ref":pair["forward_comparison_ref"],
+            "backward_comparison_ref":pair["backward_comparison_ref"],"forward":pair["forward"],"backward":pair["backward"],
+            "proof_binding":proof["binding"],"formal_premise":proof["authenticated_formal_premise"],
+            "proof_readback_digest":if proof.is_null(){None}else{Some(context_digest("slr.context.proof.v1",proof)?)},
+            "residual_paid":false,"source_independence_paid":false}));
+    }
+    // Preserve exact locator inputs so expansion does not rely on memory
+    // or on selecting an arbitrary referee record. Sort independent pairs.
+    let mut locators=requests.to_vec();
+    locators.sort_by(|a,b|(&a.left_selector_ref,&a.right_selector_ref).cmp(&(&b.left_selector_ref,&b.right_selector_ref)));
+    let locators=locators.iter().map(|r|json!({"left_selector_ref":r.left_selector_ref,
+        "right_selector_ref":r.right_selector_ref,"evidence_ref":r.evidence_ref,"repo":r.repo,
+        "sha":r.sha,"path":r.path,"canonical_thread_id":r.canonical_thread_id})).collect::<Vec<_>>();
+    let body=json!({"schema":"slr.query-context-capsule.v1","family_ref":family.family_ref,
+        "consumer_ref":family.projection.consumer_ref,"query_ref":cohort["query_ref"],
+        "family_digest":family_digest,"full_readback_digest":full_digest,
+        "sources":sources,"pairs":pairs,"residuals":residuals,"reviews":reviews,
+        "lifecycles":lifecycles,"queues":queues,
+        "prepared_revision_refs":family.prepared_revision_refs,
+        "published_parent_transition_refs":family.published_parent_transition_refs,
+        "inconsistent_selector_refs":cohort["inconsistent_selector_refs"],
+        "all_pairs_bounded_signed_support_equal":cohort["all_pairs_bounded_signed_support_equal"],
+        "pair_evidence":locators,
+        "loss_profile":{"omitted_inline":["full_observation_payloads","full_comparison_and_transport_payloads",
+            "full_acquisition_route_bodies","full_review_and_lifecycle_payloads","full_referee_readbacks",
+            "full_reopening_cones_and_synthesis_candidates"],
+            "canonical_owners_retained":true,"omission_implies_irrelevance":false,
+            "expansion_requires_exact_current_replay":true},
+        "noncanonical":true,"query_scoped":true,"shared_transaction_snapshot":true,
+        "creates_semantic_authority":false,"world_truth_paid":false,"writes_database":false});
+    let digest=context_digest("slr.context.capsule.v1",&body)?;
+    let full_bytes=serde_json::to_vec(&full)?.len();
+    let capsule_bytes=serde_json::to_vec(&body)?.len();
+    Ok(json!({"schema":"slr.query-context-capsule-envelope.v1","capsule_digest":digest,
+        "capsule":body,"full_readback_json_bytes":full_bytes,"capsule_body_json_bytes":capsule_bytes,
+        "body_smaller_than_full_readback":capsule_bytes<full_bytes,
+        "measurement":"compact JSON byte length, not tokens or wire compression",
+        "creates_semantic_authority":false,"writes_database":false}))
+}
+
+/// Read or expand a capsule in a single current family/referee snapshot.
+/// Expected digest is mandatory for expansion; stale review, changed
+/// residuals, source or evidence cause a hold, not a historical rewrite.
+pub fn read_query_context_capsule(config:&DatabaseConfig,family_ref:&str,query:&str,
+    requests:&[ViewPairEvidence],expected_digest:Option<&str>)
+    ->Result<serde_json::Value,RelationalFamilyError>{
+    let (family,cohort)=read_view_cohort_snapshot(config,family_ref,query,requests)?;
+    let capsule=context_capsule(&family,&cohort,requests)?;
+    if let Some(expected)=expected_digest{
+        if capsule["capsule_digest"]!=expected{return Err(RelationalFamilyError::ChangedReplay);}
+        Ok(serde_json::json!({"schema":"slr.query-context-expanded.v1",
+            "capsule_digest":expected,"capsule_envelope":capsule,"family":family,"cohort":cohort,
+            "exact_current_replay":true,"creates_semantic_authority":false,"writes_database":false}))
+    }else{Ok(capsule)}
+}
+
+#[cfg(test)]
+mod query_context_digest_tests{
+    use super::*;
+    use serde_json::json;
+    #[test]
+    fn canonical_digest_order_and_domain_separation(){
+        let a=json!({"b":1,"a":{"z":2,"x":3}});
+        let b=json!({"a":{"x":3,"z":2},"b":1});
+        assert_eq!(context_digest("capsule",&a).unwrap(),context_digest("capsule",&b).unwrap());
+        assert_ne!(context_digest("capsule",&a).unwrap(),context_digest("full",&a).unwrap());
+        assert_ne!(context_digest("capsule",&a).unwrap(),context_digest("capsule",&json!({"b":2,"a":{"z":2,"x":3}})).unwrap());
+        assert_ne!(context_digest("capsule",&json!([1,2])).unwrap(),context_digest("capsule",&json!([2,1])).unwrap());
+    }
 }
 
 #[cfg(test)]
