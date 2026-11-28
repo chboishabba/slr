@@ -69,10 +69,37 @@ if [[ -z "$other" ]]; then
   other="$(jq -er '.candidate_right_members[0].member_ref' "$OUT/election-candidates.json")"
 fi
 jq -e --arg other "$other" 'any(.candidate_right_members[];.member_ref==$other)' "$OUT/election-candidates.json" >/dev/null
-# These two manifests name real already-persisted checked regions. No
-# matching article/native source or book predicate inverse may be fabricated.
-if [[ -z "${GWB_ARTICLE_CHART_JSON:-}" || -z "${GWB_BOOK_BATCHES_JSON:-}" ]]; then
-  echo "HOLD: selected candidate found; actual original article native chart and book checked batch refs required."
+# Reverse-discover actual checked products from the nominated original
+# occurrences before requesting any unavailable article numeric chart.
+# Both source digests are pinned; any ambiguity is explicit.
+article_sha="$(jq -er .source_sha256 "$GWB_INDEXED_RECEIPT")"
+article_revision="$(jq -er .inventory.article_revision "$GWB_INDEXED_RECEIPT")"
+article_start="$(jq -er '.left_original.predicate.start_char' "$OUT/election-candidates.json")"
+article_end="$(jq -er '.left_original.predicate.end_char' "$OUT/election-candidates.json")"
+article_literal="$(jq -er '.left_original.predicate.surface' "$OUT/election-candidates.json")"
+book_parser="$(jq -er .parser_run_ref "$book")"
+jq -e --arg other "$other" '[.candidate_right_members[]|select(.member_ref==$other)|
+  .original.role_inverse[]|select(.original_role.role=="head")|.original_atom] |
+  if length==1 then .[0] else error("book predicate head inverse not unique") end' \
+  "$OUT/election-candidates.json" >"$OUT/book-predicate-head.json"
+book_start="$(jq -er '.span[0]' "$OUT/book-predicate-head.json")"
+book_end="$(jq -er '.span[1]' "$OUT/book-predicate-head.json")"
+book_literal="$(jq -er '.text' "$OUT/book-predicate-head.json")"
+invoke book-inverse.json discover-checked-predicate "$revision" "$book_sha" "$book_start" "$book_end" "$book_literal" "$book_parser"
+if ! invoke article-inverse.json discover-checked-predicate "$article_revision" "$article_sha" "$article_start" "$article_end" "$article_literal" "${GWB_ARTICLE_PARSER_RUN_REF:---any-run}"; then
+  echo "HOLD: original article native source unavailable or inconsistent; see article-inverse stderr."
+  exit 3
+fi
+if [[ -z "${GWB_BOOK_BATCHES_JSON:-}" ]]; then
+  if ! jq -e '.status=="unique_checked_candidate"' "$OUT/book-inverse.json" >/dev/null; then
+    echo "HOLD: book checked predicate inverse missing/ambiguous; see book-inverse.json."
+    exit 3
+  fi
+  GWB_BOOK_BATCHES_JSON="$OUT/book-batches.json"
+  jq '[.candidates[].batch_ref]' "$OUT/book-inverse.json" >"$GWB_BOOK_BATCHES_JSON"
+fi
+if [[ -z "${GWB_ARTICLE_CHART_JSON:-}" ]]; then
+  echo "HOLD: original article numeric packet coordinates still required; checked source alternatives in article-inverse.json."
   exit 3
 fi
 jq -e '.revision=="enwiki-revid:1385850169" and
