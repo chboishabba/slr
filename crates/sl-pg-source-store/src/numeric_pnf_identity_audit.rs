@@ -2594,7 +2594,7 @@ struct NativeRelationPrefix {
     original_relation_payload:serde_json::Value,
 }
 fn load_native_relation_prefix(
-    tx:&mut postgres::Transaction<'_>,run_ref:&str,doc:&str,sha:&str,focus_token:i64,
+    tx:&mut postgres::Transaction<'_>,run_ref:&str,doc:&str,sha:&str,focus_token:i64,extended:bool,
 )->Result<NativeRelationPrefix,NativeNumericAuditError>{
     let locator:String=tx.query_one(
         "SELECT locator FROM execution.semantic_parser_source
@@ -2662,7 +2662,7 @@ fn load_native_relation_prefix(
     if relation_tokens.iter().any(|t|tokens.get(&t.head).map_or(true,|h|h.region!=t.region)){
         return Err(NativeNumericAuditError::ForeignSource);
     }
-    let relations=native_relation_grammar(&relation_tokens);
+    let relations=native_relation_grammar_for_policy(&relation_tokens,extended);
     let (relation_reductions,question_mode,missing_original_tags)=native_relation_reductions(tx,run_ref,doc,&relation_tokens,&relations)?;
     // The selected region includes the full containing sentence. Bind
     // the comparison to that exact supplied parser prefix, not the whole
@@ -2694,9 +2694,20 @@ fn load_native_relation_prefix(
     let uncovered=chars[..prefix_end_usize].iter().zip(&coverage)
         .filter(|(c,seen)|!c.is_whitespace()&&!**seen).count();
     let prefix=chars[..prefix_end_usize].iter().collect::<String>();
-    let (original_relation_packet,original_relation_payload)=assemble_original_relation_packet(
+    let (mut original_relation_packet,mut original_relation_payload)=assemble_original_relation_packet(
         doc,sha,&source_revision,&parser_run,&prefix,missing_original_tags,uncovered,
         &relation_reductions,question_mode.as_ref())?;
+    if extended {
+        // Distinct policy: original donor reference cannot certify the added
+        // structural predicates. Preserve comparison debt and hash the policy.
+        original_relation_payload["comparison"]["projection_policy"]=
+            serde_json::json!("native-multilingual-syntax-v2");
+        original_relation_payload["comparison"]["producer_revision"]=
+            serde_json::json!("SLR:native-multilingual-syntax-v2;derived-from:SensibLaw:f9c4670ef04b40e8153caa7dd00fa1eba7013ef4");
+        original_relation_packet.packet_sha256=original_relation_digest(&original_relation_payload)?;
+        original_relation_packet.independent_reference_exact=false;
+        original_relation_packet.complete_supplied_prefix_relation_parity=false;
+    }
     Ok(NativeRelationPrefix{source,tokens,relations,relation_reductions,question_mode,
         missing_original_tags,uncovered,original_relation_packet,original_relation_payload})
 }
@@ -2721,7 +2732,7 @@ pub fn publish_native_source_relation_prefix(
         &[&run,&doc,&start,&end,&literal])?;
     if rows.len()!=1{return Err(NativeNumericAuditError::ForeignSource);}
     let focus_token:i64=rows[0].get(0);
-    let prefix=load_native_relation_prefix(&mut tx,run,doc,sha,focus_token)?;
+    let prefix=load_native_relation_prefix(&mut tx,run,doc,sha,focus_token,true)?;
     let comparison=&prefix.original_relation_payload["comparison"];
     if comparison["source_revision_ref"]!=revision||comparison["parser_run_ref"]!=parser_run{
         return Err(NativeNumericAuditError::ForeignSource);
@@ -2760,7 +2771,7 @@ fn materialize_native_binding_bridge(
 )->Result<NativeBindingBridgeReceipt,NativeNumericAuditError>{
     let NativeRelationPrefix{source,tokens,relations,relation_reductions,question_mode,
         missing_original_tags,uncovered,original_relation_packet,original_relation_payload}=
-        load_native_relation_prefix(tx,run_ref,doc,sha,focus_token)?;
+        load_native_relation_prefix(tx,run_ref,doc,sha,focus_token,false)?;
     if tokens.get(&focus_token).map(|t|t.pos.as_str())!=Some("PRON"){
         return Err(NativeNumericAuditError::ForeignSource);
     }
@@ -3441,26 +3452,31 @@ struct ProjectedRelation{
     roles:Vec<(&'static str,i64)>,
 }
 fn projected_predicate_relations(tokens:&[NativeRelationToken])->Vec<ProjectedRelation>{
+    projected_predicate_relations_for_policy(tokens,false)
+}
+fn projected_predicate_relations_for_policy(tokens:&[NativeRelationToken],extended:bool)->Vec<ProjectedRelation>{
     let mut children=BTreeMap::<i64,Vec<&NativeRelationToken>>::new();
     for t in tokens{children.entry(t.head).or_default().push(t);}
     let nounish=|t:&&NativeRelationToken|matches!(t.pos.as_str(),"NOUN"|"PROPN"|"PRON"|"NUM");
     let mut out=Vec::new();
     for t in tokens{
         if !matches!(t.pos.as_str(),"VERB"|"AUX")
-            ||!matches!(t.dep.as_str(),"root"|"acl"|"xcomp"|"ccomp"|"advcl"){continue;}
+            ||!(matches!(t.dep.as_str(),"root"|"acl"|"xcomp"|"ccomp"|"advcl")
+                ||extended&&matches!(t.dep.as_str(),"conj"|"relcl"|"acl:relcl"|"pcomp")){continue;}
         let direct=children.get(&t.id).map(Vec::as_slice).unwrap_or(&[]);
-        let aux=direct.iter().copied().filter(|c|matches!(c.dep.as_str(),"aux"|"auxpass")&&c.pos=="AUX").collect::<Vec<_>>();
-        let mut subjects=direct.iter().copied().filter(|c|matches!(c.dep.as_str(),"nsubj"|"nsubjpass")).filter(nounish).collect::<Vec<_>>();
+        let aux=direct.iter().copied().filter(|c|(matches!(c.dep.as_str(),"aux"|"auxpass")||extended&&c.dep=="aux:pass")&&c.pos=="AUX").collect::<Vec<_>>();
+        let mut subjects=direct.iter().copied().filter(|c|matches!(c.dep.as_str(),"nsubj"|"nsubjpass")||extended&&matches!(c.dep.as_str(),"nsubj:pass")).filter(nounish).collect::<Vec<_>>();
         for a in &aux{
             subjects.extend(children.get(&a.id).into_iter().flatten().copied()
-                .filter(|c|matches!(c.dep.as_str(),"nsubj"|"nsubjpass")).filter(nounish));
+                .filter(|c|matches!(c.dep.as_str(),"nsubj"|"nsubjpass")||extended&&matches!(c.dep.as_str(),"nsubj:pass")).filter(nounish));
         }
         let objects=direct.iter().copied().filter(|c|matches!(c.dep.as_str(),"dobj"|"obj"|"attr"|"oprd")).filter(nounish).collect::<Vec<_>>();
         let oblique=direct.iter().copied().filter(|c|matches!(c.dep.as_str(),"obl"|"pobj"|"iobj")).filter(nounish).collect::<Vec<_>>();
         let complements=direct.iter().copied().filter(|c|matches!(c.dep.as_str(),"attr"|"acomp"|"ccomp"|"xcomp"|"oprd")).collect::<Vec<_>>();
         // Original shared_reducer uses dependency negation OR its pinned
         // lexical negation cue; do not infer a claim truth judgement.
-        let neg=direct.iter().copied().filter(|c|c.dep=="neg"||matches!(c.lemma.to_lowercase().as_str(),"not"|"never"|"no")).collect::<Vec<_>>();
+        let neg=direct.iter().copied().filter(|c|c.dep=="neg"||matches!(c.lemma.to_lowercase().as_str(),"not"|"never"|"no")
+            ||extended&&c.dep=="advmod"&&matches!(c.lemma.to_lowercase().as_str(),"nunca"|"jamás")).collect::<Vec<_>>();
         let base=||{
             let mut roles=vec![("head",t.id)];
             roles.extend(subjects.iter().map(|s|("subject",s.id)));roles
@@ -3495,7 +3511,10 @@ fn projected_predicate_relations(tokens:&[NativeRelationToken])->Vec<ProjectedRe
  * a239d2c14255, pinned SensibLaw f9c4670e. Candidate relation syntax only.
  * Question mode is a value role, not an atom, and is retained separately. */
 fn native_relation_grammar(tokens:&[NativeRelationToken])->Vec<ProjectedRelation>{
-    let mut rows=projected_predicate_relations(tokens);
+    native_relation_grammar_for_policy(tokens,false)
+}
+fn native_relation_grammar_for_policy(tokens:&[NativeRelationToken],extended:bool)->Vec<ProjectedRelation>{
+    let mut rows=projected_predicate_relations_for_policy(tokens,extended);
     let by_id=tokens.iter().map(|t|(t.id,t)).collect::<BTreeMap<_,_>>();
     for t in tokens {
         if let Some(head)=by_id.get(&t.head) {

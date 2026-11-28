@@ -150,6 +150,7 @@ def selected(v, view, out, commit, max_steps):
             and packet["document_ref"] == row["document"] and packet["selected_span"] == [a,b]
             and packet["selected_literal"] == literal and packet["world_truth_paid"] is False,
             "packet publication binding mismatch")
+    require(packet["selected_predicate_count"] > 0, "selected predicate absent from numeric grammar")
     row.update(snapshot=packet["snapshot_ref"], packet_digest=packet["packet_sha256"])
     reopened = native(["numeric-pnf-native","relation-reopen",row["run"],row["document"],
                        row["snapshot"],row["packet_digest"]], out / "packet-reopened.json")
