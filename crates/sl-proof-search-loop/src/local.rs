@@ -22,12 +22,12 @@ pub struct CandidatePassage {
 
 #[derive(Debug, Clone, Default)]
 pub struct LocalIndex {
-    docs: BTreeMap<String, LocalDocument>,
+    docs: BTreeMap<(String, String), LocalDocument>,
 }
 
 impl LocalIndex {
     pub fn insert(&mut self, doc: LocalDocument) {
-        self.docs.insert(doc.document_ref.clone(), doc);
+        self.docs.insert((doc.document_ref.clone(), doc.source_revision_ref.clone()), doc);
     }
 
     pub fn len(&self) -> usize {
@@ -157,5 +157,21 @@ mod tests {
                 .len(),
             1
         );
+    }
+}
+
+#[cfg(test)]
+mod revision_index_tests {
+    use super::*;
+    #[test]
+    fn same_document_different_revisions_survive_local_search() {
+        let mut index=LocalIndex::default();
+        for rev in ["r1","r2"] {
+            index.insert(LocalDocument{document_ref:"d".into(),source_revision_ref:rev.into(),
+                jurisdiction_ref:None,court_ref:None,date_ref:None,
+                canonical_text:"recorded predicate".into(),citation_refs:vec![]});
+        }
+        assert_eq!(index.len(),2);
+        assert_eq!(index.search(&QueryExpr::Term("predicate".into())).len(),2);
     }
 }
