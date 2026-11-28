@@ -289,7 +289,7 @@ pub fn indexed_inventory_observations(receipt: &serde_json::Value)
             &&s.bytes().all(|b|b.is_ascii_lowercase()||b==b'-')).ok_or_else(bad)?;
         let site=format!("{}wiki",edition.replace('-',"_"));
         let prefix=format!("{site}-revid:");
-        let rev=article_revision.strip_prefix(&prefix).and_then(|s|s.parse::<u64>().ok())
+        let rev=article_revision.strip_prefix(prefix.as_str()).and_then(|s|s.parse::<u64>().ok())
             .filter(|n|*n>0).ok_or_else(bad)?;
         let title=receipt["title"].as_str().filter(|s|!s.is_empty()).ok_or_else(bad)?;
         if receipt["site"]!=site||receipt["source_unit_ref"]!=format!("wikipedia:{edition}:{}:{rev}",title.replace(' ',"_")){
@@ -809,7 +809,9 @@ pub fn inspect_indexed_view_cohort(receipts:&[serde_json::Value],consumer:&str)
     for receipt in receipts{
         if receipt["qid"]!=qid{return Err(bad());}
         let inv=indexed_inventory_observations(receipt)?;
-        let edition=receipt["edition"].as_str().unwrap_or("en");
+        let edition=if receipt["schema"]=="slr.jmd-indexed-world-fibre-receipt.v2"{
+            receipt["edition"].as_str().ok_or_else(bad)?
+        }else{"en"};
         let rev=receipt["inventory"]["article_revision"].as_str().ok_or_else(bad)?;
         let sha=receipt["source_sha256"].as_str().ok_or_else(bad)?;
         if !identities.insert((edition,rev,sha)){return Err(bad());}
@@ -820,14 +822,15 @@ pub fn inspect_indexed_view_cohort(receipts:&[serde_json::Value],consumer:&str)
         let mut index=BTreeMap::<String,Vec<String>>::new();
         let mut event_count=0usize;
         let mut feature_count=0usize;
+        let mut unfeatured=Vec::new();
         for m in inv.members.iter().filter(|m|m.lane==lane){
             event_count+=1;
-            let mut roles=BTreeSet::new();
+            let mut roles=BTreeMap::<&str,usize>::new();
             for lane in ["actors","patients"]{
                 if let Some(atoms)=m.original[lane].as_array(){
                     for atom in atoms{
                         if let Some(role)=atom["dep"].as_str().and_then(overlap_dependency_class){
-                            roles.insert(role);
+                            *roles.entry(role).or_default()+=1;
                         }
                     }
                 }
@@ -836,7 +839,7 @@ pub fn inspect_indexed_view_cohort(receipts:&[serde_json::Value],consumer:&str)
                 feature_count+=1;
                 let key=serde_json::to_string(&roles).map_err(|_|bad())?;
                 index.entry(key).or_default().push(m.observation.request_ref.clone());
-            }
+            }else{unfeatured.push(m.observation.request_ref.clone());}
         }
         signatures.push(index);
         let members:Vec<_>=inv.members.iter().map(|m|json!({"member_ref":m.observation.request_ref,
@@ -848,6 +851,7 @@ pub fn inspect_indexed_view_cohort(receipts:&[serde_json::Value],consumer:&str)
             "entity_sha256":receipt["entity_sha256"],"event_lane_available":available,
             "event_count":if available{json!(event_count)}else{Value::Null},
             "role_feature_count":if available{json!(feature_count)}else{Value::Null},
+            "unfeatured_event_members":unfeatured,
             "unavailable_lanes":inv.unavailable_lanes,"empty_lanes":inv.empty_lanes,"members":members}));
     }
     let mut pairs=Vec::new();
@@ -873,6 +877,7 @@ pub fn inspect_indexed_view_cohort(receipts:&[serde_json::Value],consumer:&str)
                 "left_coverage":coverage(matched_l,&views[i]),"right_coverage":coverage(matched_r,&views[j]),
                 "same_entity_snapshot":views[i]["entity_revision"]==views[j]["entity_revision"]
                     &&views[i]["entity_sha256"]==views[j]["entity_sha256"],
+                "shared_snapshot_is_not_independent_corroboration":true,
                 "translation_equivalence_paid":false,"consumer_proof_equivalence_paid":false}));
         }
     }
@@ -1011,6 +1016,33 @@ mod heterogeneous_overlap_tests {
         assert_eq!(held["right_inverse"].as_array().unwrap().len(),2);
         book["source_coordinate_meet"]["numeric_original"]["packet_sha256"]=json!("foreign");
         assert!(select_heterogeneous_native_pair(&indexed,&article,&book,&native,"consumer:test",&member,"r1").is_err());
+    }
+
+    #[test]
+    fn edition_cohort_preserves_inverse_multiplicity_missing_and_foreign_site(){
+        let (en,_)=fixture();
+        let mut fi=en.clone();
+        fi["schema"]=json!("slr.jmd-indexed-world-fibre-receipt.v2");
+        fi["edition"]=json!("fi"); fi["site"]=json!("fiwiki");
+        fi["title"]=json!("Esimerkki");fi["inventory"]["title"]=json!("Esimerkki");
+        fi["inventory"]["article_revision"]=json!("fiwiki-revid:25");
+        fi["source_unit_ref"]=json!("wikipedia:fi:Esimerkki:25");
+        fi["source_sha256"]=json!("b".repeat(64));
+        fi["projection_sha256"]=json!("c".repeat(64));
+        let out=inspect_indexed_view_cohort(&[en.clone(),fi.clone()],"consumer:cohort").unwrap();
+        assert_eq!(out["directed_pairs"].as_array().unwrap().len(),2);
+        assert_eq!(out["views"][1]["members"][0]["source_ref"],"wikipedia:fi:Q9");
+        assert_eq!(out["views"][0]["unfeatured_event_members"].as_array().unwrap().len(),1);
+        assert_eq!(out["directed_pairs"][0]["left_coverage"],json!(0.75));
+        assert_eq!(out["directed_pairs"][0]["same_entity_snapshot"],true);
+        assert_eq!(out["directed_pairs"][0]["consumer_proof_equivalence_paid"],false);
+        fi["inventory"]["article_lanes"]["event_candidates"]=Value::Null;
+        let held=inspect_indexed_view_cohort(&[en.clone(),fi.clone()],"consumer:cohort").unwrap();
+        assert!(held["directed_pairs"][0]["left_coverage"].is_null());
+        assert!(held["views"][1]["event_count"].is_null());
+        fi["site"]=json!("enwiki");
+        assert!(inspect_indexed_view_cohort(&[en.clone(),fi],"consumer:cohort").is_err());
+        assert!(inspect_indexed_view_cohort(&[en.clone(),en],"consumer:cohort").is_err());
     }
     #[test]
     fn rejects_same_manifestation_and_promotion_and_marks_unavailable() {
