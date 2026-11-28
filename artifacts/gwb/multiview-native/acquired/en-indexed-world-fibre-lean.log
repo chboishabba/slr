@@ -1,0 +1,7 @@
+/content/dashi_lean4/tools/IndexedWorldFibreRunner.lean:50:9: warning: unused variable `h`
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+'Wikidata.Slr.IndexedWorldFibreInspection.independentlyCheckedMembers' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
+INDEXED_WORLD_FIBRE_KERNEL_OK
