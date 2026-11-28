@@ -1,0 +1,98 @@
+{
+  "candidate_only": true,
+  "candidates": [
+    {
+      "batch_ref": "candidate-pnf-batch:sha256:33563680affe2cf3525213d249f70ef61ffbe00f712149c1c3c68c1d0dd4d17d",
+      "observation": {
+        "candidate_only": true,
+        "candidate_type_refs": [],
+        "claim_truth_promoted": false,
+        "context": {
+          "attribution_ref": null,
+          "language_ref": null,
+          "modality_ref": null,
+          "ontology_ref": null,
+          "quantifier_ref": null,
+          "scope_ref": null,
+          "time_ref": null
+        },
+        "creates_semantic_authority": false,
+        "native_metadata_refs": [
+          "syntax:predicate-ordinal:9",
+          "syntax:predicate-span:211:217",
+          "syntax:predicate-dependency:ROOT",
+          "native-source-family:document",
+          "native-source-provider:provider:wikimedia:wikipedia-api",
+          "native-parser-compilation:sha256:ad8860312abdb82c67b61961eeca69d177e3219205f4b787f9f1273721425747"
+        ],
+        "observation_ref": "checked-pnf-observation:sha256:169773a20b08dfa25f8c449480b0640d00422d3f04138984597e487274d72484",
+        "parser_or_producer_ref": "db-parser:parser-run:sha256:6c288f309dcce65b9765fdb8a11847a53437327e958e3747283e6db0036a5959:document-region:source-revision:sha256:eba877f737b18412cc2e22095dd791b3e449f8fcf17af779df1432ea9fa62cdb:sentence:1:162-266",
+        "polarity": "undetermined",
+        "predicate_candidate_ref": "candidate-pnf-db:parser-run:sha256:6c288f309dcce65b9765fdb8a11847a53437327e958e3747283e6db0036a5959:document-region:source-revision:sha256:eba877f737b18412cc2e22095dd791b3e449f8fcf17af779df1432ea9fa62cdb:sentence:1:162-266:9:211:217",
+        "provenance_refs": [
+          "acquisition:wikimedia-api:enwiki:1385850169",
+          "candidate-pnf-batch:sha256:33563680affe2cf3525213d249f70ef61ffbe00f712149c1c3c68c1d0dd4d17d",
+          "db-parser:parser-run:sha256:6c288f309dcce65b9765fdb8a11847a53437327e958e3747283e6db0036a5959:document-region:source-revision:sha256:eba877f737b18412cc2e22095dd791b3e449f8fcf17af779df1432ea9fa62cdb:sentence:1:162-266",
+          "sha256:a88ef63b9c109f0f09c2fc2a266373a9ecaae855104cb0e11c4e6c53d90d3233",
+          "statement:sha256:aa970fe20d6d588495e3aa12367705099acab5f27452aa51c43f953cd13e23b8"
+        ],
+        "role_bindings": [
+          {
+            "filler_candidate_ref": "candidate-pnf-db:parser-run:sha256:6c288f309dcce65b9765fdb8a11847a53437327e958e3747283e6db0036a5959:document-region:source-revision:sha256:eba877f737b18412cc2e22095dd791b3e449f8fcf17af779df1432ea9fa62cdb:sentence:1:162-266:1:164:170",
+            "occurrence": 0,
+            "role_ref": "syntax:dep"
+          },
+          {
+            "filler_candidate_ref": "candidate-pnf-db:parser-run:sha256:6c288f309dcce65b9765fdb8a11847a53437327e958e3747283e6db0036a5959:document-region:source-revision:sha256:eba877f737b18412cc2e22095dd791b3e449f8fcf17af779df1432ea9fa62cdb:sentence:1:162-266:6:195:196",
+            "occurrence": 0,
+            "role_ref": "syntax:punct"
+          },
+          {
+            "filler_candidate_ref": "candidate-pnf-db:parser-run:sha256:6c288f309dcce65b9765fdb8a11847a53437327e958e3747283e6db0036a5959:document-region:source-revision:sha256:eba877f737b18412cc2e22095dd791b3e449f8fcf17af779df1432ea9fa62cdb:sentence:1:162-266:7:197:199",
+            "occurrence": 0,
+            "role_ref": "syntax:nsubj"
+          },
+          {
+            "filler_candidate_ref": "candidate-pnf-db:parser-run:sha256:6c288f309dcce65b9765fdb8a11847a53437327e958e3747283e6db0036a5959:document-region:source-revision:sha256:eba877f737b18412cc2e22095dd791b3e449f8fcf17af779df1432ea9fa62cdb:sentence:1:162-266:8:200:210",
+            "occurrence": 0,
+            "role_ref": "syntax:advmod"
+          },
+          {
+            "filler_candidate_ref": "candidate-pnf-db:parser-run:sha256:6c288f309dcce65b9765fdb8a11847a53437327e958e3747283e6db0036a5959:document-region:source-revision:sha256:eba877f737b18412cc2e22095dd791b3e449f8fcf17af779df1432ea9fa62cdb:sentence:1:162-266:10:218:220",
+            "occurrence": 0,
+            "role_ref": "syntax:prep"
+          },
+          {
+            "filler_candidate_ref": "candidate-pnf-db:parser-run:sha256:6c288f309dcce65b9765fdb8a11847a53437327e958e3747283e6db0036a5959:document-region:source-revision:sha256:eba877f737b18412cc2e22095dd791b3e449f8fcf17af779df1432ea9fa62cdb:sentence:1:162-266:16:248:252",
+            "occurrence": 1,
+            "role_ref": "syntax:prep"
+          },
+          {
+            "filler_candidate_ref": "candidate-pnf-db:parser-run:sha256:6c288f309dcce65b9765fdb8a11847a53437327e958e3747283e6db0036a5959:document-region:source-revision:sha256:eba877f737b18412cc2e22095dd791b3e449f8fcf17af779df1432ea9fa62cdb:sentence:1:162-266:20:265:266",
+            "occurrence": 1,
+            "role_ref": "syntax:punct"
+          }
+        ],
+        "role_type_hypotheses": [],
+        "source_family": "other",
+        "source_revision_ref": "source-revision:sha256:eba877f737b18412cc2e22095dd791b3e449f8fcf17af779df1432ea9fa62cdb",
+        "source_span_ref": "document-region:source-revision:sha256:eba877f737b18412cc2e22095dd791b3e449f8fcf17af779df1432ea9fa62cdb:sentence:1:162-266"
+      },
+      "parser_run_ref": "parser-run:sha256:6c288f309dcce65b9765fdb8a11847a53437327e958e3747283e6db0036a5959",
+      "predicate_candidate_ref": "candidate-pnf-db:parser-run:sha256:6c288f309dcce65b9765fdb8a11847a53437327e958e3747283e6db0036a5959:document-region:source-revision:sha256:eba877f737b18412cc2e22095dd791b3e449f8fcf17af779df1432ea9fa62cdb:sentence:1:162-266:9:211:217",
+      "region_ref": "document-region:source-revision:sha256:eba877f737b18412cc2e22095dd791b3e449f8fcf17af779df1432ea9fa62cdb:sentence:1:162-266"
+    }
+  ],
+  "literal": "served",
+  "parser_run_constraint": "parser-run:sha256:6c288f309dcce65b9765fdb8a11847a53437327e958e3747283e6db0036a5959",
+  "schema": "slr.checked-predicate-occurrence-discovery.v1",
+  "semantic_coverage_paid": false,
+  "source_end_char": 217,
+  "source_revision_ref": "source-revision:sha256:eba877f737b18412cc2e22095dd791b3e449f8fcf17af779df1432ea9fa62cdb",
+  "source_sha256": "a88ef63b9c109f0f09c2fc2a266373a9ecaae855104cb0e11c4e6c53d90d3233",
+  "source_start_char": 211,
+  "status": "unique_checked_candidate",
+  "truncated": false,
+  "world_truth_paid": false,
+  "writes_database": false
+}

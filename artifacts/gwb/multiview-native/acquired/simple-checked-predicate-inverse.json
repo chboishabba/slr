@@ -1,0 +1,83 @@
+{
+  "candidate_only": true,
+  "candidates": [
+    {
+      "batch_ref": "candidate-pnf-batch:sha256:54ac12c627a8e63597e2387708dd981fc4844ee3404037570e2b87c1f4b382c6",
+      "observation": {
+        "candidate_only": true,
+        "candidate_type_refs": [],
+        "claim_truth_promoted": false,
+        "context": {
+          "attribution_ref": null,
+          "language_ref": null,
+          "modality_ref": null,
+          "ontology_ref": null,
+          "quantifier_ref": null,
+          "scope_ref": null,
+          "time_ref": null
+        },
+        "creates_semantic_authority": false,
+        "native_metadata_refs": [
+          "syntax:predicate-ordinal:1",
+          "syntax:predicate-span:366:370",
+          "syntax:predicate-dependency:ROOT",
+          "native-source-family:document",
+          "native-source-provider:wikipedia-api:simple:George_W._Bush:plain-heading-v1",
+          "native-parser-compilation:sha256:d506d6daa437c547535e631744c298e87468a0a8e49cd61f5692711fa2f65bd3"
+        ],
+        "observation_ref": "checked-pnf-observation:sha256:5fd76f35d7513cf88b92d338e25ee0503d5b3425ee99348962dd117cc639977f",
+        "parser_or_producer_ref": "db-parser:parser-run:sha256:1d28749f173cc7cf147afb0bbebde9fb5a9734f0bc82c71c7e628bfca3ddf1bf:document-region:source-revision:sha256:942f93cc682eceb82a5641a8ff20a7bcdcb3b5fb097564d38933266374f36d87:sentence:9:363-425",
+        "polarity": "undetermined",
+        "predicate_candidate_ref": "candidate-pnf-db:parser-run:sha256:1d28749f173cc7cf147afb0bbebde9fb5a9734f0bc82c71c7e628bfca3ddf1bf:document-region:source-revision:sha256:942f93cc682eceb82a5641a8ff20a7bcdcb3b5fb097564d38933266374f36d87:sentence:9:363-425:1:366:370",
+        "provenance_refs": [
+          "acquisition:wikipedia:simple:George_W._Bush:revid:11077923:projection:plain-heading-v1:sha256:5941349e25de746fd830a4d85ef7596410c2be072d0e8835681e21814837a9bc",
+          "candidate-pnf-batch:sha256:54ac12c627a8e63597e2387708dd981fc4844ee3404037570e2b87c1f4b382c6",
+          "db-parser:parser-run:sha256:1d28749f173cc7cf147afb0bbebde9fb5a9734f0bc82c71c7e628bfca3ddf1bf:document-region:source-revision:sha256:942f93cc682eceb82a5641a8ff20a7bcdcb3b5fb097564d38933266374f36d87:sentence:9:363-425",
+          "sha256:5941349e25de746fd830a4d85ef7596410c2be072d0e8835681e21814837a9bc",
+          "statement:sha256:df647be0b53cff500b7710e8032c702b7b24f12c1810df247a6dcb8db7176ae9"
+        ],
+        "role_bindings": [
+          {
+            "filler_candidate_ref": "candidate-pnf-db:parser-run:sha256:1d28749f173cc7cf147afb0bbebde9fb5a9734f0bc82c71c7e628bfca3ddf1bf:document-region:source-revision:sha256:942f93cc682eceb82a5641a8ff20a7bcdcb3b5fb097564d38933266374f36d87:sentence:9:363-425:0:363:365",
+            "occurrence": 0,
+            "role_ref": "syntax:nsubj"
+          },
+          {
+            "filler_candidate_ref": "candidate-pnf-db:parser-run:sha256:1d28749f173cc7cf147afb0bbebde9fb5a9734f0bc82c71c7e628bfca3ddf1bf:document-region:source-revision:sha256:942f93cc682eceb82a5641a8ff20a7bcdcb3b5fb097564d38933266374f36d87:sentence:9:363-425:2:371:380",
+            "occurrence": 0,
+            "role_ref": "syntax:dobj"
+          },
+          {
+            "filler_candidate_ref": "candidate-pnf-db:parser-run:sha256:1d28749f173cc7cf147afb0bbebde9fb5a9734f0bc82c71c7e628bfca3ddf1bf:document-region:source-revision:sha256:942f93cc682eceb82a5641a8ff20a7bcdcb3b5fb097564d38933266374f36d87:sentence:9:363-425:3:381:383",
+            "occurrence": 0,
+            "role_ref": "syntax:prep"
+          },
+          {
+            "filler_candidate_ref": "candidate-pnf-db:parser-run:sha256:1d28749f173cc7cf147afb0bbebde9fb5a9734f0bc82c71c7e628bfca3ddf1bf:document-region:source-revision:sha256:942f93cc682eceb82a5641a8ff20a7bcdcb3b5fb097564d38933266374f36d87:sentence:9:363-425:11:424:425",
+            "occurrence": 0,
+            "role_ref": "syntax:punct"
+          }
+        ],
+        "role_type_hypotheses": [],
+        "source_family": "other",
+        "source_revision_ref": "source-revision:sha256:942f93cc682eceb82a5641a8ff20a7bcdcb3b5fb097564d38933266374f36d87",
+        "source_span_ref": "document-region:source-revision:sha256:942f93cc682eceb82a5641a8ff20a7bcdcb3b5fb097564d38933266374f36d87:sentence:9:363-425"
+      },
+      "parser_run_ref": "parser-run:sha256:1d28749f173cc7cf147afb0bbebde9fb5a9734f0bc82c71c7e628bfca3ddf1bf",
+      "predicate_candidate_ref": "candidate-pnf-db:parser-run:sha256:1d28749f173cc7cf147afb0bbebde9fb5a9734f0bc82c71c7e628bfca3ddf1bf:document-region:source-revision:sha256:942f93cc682eceb82a5641a8ff20a7bcdcb3b5fb097564d38933266374f36d87:sentence:9:363-425:1:366:370",
+      "region_ref": "document-region:source-revision:sha256:942f93cc682eceb82a5641a8ff20a7bcdcb3b5fb097564d38933266374f36d87:sentence:9:363-425"
+    }
+  ],
+  "literal": "flew",
+  "parser_run_constraint": "parser-run:sha256:1d28749f173cc7cf147afb0bbebde9fb5a9734f0bc82c71c7e628bfca3ddf1bf",
+  "schema": "slr.checked-predicate-occurrence-discovery.v1",
+  "semantic_coverage_paid": false,
+  "source_end_char": 370,
+  "source_revision_ref": "source-revision:sha256:942f93cc682eceb82a5641a8ff20a7bcdcb3b5fb097564d38933266374f36d87",
+  "source_sha256": "5941349e25de746fd830a4d85ef7596410c2be072d0e8835681e21814837a9bc",
+  "source_start_char": 366,
+  "status": "unique_checked_candidate",
+  "truncated": false,
+  "world_truth_paid": false,
+  "writes_database": false
+}

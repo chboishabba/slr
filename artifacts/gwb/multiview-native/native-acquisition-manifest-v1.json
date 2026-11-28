@@ -69,6 +69,6 @@
     "canonical_sha256": "7ff2ec8ffe6243871ad682e7d7060fe3b84025fb15dbe229154d7aa7f6a72b30",
     "status": "preexisting-book-pdf"
   },
-  "next_required": "Recover exact native predicate batch/member references and construct GWB_NATIVE_VIEW_INPUTS_JSON for the accepted English, Simple English and Spanish source fibres.",
-  "status": "native-acquisition-and-jmd-indexing-accepted-cross-view-weld-pending"
+  "next_required": "Recover or produce native numeric relation packets for the three article revisions, then run scripts/run_gwb_multiview_native.sh with artifacts/gwb/multiview-native/gwb-native-view-inputs-v1.json; exact checked predicate batches and inverse receipts are now persisted.",
+  "status": "native-acquisition-and-jmd-indexing-accepted-cross-view-numeric-chart-held"
 }

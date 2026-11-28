@@ -1,0 +1,59 @@
+[
+  {
+    "edition": "en",
+    "receipt_path": "artifacts/gwb/multiview-native/acquired/en-indexed-world-fibre.json",
+    "indexed_member_ref": "source-event-candidate:06d29e59e8d996ab312975448780077848c4fa9b50e3dfd3b7bf3d013f09f210",
+    "revision": "source-revision:sha256:eba877f737b18412cc2e22095dd791b3e449f8fcf17af779df1432ea9fa62cdb",
+    "run": "parser-run:sha256:6c288f309dcce65b9765fdb8a11847a53437327e958e3747283e6db0036a5959",
+    "document": "document:sha256:a88ef63b9c109f0f09c2fc2a266373a9ecaae855104cb0e11c4e6c53d90d3233",
+    "snapshot": "native-numeric-chart:missing",
+    "packet_digest": "native-numeric-chart:missing",
+    "batches": [
+      "candidate-pnf-batch:sha256:33563680affe2cf3525213d249f70ef61ffbe00f712149c1c3c68c1d0dd4d17d"
+    ],
+    "selected_literal": "served",
+    "selected_span": [
+      211,
+      217
+    ],
+    "numeric_chart_status": "held_missing_for_article_revision"
+  },
+  {
+    "edition": "simple",
+    "receipt_path": "artifacts/gwb/multiview-native/acquired/simple-indexed-world-fibre.json",
+    "indexed_member_ref": "source-event-candidate:5f84e07213497051097c2127d6a07a4c7b246ff2b2fa9cd4aeb245e273b5ee10",
+    "revision": "source-revision:sha256:942f93cc682eceb82a5641a8ff20a7bcdcb3b5fb097564d38933266374f36d87",
+    "run": "parser-run:sha256:1d28749f173cc7cf147afb0bbebde9fb5a9734f0bc82c71c7e628bfca3ddf1bf",
+    "document": "document:sha256:5941349e25de746fd830a4d85ef7596410c2be072d0e8835681e21814837a9bc",
+    "snapshot": "native-numeric-chart:missing",
+    "packet_digest": "native-numeric-chart:missing",
+    "batches": [
+      "candidate-pnf-batch:sha256:54ac12c627a8e63597e2387708dd981fc4844ee3404037570e2b87c1f4b382c6"
+    ],
+    "selected_literal": "flew",
+    "selected_span": [
+      366,
+      370
+    ],
+    "numeric_chart_status": "held_missing_for_article_revision"
+  },
+  {
+    "edition": "es",
+    "receipt_path": "artifacts/gwb/multiview-native/acquired/es-indexed-world-fibre.json",
+    "indexed_member_ref": "source-event-candidate:8d9b0f1d31d01b66bda215b68f8c8ead912eab03f1741b02469ad5c2fa13d159",
+    "revision": "source-revision:sha256:2c323f2b7434a256332e5840bb4eee9a1ab2db06ba250d85c3afaef450a9bac4",
+    "run": "parser-run:sha256:b6f8f03575d344b8fe98f159ed8990896ae10a501d8d4a3be4fe3aa0757843b6",
+    "document": "document:sha256:81434a7f74ee08989cdcfb6996b48aa2cd2da3c9b2a508302ba67722e4ffe075",
+    "snapshot": "native-numeric-chart:missing",
+    "packet_digest": "native-numeric-chart:missing",
+    "batches": [
+      "candidate-pnf-batch:sha256:e4ba5fb69d08cd53b0d20edcb387955f1c31c157cf46acfca2e4906c989ffd86"
+    ],
+    "selected_literal": "graduarse",
+    "selected_span": [
+      481,
+      490
+    ],
+    "numeric_chart_status": "held_missing_for_article_revision"
+  }
+]

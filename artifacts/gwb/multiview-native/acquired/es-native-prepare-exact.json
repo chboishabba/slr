@@ -1,0 +1,22 @@
+{
+  "applicability_promoted": false,
+  "candidate_only": true,
+  "canonical_ref": "canonical:sha256:81434a7f74ee08989cdcfb6996b48aa2cd2da3c9b2a508302ba67722e4ffe075",
+  "claim_truth_promoted": false,
+  "content_digest_ref": "sha256:81434a7f74ee08989cdcfb6996b48aa2cd2da3c9b2a508302ba67722e4ffe075",
+  "creates_semantic_authority": false,
+  "document_ref": "document:sha256:81434a7f74ee08989cdcfb6996b48aa2cd2da3c9b2a508302ba67722e4ffe075",
+  "input_transport": "stdin",
+  "model_ref": "es_core_news_sm",
+  "new_jobs": 274,
+  "parser_family": "spacy",
+  "parser_run_ref": "parser-run:sha256:b6f8f03575d344b8fe98f159ed8990896ae10a501d8d4a3be4fe3aa0757843b6",
+  "parser_version": "3.8.16",
+  "reused_jobs": 0,
+  "schema": "sensiblaw.scale1.long-document-prepare.v0_1",
+  "semantic_regions": 274,
+  "source_family": "document",
+  "source_ref": "source:wikipedia:es:George_W._Bush:revid:176217381",
+  "source_revision_ref": "source-revision:sha256:2c323f2b7434a256332e5840bb4eee9a1ab2db06ba250d85c3afaef450a9bac4",
+  "structural_regions": 139
+}

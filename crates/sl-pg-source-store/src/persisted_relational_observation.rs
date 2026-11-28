@@ -953,7 +953,7 @@ pub fn discover_checked_predicate(config:&DatabaseConfig,revision:&str,sha:&str,
         return Err(PersistedRelationalObservationError::CheckedSourceMismatch);
     }
     let start64=i64::from(start);let end64=i64::from(end);
-    let rows=tx.query("SELECT DISTINCT b.batch_ref,f.candidate_ref
+    let mut rows=tx.query("SELECT DISTINCT b.batch_ref,f.candidate_ref
         FROM pnf.statement_candidate_batch b
         JOIN corpus.source_statement s ON s.statement_ref=b.statement_ref
         JOIN pnf.statement_candidate_factor f ON f.batch_ref=b.batch_ref AND f.statement_ref=b.statement_ref
@@ -963,6 +963,36 @@ pub fn discover_checked_predicate(config:&DatabaseConfig,revision:&str,sha:&str,
         AND ($5::text IS NULL OR b.parser_receipt_ref='db-parser:'||$5||':'||b.exact_span_ref)
         ORDER BY b.batch_ref,f.candidate_ref LIMIT 65",
         &[&revision,&start64,&end64,&literal,&parser_run])?;
+    // New native SCALE-1 products retain the same checked batch owner, but
+    // store factors in candidate_semantic_product_factor.  Reopen that owner
+    // too; do not synthesize a candidate ref or choose a first row.  The
+    // candidate reference is exactly the one produced by
+    // load_candidate_pnf_batch_with_client for product-backed batches.
+    if rows.is_empty() {
+        rows=tx.query("SELECT DISTINCT b.batch_ref,
+                format('candidate-pnf-db:%s:%s:%s:%s:%s',
+                    j.parser_run_ref, b.exact_span_ref,
+                    pf.token_ordinal,
+                    j.region_start_char + pf.start_offset,
+                    j.region_start_char + pf.end_offset)
+            FROM pnf.statement_candidate_batch b
+            JOIN corpus.source_statement s ON s.statement_ref=b.statement_ref
+            JOIN pnf.candidate_semantic_product_factor pf
+              ON pf.product_ref=b.candidate_product_ref
+            JOIN ingest.parser_job j
+              ON j.source_revision_ref=s.source_revision_ref
+             AND j.region_ref=b.exact_span_ref
+             AND ('db-parser:' || j.parser_run_ref || ':' || j.region_ref)=b.parser_receipt_ref
+             AND j.status='succeeded'
+            WHERE s.source_revision_ref=$1 AND s.exact_span_ref=b.exact_span_ref
+              AND pf.role_ref='predicate'
+              AND j.region_start_char + pf.start_offset=$2
+              AND j.region_start_char + pf.end_offset=$3
+              AND pf.surface=$4
+              AND ($5::text IS NULL OR j.parser_run_ref=$5)
+            ORDER BY b.batch_ref LIMIT 65",
+            &[&revision,&start64,&end64,&literal,&parser_run])?;
+    }
     let truncated=rows.len()>64;
     let family=crate::workbench_projection::acceptance_control_store::relational_family_for_ingest(&source.source_family_ref);
     let mut candidates=Vec::new();
