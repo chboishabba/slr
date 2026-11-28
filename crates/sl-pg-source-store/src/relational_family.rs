@@ -1605,7 +1605,8 @@ fn context_capsule(family:&PersistedRelationalFamily,cohort:&serde_json::Value,
         let o=serde_json::to_value(&s.observation)?;
         Ok(json!({"selector_ref":s.selector_ref,"observation_ref":s.observation.observation_ref,
             "source_revision_ref":s.observation.source_revision_ref,"source_family":o["source_family"],
-            "context":o["context"],"polarity":o["polarity"],"provenance_refs":o["provenance_refs"],
+            "source_span_ref":s.observation.source_span_ref,"parser_or_producer_ref":s.observation.parser_or_producer_ref,
+            "predicate_candidate_ref":s.observation.predicate_candidate_ref,"context":o["context"],"polarity":o["polarity"],"provenance_refs":o["provenance_refs"],
             "observation_digest":context_digest("slr.context.observation.v1",&o)?}))
     }).collect::<Result<Vec<Value>,RelationalFamilyError>>()?;
     let mut residuals=Vec::new();
@@ -1617,8 +1618,8 @@ fn context_capsule(family:&PersistedRelationalFamily,cohort:&serde_json::Value,
                 .map(|d|d.obligation.obligation_ref.as_str()).collect();
             if demands.len()!=1{return Err(RelationalFamilyError::ChangedReplay);}
             // Same occurrence identity as the existing investigation frontier.
-            let ref_id=digest_bytes(&serde_json::to_vec(&(&pair.comparison.comparison_ref,ordinal,r))?);
-            residuals.push(json!({"residual_coordinate_digest":ref_id,
+            let ref_id=format!("residual:relational:{}",digest_bytes(&serde_json::to_vec(&(&pair.comparison.comparison_ref,ordinal,r))?));
+            residuals.push(json!({"residual_ref":ref_id,
                 "comparison_ref":pair.comparison.comparison_ref,"ordinal":ordinal,
                 "left_selector_ref":pair.left_selector_ref,"right_selector_ref":pair.right_selector_ref,
                 "exact_residual":inverse,"acquisition_obligation_ref":demands[0]}));
@@ -1633,10 +1634,11 @@ fn context_capsule(family:&PersistedRelationalFamily,cohort:&serde_json::Value,
         "terminal_update":l.terminal_update,"reopening":l.reopening,
         "effective_executable_frontier_route_refs":l.effective_executable_frontier_route_refs
     })).collect::<Vec<_>>();
-    let queues=family.durable_acquisition_queues.iter().map(|q|json!({
+    let queues=family.durable_acquisition_queues.iter().map(|q|Ok(json!({
         "obligation_ref":q.obligation.obligation_ref,
-        "route_refs":q.routes.iter().map(|r|r.route_ref.as_str()).collect::<Vec<_>>()
-    })).collect::<Vec<_>>();
+        "route_refs":q.routes.iter().map(|r|r.route_ref.as_str()).collect::<Vec<_>>(),
+        "queue_digest":context_digest("slr.context.queue.v1",&serde_json::to_value(q)?)
+    }))).collect::<Result<Vec<_>,RelationalFamilyError>>()?;
     let mut pairs=Vec::new();
     for pair in cohort["pairs"].as_array().ok_or(RelationalFamilyError::ChangedReplay)?{
         let proof=&pair["authenticated_pair"];
