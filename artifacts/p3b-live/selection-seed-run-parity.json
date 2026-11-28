@@ -1,0 +1,11 @@
+{
+  "candidate_only": true,
+  "claim_truth_promoted": false,
+  "consumer_ref": "consumer:native-pnf-p3b",
+  "creates_semantic_authority": false,
+  "left_batch_ref": "candidate-pnf-batch:sha256:0e0fedef021998f6a7607d994f760283fe4265a437c6808b6484979d4b38f73f",
+  "left_selector_ref": "selector:native-pnf:sha256:9098941676f6e418b9f3b973286aac38edd191e9d8e5a687d2bafb043aac00e8",
+  "right_batch_ref": "candidate-pnf-batch:sha256:efc6f121f50f1130cdc547a5b5b303594557f8f7d63d7f99b3db5db9e48afcad",
+  "right_selector_ref": "selector:native-pnf:sha256:596b779fd654cea370b7b56eb44dc84e971dc57cba3455160226f43a39bf4115",
+  "schema": "slr.native-pnf-relational-selection-seed.v1"
+}
