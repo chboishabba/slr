@@ -20,8 +20,9 @@
       "candidate_only": true,
       "creates_semantic_authority": false,
       "claim_truth_promoted": false,
-      "indexed_jmd_receipt": null,
-      "status": "native-persisted-awaiting-jmd-indexed-receipt"
+      "indexed_jmd_receipt": "artifacts/gwb/multiview-native/acquired/simple-indexed-world-fibre.json",
+      "indexed_jmd_kernel_marker": "INDEXED_WORLD_FIBRE_KERNEL_OK",
+      "status": "native-and-jmd-indexed-receipt-kernel-accepted"
     },
     {
       "edition": "es",
@@ -38,8 +39,9 @@
       "candidate_only": true,
       "creates_semantic_authority": false,
       "claim_truth_promoted": false,
-      "indexed_jmd_receipt": null,
-      "status": "native-persisted-awaiting-jmd-indexed-receipt"
+      "indexed_jmd_receipt": "artifacts/gwb/multiview-native/acquired/es-indexed-world-fibre.json",
+      "indexed_jmd_kernel_marker": "INDEXED_WORLD_FIBRE_KERNEL_OK",
+      "status": "native-and-jmd-indexed-receipt-kernel-accepted"
     }
   ],
   "existing_native_book_source": {
@@ -48,6 +50,6 @@
     "canonical_sha256": "7ff2ec8ffe6243871ad682e7d7060fe3b84025fb15dbe229154d7aa7f6a72b30",
     "status": "preexisting-book-pdf"
   },
-  "next_required": "Produce independently checked JMD indexed receipts and exact predicate member references for the new native revisions before constructing GWB_NATIVE_VIEW_INPUTS_JSON.",
-  "status": "native-acquisition-persisted-jmd-indexing-required"
+  "next_required": "Recover exact native predicate batch/member references and an exact native English manifestation before constructing GWB_NATIVE_VIEW_INPUTS_JSON.",
+  "status": "native-acquisition-and-jmd-indexing-accepted-cross-view-weld-pending"
 }
