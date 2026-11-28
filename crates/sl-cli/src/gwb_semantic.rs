@@ -114,6 +114,66 @@ fn abstract_source(source:&Path,receipt:&Path,definitions:Option<&Path>)->R<Valu
         "candidate_only":true,"runtime_interpretation_paid":false,"type_check_paid":false,
         "semantic_authority_paid":false,"world_truth_paid":false}))
 }
+
+/// Preserve a single original statement and its complete qualifiers. Never
+/// join dates/ordinal across different statements or infer negative facts.
+fn exact_qualifier<'a>(row:&'a Value,property:&str,datatype:&str)->Option<&'a Value>{
+    let values=row["qualifiers"][property].as_array()?;
+    if values.len()!=1{return None;}
+    let s=&values[0];
+    if s["property"]!=property||s["snaktype"]!="value"||s["datatype"]!=datatype{return None;}
+    Some(&s["datavalue"])
+}
+fn exact_date(row:&Value,property:&str,time:&str)->bool{
+    let Some(d)=exact_qualifier(row,property,"time") else{return false;};
+    let v=&d["value"];
+    d["type"]=="time"&&v["time"]==time&&v["precision"]==11&&v["timezone"]==0&&
+        v["before"]==0&&v["after"]==0&&v["calendarmodel"]=="http://www.wikidata.org/entity/Q1985727"
+}
+fn office_row(row:&Value)->bool{
+    let s=&row["mainsnak"];
+    matches!(row["rank"].as_str(),Some("normal"|"preferred"))&&
+        row["id"].as_str().is_some_and(|id|id.to_ascii_lowercase().starts_with("q207$")&&id.len()>5)&&
+        s["property"]=="P39"&&s["snaktype"]=="value"&&s["datatype"]=="wikibase-item"&&
+        s["datavalue"]["type"]=="wikibase-entityid"&&s["datavalue"]["value"]["id"]=="Q11696"&&
+        s["datavalue"]["value"]["entity-type"]=="item"&&s["datavalue"]["value"]["numeric-id"]==11696&&
+        exact_qualifier(row,"P1545","string").is_some_and(|d|d["type"]=="string"&&d["value"]=="43")&&
+        exact_date(row,"P580","+2001-01-20T00:00:00Z")&&exact_date(row,"P582","+2009-01-20T00:00:00Z")
+}
+fn entity_office(bytes:&[u8],expected_sha:&str,revision:u64)->R<Value>{
+    require(expected_sha.len()==64&&expected_sha.bytes().all(|c|c.is_ascii_digit()||(b'a'..=b'f').contains(&c))&&sha(bytes)==expected_sha,"entity source digest mismatch")?;
+    let original:Value=serde_json::from_slice(bytes).map_err(|e|e.to_string())?;
+    let e=&original["entities"]["Q207"];
+    require(e["id"]=="Q207"&&e["lastrevid"].as_u64()==Some(revision)&&revision>0,"entity revision mismatch")?;
+    let rows=array(&e["claims"],"P39")?;
+    let matches:Vec<_>=rows.iter().enumerate().filter(|(_,r)|office_row(r)).collect();
+    let witness=if matches.len()==1{
+        let (i,row)=matches[0];
+        json!({"pointer":format!("/entities/Q207/claims/P39/{i}"),"statement":row,
+            "statement_ref":row["id"],"ordinal":43,"start":"+2001-01-20T00:00:00Z","end":"+2009-01-20T00:00:00Z"})
+    }else{Value::Null};
+    Ok(json!({"schema":"slr.native-entity-office-dependency.v1","qid":"Q207",
+        "property":"P39","office":"Q11696","entity_revision":revision,"source_sha256":expected_sha,
+        "matching_statement_count":matches.len(),"witness":witness,
+        "year_support":if matches.len()==1{json!({"positive":true,"negative":false})}else{Value::Null},
+        "day_support":if matches.len()==1{json!({"positive":true,"negative":false})}else{Value::Null},
+        "candidate_only":true,"abstract_runtime_lookup_paid":false,"source_independence_paid":false,
+        "world_truth_paid":false}))
+}
+fn dependency_join(source:&Path,receipt:&Path,definitions:&Path,entity_path:&Path,entity_sha:&str,revision:u64)->R<Value>{
+    let abstract_view=abstract_source(source,receipt,Some(definitions))?;
+    let kb=entity_office(&raw(entity_path,32<<20)?,entity_sha,revision)?;
+    require(abstract_view["explicit_occupation_coordinate"]["subject"]==kb["qid"],"foreign dependency subject")?;
+    // This join identifies a discriminator candidate only. In particular the
+    // later EntityData revision may not be the historical function's lookup.
+    Ok(json!({"schema":"slr.native-abstract-office-dependency-join.v1","abstract_view":abstract_view,
+        "entity_dependency":kb,"join_scope":"explicit_subject_coordinate_only",
+        "abstract_year_support":null,"abstract_day_support":null,
+        "required_welds":["historical_function_implementation_selection","exact_dynamic_entity_revision",
+            "implementation_to_query_factorisation","independent_golden_execution"],
+        "candidate_only":true,"runtime_interpretation_paid":false,"world_truth_paid":false}))
+}
+
 fn lead(e:&str)->R<(&'static str,usize,usize,&'static str)>{
     match e{
         "en"=>Ok(("George Walker Bush (born July 6, 1946) is an American retired politician and businessman who served as the 43rd president of the United States from 2001 to 2009.",93,99,"served")),
@@ -144,8 +204,8 @@ fn verify_observation(family:&Value,selector:&str,coordinate:&Value)->R<Value>{
     let marker=format!("syntax:predicate-span:{}:{}",span[0],span[1]);
     let parser=string(o,"parser_or_producer_ref")?;
     require(o["candidate_only"]==true&&o["creates_semantic_authority"]==false&&o["claim_truth_promoted"]==false
-        &&parser.starts_with("db-parser:")&&array(o,"provenance_refs")?.iter().any(|v|v==&digest)
-        &&array(o,"native_metadata_refs")?.iter().any(|v|v==&marker),"native observation not attached to exact source occurrence")?;
+        &&parser.starts_with("db-parser:")&&array(o,"provenance_refs")?.iter().any(|v|v.as_str()==Some(digest.as_str()))
+        &&array(o,"native_metadata_refs")?.iter().any(|v|v.as_str()==Some(marker.as_str())),"native observation not attached to exact source occurrence")?;
     Ok(o.clone())
 }
 fn exec(cmd:&mut Command)->R<Vec<u8>>{
@@ -183,7 +243,7 @@ fn verify_pair(args:&[String])->R<Value>{
         .arg(&runner).arg(le).arg(&lp).arg(re).arg(&rp).arg(query).current_dir(&root))?;
     let golden:Value=serde_json::from_slice(&out).map_err(|e|e.to_string())?;
     require(golden["schema"]=="slr.gwb-golden-pair-evaluation.v1"&&golden["theorem"]=="Wikidata.Slr.GwbMultilingualOffice.exactPairAnswer"
-        &&golden["query_ref"]==*query&&golden["left"]==lc&&golden["right"]==rc&&golden["answer"]==answer
+        &&golden["query_ref"].as_str()==Some(query.as_str())&&golden["left"]==lc&&golden["right"]==rc&&golden["answer"]==answer
         &&golden["bounded_rule_only"]==true&&golden["world_truth_paid"]==false&&golden["referee_authority_paid"]==false,"golden/native answer mismatch")?;
     check_checkout(&root,commit)?;
     require(raw(&lp,32<<20)?==a&&raw(&rp,32<<20)?==b&&raw(&runner,1<<20)?==runner_bytes&&raw(&theorem,1<<20)?==theorem_bytes,"input changed during verification")?;
@@ -200,6 +260,10 @@ pub fn run(args:&[String])->R<()>{
     let result=match args{
         [mode,source,receipt] if mode=="inspect-abstract"=>abstract_source(Path::new(source),Path::new(receipt),None)?,
         [mode,source,receipt,definitions] if mode=="inspect-abstract"=>abstract_source(Path::new(source),Path::new(receipt),Some(Path::new(definitions)))?,
+        [mode,entity,digest,revision] if mode=="inspect-entity-office"=>
+            entity_office(&raw(Path::new(entity),32<<20)?,digest,revision.parse::<u64>().map_err(|e|e.to_string())?)?,
+        [mode,source,receipt,definitions,entity,digest,revision] if mode=="inspect-dependency-join"=>
+            dependency_join(Path::new(source),Path::new(receipt),Path::new(definitions),Path::new(entity),digest,revision.parse::<u64>().map_err(|e|e.to_string())?)?,
         [mode,rest @ ..] if mode=="verify-pair"=>verify_pair(rest)?,
         _=>return Err("gwb-semantic inspect-abstract SOURCE RECEIPT [DEFINITIONS_DIR] | verify-pair FAMILY LEFT RIGHT QUERY STATEMENT_DIGEST EVIDENCE_REF LEFT_EDITION LEFT_SOURCE RIGHT_EDITION RIGHT_SOURCE LEAN_ROOT LEAN_COMMIT".into())
     };
@@ -216,6 +280,24 @@ mod tests{
             assert_eq!(y["positive"],true);assert_eq!(d.is_null(),e!="es");
             assert!(evaluated(e,b"unrelated","query:gwb:office-years:v1").is_err());
         }
+    }
+    #[test] fn original_entity_office_exact_and_mutations(){
+        let bytes=include_bytes!("../../../artifacts/gwb/multiview-native/acquired/Q207-EntityData.json");
+        let found=entity_office(bytes,&sha(bytes),2575571605).unwrap();
+        assert_eq!(found["matching_statement_count"],1);
+        assert_eq!(found["witness"]["statement_ref"],"q207$B2345BA9-CE6F-4636-A7B1-38210CEBDFD7");
+        let row=found["witness"]["statement"].clone();
+        assert!(office_row(&row));
+        for p in ["P580","P582","P1545"]{
+            let mut changed=row.clone();changed["qualifiers"][p]=json!([]);
+            assert!(!office_row(&changed));
+        }
+        let mut bad=row.clone();bad["rank"]=json!("deprecated");assert!(!office_row(&bad));
+        let mut duplicate=row.clone();let extra=duplicate["qualifiers"]["P580"][0].clone();
+        duplicate["qualifiers"]["P580"].as_array_mut().unwrap().push(extra);
+        assert!(!office_row(&duplicate));
+        assert!(entity_office(bytes,&"0".repeat(64),2575571605).is_err());
+        assert!(entity_office(bytes,&sha(bytes),2575571606).is_err());
     }
     #[test] fn typed_entity_list_rejects_wrong_tag(){
         assert!(entities(&json!(["Z6",{"Z1K1":"Z6091","Z6091K1":"Q30"}])).is_err());
