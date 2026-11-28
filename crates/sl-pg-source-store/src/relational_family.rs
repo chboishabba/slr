@@ -1177,11 +1177,22 @@ pub fn read_authenticated_reciprocal_query(
         ||payment.applicability_promoted||payment.claim_truth_promoted{
         return Err(RelationalFamilyError::ReciprocalProofBinding);
     }
+    let authenticated_formal_premise=json!({
+        "demand_ref":payment.demand_ref,
+        "obligation_ref":payment.obligation_ref,
+        "evidence_ref":payment.evidence_ref,
+        "statement_digest":payment.statement_digest,
+        "formal_premise_paid":payment.formal_premise_paid,
+        "reopen_refs":payment.reopen_refs,
+        "creates_legal_authority":payment.creates_legal_authority,
+        "applicability_promoted":payment.applicability_promoted,
+        "claim_truth_promoted":payment.claim_truth_promoted
+    });
     let result=json!({
         "schema":"slr.authenticated-bounded-reciprocal-query.v1",
         "family_ref":family_ref,"query_ref":query,"binding":binding,
         "answer":answer,"recorded_comparison":recorded,
-        "authenticated_formal_premise":payment,"proof_scope":"bounded-source-proposition",
+        "authenticated_formal_premise":authenticated_formal_premise,"proof_scope":"bounded-source-proposition",
         "creates_semantic_authority":false,"all_live_semantic_readings_covered":false,
         "governed_identity_paid":false,"world_truth_paid":false,
         "writes_database":false
