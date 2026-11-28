@@ -1,0 +1,38 @@
+{
+  "schema": "slr.native-pnf-p3b-live-attempt.v1",
+  "database_source": "existing DATABASE_URL from slr/.env",
+  "existing_native_pnf_batches": 13364,
+  "source_revisions_with_pnf_factors": {
+    "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00": {
+      "batches": 6678,
+      "factor_rows": 155968
+    },
+    "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8": {
+      "batches": 6678,
+      "factor_rows": 0
+    }
+  },
+  "seeded_existing_native_pnf_pair": true,
+  "seed_receipt": "selection-seed.json",
+  "family_attempts": [
+    {
+      "inputs": "Run A native factors + Run B native batch rows",
+      "result": "rejected",
+      "reason": "Run B has no candidate factor rows, so no selected predicate can be checked."
+    },
+    {
+      "inputs": "Run A native factors + external factor rows",
+      "result": "rejected",
+      "reason": "external factor rows do not carry the required db-parser receipt."
+    },
+    {
+      "inputs": "two Run A native PNF batches",
+      "result": "rejected",
+      "reason": "the relational-family owner requires distinct source revisions."
+    }
+  ],
+  "family_rejection": "No pair of existing persisted batches currently satisfies the native checked-family contract.",
+  "reason": "The complete second native revision has no persisted candidate factors; external factor rows lack native db-parser receipts; same-revision comparison is intentionally rejected by the production family invariant.",
+  "semantic_authority_promoted": false,
+  "claim_truth_promoted": false
+}

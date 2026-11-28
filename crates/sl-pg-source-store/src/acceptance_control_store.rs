@@ -6,6 +6,7 @@
 //! findings are PostgreSQL-owned before execution begins.
 
 use postgres::{Client, GenericClient, NoTls};
+use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 use crate::{
@@ -14,6 +15,8 @@ use crate::{
     GovernanceAccessState, LicensedAlignment, ObservationContext, PrivacyExposureState,
     RelationalConsumer, RelationalSourceFamily, ResidualKind, RoleTypeDemand,
 };
+use crate::candidate_pnf_store::load_candidate_pnf_batch_with_client;
+use crate::CandidatePnfRole;
 
 /// REL/common acceptance tables.  This deliberately has no reviewed-evidence
 /// dependency, so a REL-only corpus can persist independently of legal/INV.
@@ -382,6 +385,97 @@ pub fn persist_rel_acceptance_corpus(
     }
     tx.commit()?;
     Ok(())
+}
+
+/// Seed the existing relational-family control plane from two already
+/// persisted native PNF batches. This creates candidate-only selectors only;
+/// it never creates semantic authority or claim truth.
+pub fn seed_relational_pnf_pair(
+    config: &DatabaseConfig,
+    consumer_ref: &str,
+    left_batch_ref: &str,
+    left_predicate_ref: &str,
+    right_batch_ref: &str,
+    right_predicate_ref: &str,
+) -> Result<serde_json::Value, AcceptanceControlStoreError> {
+    for (name, value) in [
+        ("consumer_ref", consumer_ref),
+        ("left_batch_ref", left_batch_ref),
+        ("left_predicate_ref", left_predicate_ref),
+        ("right_batch_ref", right_batch_ref),
+        ("right_predicate_ref", right_predicate_ref),
+    ] {
+        validate_nonempty(name, value)?;
+    }
+    install_rel_acceptance_schema(config)?;
+    let mut client = Client::connect(config.database_url(), NoTls)?;
+    let mut tx = client.transaction()?;
+    tx.batch_execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")?;
+    let left = load_candidate_pnf_batch_with_client(&mut tx, left_batch_ref)
+        .map_err(|e| AcceptanceControlStoreError::Upstream(e.to_string()))?
+        .ok_or_else(|| AcceptanceControlStoreError::NotFound(left_batch_ref.to_owned()))?;
+    let right = load_candidate_pnf_batch_with_client(&mut tx, right_batch_ref)
+        .map_err(|e| AcceptanceControlStoreError::Upstream(e.to_string()))?
+        .ok_or_else(|| AcceptanceControlStoreError::NotFound(right_batch_ref.to_owned()))?;
+    for (name, batch, predicate) in [
+        ("left", &left, left_predicate_ref),
+        ("right", &right, right_predicate_ref),
+    ] {
+        if !batch.candidate_only || batch.semantic_admission_paid
+            || batch.proposition_support_paid || batch.applicability_paid
+            || batch.claim_truth_paid {
+            return Err(AcceptanceControlStoreError::ExistingRowConflict);
+        }
+        if !batch.factors.iter().any(|f| {
+            f.candidate_ref == predicate && f.role == CandidatePnfRole::Predicate
+        }) {
+            return Err(AcceptanceControlStoreError::NotFound(format!(
+                "{name} predicate {predicate}"
+            )));
+        }
+    }
+    let consumer = RelationalConsumer {
+        consumer_ref: consumer_ref.to_owned(),
+        permitted_source_families: vec![RelationalSourceFamily::Wikipedia],
+        required_roles: vec![], required_role_types: vec![],
+        compare_scope: true, compare_time: true, compare_modality: true,
+        compare_quantifier: true, compare_attribution: true,
+        compare_ontology: true, compare_language: true,
+        predicate_alignments: vec![], role_alignments: vec![],
+        filler_alignments: vec![], type_alignments: vec![],
+    };
+    persist_consumer(&mut tx, &consumer)?;
+    let selector = |side: &str, batch_ref: &str, predicate_ref: &str| {
+        let digest = Sha256::digest(
+            format!("{consumer_ref}|{side}|{batch_ref}|{predicate_ref}").as_bytes(),
+        );
+        let digest = format!("{digest:x}");
+        AcceptanceObservationSelector {
+            selector_ref: format!("selector:native-pnf:sha256:{digest}"),
+            kind: AcceptanceObservationKind::CandidatePnf,
+            batch_ref: Some(batch_ref.to_owned()),
+            selected_predicate_candidate_ref: Some(predicate_ref.to_owned()),
+            diagnostic_ref: None, native_statement_ref: None,
+            observation_ref: format!("observation:native-pnf:sha256:{digest}"),
+            source_family: Some(RelationalSourceFamily::Wikipedia),
+            context: ObservationContext::default(),
+            provenance_refs: vec![batch_ref.to_owned(), "native-pnf-existing-run".to_owned()],
+        }
+    };
+    let left_selector = selector("left", left_batch_ref, left_predicate_ref);
+    let right_selector = selector("right", right_batch_ref, right_predicate_ref);
+    persist_selector(&mut tx, &left_selector)?;
+    persist_selector(&mut tx, &right_selector)?;
+    tx.commit()?;
+    Ok(serde_json::json!({
+        "schema": "slr.native-pnf-relational-selection-seed.v1",
+        "consumer_ref": consumer_ref,
+        "left_selector_ref": left_selector.selector_ref,
+        "right_selector_ref": right_selector.selector_ref,
+        "left_batch_ref": left_batch_ref, "right_batch_ref": right_batch_ref,
+        "candidate_only": true, "creates_semantic_authority": false,
+        "claim_truth_promoted": false,
+    }))
 }
 
 pub fn load_rel_acceptance_corpus(

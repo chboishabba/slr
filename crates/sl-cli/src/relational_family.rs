@@ -3,6 +3,7 @@ use sensiblaw_pg_source_store::{
     load_database_config,run_persisted_relational_family,inspect_persisted_relational_family,
     prepare_relational_family_revision,publish_relational_family_revision,inspect_relational_family_revision,
     apply_persisted_review_command,ReviewAction,ReviewCommand,load_rel_acceptance_corpus,
+    seed_relational_pnf_pair,
 };
 fn print_json<T:serde::Serialize>(value:&T)->Result<(),String>{
     println!("{}",serde_json::to_string_pretty(value).map_err(|e|e.to_string())?);Ok(())
@@ -137,6 +138,8 @@ pub fn run(args:&[String])->Result<(),String>{
     }
     let config=load_database_config(None).map_err(|e|e.to_string())?;
     match args {
+        [mode,consumer,left_batch,left_pred,right_batch,right_pred] if mode=="seed-pnf-pair"=>
+            print_json(&seed_relational_pnf_pair(&config,consumer,left_batch,left_pred,right_batch,right_pred).map_err(|e|e.to_string())?),
         [mode,revision,batches_path,run,doc,snapshot,digest,observation,consumer,query,evidence,repo,sha,path,thread] if mode=="licensed-semantic"=>{
             let raw=std::fs::read_to_string(batches_path).map_err(|e|e.to_string())?;
             let batches:Vec<String>=serde_json::from_str(&raw).map_err(|e|e.to_string())?;
