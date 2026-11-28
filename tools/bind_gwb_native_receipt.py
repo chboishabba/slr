@@ -27,7 +27,9 @@ def bind(edition, receipt, manifest_path=BASE / "native-acquisition-manifest-v1.
     s = entries[0]
     a = BASE / "acquired"
     raw = load(receipt)
-    require(raw["schema"] == "slr.jmd-indexed-world-fibre-receipt.v1", "expected original native v1 receipt")
+    require(raw["schema"] in ("slr.jmd-indexed-world-fibre-receipt.v1", "slr.jmd-indexed-world-fibre-receipt.v2"), "unexpected original native receipt")
+    if raw["schema"].endswith(".v2"):
+        require(raw["edition"] == edition, "kernel edition mismatch")
     require(raw["qid"] == manifest["qid"] == "Q207", "qid mismatch")
     require(raw["source_observation_checked"] is True and raw["cross_source_alignment_paid"] is False
             and raw["world_truth_paid"] is False, "unexpected proof scope")

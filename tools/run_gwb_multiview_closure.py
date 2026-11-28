@@ -90,11 +90,19 @@ def prepare_view(v, manifest, module, lean, out):
     projected = module.derive_projection(record, text, old["sections"])
     require(projected.get("projection_policy") == "native-multilingual-syntax-v2", "wrong projection policy")
     put(projection, projected)
-    p = command(["lake", "env", "lean", "--run", "tools/IndexedWorldFibreRunner.lean",
+    p = command(["lake", "env", "lean", "--run", "tools/IndexedWorldFibreRunner.lean", "--edition", edition,
                  "Q207", title.replace("_", " "), raw_path, source, projection,
                  ACQ / "Q207-EntityData.json", receipt, ACQ / "properties.txt"],
                 a / "lean.log", cwd=lean)
     require(b"INDEXED_WORLD_FIBRE_KERNEL_OK" in p.stdout, "missing kernel acceptance marker")
+    require(load(receipt)["schema"] == "slr.jmd-indexed-world-fibre-receipt.v2", "expected edition-aware kernel receipt")
+    wrong = a / "wrong-edition-receipt.json"
+    wrong.unlink(missing_ok=True)
+    control = command(["lake", "env", "lean", "--run", "tools/IndexedWorldFibreRunner.lean",
+                       "--edition", "simple" if edition == "en" else "en", "Q207", title.replace("_", " "),
+                       raw_path, source, projection, ACQ / "Q207-EntityData.json", wrong, ACQ / "properties.txt"],
+                      a / "wrong-edition.log", cwd=lean, allowed=(1,))
+    require(not wrong.exists() and b"INDEXED_WORLD_FIBRE_REJECTED" in control.stderr, "wrong-edition rejection not established")
     bound = bind(edition, receipt, source_record=source, projection_record=projection)
     put(a / "bound-receipt.json", bound)
     return (text, source, projection, receipt, bound)
@@ -179,6 +187,19 @@ def main():
     module=projection_module(lean)
     summary={"schema":"slr.gwb-multiview-local-campaign.v1","commit_requested":args.commit,
              "views":[],"cohorts":{},"semantic_alignment_paid":False,"world_truth_paid":False}
+    try:
+        command(["lake", "env", "lean", "--run", "tools/GwbMultilingualOfficeRunner.lean",
+                 *(ACQ / f"{e}-canonical.txt" for e in ("en", "simple", "es"))],
+                out / "controlled-office.log", cwd=lean)
+        summary["controlled_office_rule"] = "bounded_rule_evaluated_no_referee_authority"
+    except (ValueError, RuntimeError, OSError, KeyError) as exc:
+        summary["controlled_office_rule"] = {"held": str(exc)}
+    try:
+        command([sys.executable, ROOT / "tools/inspect_abstract_constructor.py"],
+                out / "abstract-constructor.json")
+        summary["abstract_constructor"] = "structural_inventory_only_signature_interpretation_held"
+    except (ValueError, RuntimeError, OSError, KeyError) as exc:
+        summary["abstract_constructor"] = {"held": str(exc)}
     # Always emit the per-view failures, even if another edition is held.
     rows={"positive":[], "negative":[]}
     for v in cohort["views"]:
@@ -227,7 +248,7 @@ def main():
         put(out/"campaign.json",summary)
     print(json.dumps(summary,indent=2))
     # This is an implementation/acceptance campaign, not a historical proof.
-    return 0 if not args.commit and all(x=="read_only_preflight_ready" for x in summary["cohorts"].values()) else 3
+    return 0 if not args.commit and all(x=="read_only_preflight_ready" for x in summary["cohorts"].values()) and isinstance(summary["controlled_office_rule"], str) and isinstance(summary["abstract_constructor"], str) else 3
 
 if __name__=="__main__":
     raise SystemExit(main())
