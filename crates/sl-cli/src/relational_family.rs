@@ -390,6 +390,83 @@ mod investigation_diagnostic_tests{
     }
 }
 
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct NativeChartRequest {
+    revision:String,run:String,document:String,snapshot:String,packet_digest:String,batches:Vec<String>,
+}
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct HeterogeneousSelectionRequest {
+    indexed_receipt_path:String,consumer_ref:String,indexed_member_ref:String,other_relation_ref:String,
+    article:NativeChartRequest,other:NativeChartRequest,context_axes:Vec<String>,
+}
+fn bounded_json<T:serde::de::DeserializeOwned>(path:&str,max:u64)->Result<T,String>{
+    use std::io::Read;
+    let file=std::fs::File::open(path).map_err(|e|e.to_string())?;
+    let mut bytes=Vec::new();
+    file.take(max+1).read_to_end(&mut bytes).map_err(|e|e.to_string())?;
+    if bytes.len() as u64>max{return Err("bounded input exceeded".into());}
+    serde_json::from_slice(&bytes).map_err(|e|e.to_string())
+}
+fn inspect_heterogeneous_selection(config:&sensiblaw_pg_source_store::DatabaseConfig,
+    request:&HeterogeneousSelectionRequest)->Result<serde_json::Value,String>{
+    for chart in [&request.article,&request.other]{
+        if chart.batches.is_empty()||chart.batches.len()>4096||
+            chart.batches.iter().any(|r|r.trim().is_empty()||r.len()>2048){
+            return Err("invalid bounded native chart batches".into());
+        }
+    }
+    let receipt:serde_json::Value=bounded_json(&request.indexed_receipt_path,64*1024*1024)?;
+    let transport=|c:&NativeChartRequest|sensiblaw_pg_source_store::read_article_numeric_predicate_transport(
+        config,&c.revision,&c.batches,&c.run,&c.document,&c.snapshot,&c.packet_digest).map_err(|e|e.to_string());
+    let article=transport(&request.article)?;
+    let other=transport(&request.other)?;
+    let c=&request.other;
+    let predicates=sensiblaw_pg_source_store::query_native_original_relations(
+        config.database_url(),&c.run,&c.document,&c.snapshot,&c.packet_digest,"predicate").map_err(|e|e.to_string())?;
+    sensiblaw_proof_search_loop::world_observation::select_heterogeneous_native_pair(
+        &receipt,&article,&other,&predicates,&request.consumer_ref,&request.indexed_member_ref,
+        &request.other_relation_ref).map_err(|e|format!("{e:?}"))
+}
+/// Explicit operator action. A prior JSON selection cannot be substituted
+/// for native readback; reopen both original charts and derive the selection
+/// again. Existing selector/family persistence remains the only writer.
+fn run_heterogeneous_family(config:&sensiblaw_pg_source_store::DatabaseConfig,
+    request:&HeterogeneousSelectionRequest,access:&str,expected_selection:&str)
+    ->Result<serde_json::Value,String>{
+    use serde_json::json;
+    let selection=inspect_heterogeneous_selection(config,request)?;
+    if selection["candidate_selector_ready"]!=true||selection["selection_ref"]!=expected_selection{
+        return Err("heterogeneous candidate held or changed since inspection".into());
+    }
+    let coordinate=|side:&str,key:&str|selection[side][0][key].as_str()
+        .map(str::to_owned).ok_or_else(||"missing unique native selector coordinate".to_owned());
+    let lb=coordinate("left_inverse","batch_ref")?;
+    let lp=coordinate("left_inverse","predicate_candidate_ref")?;
+    let rb=coordinate("right_inverse","batch_ref")?;
+    let rp=coordinate("right_inverse","predicate_candidate_ref")?;
+    let axes:Vec<_>=request.context_axes.iter().map(String::as_str).collect();
+    let seed=seed_relational_pnf_pair_scoped(config,&request.consumer_ref,&lb,&lp,&rb,&rp,&axes)
+        .map_err(|e|e.to_string())?;
+    let refs= ["left_selector_ref","right_selector_ref"].iter().map(|k|
+        seed[*k].as_str().map(str::to_owned).ok_or("missing persisted selector"))
+        .collect::<Result<Vec<_>,_>>()?;
+    let family=run_persisted_relational_family(config,&request.consumer_ref,access,&refs)
+        .map_err(|e|e.to_string())?;
+    // Seed and family writes are existing separate transactions. Reopen and
+    // retain the exact evidence path rather than claiming atomic publication.
+    let reopened=inspect_persisted_relational_family(config,&family.family_ref).map_err(|e|e.to_string())?;
+    if reopened!=family{return Err("family changed on readback".into());}
+    let investigation=family_investigation_projection(&reopened)?;
+    Ok(json!({"schema":"slr.heterogeneous-family-journey.v1",
+        "selection":selection,"selector_seed":seed,"family":reopened,"investigation":investigation,
+        "candidate_only":true,"original_checker_replayed":false,"atomic_publication":false,
+        "formal_consumer_equivalence_paid":false,"source_independence_paid":false,
+        "world_truth_paid":false,"provider_acquisition_executed":false}))
+}
+
 pub fn run(args:&[String])->Result<(),String>{
     // Local operator-only receipt inspection; no DB or authority access.
     if let [mode,receipt_path,consumer,required_json]=args{
@@ -437,6 +514,14 @@ pub fn run(args:&[String])->Result<(),String>{
     }
     let config=load_database_config(None).map_err(|e|e.to_string())?;
     match args {
+        [mode,path] if mode=="inspect-heterogeneous-selection"=>{
+            let request:HeterogeneousSelectionRequest=bounded_json(path,4*1024*1024)?;
+            print_json(&inspect_heterogeneous_selection(&config,&request)?)
+        },
+        [mode,path,access,expected,flag] if mode=="run-heterogeneous-family"&&flag=="--commit"=>{
+            let request:HeterogeneousSelectionRequest=bounded_json(path,4*1024*1024)?;
+            print_json(&run_heterogeneous_family(&config,&request,access,expected)?)
+        },
         [mode,consumer,left_batch,left_pred,right_batch,right_pred,axes_json] if mode=="seed-pnf-pair-scoped"=>{
             let axes:Vec<String>=serde_json::from_str(axes_json).map_err(|e|e.to_string())?;
             let refs:Vec<_>=axes.iter().map(String::as_str).collect();
@@ -578,6 +663,6 @@ pub fn run(args:&[String])->Result<(),String>{
                 "candidate_review_status":format!("{:?}",item.current_status),"creates_semantic_authority":false}))
         },
         _ if (4..=12).contains(&args.len())=>print_json(&run_persisted_relational_family(&config,&args[0],&args[1],&args[2..]).map_err(|e|e.to_string())?),
-        _=>Err("usage: relational-family inspect-heterogeneous-overlap RECEIPT CONSUMER RUN DOC SNAPSHOT DIGEST | inspect-indexed-native-meet RECEIPT CONSUMER REVISION RUN DOC SNAPSHOT DIGEST BATCH_REFS_JSON | inspect-indexed-inventory RECEIPT CONSUMER REQUIRED_LANES_JSON | CONSUMER ACCESS SELECTOR SELECTOR ... | licensed-semantic REVISION BATCH_REFS_JSON RUN DOC SNAPSHOT DIGEST OBSERVATION CONSUMER QUERY EVIDENCE REPO SHA PATH THREAD | predicate-transport REVISION BATCH_REFS_JSON RUN DOC SNAPSHOT DIGEST | semantic-candidates REVISION BATCH_REFS_JSON RUN DOC SNAPSHOT DIGEST | coordinate-meet REVISION BATCH_REFS_JSON RUN DOC SNAPSHOT DIGEST | numeric-action-roles RUN DOC SNAPSHOT DIGEST MENTION_TOKEN_IDS_JSON | article-actions REVISION BATCH_REFS_JSON MENTION_REFS_JSON | licensed-reciprocal FAMILY LEFT RIGHT QUERY EVIDENCE REPO SHA PATH THREAD | reciprocal FAMILY LEFT RIGHT | participant FAMILY FILLER_REF | seed-pnf-pair-scoped CONSUMER LEFT_BATCH LEFT_PRED RIGHT_BATCH RIGHT_PRED AXES_JSON | inspect-mabo-formal-demands OBLIGATION | inspect-investigation FAMILY | inspect-recorded-parity FAMILY | inspect-local-research FAMILY | plan-local-research FAMILY CALIBRATION_JSON_PATH | inspect-research-frontier FAMILY | inspect FAMILY | prepare-revision FAMILY OLD_SELECTOR NEW_SELECTOR | inspect-revision TRANSITION | review-revision TRANSITION COMMAND REVIEWER accept|reject|abstain | publish-revision TRANSITION".into())
+        _=>Err("usage: relational-family inspect-heterogeneous-selection REQUEST_JSON | run-heterogeneous-family REQUEST_JSON ACCESS EXPECTED_SELECTION --commit | inspect-heterogeneous-overlap RECEIPT CONSUMER RUN DOC SNAPSHOT DIGEST | inspect-indexed-native-meet RECEIPT CONSUMER REVISION RUN DOC SNAPSHOT DIGEST BATCH_REFS_JSON | inspect-indexed-inventory RECEIPT CONSUMER REQUIRED_LANES_JSON | CONSUMER ACCESS SELECTOR SELECTOR ... | licensed-semantic REVISION BATCH_REFS_JSON RUN DOC SNAPSHOT DIGEST OBSERVATION CONSUMER QUERY EVIDENCE REPO SHA PATH THREAD | predicate-transport REVISION BATCH_REFS_JSON RUN DOC SNAPSHOT DIGEST | semantic-candidates REVISION BATCH_REFS_JSON RUN DOC SNAPSHOT DIGEST | coordinate-meet REVISION BATCH_REFS_JSON RUN DOC SNAPSHOT DIGEST | numeric-action-roles RUN DOC SNAPSHOT DIGEST MENTION_TOKEN_IDS_JSON | article-actions REVISION BATCH_REFS_JSON MENTION_REFS_JSON | licensed-reciprocal FAMILY LEFT RIGHT QUERY EVIDENCE REPO SHA PATH THREAD | reciprocal FAMILY LEFT RIGHT | participant FAMILY FILLER_REF | seed-pnf-pair-scoped CONSUMER LEFT_BATCH LEFT_PRED RIGHT_BATCH RIGHT_PRED AXES_JSON | inspect-mabo-formal-demands OBLIGATION | inspect-investigation FAMILY | inspect-recorded-parity FAMILY | inspect-local-research FAMILY | plan-local-research FAMILY CALIBRATION_JSON_PATH | inspect-research-frontier FAMILY | inspect FAMILY | prepare-revision FAMILY OLD_SELECTOR NEW_SELECTOR | inspect-revision TRANSITION | review-revision TRANSITION COMMAND REVIEWER accept|reject|abstain | publish-revision TRANSITION".into())
     }
 }
