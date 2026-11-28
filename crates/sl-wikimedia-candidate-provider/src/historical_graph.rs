@@ -122,12 +122,17 @@ pub fn resolve_historical_graph_targeted(repo:&Path,manifest:&Path,cache:&Path,n
         nodes.insert(id.clone(),json!({"receipt":row,"body":body}));
     }
     pending.retain(|v|!nodes.contains_key(v["target"].as_str().unwrap_or("")));
+    // Receipt inventory is separate from the bounded reachable graph. Bind
+    // offline replay to the exact validated cache inputs, including unreached
+    // receipts, so an older replay cannot masquerade as the current cache.
+    let inventory:Vec<_>=rows.iter().map(|(id,(r,_))|json!({"id":id,"revision":r["revision"],"sha256":r["sha256"]})).collect();
+    let inventory_bytes=serde_json::to_vec(&inventory).map_err(|_|err("inventory encoding"))?;
     Ok(json!({"schema":"slr.native-historical-zobject-graph.v1","as_of":as_of,
         "roots":["Z35370","Z38053","Z38757"],"nodes":nodes,"edges":links,"pending":pending,
-        "network_attempts":attempts,"requested_target":target,"candidate_only":true,"runtime_selection_paid":false,"world_truth_paid":false}))
+        "cache_inventory":inventory,"cache_inventory_sha256":digest(&inventory_bytes),"network_attempts":attempts,"requested_target":target,"candidate_only":true,"runtime_selection_paid":false,"world_truth_paid":false}))
 }
 /// Symbolic call-by-value subset. No arbitrary code or assumed builtins.
-fn eval(v:&Value,env:&BTreeMap<String,Value>,nodes:&Value,fuel:&mut usize,stack:&mut BTreeSet<String>,trace:&mut Vec<Value>)->R<Value>{
+fn eval(v:&Value,env:&BTreeMap<String,Value>,nodes:&Value,fuel:&mut usize,stack:&mut BTreeSet<String>,trace:&mut Vec<Value>,choices:&BTreeMap<String,String>,frontier:&mut Value)->R<Value>{
     req(*fuel>0,"evaluation fuel exhausted")?;*fuel-=1;
     match reference(&v["Z1K1"]){
         Some("Z18")=>{
@@ -138,30 +143,52 @@ fn eval(v:&Value,env:&BTreeMap<String,Value>,nodes:&Value,fuel:&mut usize,stack:
             let id=reference(&v["Z7K1"]).ok_or_else(||err("invalid call target"))?;
             req(zid(id),"dynamic call target held")?;
             let fun=&nodes[id]["body"];
-            req(reference(&fun["Z1K1"])==Some("Z8"),"function definition not acquired")?;
+            if reference(&fun["Z1K1"])!=Some("Z8"){
+                *frontier=json!({"kind":if nodes.get(id).is_none(){"missing_function"}else{"foreign_function"},"function":id});
+                return Err(err("function definition missing or foreign"));
+            }
             let sig=fun["Z8K1"].as_array().ok_or_else(||err("signature held"))?;
             let mut bindings=BTreeMap::new();
             for d in sig.iter().skip(1){
                 req(reference(&d["Z1K1"])==Some("Z17"),"argument declaration held")?;
                 let key=reference(&d["Z17K2"]).ok_or_else(||err("invalid signature key"))?;
                 let arg=v.get(key).ok_or_else(||err("missing call argument"))?;
-                req(bindings.insert(key.to_owned(),eval(arg,env,nodes,fuel,stack,trace)?).is_none(),"duplicate declaration")?;
+                req(bindings.insert(key.to_owned(),eval(arg,env,nodes,fuel,stack,trace,choices,frontier)?).is_none(),"duplicate declaration")?;
             }
             req(v.as_object().is_some_and(|o|o.len()==bindings.len()+2),"extra call argument")?;
             let impls=fun["Z8K4"].as_array().ok_or_else(||err("implementation selection held"))?;
-            req(impls.len()==2&&reference(&impls[0])==Some("Z14"),"nonunique implementation selection held")?;
-            let imp=reference(&impls[1]).ok_or_else(||err("invalid implementation reference"))?;
+            req(impls.len()>=2&&reference(&impls[0])==Some("Z14"),"implementation list held")?;
+            let mut listed=BTreeSet::new();
+            for item in impls.iter().skip(1){
+                let z=reference(item).filter(|z|zid(z)).ok_or_else(||err("invalid implementation reference"))?;
+                req(listed.insert(z),"duplicate implementation reference")?;
+            }
+            let imp=if let Some(chosen)=choices.get(id){
+                req(listed.contains(chosen.as_str()),"unlisted implementation choice")?;
+                chosen.as_str()
+            }else if listed.len()==1{
+                *listed.iter().next().ok_or_else(||err("empty implementation list"))?
+            }else{
+                *frontier=json!({"kind":"implementation_choice","function":id,"listed":listed,"function_receipt":nodes[id]["receipt"]});
+                return Err(err("nonunique implementation selection held"));
+            };
             let body=&nodes[imp]["body"];
-            req(reference(&body["Z1K1"])==Some("Z14")&&reference(&body["Z14K1"])==Some(id),"implementation missing or foreign")?;
-            req(body.get("Z14K2").is_some_and(|x|!x.is_null())&&body.get("Z14K3").map_or(true,Value::is_null)&&body.get("Z14K4").map_or(true,Value::is_null),"code/builtin or unsupported implementation held")?;
+            if reference(&body["Z1K1"])!=Some("Z14")||reference(&body["Z14K1"])!=Some(id){
+                *frontier=json!({"kind":if nodes.get(imp).is_none(){"missing_implementation"}else{"foreign_implementation"},"function":id,"implementation":imp});
+                return Err(err("implementation missing or foreign"));
+            }
+            if !(body.get("Z14K2").is_some_and(|x|!x.is_null())&&body.get("Z14K3").map_or(true,Value::is_null)&&body.get("Z14K4").map_or(true,Value::is_null)){
+                *frontier=json!({"kind":"unsupported_implementation","function":id,"implementation":imp,"code":!body["Z14K3"].is_null(),"builtin":!body["Z14K4"].is_null(),"implementation_receipt":nodes[imp]["receipt"]});
+                return Err(err("code/builtin or unsupported implementation held"));
+            }
             req(stack.insert(id.into()),"recursive call held")?;
             trace.push(json!({"function":id,"implementation":imp,"function_receipt":nodes[id]["receipt"],"implementation_receipt":nodes[imp]["receipt"]}));
-            let out=eval(&body["Z14K2"],&bindings,nodes,fuel,stack,trace);
+            let out=eval(&body["Z14K2"],&bindings,nodes,fuel,stack,trace,choices,frontier);
             stack.remove(id);out
         },
         _=>{
-            if let Some(a)=v.as_array(){return Ok(Value::Array(a.iter().map(|x|eval(x,env,nodes,fuel,stack,trace)).collect::<R<Vec<_>>>()?));}
-            if let Some(o)=v.as_object(){let mut result=serde_json::Map::new();for(k,x)in o{result.insert(k.clone(),eval(x,env,nodes,fuel,stack,trace)?);}return Ok(Value::Object(result));}
+            if let Some(a)=v.as_array(){return Ok(Value::Array(a.iter().map(|x|eval(x,env,nodes,fuel,stack,trace,choices,frontier)).collect::<R<Vec<_>>>()?));}
+            if let Some(o)=v.as_object(){let mut result=serde_json::Map::new();for(k,x)in o{result.insert(k.clone(),eval(x,env,nodes,fuel,stack,trace,choices,frontier)?);}return Ok(Value::Object(result));}
             Ok(v.clone())
         }
     }
@@ -172,16 +199,58 @@ pub fn evaluate_composition_candidate(graph:&Value,expression:&Value)->Value{
 /// The enclosing Abstract language argument is an explicit input, never
 /// silently chosen. A language ZID is still a candidate, not a type proof.
 pub fn evaluate_composition_with_language(graph:&Value,expression:&Value,language:Option<&str>)->Value{
-    let mut fuel=4096;let mut trace=Vec::new();
+    evaluate_selected(graph,expression,language,&BTreeMap::new())
+}
+fn evaluate_selected(graph:&Value,expression:&Value,language:Option<&str>,choices:&BTreeMap<String,String>)->Value{
+    let mut fuel=4096;let mut trace=Vec::new();let mut frontier=Value::Null;
     let mut env=BTreeMap::new();
     let result=if language.map_or(true,zid){
         if let Some(z)=language{env.insert("Z825K2".into(),json!({"Z1K1":"Z9","Z9K1":z}));}
-        eval(expression,&env,&graph["nodes"],&mut fuel,&mut BTreeSet::new(),&mut trace)
+        eval(expression,&env,&graph["nodes"],&mut fuel,&mut BTreeSet::new(),&mut trace,choices,&mut frontier)
     }else{Err(err("invalid explicit language reference"))};
     let (value,held)=match result{Ok(v)=>(v,Value::Null),Err(e)=>(Value::Null,json!(e.to_string()))};
     json!({"schema":"slr.native-abstract-composition-candidate.v1","value":value,"held":held,
-        "trace":trace,"explicit_language":language,"fuel_used":4096-fuel,"candidate_only":true,"type_check_paid":false,
+        "trace":trace,"frontier":frontier,"candidate_choices":choices,"explicit_language":language,"fuel_used":4096-fuel,"candidate_only":true,"type_check_paid":false,
         "runtime_selection_paid":false,"tester_acceptance_paid":false,"world_truth_paid":false})
+}
+/// Enumerate the listed implementation alternatives reached by the symbolic
+/// evaluator. This is a bounded candidate envelope, not runtime selection,
+/// admissibility, type soundness, tester acceptance or a semantic licence.
+/// Replay each assignment from the original expression; a hold is retained,
+/// never treated as an alternative value. Assignments are global per function
+/// for this diagnostic, not a claim about contextual Wikifunctions dispatch.
+pub fn inspect_composition_envelope(graph:&Value,expression:&Value,language:Option<&str>,budget:usize)->R<Value>{
+    req((1..=64).contains(&budget),"invalid candidate envelope budget")?;
+    let mut queue=std::collections::VecDeque::from([BTreeMap::<String,String>::new()]);
+    let mut branches=Vec::new();
+    let mut explored=0usize;
+    while explored<budget{
+        let Some(choices)=queue.pop_front()else{break};
+        explored+=1;
+        let answer=evaluate_selected(graph,expression,language,&choices);
+        if answer["frontier"]["kind"]=="implementation_choice"{
+            let id=text(&answer["frontier"],"function")?;
+            let listed=answer["frontier"]["listed"].as_array().ok_or_else(||err("invalid choice frontier"))?;
+            // Keep the parent held if its full child set cannot fit the
+            // bounded queue. Never silently truncate the choice fibre.
+            if explored+queue.len()+listed.len()>budget{
+                branches.push(answer);
+                continue;
+            }
+            for item in listed{
+                let mut child=choices.clone();
+                child.insert(id.into(),item.as_str().ok_or_else(||err("invalid choice"))?.into());
+                queue.push_back(child);
+            }
+        }else{branches.push(answer);}
+    }
+    let complete=queue.is_empty()&&branches.iter().all(|b|b["held"].is_null());
+    let equal=complete&&!branches.is_empty()&&branches.iter().all(|b|b["value"]==branches[0]["value"]);
+    Ok(json!({"schema":"slr.native-abstract-candidate-envelope.v1","branches":branches,
+        "explored":explored,"unexplored_assignments":queue,"symbolic_envelope_complete":complete,
+        "symbolic_values_equal":equal,"candidate_only":true,"admissibility_paid":false,
+        "type_check_paid":false,"tester_acceptance_paid":false,"runtime_selection_paid":false,
+        "source_query_licence_paid":false,"world_truth_paid":false}))
 }
 #[cfg(test)]
 mod tests{
@@ -190,6 +259,28 @@ mod tests{
         let root:Value=serde_json::from_str(include_str!("../../../artifacts/gwb/native-zobjects/Z38757.326825.64ee066e2c1cf0f4a924b87b7fc87211d344517509141748da70a0e6cf6babe4.json")).unwrap();
         let e=edges(&root["Z2K2"]);
         for (id,kind) in [("Z38758","implementation"),("Z38759","tester"),("Z39656","tester"),("Z881","call_target")]{assert!(e.iter().any(|x|x.target==id&&x.kind==kind));}
+    }
+    #[test]fn bounded_choice_envelope_preserves_alternatives_and_holds(){
+        let mut g=json!({"nodes":{
+            "Z100":{"body":{"Z1K1":"Z8","Z8K1":["Z17"],"Z8K4":["Z14","Z102","Z101"]}},
+            "Z101":{"body":{"Z1K1":"Z14","Z14K1":"Z100","Z14K2":"one"}},
+            "Z102":{"body":{"Z1K1":"Z14","Z14K1":"Z100","Z14K2":"two"}}
+        }});
+        let x=json!({"Z1K1":"Z7","Z7K1":"Z100"});
+        let r=inspect_composition_envelope(&g,&x,None,3).unwrap();
+        assert_eq!(r["symbolic_envelope_complete"],true);
+        assert_eq!(r["symbolic_values_equal"],false);
+        assert_eq!(r["branches"][0]["value"],"one");
+        assert_eq!(r["branches"][1]["value"],"two");
+        assert_eq!(inspect_composition_envelope(&g,&x,None,2).unwrap()["symbolic_envelope_complete"],false);
+        g["nodes"]["Z102"]["body"]["Z14K2"]=json!("one");
+        assert_eq!(inspect_composition_envelope(&g,&x,None,3).unwrap()["symbolic_values_equal"],true);
+        g["nodes"].as_object_mut().unwrap().remove("Z102");
+        let r=inspect_composition_envelope(&g,&x,None,3).unwrap();
+        assert_eq!(r["symbolic_values_equal"],false);
+        assert_eq!(r["branches"][1]["frontier"]["kind"],"missing_implementation");
+        assert_eq!(r["branches"][1]["frontier"]["implementation"],"Z102");
+        assert_eq!(r["source_query_licence_paid"],false);
     }
     #[test]fn composition_and_foreign_owner(){
         let mut g=json!({"nodes":{"Z100":{"body":{"Z1K1":"Z8","Z8K1":["Z17",{"Z1K1":"Z17","Z17K2":"Z100K1"}],"Z8K4":["Z14","Z101"]}},
