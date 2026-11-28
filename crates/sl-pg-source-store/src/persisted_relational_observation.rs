@@ -743,6 +743,44 @@ mod coordinate_meet_tests {
     use super::*;
     use serde_json::json;
     #[test]
+    fn predicate_owned_transport_and_fragments_preserve_scope_debt(){
+        let coordinate=|factor:&str,token:i64|json!({
+            "status":"unique_coordinate_match",
+            "checked":[{"batch_ref":"b","factor_ref":factor}],
+            "numeric":[{"numeric_token_id":token}]
+        });
+        let role=|name:&str,token:i64|json!({
+            "original_role":{"role":name},"numeric_token_id":token
+        });
+        let meet=json!({
+            "coordinates":[coordinate("p",1),coordinate("f",2),coordinate("q",3)],
+            "checked_batches":[{"batch_ref":"b","observations":[{
+                "observation_ref":"o","predicate_candidate_ref":"p",
+                "role_bindings":[{"role_ref":"syntax:nsubj:pass","filler_candidate_ref":"f"},
+                                 {"role_ref":"syntax:ccomp","filler_candidate_ref":"q"}]
+            }]}],
+            "numeric_original":{"answers":[
+                {"relation_ref":"r1","original_relation":{"type":"predicate"},
+                 "role_inverse":[role("head",1),role("subject",2),role("content",3)]},
+                {"relation_ref":"r2","original_relation":{"type":"predicate"},
+                 "role_inverse":[role("head",3),role("subject",2)]},
+                {"relation_ref":"r3","original_relation":{"type":"composition"},
+                 "role_inverse":[role("governor",1),role("content",3)]}
+            ]}
+        });
+        let out=predicate_role_transport(&meet).unwrap();
+        assert_eq!(out["checked_predicates"][0]["numeric_alternatives"].as_array().unwrap().len(),1);
+        assert_eq!(out["numeric_only_predicates"][0]["relation_ref"],"r2");
+        assert_eq!(out["numeric_context_relations"][0]["relation_ref"],"r3");
+        let fragments=candidate_semantic_fragments(&out).unwrap();
+        assert_eq!(fragments["rows"][0]["fragments"][0]["kind"],"patient_fragment");
+        assert_eq!(fragments["rows"][0]["fragments"][1]["kind"],"content_clause_fragment");
+        assert_eq!(fragments["rows"][0]["fragments"][1]["scope_resolved"],false);
+        assert_eq!(fragments["rows"][0]["signed_alternatives"],json!([-1,0,1]));
+        assert_eq!(fragments["rows"][0]["outside_model_possible"],true);
+    }
+
+    #[test]
     fn retains_both_residual_directions_and_ambiguity(){
         let k=|n| (n,n+1,format!("t{n}"));
         let left=vec![(k(1),json!("a")),(k(2),json!("b")),(k(3),json!("c")),(k(3),json!("d"))];
