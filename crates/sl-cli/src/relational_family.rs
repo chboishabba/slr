@@ -528,6 +528,13 @@ pub fn run(args:&[String])->Result<(),String>{
     }
     let config=load_database_config(None).map_err(|e|e.to_string())?;
     match args {
+        [mode,revision,sha,start,end,literal,run] if mode=="discover-checked-predicate"=>{
+            let start=start.parse::<u32>().map_err(|e|e.to_string())?;
+            let end=end.parse::<u32>().map_err(|e|e.to_string())?;
+            let run=if run=="--any-run"{None}else{Some(run.as_str())};
+            print_json(&sensiblaw_pg_source_store::discover_checked_predicate(&config,revision,sha,start,end,literal,run)
+                .map_err(|e|e.to_string())?)
+        },
         [mode,path] if mode=="inspect-heterogeneous-selection"=>{
             let request:HeterogeneousSelectionRequest=bounded_json(path,4*1024*1024)?;
             print_json(&inspect_heterogeneous_selection(&config,&request)?)
