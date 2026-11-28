@@ -2580,10 +2580,22 @@ fn materialize_native_numeric_relation_arguments(
     Ok((factors_inserted,objects_inserted))
 }
 
-fn materialize_native_binding_bridge(
-    tx:&mut postgres::Transaction<'_>,run_ref:&str,doc:&str,sha:&str,
-    focus_token:i64,demand:i64,campaign:&NativeMentionBindingCampaign,
-)->Result<NativeBindingBridgeReceipt,NativeNumericAuditError>{
+// Common immutable source-prefix projection. This is independent of
+// antecedent policy; the original binding consumer still enforces PRON.
+struct NativeRelationPrefix {
+    source:String,
+    tokens:BTreeMap<i64,BridgeToken>,
+    relations:Vec<ProjectedRelation>,
+    relation_reductions:Vec<NativeRelationReductionRow>,
+    question_mode:Option<serde_json::Value>,
+    missing_original_tags:usize,
+    uncovered:usize,
+    original_relation_packet:NativeOriginalRelationPacketReceipt,
+    original_relation_payload:serde_json::Value,
+}
+fn load_native_relation_prefix(
+    tx:&mut postgres::Transaction<'_>,run_ref:&str,doc:&str,sha:&str,focus_token:i64,
+)->Result<NativeRelationPrefix,NativeNumericAuditError>{
     let locator:String=tx.query_one(
         "SELECT locator FROM execution.semantic_parser_source
          WHERE run_ref=$1 AND document_ref=$2 AND encode(content_sha256,'hex')=$3",
@@ -2641,8 +2653,7 @@ fn materialize_native_binding_bridge(
             morphology:bridge_morphology(&row.get::<_,Vec<String>>(11))};
         if tokens.insert(id,t).is_some(){return Err(NativeNumericAuditError::ForeignSource);}
     }
-    let focus=tokens.get(&focus_token).ok_or(NativeNumericAuditError::ForeignSource)?;
-    if focus.pos!="PRON" {return Err(NativeNumericAuditError::ForeignSource);}
+    if !tokens.contains_key(&focus_token){return Err(NativeNumericAuditError::ForeignSource);}
     let mut relation_tokens=tokens.values().map(|t|NativeRelationToken{
         id:t.id,region:t.region,lemma_id:t.lemma_id,head:t.head,start:t.start,end:t.end,
         orth:t.orth.clone(),lemma:t.lemma.clone(),pos:t.pos.clone(),dep:t.dep.clone(),
@@ -2686,6 +2697,73 @@ fn materialize_native_binding_bridge(
     let (original_relation_packet,original_relation_payload)=assemble_original_relation_packet(
         doc,sha,&source_revision,&parser_run,&prefix,missing_original_tags,uncovered,
         &relation_reductions,question_mode.as_ref())?;
+    Ok(NativeRelationPrefix{source,tokens,relations,relation_reductions,question_mode,
+        missing_original_tags,uncovered,original_relation_packet,original_relation_payload})
+}
+
+/// Publish the detached, candidate-only relation packet for an explicitly
+/// selected source coordinate, without creating a pronoun demand, modifying
+/// current anchor snapshots or admitting semantic identity.
+pub fn publish_native_source_relation_prefix(
+    url:&str,run:&str,doc:&str,revision:&str,parser_run:&str,sha:&str,
+    start:i64,end:i64,literal:&str,
+)->Result<serde_json::Value,NativeNumericAuditError>{
+    if start<0||end<=start||literal.chars().count() as i64!=end-start
+        ||doc!=format!("document:sha256:{sha}"){return Err(NativeNumericAuditError::ForeignSource);}
+    let mut db=Client::connect(url,NoTls)?;
+    let mut tx=db.transaction()?;
+    tx.batch_execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE; SET LOCAL statement_timeout='90000ms'; SET LOCAL lock_timeout='5000ms'")?;
+    tx.query_one("SELECT pg_advisory_xact_lock(hashtext($1),hashtext($2))",&[&run,&doc])?;
+    let rows=tx.query("SELECT t.token_id FROM execution.semantic_parser_token t
+        JOIN execution.semantic_symbol orth ON orth.symbol_id=t.orth_symbol_id
+        WHERE t.run_ref=$1 AND t.document_ref=$2 AND t.representation_version=2
+          AND t.start_char=$3 AND t.end_char=$4 AND orth.symbol_text=$5",
+        &[&run,&doc,&start,&end,&literal])?;
+    if rows.len()!=1{return Err(NativeNumericAuditError::ForeignSource);}
+    let focus_token:i64=rows[0].get(0);
+    let prefix=load_native_relation_prefix(&mut tx,run,doc,sha,focus_token)?;
+    let comparison=&prefix.original_relation_payload["comparison"];
+    if comparison["source_revision_ref"]!=revision||comparison["parser_run_ref"]!=parser_run{
+        return Err(NativeNumericAuditError::ForeignSource);
+    }
+    validate_reopened_relation_packet(&prefix.original_relation_payload,doc,sha,prefix.source.as_bytes())?;
+    let digest=&prefix.original_relation_packet.packet_sha256;
+    let snapshot=format!("slr-native-source-relation-prefix:v1:{}",bridge_digest(&(run,doc,revision,parser_run,digest))?);
+    let key=format!("native-original-relation-packet:{digest}");
+    tx.batch_execute("CREATE TABLE IF NOT EXISTS execution.slr_native_relation_reduction(
+        run_ref text NOT NULL,document_ref text NOT NULL,snapshot_ref text NOT NULL,
+        relation_ref text NOT NULL,payload jsonb NOT NULL,
+        PRIMARY KEY(run_ref,document_ref,snapshot_ref,relation_ref))")?;
+    tx.execute("INSERT INTO execution.slr_native_relation_reduction(run_ref,document_ref,snapshot_ref,relation_ref,payload)
+        VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING",
+        &[&run,&doc,&snapshot,&key,&prefix.original_relation_payload])?;
+    let stored:serde_json::Value=tx.query_one("SELECT payload FROM execution.slr_native_relation_reduction
+        WHERE run_ref=$1 AND document_ref=$2 AND snapshot_ref=$3 AND relation_ref=$4",
+        &[&run,&doc,&snapshot,&key])?.get(0);
+    if stored!=prefix.original_relation_payload{return Err(NativeNumericAuditError::ForeignSource);}
+    let selected_predicate_count=prefix.relations.iter().filter(|p|
+        p.relation_type=="predicate"&&p.head_token_id==focus_token).count();
+    tx.commit()?;
+    Ok(serde_json::json!({"schema":"slr.native-source-relation-prefix.v1",
+        "numeric_run_ref":run,"document_ref":doc,"source_revision_ref":revision,
+        "parser_run_ref":parser_run,"source_sha256":sha,"snapshot_ref":snapshot,
+        "packet_sha256":digest,"packet_receipt":prefix.original_relation_packet,
+        "selected_span":[start,end],"selected_literal":literal,
+        "selected_predicate_count":selected_predicate_count,
+        "candidate_only":true,"writes_database":true,"current_snapshot_certified":false,
+        "semantic_alignment_paid":false,"world_truth_paid":false}))
+}
+
+fn materialize_native_binding_bridge(
+    tx:&mut postgres::Transaction<'_>,run_ref:&str,doc:&str,sha:&str,
+    focus_token:i64,demand:i64,campaign:&NativeMentionBindingCampaign,
+)->Result<NativeBindingBridgeReceipt,NativeNumericAuditError>{
+    let NativeRelationPrefix{source,tokens,relations,relation_reductions,question_mode,
+        missing_original_tags,uncovered,original_relation_packet,original_relation_payload}=
+        load_native_relation_prefix(tx,run_ref,doc,sha,focus_token)?;
+    if tokens.get(&focus_token).map(|t|t.pos.as_str())!=Some("PRON"){
+        return Err(NativeNumericAuditError::ForeignSource);
+    }
     // Keep the native numeric relation argument in the committed producer
     // lane.  The rollback-only probe below remains an independent regression
     // check; it must not be the sole owner of this Level-1 source carrier.
