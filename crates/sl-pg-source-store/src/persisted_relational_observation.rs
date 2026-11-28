@@ -486,12 +486,14 @@ pub fn read_recorded_article_actions(config: &DatabaseConfig, revision: &str,
     let mut client = Client::connect(config.database_url(), NoTls)?;
     let mut tx = client.transaction()?;
     tx.batch_execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY; SET LOCAL statement_timeout='90000ms'")?;
+    let (source,_)=crate::generic_source_content_store::load_generic_text_source_on_client(&mut tx,revision)?;
+    let source_family=crate::workbench_projection::acceptance_control_store::relational_family_for_ingest(&source.source_family_ref);
     let mut regions = BTreeSet::new();
     let mut rows = Vec::new();
     let mut digest = None;
     for batch_ref in batches {
         let batch = relational_observations_from_checked_batch_on_client(&mut tx,
-            batch_ref, RelationalSourceFamily::Wikipedia, &ObservationContext::default(), &[])?;
+            batch_ref, source_family, &ObservationContext::default(), &[])?;
         if batch.source_revision_ref != revision || !regions.insert(batch.original_region_ref.clone())
             || digest.as_ref().is_some_and(|d| d != &batch.source_content_digest_ref) {
             return Err(PersistedRelationalObservationError::CheckedSourceMismatch);
@@ -506,7 +508,8 @@ pub fn read_recorded_article_actions(config: &DatabaseConfig, revision: &str,
         "source_content_digest_ref": digest,
         "regions": rows,
         "article_region_coverage_paid": false,
-        "source_family_verified": false,
+        "source_family_verified": true,
+        "native_source_family":source.source_family_ref,
         "semantic_coverage_paid": false,
         "world_truth_paid": false
     }))
@@ -552,12 +555,17 @@ pub fn read_article_numeric_coordinate_meet(config:&DatabaseConfig,
     let mut client=Client::connect(config.database_url(),NoTls)?;
     let mut tx=client.transaction()?;
     tx.batch_execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY; SET LOCAL statement_timeout='90000ms'")?;
+    let (source,_)=crate::generic_source_content_store::load_generic_text_source_on_client(&mut tx,revision)?;
+    if source.document_ref!=doc||source.content_digest_ref!=expected_digest{
+        return Err(PersistedRelationalObservationError::CheckedSourceMismatch);
+    }
+    let source_family=crate::workbench_projection::acceptance_control_store::relational_family_for_ingest(&source.source_family_ref);
     let mut left=Vec::new();
     let mut checked_batches=Vec::new();
     let mut regions=BTreeSet::new();
     for batch_ref in batches{
         let checked=relational_observations_from_checked_batch_on_client(&mut tx,batch_ref,
-            RelationalSourceFamily::Wikipedia,&ObservationContext::default(),&[])?;
+            source_family,&ObservationContext::default(),&[])?;
         if checked.source_revision_ref!=revision || checked.source_content_digest_ref!=expected_digest
             || !regions.insert(checked.original_region_ref.clone()){
             return Err(PersistedRelationalObservationError::CheckedSourceMismatch);
@@ -594,7 +602,8 @@ pub fn read_article_numeric_coordinate_meet(config:&DatabaseConfig,
         (key,json!({"numeric_token_id":token,"atom":atom,"relation_incidence":incidence}))).collect::<Vec<_>>();
     let meet=coordinate_meet(&left,&right);
     Ok(json!({"schema":"slr.article-numeric-coordinate-meet.v1","source_revision_ref":revision,
-        "source_content_digest_ref":expected_digest,"checked_factor_count":left.len(),
+        "source_content_digest_ref":expected_digest,"native_source_family":source.source_family_ref,
+        "checked_factor_count":left.len(),
         "numeric_atom_count":right.len(),"coordinates":meet,"checked_batches":checked_batches,
         "numeric_original":numeric,"common_current_authority_snapshot":false,
         "parser_identity_paid":false,"semantic_coverage_paid":false,"world_truth_paid":false}))
