@@ -491,6 +491,49 @@ pub fn inspect_indexed_native_predicate_meet(receipt:&serde_json::Value,
 /// Heterogeneous corpus retrieval, deliberately not source-coordinate parity.
  /// Inverted indexes retain a factorised many-to-many candidate relation;
  /// no Cartesian pair explosion and no implied semantic correspondence.
+// A common *syntactic* vocabulary, not semantic Actor/Patient. In particular
+// passive subjects never share the active-subject feature. Original labels
+// remain in the inverse row; unsupported labels simply have no common key.
+fn overlap_dependency_class(dep:&str)->Option<&'static str>{
+    match dep.to_ascii_lowercase().as_str(){
+        "nsubj"=>Some("nominal_subject"),
+        "nsubjpass"|"nsubj:pass"=>Some("passive_nominal_subject"),
+        "csubj"=>Some("clausal_subject"),
+        "csubjpass"|"csubj:pass"=>Some("passive_clausal_subject"),
+        "dobj"|"obj"=>Some("direct_object"),
+        "iobj"=>Some("indirect_object"),
+        "pobj"=>Some("prepositional_object"),
+        "attr"=>Some("attribute"),
+        "oprd"=>Some("object_predicative"),
+        "agent"=>Some("agent_dependency"),
+        "obl"=>Some("oblique"),
+        "ccomp"=>Some("content_clause"),
+        "xcomp"=>Some("open_complement"),
+        "neg"=>Some("negation_dependency"),
+        _=>None,
+    }
+}
+
+fn dependent_overlap_features(head:&serde_json::Value,
+    dependents:&[(&str,&serde_json::Value)])->Vec<(String,String)>{
+    use std::collections::BTreeSet;
+    let Some(lemma)=head["lemma"].as_str().filter(|s|!s.is_empty())else{return vec![]};
+    let lemma=lemma.to_lowercase();
+    let mut features=BTreeSet::new();
+    for (dep,atom) in dependents{
+        let Some(role)=overlap_dependency_class(dep)else{continue};
+        let encode=|parts:&[&str]|serde_json::to_string(parts).expect("string tuple serialization");
+        features.insert(("predicate_dependency".to_owned(),encode(&[&lemma,role])));
+        if let Some(surface)=atom["surface"].as_str().or_else(||atom["text"].as_str()).filter(|s|!s.is_empty()){
+            features.insert(("predicate_dependency_surface".to_owned(),encode(&[&lemma,role,surface])));
+        }
+        if let Some(value)=atom["lemma"].as_str().filter(|s|!s.is_empty()){
+            features.insert(("predicate_dependency_lemma".to_owned(),encode(&[&lemma,role,&value.to_lowercase()])));
+        }
+    }
+    features.into_iter().collect()
+}
+
 pub fn inspect_heterogeneous_predicate_overlap(receipt:&serde_json::Value,
     native:&serde_json::Value,consumer:&str)->Result<serde_json::Value,IndexedObservationError>{
     use serde_json::{json,Value};
@@ -533,7 +576,16 @@ pub fn inspect_heterogeneous_predicate_overlap(receipt:&serde_json::Value,
     let mut index=BTreeMap::<(String,String),(Vec<usize>,Vec<usize>)>::new();
     for m in inv.members.iter().filter(|m|m.lane==lane){
         let head=&m.original["predicate"];
-        let keys=features(head);
+        let mut keys=features(head);
+        let mut dependents=Vec::new();
+        for lane in ["actors","patients"]{
+            if let Some(atoms)=m.original[lane].as_array(){
+                for atom in atoms{
+                    if let Some(dep)=atom["dep"].as_str(){dependents.push((dep,atom));}
+                }
+            }
+        }
+        keys.extend(dependent_overlap_features(head,&dependents));
         let i=left.len();
         for k in &keys{index.entry(k.clone()).or_default().0.push(i);}
         left.push(json!({"member_ref":m.observation.request_ref,"ordinal":m.ordinal,
@@ -547,7 +599,14 @@ pub fn inspect_heterogeneous_predicate_overlap(receipt:&serde_json::Value,
         let roles=row["role_inverse"].as_array().ok_or_else(bad)?;
         let heads:Vec<_>=roles.iter().filter(|r|r["original_role"]["role"]=="head").collect();
         if heads.len()!=1{return Err(bad());}
-        let keys=features(&heads[0]["original_atom"]);
+        let head=&heads[0]["original_atom"];
+        let mut keys=features(head);
+        let dependents:Vec<_>=roles.iter().filter(|r|r["original_role"]["role"]!="head")
+            .filter_map(|r|{
+                let atom=&r["original_atom"];
+                atom["dependency"].as_str().map(|dep|(dep,atom))
+            }).collect();
+        keys.extend(dependent_overlap_features(head,&dependents));
         let i=right.len();
         for k in &keys{index.entry(k.clone()).or_default().1.push(i);}
         right.push(json!({"member_ref":id,"ordinal":i,"features":keys,"original":row}));
@@ -572,7 +631,7 @@ pub fn inspect_heterogeneous_predicate_overlap(receipt:&serde_json::Value,
             "status":status,"semantic_alignment_paid":false}));
     }
     let mut coverage=Vec::new();
-    for axis in ["literal_surface","predicate_lemma"]{
+    for axis in ["literal_surface","predicate_lemma","predicate_dependency","predicate_dependency_surface","predicate_dependency_lemma"]{
         let axis_members=|members:&Vec<Value>| members.iter().enumerate()
             .filter(|(_,m)|m["features"].as_array().is_some_and(|fs|fs.iter().any(|f|f[0]==axis)))
             .map(|(i,_)|i).collect::<BTreeSet<_>>();
@@ -605,6 +664,8 @@ pub fn inspect_heterogeneous_predicate_overlap(receipt:&serde_json::Value,
             "prefix_uncovered_nonwhitespace":native["prefix_uncovered_nonwhitespace"]},
         "left_members":left,"right_members":right,"feature_groups":groups,"directional_coverage":coverage,
         "candidate_relation_encoding":"factorised_by_feature; indices address side member arrays",
+        "dependent_feature_policy":"predicate lemma plus normalized original syntactic dependency, optionally dependent surface or lemma; not semantic role alignment",
+        "ambiguity_scope":"per feature group; singleton is not a unique global event correspondence",
         "same_manifestation_paid":false,"candidate_only":true,"source_independence_paid":false,
         "semantic_coverage_paid":false,"governed_identity_paid":false,"world_truth_paid":false,
         "licensed_crosswalk_count":0,"original_checker_replayed":false,"writes_database":false}))
