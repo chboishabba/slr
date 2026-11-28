@@ -20,6 +20,17 @@ pub fn run(args:&[String])->Result<(),String>{
                 &config,revision,&batches,run,doc,snapshot,digest,observation,consumer,query,evidence,&locator)
                 .map_err(|e|e.to_string())?)
         },
+        [mode,revision,run,doc,snapshot,digest,batches_json] if mode=="inspect-source-fibre"=>{
+            // Inline bounded list of persisted batch references, not a caller
+            // supplied local filesystem path. Reuses the existing native owners.
+            if batches_json.len()>262144{return Err("batch reference request too large".into());}
+            let batches:Vec<String>=serde_json::from_str(batches_json).map_err(|e|e.to_string())?;
+            if batches.is_empty()||batches.len()>4096||batches.iter().any(|b|b.trim().is_empty()||b.len()>2048){
+                return Err("invalid bounded batch references".into());
+            }
+            print_json(&sensiblaw_pg_source_store::read_article_semantic_candidates(
+                &config,revision,&batches,run,doc,snapshot,digest).map_err(|e|e.to_string())?)
+        },
         [mode,revision,batches_path,run,doc,snapshot,digest] if mode=="predicate-transport"||mode=="semantic-candidates"=>{
             let raw=std::fs::read_to_string(batches_path).map_err(|e|e.to_string())?;
             let batches:Vec<String>=serde_json::from_str(&raw).map_err(|e|e.to_string())?;
