@@ -488,6 +488,128 @@ pub fn inspect_indexed_native_predicate_meet(receipt:&serde_json::Value,
         "semantic_coverage_paid":false,"world_truth_paid":false,"writes_database":false}))
 }
 
+/// Heterogeneous corpus retrieval, deliberately not source-coordinate parity.
+ /// Inverted indexes retain a factorised many-to-many candidate relation;
+ /// no Cartesian pair explosion and no implied semantic correspondence.
+pub fn inspect_heterogeneous_predicate_overlap(receipt:&serde_json::Value,
+    native:&serde_json::Value,consumer:&str)->Result<serde_json::Value,IndexedObservationError>{
+    use serde_json::{json,Value};
+    use std::collections::{BTreeMap,BTreeSet};
+    use sha2::{Digest,Sha256};
+    let bad=||IndexedObservationError::InvalidReceipt;
+    let inv=indexed_inventory_observations(receipt)?;
+    if consumer.trim().is_empty() || native["schema"]!="slr.original-relation-query.v1"
+        ||native["query_relation_type"]!="predicate"||native["exact_persisted_packet_readback"]!=true
+        ||native["complete_recorded_query"]!=true||native["all_live_semantic_readings_covered"]!=false
+        ||native["governed_identity_paid"]!=false||native["world_truth_paid"]!=false{return Err(bad());}
+    let rev=native["source_revision_ref"].as_str().filter(|x|!x.is_empty()).ok_or_else(bad)?;
+    let sha=native["source_sha256"].as_str().filter(|x|x.len()==64&&x.bytes().all(|b|b.is_ascii_hexdigit())).ok_or_else(bad)?;
+    if native["document_ref"]!=format!("document:sha256:{sha}"){return Err(bad());}
+    // Source revisions and bytes are separate. Equal bytes at different
+    // revisions are not sufficient to establish identical manifestation.
+    let left_rev=receipt["inventory"]["article_revision"].as_str().ok_or_else(bad)?;
+    let left_sha=receipt["source_sha256"].as_str().ok_or_else(bad)?;
+    if rev==left_rev && sha==left_sha{return Err(bad());}
+    let rows=native["answers"].as_array().ok_or_else(bad)?;
+    if native["answer_count"].as_u64()!=Some(rows.len() as u64)
+        ||native["relation_type_inventory"]["predicate"].as_u64().unwrap_or(0)!=rows.len() as u64{return Err(bad());}
+    let lane="article_lanes:event_candidates";
+    let left_available=!inv.unavailable_lanes.iter().any(|s|s==lane)
+        &&receipt["inventory"]["article_lanes"].get("event_candidates").is_some();
+    let mut left=Vec::new();
+    let mut right=Vec::new();
+    // Separate surface and lemma channels, case-sensitive original surface,
+    // lowercase lemma diagnostic only. Role shape retains parser-local labels.
+    let features=|head:&Value| -> Vec<(String,String)> {
+        let mut out=Vec::new();
+        if let Some(v)=head["surface"].as_str().or_else(||head["text"].as_str()).filter(|v|!v.is_empty()){
+            out.push(("literal_surface".into(),v.into()));
+        }
+        if let Some(v)=head["lemma"].as_str().filter(|v|!v.is_empty()){
+            out.push(("predicate_lemma".into(),v.to_lowercase()));
+        }
+        out
+    };
+    let mut index=BTreeMap::<(String,String),(Vec<usize>,Vec<usize>)>::new();
+    for m in inv.members.iter().filter(|m|m.lane==lane){
+        let head=&m.original["predicate"];
+        let keys=features(head);
+        let i=left.len();
+        for k in &keys{index.entry(k.clone()).or_default().0.push(i);}
+        left.push(json!({"member_ref":m.observation.request_ref,"ordinal":m.ordinal,
+            "features":keys,"original":m.original}));
+    }
+    let mut seen=BTreeSet::new();
+    for row in rows{
+        if row["original_relation"]["type"]!="predicate"{return Err(bad());}
+        let id=row["relation_ref"].as_str().filter(|s|!s.is_empty()).ok_or_else(bad)?;
+        if !seen.insert(id){return Err(bad());}
+        let roles=row["role_inverse"].as_array().ok_or_else(bad)?;
+        let heads:Vec<_>=roles.iter().filter(|r|r["original_role"]["role"]=="head").collect();
+        if heads.len()!=1{return Err(bad());}
+        let keys=features(&heads[0]["original_atom"]);
+        let i=right.len();
+        for k in &keys{index.entry(k.clone()).or_default().1.push(i);}
+        right.push(json!({"member_ref":id,"ordinal":i,"features":keys,"original":row}));
+    }
+    let mut matched_l=BTreeMap::<String,BTreeSet<usize>>::new();
+    let mut matched_r=BTreeMap::<String,BTreeSet<usize>>::new();
+    let mut ambiguity_l=BTreeMap::<String,BTreeSet<usize>>::new();
+    let mut ambiguity_r=BTreeMap::<String,BTreeSet<usize>>::new();
+    let mut groups=Vec::new();
+    for ((axis,value),(l,r)) in index{
+        if !l.is_empty()&&!r.is_empty(){
+            matched_l.entry(axis.clone()).or_default().extend(l.iter().copied());
+            matched_r.entry(axis.clone()).or_default().extend(r.iter().copied());
+            if l.len()!=1||r.len()!=1{
+                ambiguity_l.entry(axis.clone()).or_default().extend(l.iter().copied());
+                ambiguity_r.entry(axis.clone()).or_default().extend(r.iter().copied());
+            }
+        }
+        let status=match(l.len(),r.len()){(1,1)=>"singleton_candidate",(_,0)=>"left_feature_only",
+            (0,_)=>"right_feature_only",_=>"ambiguous_candidates"};
+        groups.push(json!({"axis":axis,"value":value,"left_members":l,"right_members":r,
+            "status":status,"semantic_alignment_paid":false}));
+    }
+    let mut coverage=Vec::new();
+    for axis in ["literal_surface","predicate_lemma"]{
+        let axis_members=|members:&Vec<Value>| members.iter().enumerate()
+            .filter(|(_,m)|m["features"].as_array().is_some_and(|fs|fs.iter().any(|f|f[0]==axis)))
+            .map(|(i,_)|i).collect::<BTreeSet<_>>();
+        let lu=axis_members(&left);let ru=axis_members(&right);
+        let lm=matched_l.remove(axis).unwrap_or_default();let rm=matched_r.remove(axis).unwrap_or_default();
+        let fraction=|n:usize,d:usize,available:bool|if available&&d>0{json!(n as f64/d as f64)}else{Value::Null};
+        coverage.push(json!({"axis":axis,"left_observed_members":left.len(),"right_observed_members":right.len(),
+            "left_feature_members":lu.len(),"right_feature_members":ru.len(),
+            "left_matched_members":lm.len(),"right_matched_members":rm.len(),
+            "left_coverage":fraction(lm.len(),left.len(),left_available),
+            "right_coverage":fraction(rm.len(),right.len(),left_available),
+            "left_unmatched":lu.difference(&lm).collect::<Vec<_>>(),
+            "right_unmatched":ru.difference(&rm).collect::<Vec<_>>(),
+            "left_feature_unavailable":(0..left.len()).filter(|i|!lu.contains(i)).collect::<Vec<_>>(),
+            "right_feature_unavailable":(0..right.len()).filter(|i|!ru.contains(i)).collect::<Vec<_>>(),
+            "left_ambiguous":ambiguity_l.remove(axis).unwrap_or_default(),
+            "right_ambiguous":ambiguity_r.remove(axis).unwrap_or_default()}));
+    }
+    let digest=|v:&Value| -> Result<String,IndexedObservationError>{
+        Ok(format!("sha256:{:x}",Sha256::digest(serde_json::to_vec(v).map_err(|_|bad())?)))
+    };
+    Ok(json!({"schema":"slr.heterogeneous-predicate-overlap.v1","consumer_ref":consumer,
+        "left_receipt_digest":digest(receipt)?,"right_receipt_digest":digest(native)?,
+        "left_source":{"revision":left_rev,"sha256":left_sha,"lane_available":left_available,
+            "recorded_scope":"indexed_event_candidates"},
+        "right_source":{"revision":rev,"sha256":sha,"scope":native["scope"],
+            "prefix_end_char":native["prefix_end_char"],"packet_sha256":native["packet_sha256"],
+            "numeric_run_ref":native["numeric_run_ref"],"document_ref":native["document_ref"],
+            "snapshot_ref":native["snapshot_ref"],"missing_original_tags":native["missing_original_tags"],
+            "prefix_uncovered_nonwhitespace":native["prefix_uncovered_nonwhitespace"]},
+        "left_members":left,"right_members":right,"feature_groups":groups,"directional_coverage":coverage,
+        "candidate_relation_encoding":"factorised_by_feature; indices address side member arrays",
+        "same_manifestation_paid":false,"candidate_only":true,"source_independence_paid":false,
+        "semantic_coverage_paid":false,"governed_identity_paid":false,"world_truth_paid":false,
+        "licensed_crosswalk_count":0,"original_checker_replayed":false,"writes_database":false}))
+}
+
 #[cfg(test)]
 mod indexed_inventory_tests {
     use super::*;
