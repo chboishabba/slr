@@ -600,6 +600,93 @@ pub fn read_article_numeric_coordinate_meet(config:&DatabaseConfig,
         "parser_identity_paid":false,"semantic_coverage_paid":false,"world_truth_paid":false}))
 }
 
+/// Transport incidence, not isolated participant tokens. A checked child
+/// may match a numeric role only within a relation whose head independently
+/// matches the checked predicate. Keep all numeric relation alternatives.
+fn predicate_role_transport(meet:&serde_json::Value)
+    ->Result<serde_json::Value,PersistedRelationalObservationError>{
+    use serde_json::{json,Value};
+    let bad=||PersistedRelationalObservationError::CheckedSourceMismatch;
+    let groups=meet["coordinates"].as_array().ok_or_else(bad)?;
+    let batches=meet["checked_batches"].as_array().ok_or_else(bad)?;
+    let numeric=meet["numeric_original"]["answers"].as_array().ok_or_else(bad)?;
+    let mut forward=BTreeMap::<(String,String),i64>::new();
+    for group in groups{
+        if group["status"]!="unique_coordinate_match"{continue;}
+        let c=&group["checked"][0];let n=&group["numeric"][0];
+        let key=(c["batch_ref"].as_str().ok_or_else(bad)?.to_owned(),
+            c["factor_ref"].as_str().ok_or_else(bad)?.to_owned());
+        let token=n["numeric_token_id"].as_i64().ok_or_else(bad)?;
+        if forward.insert(key,token).is_some(){return Err(bad());}
+    }
+    let mut heads=BTreeMap::<i64,Vec<usize>>::new();
+    for (i,row) in numeric.iter().enumerate(){
+        if row["original_relation"]["type"]!="predicate"{continue;}
+        let roles=row["role_inverse"].as_array().ok_or_else(bad)?;
+        let ids=roles.iter().filter(|r|r["original_role"]["role"]=="head")
+            .map(|r|r["numeric_token_id"].as_i64().ok_or_else(bad))
+            .collect::<Result<Vec<_>,_>>()?;
+        if ids.len()!=1{return Err(bad());}
+        heads.entry(ids[0]).or_default().push(i);
+    }
+    let mut rows=Vec::new();
+    let mut used=BTreeSet::new();
+    for batch in batches{
+        let batch_ref=batch["batch_ref"].as_str().ok_or_else(bad)?;
+        for obs in batch["observations"].as_array().ok_or_else(bad)?{
+            let predicate=obs["predicate_candidate_ref"].as_str().ok_or_else(bad)?;
+            let head=forward.get(&(batch_ref.to_owned(),predicate.to_owned()));
+            let alternatives=head.and_then(|h|heads.get(h)).cloned().unwrap_or_default();
+            let mut transported=Vec::new();
+            for i in &alternatives{
+                used.insert(*i);
+                let relation=&numeric[*i];
+                let roles=relation["role_inverse"].as_array().ok_or_else(bad)?;
+                let mut matched_numeric=BTreeSet::new();
+                let mut incidence=Vec::new();
+                for child in obs["role_bindings"].as_array().ok_or_else(bad)?{
+                    let filler=child["filler_candidate_ref"].as_str().ok_or_else(bad)?;
+                    let token=forward.get(&(batch_ref.to_owned(),filler.to_owned()));
+                    let matches=roles.iter().enumerate().filter(|(_,r)|
+                        r["original_role"]["role"]!="head" && token.is_some()
+                        && r["numeric_token_id"].as_i64().as_ref()==token)
+                        .map(|(j,r)|{matched_numeric.insert(j);r}).collect::<Vec<_>>();
+                    let status=match matches.len(){0=>"checked_role_only",1=>"coordinate_incidence_match",
+                        _=>"multiple_numeric_role_incidences"};
+                    incidence.push(json!({"checked_role":child,"numeric_roles":matches,
+                        "status":status,"semantic_role_alignment_paid":false}));
+                }
+                let unmatched=roles.iter().enumerate().filter(|(j,r)|
+                    r["original_role"]["role"]!="head"&&!matched_numeric.contains(j))
+                    .map(|(_,r)|r).collect::<Vec<_>>();
+                transported.push(json!({"numeric_relation":relation,"role_incidence":incidence,
+                    "numeric_only_roles":unmatched,"semantic_scope_paid":false}));
+            }
+            rows.push(json!({"batch_ref":batch_ref,"checked_observation":obs,
+                "numeric_head_token":head,"predicate_transport_status":
+                    match alternatives.len(){0=>"checked_predicate_only",1=>"one_numeric_relation",
+                        _=>"multiple_numeric_relations"},
+                "numeric_alternatives":transported,"semantic_attribution_paid":false}));
+        }
+    }
+    let unmatched=numeric.iter().enumerate().filter(|(i,r)|
+        r["original_relation"]["type"]=="predicate"&&!used.contains(i))
+        .map(|(_,r)|r).collect::<Vec<_>>();
+    let context=numeric.iter().filter(|r|r["original_relation"]["type"]!="predicate")
+        .collect::<Vec<_>>();
+    Ok(json!({"schema":"slr.predicate-role-transport.v1","checked_predicates":rows,
+        "numeric_only_predicates":unmatched,"numeric_context_relations":context,
+        "source_coordinate_meet":meet,"semantic_coverage_paid":false,
+        "outside_model_possible":true,"world_truth_paid":false}))
+}
+
+pub fn read_article_numeric_predicate_transport(config:&DatabaseConfig,
+    revision:&str,batches:&[String],run:&str,doc:&str,snapshot:&str,digest:&str)
+    ->Result<serde_json::Value,PersistedRelationalObservationError>{
+    let meet=read_article_numeric_coordinate_meet(config,revision,batches,run,doc,snapshot,digest)?;
+    predicate_role_transport(&meet)
+}
+
 #[cfg(test)]
 mod coordinate_meet_tests {
     use super::*;
