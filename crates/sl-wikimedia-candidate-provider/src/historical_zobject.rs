@@ -26,7 +26,11 @@ fn page_revision<'a>(v:&'a Value,id:&str)->Result<&'a Value,ProviderError>{
     Ok(&r[0])
 }
 fn reference(v:&Value)->Option<&str>{
-    v.as_str().or_else(||if v["Z1K1"]=="Z9"{v["Z9K1"].as_str()}else{None})
+    v.as_str().or_else(||match v["Z1K1"].as_str(){
+        Some("Z9")=>v["Z9K1"].as_str(),
+        Some("Z6")=>v["Z6K1"].as_str(),
+        _=>None,
+    })
 }
 #[derive(Debug,Clone)]
 pub struct HistoricalZObject{
@@ -67,7 +71,7 @@ pub fn fetch_historical_zobject(id:&str,as_of:&str)->Result<HistoricalZObject,Pr
 #[cfg(test)]
 mod tests{
     use super::*;
-    fn fixture()->Value{json!({"query":{"pages":[{"title":"Z38757","revisions":[{"revid":1,"timestamp":"2026-10-15T23:00:00Z","slots":{"main":{"contentmodel":"zobject","content":"{\"Z1K1\":\"Z2\",\"Z2K1\":\"Z38757\",\"Z2K2\":{}}"}}}]}]}})}
+    fn fixture()->Value{json!({"query":{"pages":[{"title":"Z38757","revisions":[{"revid":1,"timestamp":"2026-10-15T23:00:00Z","slots":{"main":{"contentmodel":"zobject","content":"{\"Z1K1\":\"Z2\",\"Z2K1\":{\"Z1K1\":\"Z6\",\"Z6K1\":\"Z38757\"},\"Z2K2\":{}}"}}}]}]}})}
     #[test]fn exact_revision_and_as_of(){
         let f=fixture();let b=serde_json::to_vec(&f).unwrap();
         assert!(parse_historical_zobject("Z38757","2026-10-15T23:37:24Z",1,&b).is_ok());

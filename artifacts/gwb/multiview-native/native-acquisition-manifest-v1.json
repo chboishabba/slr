@@ -105,6 +105,38 @@
     "canonical_sha256": "7ff2ec8ffe6243871ad682e7d7060fe3b84025fb15dbe229154d7aa7f6a72b30",
     "status": "preexisting-book-pdf"
   },
+  "historical_wikifunctions": [
+    {
+      "function": "Z38757",
+      "as_of": "2026-10-15T23:37:24Z",
+      "revision": 326825,
+      "timestamp": "2026-10-12T19:15:49Z",
+      "sha256": "64ee066e2c1cf0f4a924b87b7fc87211d344517509141748da70a0e6cf6babe4",
+      "byte_length": 7529,
+      "path": "artifacts/gwb/native-zobjects/Z38757.326825.64ee066e2c1cf0f4a924b87b7fc87211d344517509141748da70a0e6cf6babe4.json",
+      "candidate_only": true
+    },
+    {
+      "function": "Z38053",
+      "as_of": "2026-10-15T23:37:24Z",
+      "revision": 316698,
+      "timestamp": "2026-09-21T11:29:57Z",
+      "sha256": "32f3f0df27fe241ef117a57b8a359c69f6e9d91c720be0cf37353c526a84e1be",
+      "byte_length": 4096,
+      "path": "artifacts/gwb/native-zobjects/Z38053.316698.32f3f0df27fe241ef117a57b8a359c69f6e9d91c720be0cf37353c526a84e1be.json",
+      "candidate_only": true
+    },
+    {
+      "function": "Z35370",
+      "as_of": "2026-10-15T23:37:24Z",
+      "revision": 309574,
+      "timestamp": "2026-09-06T15:14:39Z",
+      "sha256": "56e1fddaba6f7969c5a7d9243a224d9f42fac5e3473a8448f8698d21ea503d8e",
+      "byte_length": 5021,
+      "path": "artifacts/gwb/native-zobjects/Z35370.309574.56e1fddaba6f7969c5a7d9243a224d9f42fac5e3473a8448f8698d21ea503d8e.json",
+      "candidate_only": true
+    }
+  ],
   "next_required": "For abstract: implement/check constructor-level JMD receipt and any native constructor projection; do not run prose parser or claim cross-view semantic parity.",
   "status": "native-multiview-sources-persisted-abstract-structured-lane-held"
 }
