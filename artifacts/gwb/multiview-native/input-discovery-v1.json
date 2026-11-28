@@ -1,0 +1,31 @@
+{
+  "schema": "slr.gwb-multiview-native-input-discovery.v1",
+  "indexed_receipt": {
+    "path": "artifacts/gwb/multiview-native/indexed-world-fibre-q207.json",
+    "schema": "slr.jmd-indexed-world-fibre-receipt.v1",
+    "qid": "Q207",
+    "article_revision": "enwiki-revid:1385850169",
+    "source_sha256": "a88ef63b9c109f0f09c2fc2a266373a9ecaae855104cb0e11c4e6c53d90d3233",
+    "world_truth_paid": false
+  },
+  "native_persisted_source_revisions": [
+    {
+      "revision_ref": "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+      "document_ref": "document:sha256:7ff2ec8ffe6243871ad682e7d7060fe3b84025fb15dbe229154d7aa7f6a72b30",
+      "canonical_sha256": "7ff2ec8ffe6243871ad682e7d7060fe3b84025fb15dbe229154d7aa7f6a72b30",
+      "provider_ref": "gwb-source-projection:pypdf:6.18.0"
+    },
+    {
+      "revision_ref": "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8",
+      "document_ref": "document:sha256:7ff2ec8ffe6243871ad682e7d7060fe3b84025fb15dbe229154d7aa7f6a72b30",
+      "canonical_sha256": "7ff2ec8ffe6243871ad682e7d7060fe3b84025fb15dbe229154d7aa7f6a72b30",
+      "provider_ref": "gwb-source-projection:pypdf-small-edit-locality-v1"
+    }
+  ],
+  "available_native_editions": ["book-pdf"],
+  "required_native_editions": ["en", "simple", "other"],
+  "missing_native_editions": ["simple", "other"],
+  "exact_source_match": false,
+  "status": "held-missing-persisted-native-editions",
+  "reason": "The indexed Q207 receipt is an English Wikipedia article, while the native persisted source is a GWB book/PDF projection. No Simple Wikipedia or other native edition with exact source coordinates exists in the inspected database. The multiview runner must not synthesize those rows."
+}
