@@ -1,0 +1,68 @@
+{
+  "schema": "slr.gwb-office-query-candidate-cohort.v1",
+  "qid": "Q207",
+  "query_candidate": {
+    "property": "P39",
+    "office": "Q11696",
+    "ordinal": 43,
+    "start_year": 2001,
+    "end_year": 2009
+  },
+  "views": [
+    {
+      "edition": "en",
+      "source_revision_ref": "source-revision:sha256:eba877f737b18412cc2e22095dd791b3e449f8fcf17af779df1432ea9fa62cdb",
+      "source_sha256": "a88ef63b9c109f0f09c2fc2a266373a9ecaae855104cb0e11c4e6c53d90d3233",
+      "parser_run_ref": "parser-run:sha256:6c288f309dcce65b9765fdb8a11847a53437327e958e3747283e6db0036a5959",
+      "clause": "who served as the 43rd president of the United States from 2001 to 2009",
+      "clause_span": [
+        89,
+        160
+      ],
+      "predicate": "served",
+      "predicate_span": [
+        93,
+        99
+      ],
+      "status": "operator_selected_candidate_not_licensed"
+    },
+    {
+      "edition": "simple",
+      "source_revision_ref": "source-revision:sha256:942f93cc682eceb82a5641a8ff20a7bcdcb3b5fb097564d38933266374f36d87",
+      "source_sha256": "5941349e25de746fd830a4d85ef7596410c2be072d0e8835681e21814837a9bc",
+      "parser_run_ref": "parser-run:sha256:1d28749f173cc7cf147afb0bbebde9fb5a9734f0bc82c71c7e628bfca3ddf1bf",
+      "clause": "He was the 43rd president of the United States from 2001 to 2009",
+      "clause_span": [
+        82,
+        146
+      ],
+      "predicate": "was",
+      "predicate_span": [
+        85,
+        88
+      ],
+      "status": "operator_selected_candidate_not_licensed"
+    },
+    {
+      "edition": "es",
+      "source_revision_ref": "source-revision:sha256:2c323f2b7434a256332e5840bb4eee9a1ab2db06ba250d85c3afaef450a9bac4",
+      "source_sha256": "81434a7f74ee08989cdcfb6996b48aa2cd2da3c9b2a508302ba67722e4ffe075",
+      "parser_run_ref": "parser-run:sha256:b6f8f03575d344b8fe98f159ed8990896ae10a501d8d4a3be4fe3aa0757843b6",
+      "clause": "que ejerció como el 43.er presidente de los Estados Unidos entre el 20 de enero de 2001 y el 20 de enero de 2009",
+      "clause_span": [
+        143,
+        255
+      ],
+      "predicate": "ejerció",
+      "predicate_span": [
+        147,
+        154
+      ],
+      "status": "operator_selected_candidate_not_licensed"
+    }
+  ],
+  "negative_control": "artifacts/gwb/multiview-native/gwb-native-view-inputs-v1.json",
+  "shared_entity_data_dependency": "Q207:2575571605",
+  "semantic_alignment_paid": false,
+  "world_truth_paid": false
+}

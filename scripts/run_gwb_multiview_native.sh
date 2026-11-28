@@ -37,19 +37,29 @@ while IFS= read -r row; do
   snapshot="$(jq -er .snapshot <<<"$row")"
   digest="$(jq -er .packet_digest <<<"$row")"
   batches="$(jq -c .batches <<<"$row")"
-  edition="$(jq -er 'if .schema=="slr.jmd-indexed-world-fibre-receipt.v1" then "en" else .edition end' "$receipt")"
+  edition="$(jq -er .edition <<<"$row")"
+  if [[ "$revision" == source-revision:sha256:* ]]; then
+    bound="$OUT/view-$i-bound-receipt.json"
+    python3 tools/bind_gwb_native_receipt.py --edition "$edition" --receipt "$receipt" --output "$bound"
+    receipt="$bound"
+  fi
+  if [[ "$digest" == native-numeric-chart:missing || "$snapshot" == native-numeric-chart:missing ]]; then
+    echo "HOLD: exact native numeric chart missing for $edition" >&2
+    exit 3
+  fi
   jq -e --arg revision "$revision" --arg edition "$edition" '
     .qid=="Q207" and .inventory.article_revision==$revision and .source_observation_checked and
     (.world_truth_paid==false) and
-    (if $edition=="en" then .inventory.article_revision=="enwiki-revid:1385850169" and
-      .source_sha256=="a88ef63b9c109f0f09c2fc2a266373a9ecaae855104cb0e11c4e6c53d90d3233" else true end)' "$receipt" >/dev/null
+    (if .schema=="slr.jmd-indexed-world-fibre-receipt.v3" then .edition==$edition
+      elif .schema=="slr.jmd-indexed-world-fibre-receipt.v1" then $edition=="en"
+      else .edition==$edition end)' "$receipt" >/dev/null
   invoke "view-$i-meet.json" inspect-indexed-native-meet "$receipt" "$GWB_VIEW_CONSUMER_REF" \
     "$revision" "$run" "$doc" "$snapshot" "$digest" "$batches"
   # Select only a uniquely reopened checked inverse of the explicitly
   # nominated indexed occurrence. A numeric-only row cannot seed this.
   if ! jq -e --arg member "$member" --arg edition "$edition" '
     . as $m |
-    [.coordinates[] | select(any(.indexed[];.request_ref==$member))] |
+    [.coordinates[] | select(any(.indexed[];.request_ref==$member or .original.event_candidate_ref==$member))] |
     if length!=1 then error("held: indexed occurrence unavailable/ambiguous") else .[0] end |
     if .status!="unique_coordinate_match" or (.native|length)!=1 or
        .native[0].kind!="checked_predicate" then error("held: checked inverse unavailable/ambiguous")

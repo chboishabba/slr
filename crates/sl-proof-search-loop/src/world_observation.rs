@@ -265,6 +265,38 @@ pub enum IndexedObservationError { InvalidReceipt, InvalidLane, InvalidMember, I
 /// gets a content-addressed value and a distinct occurrence coordinate;
 /// duplicate values never erase original members. No source flags alone
 /// pay formal authority, semantic identity, or world truth.
+// The v3 native binding is an operator provenance envelope, not a new kernel proof.
+fn indexed_receipt_edition(receipt: &serde_json::Value) -> Result<&str, IndexedObservationError> {
+    let bad=||IndexedObservationError::InvalidReceipt;
+    let rev=receipt["inventory"]["article_revision"].as_str().ok_or_else(bad)?;
+    let schema=receipt["schema"].as_str().ok_or_else(bad)?;
+    if schema=="slr.jmd-indexed-world-fibre-receipt.v1" {
+        if rev.strip_prefix("enwiki-revid:").and_then(|s|s.parse::<u64>().ok()).filter(|n|*n>0).is_none(){return Err(bad());}
+        return Ok("en");
+    }
+    let edition=receipt["edition"].as_str().filter(|s|!s.is_empty()&&*s!="abstract"
+        &&s.bytes().all(|b|b.is_ascii_lowercase()||b==b'-')).ok_or_else(bad)?;
+    let site=format!("{}wiki",edition.replace('-',"_"));
+    let title=receipt["title"].as_str().filter(|s|!s.is_empty()).ok_or_else(bad)?;
+    if receipt["site"]!=site {return Err(bad());}
+    if schema=="slr.jmd-indexed-world-fibre-receipt.v2" {
+        let prefix=format!("{site}-revid:");
+        let n=rev.strip_prefix(&prefix).and_then(|s|s.parse::<u64>().ok()).filter(|n|*n>0).ok_or_else(bad)?;
+        if receipt["source_unit_ref"]!=format!("wikipedia:{edition}:{}:{n}",title.replace(' ',"_")){return Err(bad());}
+    } else if schema=="slr.jmd-indexed-world-fibre-receipt.v3" {
+        let hex64=|s:&str| s.len()==64&&s.bytes().all(|b|b.is_ascii_hexdigit());
+        let n=receipt["external_revision"].as_u64().filter(|n|*n>0).ok_or_else(bad)?;
+        let sha=receipt["source_sha256"].as_str().filter(|s|hex64(s)).ok_or_else(bad)?;
+        if !rev.strip_prefix("source-revision:sha256:").map(hex64).unwrap_or(false)
+            || receipt["native_revision"]!=rev
+            || receipt["source_unit_ref"]!=format!("source:wikipedia:{edition}:{}:revid:{n}",title.replace(' ',"_"))
+            || receipt["document_ref"]!=format!("document:sha256:{sha}")
+            || !receipt["original_receipt_sha256"].as_str().map(hex64).unwrap_or(false)
+            || receipt["binding_creates_semantic_authority"]!=false {return Err(bad());}
+    } else {return Err(bad());}
+    Ok(edition)
+}
+
 pub fn indexed_inventory_observations(receipt: &serde_json::Value)
     -> Result<IndexedObservationInventory, IndexedObservationError>
 {
@@ -272,7 +304,7 @@ pub fn indexed_inventory_observations(receipt: &serde_json::Value)
     use sha2::{Digest,Sha256};
     let bad=||IndexedObservationError::InvalidReceipt;
     let version=receipt["schema"].as_str().ok_or_else(bad)?;
-    if !["slr.jmd-indexed-world-fibre-receipt.v1","slr.jmd-indexed-world-fibre-receipt.v2"].contains(&version)
+    if !["slr.jmd-indexed-world-fibre-receipt.v1","slr.jmd-indexed-world-fibre-receipt.v2","slr.jmd-indexed-world-fibre-receipt.v3"].contains(&version)
         || receipt["source_observation_checked"]!=true
         || receipt["cross_source_alignment_paid"]!=false
         || receipt["world_truth_paid"]!=false {return Err(bad());}
@@ -284,19 +316,7 @@ pub fn indexed_inventory_observations(receipt: &serde_json::Value)
     let qid=inv["qid"].as_str().filter(|s|s.starts_with('Q')&&s.len()>1&&s[1..].bytes().all(|b|b.is_ascii_digit())).ok_or(IndexedObservationError::InvalidReceipt)?;
     if receipt["qid"]!=qid || receipt["title"]!=inv["title"] {return Err(IndexedObservationError::InvalidReceipt);}
     let article_revision=inv["article_revision"].as_str().filter(|s|!s.trim().is_empty()).ok_or(IndexedObservationError::InvalidReceipt)?;
-    let edition=if version=="slr.jmd-indexed-world-fibre-receipt.v2"{
-        let edition=receipt["edition"].as_str().filter(|s|!s.is_empty()&&*s!="abstract"
-            &&s.bytes().all(|b|b.is_ascii_lowercase()||b==b'-')).ok_or_else(bad)?;
-        let site=format!("{}wiki",edition.replace('-',"_"));
-        let prefix=format!("{site}-revid:");
-        let rev=article_revision.strip_prefix(prefix.as_str()).and_then(|s|s.parse::<u64>().ok())
-            .filter(|n|*n>0).ok_or_else(bad)?;
-        let title=receipt["title"].as_str().filter(|s|!s.is_empty()).ok_or_else(bad)?;
-        if receipt["site"]!=site||receipt["source_unit_ref"]!=format!("wikipedia:{edition}:{}:{rev}",title.replace(' ',"_")){
-            return Err(bad());
-        }
-        edition
-    }else{"en"};
+    let edition=indexed_receipt_edition(receipt)?;
     let entity_revision=receipt["entity_revision"].as_u64().filter(|v|*v>0).ok_or(IndexedObservationError::InvalidReceipt)?;
     let digest=|key:&str| -> Result<String,IndexedObservationError>{
         receipt[key].as_str().filter(|s|s.len()==64&&s.bytes().all(|b|b.is_ascii_hexdigit()))
@@ -809,9 +829,7 @@ pub fn inspect_indexed_view_cohort(receipts:&[serde_json::Value],consumer:&str)
     for receipt in receipts{
         if receipt["qid"]!=qid{return Err(bad());}
         let inv=indexed_inventory_observations(receipt)?;
-        let edition=if receipt["schema"]=="slr.jmd-indexed-world-fibre-receipt.v2"{
-            receipt["edition"].as_str().ok_or_else(bad)?
-        }else{"en"};
+        let edition=indexed_receipt_edition(receipt)?;
         let rev=receipt["inventory"]["article_revision"].as_str().ok_or_else(bad)?;
         let sha=receipt["source_sha256"].as_str().ok_or_else(bad)?;
         // A repeated edition/revision is not another independent view,
@@ -819,7 +837,10 @@ pub fn inspect_indexed_view_cohort(receipts:&[serde_json::Value],consumer:&str)
         if edition=="en"&&receipt["schema"]=="slr.jmd-indexed-world-fibre-receipt.v1"
             &&rev.strip_prefix("enwiki-revid:").and_then(|s|s.parse::<u64>().ok())
                 .filter(|n|*n>0).is_none(){return Err(bad());}
-        if !identities.insert((edition,rev)){return Err(bad());}
+        let external_identity=if receipt["schema"]=="slr.jmd-indexed-world-fibre-receipt.v3" {
+            receipt["external_revision"].as_u64().ok_or_else(bad)?.to_string()
+        } else {rev.rsplit(':').next().ok_or_else(bad)?.to_owned()};
+        if !identities.insert((edition,external_identity)){return Err(bad());}
         let receipt_digest=format!("sha256:{:x}",Sha256::digest(serde_json::to_vec(receipt).map_err(|_|bad())?));
         let lane="article_lanes:event_candidates";
         let available=receipt["inventory"]["article_lanes"].get("event_candidates").is_some()

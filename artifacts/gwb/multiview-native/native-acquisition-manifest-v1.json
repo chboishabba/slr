@@ -22,7 +22,11 @@
       "claim_truth_promoted": false,
       "indexed_jmd_receipt": "artifacts/gwb/multiview-native/acquired/simple-indexed-world-fibre.json",
       "indexed_jmd_kernel_marker": "INDEXED_WORLD_FIBRE_KERNEL_OK",
-      "status": "native-and-jmd-indexed-receipt-kernel-accepted"
+      "status": "native-and-jmd-indexed-receipt-kernel-accepted",
+      "initial_parser_run_ref": "parser-run:sha256:69c7ff8685dd6b730546dae572948f6f0f104341de9c24c619c7d7b9722bd920",
+      "active_exact_parser_run_ref": "parser-run:sha256:1d28749f173cc7cf147afb0bbebde9fb5a9734f0bc82c71c7e628bfca3ddf1bf",
+      "active_exact_parser_version": "3.8.16",
+      "active_exact_prepare": "artifacts/gwb/multiview-native/acquired/simple-native-prepare-exact.json"
     },
     {
       "edition": "es",
@@ -41,7 +45,11 @@
       "claim_truth_promoted": false,
       "indexed_jmd_receipt": "artifacts/gwb/multiview-native/acquired/es-indexed-world-fibre.json",
       "indexed_jmd_kernel_marker": "INDEXED_WORLD_FIBRE_KERNEL_OK",
-      "status": "native-and-jmd-indexed-receipt-kernel-accepted"
+      "status": "native-and-jmd-indexed-receipt-kernel-accepted",
+      "initial_parser_run_ref": "parser-run:sha256:bb1b970fa595d35f9ee0fdf4efbdafd9ac0aaa6190555a22a9a1d0e9884b952d",
+      "active_exact_parser_run_ref": "parser-run:sha256:b6f8f03575d344b8fe98f159ed8990896ae10a501d8d4a3be4fe3aa0757843b6",
+      "active_exact_parser_version": "3.8.16",
+      "active_exact_prepare": "artifacts/gwb/multiview-native/acquired/es-native-prepare-exact.json"
     },
     {
       "edition": "en",
@@ -60,7 +68,11 @@
       "claim_truth_promoted": false,
       "indexed_jmd_receipt": "artifacts/gwb/multiview-native/acquired/en-indexed-world-fibre.json",
       "indexed_jmd_kernel_marker": "INDEXED_WORLD_FIBRE_KERNEL_OK",
-      "status": "native-and-jmd-indexed-receipt-kernel-accepted"
+      "status": "native-and-jmd-indexed-receipt-kernel-accepted",
+      "initial_parser_run_ref": "parser-run:sha256:8a3ce9b0738d583278497aeeae44f420bee0044b863a3b94d13a9e9eb8aab7ba",
+      "active_exact_parser_run_ref": "parser-run:sha256:6c288f309dcce65b9765fdb8a11847a53437327e958e3747283e6db0036a5959",
+      "active_exact_parser_version": "3.8.16",
+      "active_exact_prepare": "artifacts/gwb/multiview-native/acquired/en-native-prepare-exact.json"
     },
     {
       "edition": "abstract",

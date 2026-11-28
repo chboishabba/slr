@@ -5,8 +5,8 @@
     {
       "edition": "en",
       "indexed_receipt": "artifacts/gwb/multiview-native/acquired/en-indexed-world-fibre.json",
-      "native_prepare": "artifacts/gwb/multiview-native/acquired/en-native-prepare-exact2.json",
-    "native_finalize": "artifacts/gwb/multiview-native/acquired/en-native-final-exact.json",
+      "native_prepare": "artifacts/gwb/multiview-native/acquired/en-native-prepare-exact.json",
+      "native_finalize": "artifacts/gwb/multiview-native/acquired/en-native-final-exact.json",
       "checked_inverse": "artifacts/gwb/multiview-native/acquired/en-checked-predicate-inverse.json",
       "native_view_input": {
         "edition": "en",
@@ -34,7 +34,7 @@
       "edition": "simple",
       "indexed_receipt": "artifacts/gwb/multiview-native/acquired/simple-indexed-world-fibre.json",
       "native_prepare": "artifacts/gwb/multiview-native/acquired/simple-native-prepare-exact.json",
-    "native_finalize": "artifacts/gwb/multiview-native/acquired/simple-native-final-exact.json",
+      "native_finalize": "artifacts/gwb/multiview-native/acquired/simple-native-final-exact.json",
       "checked_inverse": "artifacts/gwb/multiview-native/acquired/simple-checked-predicate-inverse.json",
       "native_view_input": {
         "edition": "simple",
@@ -62,7 +62,7 @@
       "edition": "es",
       "indexed_receipt": "artifacts/gwb/multiview-native/acquired/es-indexed-world-fibre.json",
       "native_prepare": "artifacts/gwb/multiview-native/acquired/es-native-prepare-exact.json",
-    "native_finalize": "artifacts/gwb/multiview-native/acquired/es-native-final-exact.json",
+      "native_finalize": "artifacts/gwb/multiview-native/acquired/es-native-final-exact.json",
       "checked_inverse": "artifacts/gwb/multiview-native/acquired/es-checked-predicate-inverse.json",
       "native_view_input": {
         "edition": "es",
@@ -93,12 +93,13 @@
     "numeric_chart_required": true,
     "semantic_alignment_paid": false,
     "world_truth_paid": false,
-    "source_truth_paid": false
+    "source_truth_paid": false,
+    "selection_class": "negative_control_distinct_propositions"
   },
   "all_three_indexed_jmd_kernel_accepted": true,
   "all_three_native_source_batches_persisted": true,
   "all_three_checked_predicate_inverses_unique": true,
   "semantic_authority_promoted": false,
   "claim_truth_promoted": false,
-  "next_required": "Produce or recover the native numeric relation packet for each article revision, then run scripts/run_gwb_multiview_native.sh with these exact batch references; do not infer cross-language correspondence from shared QID or translated surface forms."
+  "next_required": "Recover exact numeric charts, run the existing distinct-proposition negative control, and separately construct the positive office/year cohort from exact source spans; neither shared QID nor syntax alone licenses semantics."
 }
