@@ -1,0 +1,53 @@
+{
+  "schema": "slr.gwb-multiview-native-acquisition.v1",
+  "qid": "Q207",
+  "acquisition_method": "Wikimedia API revision-pinned extract -> deterministic heading projection -> existing Rust SCALE-1 compile-source-stdin",
+  "semantic_authority_promoted": false,
+  "claim_truth_promoted": false,
+  "sources": [
+    {
+      "edition": "simple",
+      "source_ref": "source:wikipedia:simple:George_W._Bush:revid:11077923",
+      "source_revision_ref": "source-revision:sha256:942f93cc682eceb82a5641a8ff20a7bcdcb3b5fb097564d38933266374f36d87",
+      "document_ref": "document:sha256:5941349e25de746fd830a4d85ef7596410c2be072d0e8835681e21814837a9bc",
+      "canonical_sha256": "5941349e25de746fd830a4d85ef7596410c2be072d0e8835681e21814837a9bc",
+      "parser_run_ref": "parser-run:sha256:69c7ff8685dd6b730546dae572948f6f0f104341de9c24c619c7d7b9722bd920",
+      "parser_model": "en_core_web_sm",
+      "parser_version": "3.8.11",
+      "parser_jobs": 144,
+      "candidate_factor_count": 2427,
+      "parser_residual_regions": 0,
+      "candidate_only": true,
+      "creates_semantic_authority": false,
+      "claim_truth_promoted": false,
+      "indexed_jmd_receipt": null,
+      "status": "native-persisted-awaiting-jmd-indexed-receipt"
+    },
+    {
+      "edition": "es",
+      "source_ref": "source:wikipedia:es:George_W._Bush:revid:176217381",
+      "source_revision_ref": "source-revision:sha256:2c323f2b7434a256332e5840bb4eee9a1ab2db06ba250d85c3afaef450a9bac4",
+      "document_ref": "document:sha256:81434a7f74ee08989cdcfb6996b48aa2cd2da3c9b2a508302ba67722e4ffe075",
+      "canonical_sha256": "81434a7f74ee08989cdcfb6996b48aa2cd2da3c9b2a508302ba67722e4ffe075",
+      "parser_run_ref": "parser-run:sha256:bb1b970fa595d35f9ee0fdf4efbdafd9ac0aaa6190555a22a9a1d0e9884b952d",
+      "parser_model": "es_core_news_sm",
+      "parser_version": "3.8.11",
+      "parser_jobs": 274,
+      "candidate_factor_count": 17222,
+      "parser_residual_regions": 0,
+      "candidate_only": true,
+      "creates_semantic_authority": false,
+      "claim_truth_promoted": false,
+      "indexed_jmd_receipt": null,
+      "status": "native-persisted-awaiting-jmd-indexed-receipt"
+    }
+  ],
+  "existing_native_book_source": {
+    "revision_ref": "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+    "document_ref": "document:sha256:7ff2ec8ffe6243871ad682e7d7060fe3b84025fb15dbe229154d7aa7f6a72b30",
+    "canonical_sha256": "7ff2ec8ffe6243871ad682e7d7060fe3b84025fb15dbe229154d7aa7f6a72b30",
+    "status": "preexisting-book-pdf"
+  },
+  "next_required": "Produce independently checked JMD indexed receipts and exact predicate member references for the new native revisions before constructing GWB_NATIVE_VIEW_INPUTS_JSON.",
+  "status": "native-acquisition-persisted-jmd-indexing-required"
+}
