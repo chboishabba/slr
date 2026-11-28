@@ -512,6 +512,111 @@ pub fn read_recorded_article_actions(config: &DatabaseConfig, revision: &str,
     }))
 }
 
+/// Original factor and numeric atom occurrences meet on exact character
+/// span and literal. Parser identities remain distinct; this is not a
+/// semantic role alignment or a claim of equal parser products.
+type SourceCoordinate = (u64,u64,String);
+
+fn coordinate_meet(left:&[(SourceCoordinate,serde_json::Value)],
+    right:&[(SourceCoordinate,serde_json::Value)]) -> Vec<serde_json::Value> {
+    let mut groups:BTreeMap<&SourceCoordinate,(Vec<&serde_json::Value>,Vec<&serde_json::Value>)>=BTreeMap::new();
+    for (key,row) in left {groups.entry(key).or_default().0.push(row);}
+    for (key,row) in right {groups.entry(key).or_default().1.push(row);}
+    groups.into_iter().map(|(key,(l,r))|{
+        let status=match (l.len(),r.len()){
+            (1,1)=>"unique_coordinate_match",
+            (_,0)=>"checked_only",
+            (0,_)=>"numeric_only",
+            _=>"ambiguous_coordinate_match",
+        };
+        serde_json::json!({"span":[key.0,key.1],"literal":key.2,
+            "checked":l,"numeric":r,"status":status,"semantic_alignment_paid":false})
+    }).collect()
+}
+
+/// Both source owners are reopened, not accepted from caller JSON. The
+/// numeric packet is immutable/content-addressed; the checked region read
+/// is a separate snapshot. No common current-authority snapshot is claimed.
+pub fn read_article_numeric_coordinate_meet(config:&DatabaseConfig,
+    revision:&str,batches:&[String],run:&str,doc:&str,snapshot:&str,digest:&str)
+    ->Result<serde_json::Value,PersistedRelationalObservationError>{
+    use serde_json::{json,Value};
+    let numeric=crate::query_native_original_relations(config.database_url(),run,doc,snapshot,digest,"all")
+        .map_err(|_|PersistedRelationalObservationError::CheckedSourceMismatch)?;
+    let sha=numeric["source_sha256"].as_str().ok_or(PersistedRelationalObservationError::CheckedSourceMismatch)?;
+    if numeric["source_revision_ref"]!=revision || doc!=format!("document:sha256:{sha}")
+        || batches.is_empty() || batches.iter().collect::<BTreeSet<_>>().len()!=batches.len(){
+        return Err(PersistedRelationalObservationError::CheckedSourceMismatch);
+    }
+    let expected_digest=format!("sha256:{sha}");
+    let mut client=Client::connect(config.database_url(),NoTls)?;
+    let mut tx=client.transaction()?;
+    tx.batch_execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY; SET LOCAL statement_timeout='90000ms'")?;
+    let mut left=Vec::new();
+    let mut checked_batches=Vec::new();
+    let mut regions=BTreeSet::new();
+    for batch_ref in batches{
+        let checked=relational_observations_from_checked_batch_on_client(&mut tx,batch_ref,
+            RelationalSourceFamily::Wikipedia,&ObservationContext::default(),&[])?;
+        if checked.source_revision_ref!=revision || checked.source_content_digest_ref!=expected_digest
+            || !regions.insert(checked.original_region_ref.clone()){
+            return Err(PersistedRelationalObservationError::CheckedSourceMismatch);
+        }
+        let batch=crate::candidate_pnf_store::load_candidate_pnf_batch_with_client(&mut tx,batch_ref)?
+            .ok_or(PersistedRelationalObservationError::MissingBatch)?;
+        for factor in &batch.factors{
+            let key=(u64::from(factor.source_start_char),u64::from(factor.source_end_char),factor.surface.clone());
+            if key.0>=key.1{return Err(PersistedRelationalObservationError::CheckedSourceMismatch);}
+            left.push((key,json!({"batch_ref":batch_ref,"region_ref":checked.original_region_ref,
+                "parser_run_ref":checked.original_parser_run_ref,"factor_ref":factor.candidate_ref,
+                "dependency":factor.dependency_ref,"lemma":factor.lemma})));
+        }
+        checked_batches.push(checked);
+    }
+    tx.commit()?;
+    let mut atoms:BTreeMap<i64,(SourceCoordinate,Value,Vec<Value>)>=BTreeMap::new();
+    for row in numeric["answers"].as_array().ok_or(PersistedRelationalObservationError::CheckedSourceMismatch)?{
+        for role in row["role_inverse"].as_array().ok_or(PersistedRelationalObservationError::CheckedSourceMismatch)?{
+            if role["numeric_token_id"].is_null(){continue;}
+            let token=role["numeric_token_id"].as_i64().ok_or(PersistedRelationalObservationError::CheckedSourceMismatch)?;
+            let atom=&role["original_atom"];
+            let start=atom["span"][0].as_u64().ok_or(PersistedRelationalObservationError::CheckedSourceMismatch)?;
+            let end=atom["span"][1].as_u64().ok_or(PersistedRelationalObservationError::CheckedSourceMismatch)?;
+            let literal=atom["text"].as_str().ok_or(PersistedRelationalObservationError::CheckedSourceMismatch)?;
+            let key=(start,end,literal.to_owned());
+            if token<=0||start>=end{return Err(PersistedRelationalObservationError::CheckedSourceMismatch);}
+            let entry=atoms.entry(token).or_insert_with(||(key.clone(),atom.clone(),Vec::new()));
+            if entry.0!=key||entry.1!=*atom{return Err(PersistedRelationalObservationError::CheckedSourceMismatch);}
+            entry.2.push(json!({"relation_ref":row["relation_ref"],"role":role}));
+        }
+    }
+    let right=atoms.into_iter().map(|(token,(key,atom,incidence))|
+        (key,json!({"numeric_token_id":token,"atom":atom,"relation_incidence":incidence}))).collect::<Vec<_>>();
+    let meet=coordinate_meet(&left,&right);
+    Ok(json!({"schema":"slr.article-numeric-coordinate-meet.v1","source_revision_ref":revision,
+        "source_content_digest_ref":expected_digest,"checked_factor_count":left.len(),
+        "numeric_atom_count":right.len(),"coordinates":meet,"checked_batches":checked_batches,
+        "numeric_original":numeric,"common_current_authority_snapshot":false,
+        "parser_identity_paid":false,"semantic_coverage_paid":false,"world_truth_paid":false}))
+}
+
+#[cfg(test)]
+mod coordinate_meet_tests {
+    use super::*;
+    use serde_json::json;
+    #[test]
+    fn retains_both_residual_directions_and_ambiguity(){
+        let k=|n| (n,n+1,format!("t{n}"));
+        let left=vec![(k(1),json!("a")),(k(2),json!("b")),(k(3),json!("c")),(k(3),json!("d"))];
+        let right=vec![(k(1),json!(11)),(k(3),json!(13)),(k(4),json!(14))];
+        let rows=coordinate_meet(&left,&right);
+        assert_eq!(rows.iter().map(|r|r["status"].as_str().unwrap()).collect::<Vec<_>>(),
+            vec!["unique_coordinate_match","checked_only","ambiguous_coordinate_match","numeric_only"]);
+        assert_eq!(rows[2]["checked"].as_array().unwrap().len(),2);
+        assert_eq!(rows[2]["numeric"].as_array().unwrap().len(),1);
+    }
+}
+
 /// Exact source-local inverse of the existing checked predicate projection.
 /// No QID, title, surface string or grammatical subject establishes identity.
 /// All roles survive; callers can select active-subject candidates separately
