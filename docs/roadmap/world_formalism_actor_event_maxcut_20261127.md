@@ -108,3 +108,20 @@ Acceptance must distinguish written proof from kernel-checked proof, bounded sou
 - f42a3061585a: relational-family article-actions REVISION BATCH_REFS_JSON MENTION_REFS_JSON (both files JSON arrays of exact native refs); independent runs for GWB and GHWB. No article-subject inference.
 - 8777175f6057: regression for unmatched embedded and negated predicate retention. Source implementation only; local Rust/DB acceptance deferred.
 - Next: actual source-local semantic reading constructors and authenticated scoped answer binding over these inventories, including coordination, passive agency, reported speech and non-entity subject alternatives. Acquire original GHWB source and match independent native inventories to the existing Lean bounded licences; do not treat this syntax inventory as a semantic endpoint. W01/W02 partial; W03–W08 and W11 remain open, W09–W10 gated. Lean #112 merged into main (3e3fef3ffe53); future golden changes require a new branch/PR.
+
+## 2026-11-28 — signed semantic maximum cut
+Operator-reported acceptance at 8a126c2f9ac0: native PNF 59/59, CLI 1/1, article inventory 1/1, nested/negated 1/1, CLI build PASS. No DB or Lean acceptance inferred. Keep #80 draft.
+Lean #125 (89ac23c8aa48), based on merged #112: WorldSemanticFibre defines typed referent (entity/eventuality/proposition/expletive/outside), role, scope, sign, immutable source anchor and event/capacity/time/attribution. actionFactors, patientNotAction, predictionNotAction, anchorInvariant, actionClosed, actionDiscriminator, reciprocalComparison, actionLicence instantiate existing FiniteConsumerCertificate and DocumentQuerySound. Bounded algebra only, kernel pending.
+
+| Cut | Existing constructor | Exact remaining input/weld |
+|---|---|---|
+| W01–02 | checked native article inventory; GwbArticleSystemSoundness archivedClauseLicence; WorldSemanticFibre.actionLicence | Bind original predicate/mention/role spans to independently justified semantic readings, including reporting act vs reported content, coordination, passive agency, negation and outside-model. Supply live coverage and sourceFactor; actual pinned GHWB article and native receipts. |
+| W03–04 | reciprocalLicensedComparison; existing licensed reciprocal native reader | Independently licensed source answers on a common typed event coordinate; no lexical/QID-only match. Preserve modality, role, time, capacity and attribution. |
+| W05 | participant incidence, exact role inverse | Traversal by licensed semantic referent/event, not spelling; retain source inverse and unresolved alternatives. |
+| W06 | projectedEnvelopeDisagreement, projectedLiveDisagreementBlocksLicence, signed Support join | Actual live preimages for a genuine disagreement; source proposition correspondence and dependency evidence for corroboration. |
+| W07 | originalQualifiedYearWitnesses, GwbProofComposition, TemporalDocumentProof | Bind time to exact event, compatible capacity and interval boundary, separate causal evidence. |
+| W08 | indexedArticleKBAlignmentSound, originalEntityPropertyProof? | Same licensed typed proposition as independently imported original JMD property/qualifier; actual pinned entity snapshots. |
+| W11 | current_focus_owner_proof_pays_exact_scope, joined_endpoint_lanes_pay_scoped_consumer, existing formal bridge and selective reopening | Independent referee issuance bound to exact source/query/answer and current authority; replay withdrawal preserving independent evidence. |
+| W09–10 | existing legal owners (audit pending) | Gated on W01–08 actual wiki results; rule-version/jurisdiction/capacity/exception/phase evidence and reverse premise evaluation. |
+
+Do not treat arbitrary inhabited Prop fields in older reviewed structures as proof of the intended semantic relation. The next native weld must consume typed reading witnesses with exact original coordinates and existing authenticated evidence, not caller-supplied authority. No new storage or proof transport. No CI or intermediate run requested.
