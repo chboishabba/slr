@@ -1367,6 +1367,32 @@ pub fn prepare_reciprocal_referee_binding(
 /// domain binding is issued by the trusted referee for the same pair/query.
 /// A checked generic theorem, historical proof or differently scoped answer
 /// cannot pay this query. The existing family lineage is the currentness gate.
+
+/// Read the current exact formal demand via its original owner; this does
+/// not pay the demand or issue a referee receipt.
+pub fn read_reciprocal_formal_demand(config:&DatabaseConfig,demand_ref:&str,
+    binding:&serde_json::Value)->Result<serde_json::Value,RelationalFamilyError>{
+    use serde_json::json;
+    let mut connection=Client::connect(config.database_url(),NoTls)?;
+    let mut tx=connection.transaction()?;
+    tx.batch_execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE READ ONLY; SET LOCAL statement_timeout='90000ms'")?;
+    let d=sensiblaw_formal_proof_bridge::load_demand_tx(&mut tx,demand_ref)?;
+    d.validate()?;
+    if binding["schema"]!="slr-reciprocal-source-query-binding-v1"
+        ||binding["statement_digest"]!=d.statement_digest||binding["consumer_ref"]!=d.consumer_ref
+        ||d.target_prover!="lean"||d.statement_language!="lean"
+        ||!["left_source_revision_ref","right_source_revision_ref"].iter().all(|k|
+            binding[*k].as_str().is_some_and(|r|d.source_revision_refs.iter().any(|s|s==r))){
+        return Err(RelationalFamilyError::ReciprocalProofBinding);
+    }
+    let result=json!({"demand_ref":d.demand_ref,"obligation_ref":d.obligation_ref,"consumer_ref":d.consumer_ref,
+        "pnf_revision_ref":d.pnf_revision_ref,"residual_ref":d.residual_ref,"proposition_ref":d.proposition_ref,
+        "statement_digest":d.statement_digest,"statement_language":d.statement_language,"target_prover":d.target_prover,
+        "da51_address":d.da51_address,"source_revisions":d.source_revision_refs,
+        "result_kind":d.requested_result_kind,"dependent_refs":d.dependent_refs});
+    tx.commit()?;Ok(result)
+}
+
 pub fn read_authenticated_reciprocal_query(
     config:&DatabaseConfig,family_ref:&str,left:&str,right:&str,query:&str,
     evidence_ref:&str,locator:&sensiblaw_formal_proof_bridge::RefereeReceiptLocator,

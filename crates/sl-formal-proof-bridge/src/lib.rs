@@ -313,7 +313,7 @@ fn require_existing_inputs(tx: &mut Transaction<'_>, demand: &FormalProofDemand)
     Ok(())
 }
 
-fn load_demand_tx(tx: &mut Transaction<'_>, demand_ref: &str) -> Result<FormalProofDemand, FormalProofBridgeError> {
+pub fn load_demand_tx(tx: &mut Transaction<'_>, demand_ref: &str) -> Result<FormalProofDemand, FormalProofBridgeError> {
     let row = tx.query_one(
         "SELECT obligation_ref,consumer_ref,pnf_revision_ref,residual_ref,proposition_ref,statement_digest,statement_language,target_prover,da51_address,source_revision_refs,requested_result_kind,dependent_refs,candidate_only,creates_semantic_authority,creates_legal_authority,applicability_promoted,claim_truth_promoted FROM formal_bridge.demand WHERE demand_ref=$1",
         &[&demand_ref],

@@ -219,6 +219,20 @@ fn check_checkout(root:&Path,commit:&str)->R<()>{
     let dirty=exec(Command::new("git").arg("-C").arg(root).args(["status","--porcelain","--untracked-files=no"]))?;
     require(dirty.is_empty(),"tracked golden checkout modified")
 }
+fn statement_fingerprint(material:&Value)->R<String>{
+    // Versioned exact JSON encoding; no pretty printing or supplied hash.
+    fn canonical(v:&Value)->Value{
+        match v{
+            Value::Object(m)=>Value::Object(m.iter().map(|(k,v)|(k.clone(),canonical(v))).collect::<BTreeMap<_,_>>().into_iter().collect()),
+            Value::Array(a)=>Value::Array(a.iter().map(canonical).collect()),
+            _=>v.clone(),
+        }
+    }
+    let body=serde_json::to_vec(&canonical(material)).map_err(|e|e.to_string())?;
+    let mut h=Sha256::new();h.update(b"slr.gwb-instantiated-statement.v1\0");
+    h.update((body.len() as u64).to_be_bytes());h.update(body);
+    Ok(format!("sha256:{:x}",h.finalize()))
+}
 fn verify_pair(args:&[String])->R<Value>{
     let [family_ref,left,right,query,statement,evidence,le,lp,re,rp,lean_root,commit]=args else{
         return Err("verify-pair FAMILY LEFT RIGHT QUERY STATEMENT_DIGEST EVIDENCE_REF LEFT_EDITION LEFT_SOURCE RIGHT_EDITION RIGHT_SOURCE LEAN_ROOT LEAN_COMMIT".into())};
@@ -247,13 +261,48 @@ fn verify_pair(args:&[String])->R<Value>{
         &&golden["bounded_rule_only"]==true&&golden["world_truth_paid"]==false&&golden["referee_authority_paid"]==false,"golden/native answer mismatch")?;
     check_checkout(&root,commit)?;
     require(raw(&lp,32<<20)?==a&&raw(&rp,32<<20)?==b&&raw(&runner,1<<20)?==runner_bytes&&raw(&theorem,1<<20)?==theorem_bytes,"input changed during verification")?;
-    let binding=sensiblaw_pg_source_store::prepare_reciprocal_referee_binding(&config,family_ref,left,right,query,statement,evidence,&answer).map_err(|e|e.to_string())?;
+    // The elaborated type is extracted by Lean, not copied from a request.
+    let statement_runner=root.join("tools/GwbGoldenStatement.lean");
+    let statement_bytes=raw(&statement_runner,1<<20)?;
+    let version=exec(Command::new("timeout").args(["90s","lake","env","lean","--version"]).current_dir(&root))?;
+    let version=String::from_utf8(version).map_err(|e|e.to_string())?.trim().to_owned();
+    require(version.contains("4.28.0"),"wrong golden Lean version")?;
+    let checked=exec(Command::new("timeout").args(["--kill-after=5s","90s","lake","env","lean"])
+        .arg(&statement_runner).current_dir(&root))?;
+    let output=String::from_utf8(checked).map_err(|e|e.to_string())?;
+    let records=output.lines().filter_map(|line|line.strip_prefix("GWB_ELABORATED_THEOREM ")).collect::<Vec<_>>();
+    require(records.len()==1,"missing or ambiguous elaborated theorem receipt")?;
+    let declaration:Value=serde_json::from_str(records[0]).map_err(|e|e.to_string())?;
+    require(declaration["schema"]=="slr.golden-elaborated-theorem.v1"&&
+        declaration["declaration"]==golden["theorem"]&&
+        declaration["level_params"].is_array()&&string(&declaration,"type_expr_repr")?.len()>32,
+        "wrong elaborated declaration")?;
+    let preliminary=sensiblaw_pg_source_store::prepare_reciprocal_referee_binding(&config,family_ref,left,right,query,"derive",evidence,&answer).map_err(|e|e.to_string())?;
+    let mut coordinates=preliminary["proposed_binding"].clone();
+    let object=coordinates.as_object_mut().ok_or("missing native binding")?;
+    object.remove("statement_digest");object.remove("evidence_ref");
+    let material=json!({"schema":"slr.gwb-instantiated-statement.v1","lean_version":version,
+        "golden_commit":commit,"theorem_source_sha256":sha(&theorem_bytes),
+        "statement_runner_sha256":sha(&statement_bytes),"pair_runner_sha256":sha(&runner_bytes),
+        "elaborated_declaration":declaration,"source_pair":golden,"native_coordinates":coordinates});
+    let computed=statement_fingerprint(&material)?;
+    require(statement=="derive"||statement==&computed,"formal statement digest differs from exact elaborated instance")?;
+    let binding=sensiblaw_pg_source_store::prepare_reciprocal_referee_binding(&config,family_ref,left,right,query,&computed,evidence,&answer).map_err(|e|e.to_string())?;
+    let mut rebound=binding["proposed_binding"].clone();
+    let obj=rebound.as_object_mut().ok_or("missing rebound coordinates")?;
+    obj.remove("statement_digest");obj.remove("evidence_ref");
+    require(rebound==coordinates,"binding changed during statement verification")?;
+    check_checkout(&root,commit)?;
+    require(raw(&statement_runner,1<<20)?==statement_bytes&&raw(&runner,1<<20)?==runner_bytes&&
+        raw(&theorem,1<<20)?==theorem_bytes&&raw(&lp,32<<20)?==a&&raw(&rp,32<<20)?==b,
+        "statement or original source changed during readback")?;
     let fresh=get_family()?;require(fresh==family&&verify_observation(&fresh,left,&lc)?==lo&&verify_observation(&fresh,right,&rc)?==ro,"family changed during parity check")?;
     Ok(json!({"schema":"slr.native-golden-pair-parity.v1","family_ref":family_ref,
         "golden_commit":commit,"runner_sha256":sha(&runner_bytes),"theorem_source_sha256":sha(&theorem_bytes),
         "golden_evaluation":golden,"native_binding_candidate":binding,
         "native_golden_bounded_answer_equal":true,"candidate_only":true,
-        "isolated_kernel_certification_paid":false,"statement_digest_verified":false,
+        "isolated_kernel_certification_paid":false,"statement_digest_verified":statement!="derive",
+        "derived_statement_digest":computed,"statement_material":material,
         "referee_authority_paid":false,"world_truth_paid":false,"writes_database":false}))
 }
 
@@ -278,6 +327,20 @@ fn verify_entity_office(path:&Path,digest:&str,revision:u64,root:&Path,commit:&s
         "golden_commit":commit,"exact_original_witness_parity":true,"candidate_only":true,
         "runtime_interpretation_paid":false,"referee_authority_paid":false,"world_truth_paid":false}))
 }
+
+/// Referee-side readback of the exact persisted demand. No issuance.
+/// The caller must run this in an independently governed execution context.
+fn verify_referee_demand(args:&[String])->R<Value>{
+    let [demand,rest @ ..]=args else{return Err("verify-referee-demand DEMAND (verify-pair arguments)".into());};
+    let result=verify_pair(rest)?;
+    require(result["statement_digest_verified"]==true,"derive mode cannot authenticate a demand")?;
+    let config=sensiblaw_pg_source_store::load_database_config(None).map_err(|e|e.to_string())?;
+    let b=&result["native_binding_candidate"]["proposed_binding"];
+    let persisted=sensiblaw_pg_source_store::read_reciprocal_formal_demand(&config,demand,b).map_err(|e|e.to_string())?;
+    Ok(json!({"schema":"slr.native-referee-demand-readback.v1","pair_parity":result,
+        "persisted_demand":persisted,"exact_demand_bound":true,"candidate_only":true,
+        "referee_authority_paid":false,"world_truth_paid":false,"writes_database":false}))
+}
 pub fn run(args:&[String])->R<()>{
     let result=match args{
         [mode,source,receipt] if mode=="inspect-abstract"=>abstract_source(Path::new(source),Path::new(receipt),None)?,
@@ -288,6 +351,7 @@ pub fn run(args:&[String])->R<()>{
             dependency_join(Path::new(source),Path::new(receipt),Path::new(definitions),Path::new(entity),digest,revision.parse::<u64>().map_err(|e|e.to_string())?)?,
         [mode,entity,digest,revision,root,commit] if mode=="verify-entity-office"=>
             verify_entity_office(Path::new(entity),digest,revision.parse::<u64>().map_err(|e|e.to_string())?,Path::new(root),commit)?,
+        [mode,rest @ ..] if mode=="verify-referee-demand"=>verify_referee_demand(rest)?,
         [mode,rest @ ..] if mode=="verify-pair"=>verify_pair(rest)?,
         _=>return Err("gwb-semantic inspect-abstract SOURCE RECEIPT [DEFINITIONS_DIR] | verify-pair FAMILY LEFT RIGHT QUERY STATEMENT_DIGEST EVIDENCE_REF LEFT_EDITION LEFT_SOURCE RIGHT_EDITION RIGHT_SOURCE LEAN_ROOT LEAN_COMMIT".into())
     };
@@ -296,6 +360,12 @@ pub fn run(args:&[String])->R<()>{
 #[cfg(test)]
 mod tests{
     use super::*;
+    #[test] fn statement_fingerprint_changes_with_instance(){
+        let a=json!({"type":"t","answer":[true,null],"source":"rev:a"});
+        let mut b=a.clone();b["answer"][1]=json!(false);
+        assert_ne!(statement_fingerprint(&a).unwrap(),statement_fingerprint(&b).unwrap());
+        assert_eq!(statement_fingerprint(&a).unwrap(),statement_fingerprint(&json!({"source":"rev:a","answer":[true,null],"type":"t"})).unwrap());
+    }
     #[test] fn bounded_pair_and_day_loss(){
         for e in ["en","simple","es"]{
             let (s,_,_,_)=lead(e).unwrap();
