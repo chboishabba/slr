@@ -422,6 +422,12 @@ fn checked_observation(client:&mut impl GenericClient,s:&AcceptanceObservationSe
             let batch=relational_observations_from_checked_batch_on_client(client,
                 &required(&s.batch_ref)?,s.source_family.ok_or(RelationalFamilyError::InvalidSelector)?,
                 &s.context,&s.provenance_refs)?;
+            // A caller's unrelated digest is not the canonical source digest.
+            // Keep the legacy receipt shape, but fail closed rather than
+            // allowing injected raw digests to enable same-content transport.
+            if s.provenance_refs.iter().any(|r|r.starts_with("sha256:")&&r!=&batch.source_content_digest_ref){
+                return Err(RelationalFamilyError::InvalidSelector);
+            }
             batch.observations.into_iter().find(|o|o.predicate_candidate_ref==selected)
                 .ok_or(RelationalFamilyError::InvalidSelector)
         },
@@ -911,7 +917,7 @@ pub fn inspect_recorded_family_parity(config:&DatabaseConfig,family_ref:&str)
         "superseded_by":family.superseded_by,"pairs":pairs,"all_recorded_answers_equal":equal,
         "factorisation_evidence_ref":evidence_ref,"recorded_consumer_adequacy":adequacy,
         "reviewed_representation_parity_paid":false,"formal_consumer_equivalence_paid":false,
-        "semantic_residuals_retained":family.projection.acquisition_demands.len(),
+        "semantic_residuals_retained":family.projection.directed_comparisons.iter().map(|p|p.comparison.residuals.len()).sum::<usize>(),
         "candidate_only":true,"source_independence_paid":false,"world_truth_paid":false,"writes_database":false}))
 }
 
