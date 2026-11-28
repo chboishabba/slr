@@ -1376,11 +1376,11 @@ pub fn read_reciprocal_formal_demand(config:&DatabaseConfig,demand_ref:&str,
     let mut connection=Client::connect(config.database_url(),NoTls)?;
     let mut tx=connection.transaction()?;
     tx.batch_execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE READ ONLY; SET LOCAL statement_timeout='90000ms'")?;
-    let d=sensiblaw_formal_proof_bridge::load_demand_tx(&mut tx,demand_ref)?;
+    let d=sensiblaw_formal_proof_bridge::load_open_demand_tx(&mut tx,demand_ref)?;
     d.validate()?;
     if binding["schema"]!="slr-reciprocal-source-query-binding-v1"
         ||binding["statement_digest"]!=d.statement_digest||binding["consumer_ref"]!=d.consumer_ref
-        ||d.target_prover!="lean"||d.statement_language!="lean"
+        ||d.target_prover!="lean"||d.statement_language!="lean4"&&d.statement_language!="lean"
         ||!["left_source_revision_ref","right_source_revision_ref"].iter().all(|k|
             binding[*k].as_str().is_some_and(|r|d.source_revision_refs.iter().any(|s|s==r))){
         return Err(RelationalFamilyError::ReciprocalProofBinding);
@@ -1390,6 +1390,53 @@ pub fn read_reciprocal_formal_demand(config:&DatabaseConfig,demand_ref:&str,
         "statement_digest":d.statement_digest,"statement_language":d.statement_language,"target_prover":d.target_prover,
         "da51_address":d.da51_address,"source_revisions":d.source_revision_refs,
         "result_kind":d.requested_result_kind,"dependent_refs":d.dependent_refs});
+    tx.commit()?;Ok(result)
+}
+
+
+/** Consumer-side payment of a receipt already issued by the independent
+ * referee role. No caller answer, theorem digest or receipt body accepted.
+ * Current native family binding and formal payment share the transaction. */
+pub fn pay_authenticated_reciprocal_query(config:&DatabaseConfig,family_ref:&str,
+    left:&str,right:&str,query:&str,evidence_ref:&str,
+    locator:&sensiblaw_formal_proof_bridge::RefereeReceiptLocator)
+    ->Result<serde_json::Value,RelationalFamilyError>{
+    use serde_json::{json,Value};
+    use sensiblaw_formal_proof_bridge::{read_source_bound_referee_receipt,FormalEvidenceReceiptInput,
+        persist_authenticated_formal_evidence_tx};
+    let mut connection=Client::connect(config.database_url(),NoTls)?;
+    let mut tx=connection.transaction()?;
+    tx.batch_execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE; SET LOCAL statement_timeout='90000ms'; SET LOCAL lock_timeout='5000ms'")?;
+    let manifest=read_manifest(&mut tx,family_ref)?;
+    let family=read_family_on_client(&mut tx,&manifest)?;
+    let referee:Value=serde_json::from_str(&read_source_bound_referee_receipt(&mut tx,locator)?)?;
+    let p=&referee["slr_premise_binding"];
+    let answer=&referee["slr_reciprocal_query_answer"];
+    signed_view_answer(answer,query)?;
+    let field=|k:&str|p[k].as_str().filter(|v|!v.is_empty()).map(str::to_owned).ok_or(RelationalFamilyError::ReciprocalProofBinding);
+    let statement=field("statement_digest")?;
+    let binding=reciprocal_proof_binding(&family,left,right,query,&statement,evidence_ref,answer)?;
+    if binding!=referee["slr_reciprocal_query_binding"]||field("evidence_ref")?!=evidence_ref{
+        return Err(RelationalFamilyError::ReciprocalProofBinding);
+    }
+    let da51_address=if p["da51_address"].is_null(){None}else{Some(field("da51_address")?)};
+    let dependencies=p["dependencies"].as_array().ok_or(RelationalFamilyError::ReciprocalProofBinding)?
+        .iter().map(|v|v.as_str().map(str::to_owned).ok_or(RelationalFamilyError::ReciprocalProofBinding)).collect::<Result<Vec<_>,_>>()?;
+    let evidence=FormalEvidenceReceiptInput{
+        evidence_ref:evidence_ref.to_owned(),demand_ref:field("demand_ref")?,obligation_ref:field("obligation_ref")?,
+        da51_address,producer:field("producer")?,artifact_ref:field("artifact_ref")?,artifact_digest:field("artifact_digest")?,
+        statement_digest:statement,checker:field("checker")?,checker_revision:field("checker_revision")?,
+        source_revision:field("source_revision")?,result_kind:field("result_kind")?,
+        certification_state:"kernel-certified".into(),dependencies,establishes_formal_premise:true,
+        creates_legal_authority:false,applicability_promoted:false,claim_truth_promoted:false};
+    let payment=persist_authenticated_formal_evidence_tx(&mut tx,&evidence,locator)?;
+    // Reopen through the same authenticated receiver before committing.
+    let readback=authenticated_reciprocal_on_tx(&mut tx,&family,left,right,query,evidence_ref,locator)?;
+    let result=json!({"schema":"slr.authenticated-reciprocal-payment.v1","family_ref":family_ref,
+        "query_ref":query,"evidence_ref":evidence_ref,"formal_premise_paid":payment.payment().formal_premise_paid,
+        "reopen_refs":payment.payment().reopen_refs,"authenticated_pair":readback,
+        "creates_semantic_authority":false,"creates_legal_authority":false,"world_truth_paid":false,
+        "writes_database":true});
     tx.commit()?;Ok(result)
 }
 

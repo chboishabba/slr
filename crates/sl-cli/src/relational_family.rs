@@ -766,6 +766,13 @@ pub fn run(args:&[String])->Result<(),String>{
             print_json(&sensiblaw_pg_source_store::read_query_context_capsule(
                 &config,family,query,&requests,Some(expected)).map_err(|e|e.to_string())?)
         },
+        [mode,family,left,right,query,evidence,repo,sha,path,thread,commit] if mode=="pay-authenticated-reciprocal-query"=>{
+            if commit!="--commit"{return Err("explicit --commit required".into());}
+            let locator=sensiblaw_pg_source_store::RefereeReceiptLocator{
+                repo:repo.clone(),sha:sha.clone(),path:path.clone(),canonical_thread_id:thread.clone()};
+            print_json(&sensiblaw_pg_source_store::pay_authenticated_reciprocal_query(
+                &config,family,left,right,query,evidence,&locator).map_err(|e|e.to_string())?)
+        },
         [mode,family,query,requests_json] if mode=="inspect-licensed-view-cohort"=>{
             // Inline exact native selectors and existing referee locators;
             // never accept proof answers or arbitrary local input files.
