@@ -702,3 +702,73 @@ mod indexed_inventory_tests {
         assert!(indexed_inventory_observations(&r).is_err());
     }
 }
+
+#[cfg(test)]
+mod heterogeneous_overlap_tests {
+    use super::*;
+    use serde_json::{json,Value};
+
+    fn fixture() -> (Value,Value) {
+        let a="a".repeat(64);
+        let b="b".repeat(64);
+        let event=|surface:&str,dep:&str,person:&str|json!({
+            "predicate":{"surface":surface,"lemma":"appoint"},
+            "actors":[{"surface":person,"lemma":person,"dep":dep}],"patients":[]
+        });
+        let relation=|id:&str,dep:&str,person:&str|json!({
+            "relation_ref":id,"original_relation":{"type":"predicate"},
+            "role_inverse":[
+                {"original_role":{"role":"head"},"original_atom":{"text":"appointed","lemma":"appoint"}},
+                {"original_role":{"role":"subject"},"original_atom":{"text":person,"lemma":person,"dependency":dep}}
+            ]
+        });
+        let indexed=json!({"schema":"slr.jmd-indexed-world-fibre-receipt.v1","qid":"Q9","title":"Example",
+            "source_observation_checked":true,"cross_source_alignment_paid":false,"world_truth_paid":false,
+            "source_sha256":a,"original_slr_sha256":a,"projection_sha256":a,"entity_sha256":a,"entity_revision":42,
+            "inventory":{"schema":"slr.jmd-indexed-world-fibre.v1","qid":"Q9","title":"Example","article_revision":"enwiki-revid:23",
+                "article_lanes":{"event_candidates":[event("appointed","nsubj","Alice"),
+                    event("appoints","nsubjpass","Alice"),event("appointed","nsubj","Alice"),
+                    {"predicate":{"surface":"left","lemma":"leave"},"actors":[],"patients":[]}]},
+                "wikidata_lanes":{},"semantic_coverage_paid":false,"cross_source_alignment_paid":false,"world_truth_paid":false}});
+        let native=json!({"schema":"slr.original-relation-query.v1","query_relation_type":"predicate",
+            "exact_persisted_packet_readback":true,"complete_recorded_query":true,
+            "all_live_semantic_readings_covered":false,"governed_identity_paid":false,"world_truth_paid":false,
+            "source_revision_ref":"book:rev:1","source_sha256":b,"document_ref":format!("document:sha256:{b}"),
+            "answer_count":2,"relation_type_inventory":{"predicate":2},
+            "answers":[relation("r1","nsubj","Alice"),relation("r2","nsubj","Bob")]});
+        (indexed,native)
+    }
+
+    #[test]
+    fn dependent_overlap_retains_passive_and_missing_residuals() {
+        let (indexed,native)=fixture();
+        let out=inspect_heterogeneous_predicate_overlap(&indexed,&native,"consumer:test").unwrap();
+        let coverage=out["directional_coverage"].as_array().unwrap().iter()
+            .find(|x|x["axis"]=="predicate_dependency_surface").unwrap();
+        assert_eq!(coverage["left_observed_members"],4);
+        assert_eq!(coverage["left_matched_members"],2);
+        assert_eq!(coverage["right_matched_members"],1);
+        assert_eq!(coverage["left_unmatched"],json!([1]));
+        assert_eq!(coverage["left_feature_unavailable"],json!([3]));
+        assert_eq!(coverage["right_unmatched"],json!([1]));
+        assert_eq!(coverage["left_ambiguous"],json!([0,2]));
+        assert_eq!(out["licensed_crosswalk_count"],0);
+        assert_eq!(out["world_truth_paid"],false);
+        assert_eq!(out["right_members"][0]["original"],native["answers"][0]);
+    }
+
+    #[test]
+    fn rejects_same_manifestation_and_promotion_and_marks_unavailable() {
+        let (mut indexed,mut native)=fixture();
+        indexed["inventory"]["article_lanes"]["event_candidates"]=Value::Null;
+        let out=inspect_heterogeneous_predicate_overlap(&indexed,&native,"consumer:test").unwrap();
+        assert!(out["directional_coverage"].as_array().unwrap().iter().all(|r|r["right_coverage"].is_null()));
+        native["world_truth_paid"]=json!(true);
+        assert!(inspect_heterogeneous_predicate_overlap(&indexed,&native,"consumer:test").is_err());
+        native["world_truth_paid"]=json!(false);
+        native["source_revision_ref"]=indexed["inventory"]["article_revision"].clone();
+        native["source_sha256"]=indexed["source_sha256"].clone();
+        native["document_ref"]=json!(format!("document:sha256:{}",indexed["source_sha256"].as_str().unwrap()));
+        assert!(inspect_heterogeneous_predicate_overlap(&indexed,&native,"consumer:test").is_err());
+    }
+}
