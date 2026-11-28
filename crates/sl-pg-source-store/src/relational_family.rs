@@ -763,6 +763,30 @@ pub fn inspect_persisted_relational_family(config:&DatabaseConfig,family_ref:&st
 }
 
 
+
+/// Native, read-only corpus for local research; never fetch outside sources
+/// or accept caller-supplied source text. Both selected revisions survive
+/// even when they share a canonical document ID or digest.
+pub fn inspect_family_local_corpus(config:&DatabaseConfig,family_ref:&str)
+    ->Result<(PersistedRelationalFamily,Vec<(crate::PersistedGenericSourceContent,String)>),RelationalFamilyError>{
+    let mut connection=Client::connect(config.database_url(),NoTls)?;
+    let mut tx=connection.transaction()?;
+    tx.batch_execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY; SET LOCAL statement_timeout='90000ms'")?;
+    let m=read_manifest(&mut tx,family_ref)?;
+    let family=read_family_on_client(&mut tx,&m)?;
+    let mut corpus=Vec::new();
+    for s in &family.projection.sources{
+        let (source,text)=crate::generic_source_content_store::load_generic_text_source_on_client(
+            &mut tx,&s.observation.source_revision_ref).map_err(PersistedRelationalObservationError::from)?;
+        if !s.observation.provenance_refs.contains(&source.content_digest_ref){
+            return Err(RelationalFamilyError::ChangedReplay);
+        }
+        corpus.push((source,text));
+    }
+    tx.commit()?;
+    Ok((family,corpus))
+}
+
 /// Recorded syntax is a separate bounded consumer, never a semantic
 /// alignment licence. Verify the candidate key against its checked owner
 /// rather than treating arbitrary suffixes or provenance refs as digests.
