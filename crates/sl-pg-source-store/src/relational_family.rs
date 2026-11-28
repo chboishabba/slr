@@ -867,7 +867,7 @@ fn recorded_syntax_pair(left:&SelectedRelationalSource,right:&SelectedRelational
 pub fn inspect_recorded_family_parity(config:&DatabaseConfig,family_ref:&str)
     ->Result<serde_json::Value,RelationalFamilyError>{
     use serde_json::json;
-    use sensiblaw_core::consumer_parity::ConsumerAdequacyReceipt;
+    use sensiblaw_core::canonical_evidence::ConsumerAdequacyReceipt;
     let mut connection=Client::connect(config.database_url(),NoTls)?;
     let mut tx=connection.transaction()?;
     tx.batch_execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY; SET LOCAL statement_timeout='90000ms'")?;
@@ -1634,11 +1634,14 @@ fn context_capsule(family:&PersistedRelationalFamily,cohort:&serde_json::Value,
         "terminal_update":l.terminal_update,"reopening":l.reopening,
         "effective_executable_frontier_route_refs":l.effective_executable_frontier_route_refs
     })).collect::<Vec<_>>();
-    let queues=family.durable_acquisition_queues.iter().map(|q|Ok(json!({
-        "obligation_ref":q.obligation.obligation_ref,
-        "route_refs":q.routes.iter().map(|r|r.route_ref.as_str()).collect::<Vec<_>>(),
-        "queue_digest":context_digest("slr.context.queue.v1",&serde_json::to_value(q)?)
-    }))).collect::<Result<Vec<_>,RelationalFamilyError>>()?;
+    let queues=family.durable_acquisition_queues.iter().map(|q|{
+        let queue_digest=context_digest("slr.context.queue.v1",&serde_json::to_value(q)?)?;
+        Ok(json!({
+            "obligation_ref":q.obligation.obligation_ref,
+            "route_refs":q.routes.iter().map(|r|r.route_ref.as_str()).collect::<Vec<_>>(),
+            "queue_digest":queue_digest
+        }))
+    }).collect::<Result<Vec<_>,RelationalFamilyError>>()?;
     let mut pairs=Vec::new();
     for pair in cohort["pairs"].as_array().ok_or(RelationalFamilyError::ChangedReplay)?{
         let proof=&pair["authenticated_pair"];
