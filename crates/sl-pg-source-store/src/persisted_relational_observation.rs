@@ -930,3 +930,61 @@ mod checked_dependency_tests {
         assert!(CheckedDependencyFibre::new(&tokens,&batch).is_err());
     }
 }
+
+
+/// Reverse-solve an original literal predicate occurrence to existing checked
+/// parser products. SQL only nominates coordinates; the established checked
+/// batch owner independently reconstructs their dependency inverse. Never
+/// choose the first alternative or manufacture a batch if the source is absent.
+pub fn discover_checked_predicate(config:&DatabaseConfig,revision:&str,sha:&str,
+    start:u32,end:u32,literal:&str,parser_run:Option<&str>)
+    ->Result<serde_json::Value,PersistedRelationalObservationError>{
+    use serde_json::json;
+    if revision.trim().is_empty()||sha.len()!=64||!sha.bytes().all(|b|b.is_ascii_hexdigit())
+        ||start>=end||literal.is_empty()||literal.chars().count()!=((end-start) as usize){
+        return Err(PersistedRelationalObservationError::CheckedSourceMismatch);
+    }
+    let mut client=Client::connect(config.database_url(),NoTls)?;
+    let mut tx=client.transaction()?;
+    tx.batch_execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY; SET LOCAL statement_timeout='90000ms'")?;
+    let (source,text)=crate::generic_source_content_store::load_generic_text_source_on_client(&mut tx,revision)?;
+    if source.content_digest_ref!=format!("sha256:{sha}")
+        ||text.chars().skip(start as usize).take((end-start) as usize).collect::<String>()!=literal{
+        return Err(PersistedRelationalObservationError::CheckedSourceMismatch);
+    }
+    let start64=i64::from(start);let end64=i64::from(end);
+    let rows=tx.query("SELECT DISTINCT b.batch_ref,f.candidate_ref
+        FROM pnf.statement_candidate_batch b
+        JOIN corpus.source_statement s ON s.statement_ref=b.statement_ref
+        JOIN pnf.statement_candidate_factor f ON f.batch_ref=b.batch_ref AND f.statement_ref=b.statement_ref
+        WHERE s.source_revision_ref=$1 AND s.exact_span_ref=b.exact_span_ref
+        AND f.role_ref='predicate' AND f.source_start_char=$2 AND f.source_end_char=$3 AND f.surface=$4
+        AND b.parser_receipt_ref LIKE 'db-parser:%'
+        AND ($5::text IS NULL OR b.parser_receipt_ref='db-parser:'||$5||':'||b.exact_span_ref)
+        ORDER BY b.batch_ref,f.candidate_ref LIMIT 65",
+        &[&revision,&start64,&end64,&literal,&parser_run])?;
+    let truncated=rows.len()>64;
+    let family=crate::workbench_projection::acceptance_control_store::relational_family_for_ingest(&source.source_family_ref);
+    let mut candidates=Vec::new();
+    for row in rows.iter().take(64){
+        let batch:String=row.get(0);let predicate:String=row.get(1);
+        let checked=relational_observations_from_checked_batch_on_client(&mut tx,&batch,family.clone(),
+            &ObservationContext::default(),&[])?;
+        if checked.source_revision_ref!=revision || checked.source_content_digest_ref!=source.content_digest_ref
+            || parser_run.is_some_and(|r|checked.original_parser_run_ref!=r){
+            return Err(PersistedRelationalObservationError::CheckedSourceMismatch);
+        }
+        let inverse=checked.observations.iter().find(|o|o.predicate_candidate_ref==predicate)
+            .ok_or(PersistedRelationalObservationError::MissingPredicate)?;
+        candidates.push(json!({"batch_ref":batch,"predicate_candidate_ref":predicate,
+            "parser_run_ref":checked.original_parser_run_ref,"region_ref":checked.original_region_ref,
+            "observation":inverse}));
+    }
+    tx.commit()?;
+    let status=if truncated{"held_truncated"}else if candidates.is_empty(){"held_missing"}
+        else if candidates.len()==1{"unique_checked_candidate"}else{"held_ambiguous"};
+    Ok(json!({"schema":"slr.checked-predicate-occurrence-discovery.v1","source_revision_ref":revision,
+        "source_sha256":sha,"source_start_char":start,"source_end_char":end,"literal":literal,
+        "parser_run_constraint":parser_run,"status":status,"truncated":truncated,"candidates":candidates,
+        "candidate_only":true,"semantic_coverage_paid":false,"world_truth_paid":false,"writes_database":false}))
+}
