@@ -271,7 +271,8 @@ pub fn indexed_inventory_observations(receipt: &serde_json::Value)
     use serde_json::Value;
     use sha2::{Digest,Sha256};
     let bad=IndexedObservationError::InvalidReceipt;
-    if receipt["schema"]!="slr.jmd-indexed-world-fibre-receipt.v1"
+    let version=receipt["schema"].as_str().ok_or_else(bad)?;
+    if !["slr.jmd-indexed-world-fibre-receipt.v1","slr.jmd-indexed-world-fibre-receipt.v2"].contains(&version)
         || receipt["source_observation_checked"]!=true
         || receipt["cross_source_alignment_paid"]!=false
         || receipt["world_truth_paid"]!=false {return Err(bad);}
@@ -283,6 +284,19 @@ pub fn indexed_inventory_observations(receipt: &serde_json::Value)
     let qid=inv["qid"].as_str().filter(|s|s.starts_with('Q')&&s.len()>1&&s[1..].bytes().all(|b|b.is_ascii_digit())).ok_or(IndexedObservationError::InvalidReceipt)?;
     if receipt["qid"]!=qid || receipt["title"]!=inv["title"] {return Err(IndexedObservationError::InvalidReceipt);}
     let article_revision=inv["article_revision"].as_str().filter(|s|!s.trim().is_empty()).ok_or(IndexedObservationError::InvalidReceipt)?;
+    let edition=if version=="slr.jmd-indexed-world-fibre-receipt.v2"{
+        let edition=receipt["edition"].as_str().filter(|s|!s.is_empty()&&*s!="abstract"
+            &&s.bytes().all(|b|b.is_ascii_lowercase()||b==b'-')).ok_or_else(bad)?;
+        let site=format!("{}wiki",edition.replace('-',"_"));
+        let prefix=format!("{site}-revid:");
+        let rev=article_revision.strip_prefix(&prefix).and_then(|s|s.parse::<u64>().ok())
+            .filter(|n|*n>0).ok_or_else(bad)?;
+        let title=receipt["title"].as_str().filter(|s|!s.is_empty()).ok_or_else(bad)?;
+        if receipt["site"]!=site||receipt["source_unit_ref"]!=format!("wikipedia:{edition}:{}:{rev}",title.replace(' ',"_")){
+            return Err(bad());
+        }
+        edition
+    }else{"en"};
     let entity_revision=receipt["entity_revision"].as_u64().filter(|v|*v>0).ok_or(IndexedObservationError::InvalidReceipt)?;
     let digest=|key:&str| -> Result<String,IndexedObservationError>{
         receipt[key].as_str().filter(|s|s.len()==64&&s.bytes().all(|b|b.is_ascii_hexdigit()))
@@ -315,7 +329,7 @@ pub fn indexed_inventory_observations(receipt: &serde_json::Value)
                 let obs=WorldObservation{
                     request_ref:format!("indexed-member:{qid}:{revision}:{chart_digest}:{lane}:{ordinal}"),
                     object_ref:qid.to_owned(),relation_ref:lane_ref.clone(),
-                    source_ref:if chart=="article_lanes"{format!("wikipedia:en:{qid}")}else{format!("wikidata:{qid}")},
+                    source_ref:if chart=="article_lanes"{format!("wikipedia:{edition}:{qid}")}else{format!("wikidata:{qid}")},
                     source_revision_ref:revision.to_owned(),content_digest_ref:source_digest.to_owned(),
                     value_ref,retrieval_status:RetrievalStatus::Retrieved,freshness_status:FreshnessStatus::Unknown,
                     provenance_class:ProvenanceClass::RevisionPinnedExternalSource,backend:GetterBackend::LeanInterop,
@@ -774,6 +788,98 @@ pub fn select_heterogeneous_native_pair(receipt:&serde_json::Value,
         "semantic_alignment_paid":false,"source_independence_paid":false,
         "formal_consumer_equivalence_paid":false,"world_truth_paid":false,
         "original_checker_replayed":false,"writes_database":false}))
+}
+
+
+/** Cohort inspection of independent, revision-pinned prose editions.
+    All recorded members retain their source inverse. Same QID is navigation,
+    not translation equivalence. A structural role overlap is only retrieval
+    pressure; unavailable lanes are not empty or denied propositions. */
+pub fn inspect_indexed_view_cohort(receipts:&[serde_json::Value],consumer:&str)
+    ->Result<serde_json::Value,IndexedObservationError>{
+    use serde_json::{json,Value};
+    use sha2::{Digest,Sha256};
+    use std::collections::{BTreeMap,BTreeSet};
+    let bad=||IndexedObservationError::InvalidReceipt;
+    if consumer.trim().is_empty()||receipts.len()<2||receipts.len()>8{return Err(bad());}
+    let qid=receipts[0]["qid"].as_str().ok_or_else(bad)?;
+    let mut identities=BTreeSet::new();
+    let mut views=Vec::new();
+    let mut signatures=Vec::new();
+    for receipt in receipts{
+        if receipt["qid"]!=qid{return Err(bad());}
+        let inv=indexed_inventory_observations(receipt)?;
+        let edition=receipt["edition"].as_str().unwrap_or("en");
+        let rev=receipt["inventory"]["article_revision"].as_str().ok_or_else(bad)?;
+        let sha=receipt["source_sha256"].as_str().ok_or_else(bad)?;
+        if !identities.insert((edition,rev,sha)){return Err(bad());}
+        let receipt_digest=format!("sha256:{:x}",Sha256::digest(serde_json::to_vec(receipt).map_err(|_|bad())?));
+        let lane="article_lanes:event_candidates";
+        let available=receipt["inventory"]["article_lanes"].get("event_candidates").is_some()
+            && !inv.unavailable_lanes.iter().any(|l|l==lane);
+        let mut index=BTreeMap::<String,Vec<String>>::new();
+        let mut event_count=0usize;
+        let mut feature_count=0usize;
+        for m in inv.members.iter().filter(|m|m.lane==lane){
+            event_count+=1;
+            let mut roles=BTreeSet::new();
+            for lane in ["actors","patients"]{
+                if let Some(atoms)=m.original[lane].as_array(){
+                    for atom in atoms{
+                        if let Some(role)=atom["dep"].as_str().and_then(overlap_dependency_class){
+                            roles.insert(role);
+                        }
+                    }
+                }
+            }
+            if !roles.is_empty(){
+                feature_count+=1;
+                let key=serde_json::to_string(&roles).map_err(|_|bad())?;
+                index.entry(key).or_default().push(m.observation.request_ref.clone());
+            }
+        }
+        signatures.push(index);
+        let members:Vec<_>=inv.members.iter().map(|m|json!({"member_ref":m.observation.request_ref,
+            "source_ref":m.observation.source_ref,"revision_ref":m.observation.source_revision_ref,
+            "source_digest_ref":m.observation.content_digest_ref,"lane":m.lane,
+            "ordinal":m.ordinal,"original":m.original})).collect();
+        views.push(json!({"edition":edition,"title":receipt["title"],"revision":rev,"source_sha256":sha,
+            "receipt_digest":receipt_digest,"entity_revision":receipt["entity_revision"],
+            "entity_sha256":receipt["entity_sha256"],"event_lane_available":available,
+            "event_count":if available{json!(event_count)}else{Value::Null},
+            "role_feature_count":if available{json!(feature_count)}else{Value::Null},
+            "unavailable_lanes":inv.unavailable_lanes,"empty_lanes":inv.empty_lanes,"members":members}));
+    }
+    let mut pairs=Vec::new();
+    for i in 0..views.len(){
+        for j in 0..views.len(){
+            if i==j{continue;}
+            let l=&signatures[i];let r=&signatures[j];
+            let available=views[i]["event_lane_available"]==true&&views[j]["event_lane_available"]==true;
+            let mut groups=Vec::new();let mut matched_l=0usize;let mut matched_r=0usize;
+            let keys:BTreeSet<_>=l.keys().chain(r.keys()).collect();
+            for key in keys{
+                let a=l.get(key).map(Vec::as_slice).unwrap_or(&[]);
+                let b=r.get(key).map(Vec::as_slice).unwrap_or(&[]);
+                if !a.is_empty()&&!b.is_empty(){matched_l+=a.len();matched_r+=b.len();}
+                groups.push(json!({"role_signature":key,"left_members":a,"right_members":b,
+                    "status":if !available{"unavailable"}else if a.is_empty(){"right_only"}
+                        else if b.is_empty(){"left_only"}else{"shared_role_shape"},
+                    "semantic_alignment_paid":false}));
+            }
+            let coverage=|count:usize,v:&Value|match v["event_count"].as_u64(){
+                Some(n) if available&&n>0=>json!(count as f64/n as f64),_=>Value::Null};
+            pairs.push(json!({"left_view":i,"right_view":j,"role_groups":groups,
+                "left_coverage":coverage(matched_l,&views[i]),"right_coverage":coverage(matched_r,&views[j]),
+                "same_entity_snapshot":views[i]["entity_revision"]==views[j]["entity_revision"]
+                    &&views[i]["entity_sha256"]==views[j]["entity_sha256"],
+                "translation_equivalence_paid":false,"consumer_proof_equivalence_paid":false}));
+        }
+    }
+    Ok(json!({"schema":"slr.indexed-view-cohort.v1","consumer_ref":consumer,"qid":qid,
+        "views":views,"directed_pairs":pairs,"candidate_only":true,"original_checker_replayed":false,
+        "abstract_constructor_view_supported":false,"semantic_coverage_paid":false,
+        "world_truth_paid":false,"writes_database":false}))
 }
 
 #[cfg(test)]
