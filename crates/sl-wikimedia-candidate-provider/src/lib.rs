@@ -1,7 +1,7 @@
 mod latest_revision;
 mod historical_zobject;
 mod historical_graph;
-pub use historical_graph::{resolve_historical_graph,resolve_historical_graph_targeted,evaluate_composition_candidate,evaluate_composition_with_language,inspect_composition_envelope};
+pub use historical_graph::{resolve_historical_graph,resolve_historical_graph_targeted,evaluate_composition_candidate,evaluate_composition_with_language,inspect_composition_envelope,inspect_historical_tester_contracts};
 pub use historical_zobject::{fetch_historical_zobject,parse_historical_zobject,HistoricalZObject};
 
 pub use latest_revision::{

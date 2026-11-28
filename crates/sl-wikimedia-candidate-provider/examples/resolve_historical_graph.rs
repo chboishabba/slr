@@ -1,4 +1,4 @@
-use sensiblaw_wikimedia_candidate_provider::{resolve_historical_graph_targeted,evaluate_composition_with_language,inspect_composition_envelope};
+use sensiblaw_wikimedia_candidate_provider::{resolve_historical_graph_targeted,evaluate_composition_with_language,inspect_composition_envelope,inspect_historical_tester_contracts};
 use std::{env,fs,path::Path};
 fn main()->Result<(),Box<dyn std::error::Error>>{
     let args:Vec<_>=env::args().skip(1).collect();
@@ -14,6 +14,6 @@ fn main()->Result<(),Box<dyn std::error::Error>>{
     let calls=ast["sections"]["Q8776414"]["fragments"].as_array().ok_or("invalid original fragments")?;
     let evaluations:Vec<_>=calls.iter().filter(|v|v["Z1K1"]=="Z7").map(|v|evaluate_composition_with_language(&graph,v,language)).collect();
     let envelopes=calls.iter().filter(|v|v["Z1K1"]=="Z7").map(|v|inspect_composition_envelope(&graph,v,language,32)).collect::<Result<Vec<_>,_>>()?;
-    println!("{}",serde_json::to_string_pretty(&serde_json::json!({"graph":graph,"composition_candidates":evaluations,"composition_envelopes":envelopes}))?);
+    println!("{}",serde_json::to_string_pretty(&serde_json::json!({"graph":graph,"composition_candidates":evaluations,"composition_envelopes":envelopes,"tester_contracts":inspect_historical_tester_contracts(&graph)?}))?);
     Ok(())
 }

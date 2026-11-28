@@ -40,6 +40,7 @@ fn walk(v:&Value,p:&str,out:&mut BTreeSet<Edge>){
                 },
                 (Some("Z7"),"Z7K1")=>push(out,x,q.clone(),"call_target",1),
                 (Some("Z14"),"Z14K1")=>push(out,x,q.clone(),"implementation_owner",2),
+                (Some("Z20"),"Z20K1")=>push(out,x,q.clone(),"tester_owner",2),
                 (Some("Z17"),"Z17K1")|(Some("Z8"),"Z8K2")=>push(out,x,q.clone(),"signature_type",3),
                 (_,"Z1K1")=>push(out,x,q.clone(),"object_type",5),
                 _=>{},
@@ -148,6 +149,7 @@ fn eval(v:&Value,env:&BTreeMap<String,Value>,nodes:&Value,fuel:&mut usize,stack:
                 return Err(err("function definition missing or foreign"));
             }
             let sig=fun["Z8K1"].as_array().ok_or_else(||err("signature held"))?;
+            req(sig.first().and_then(reference)==Some("Z17"),"invalid argument list head")?;
             let mut bindings=BTreeMap::new();
             for d in sig.iter().skip(1){
                 req(reference(&d["Z1K1"])==Some("Z17"),"argument declaration held")?;
@@ -182,7 +184,9 @@ fn eval(v:&Value,env:&BTreeMap<String,Value>,nodes:&Value,fuel:&mut usize,stack:
                 return Err(err("code/builtin or unsupported implementation held"));
             }
             req(stack.insert(id.into()),"recursive call held")?;
-            trace.push(json!({"function":id,"implementation":imp,"function_receipt":nodes[id]["receipt"],"implementation_receipt":nodes[imp]["receipt"]}));
+            let declared_args:Vec<_>=sig.iter().skip(1).map(|d|json!({"key":d["Z17K2"],"declared_type":d["Z17K1"]})).collect();
+            trace.push(json!({"function":id,"implementation":imp,"function_receipt":nodes[id]["receipt"],"implementation_receipt":nodes[imp]["receipt"],
+                "declared_arguments":declared_args,"declared_return_type":fun["Z8K2"],"bound_arguments":bindings,"type_check_paid":false}));
             let out=eval(&body["Z14K2"],&bindings,nodes,fuel,stack,trace,choices,frontier);
             stack.remove(id);out
         },
@@ -212,6 +216,56 @@ fn evaluate_selected(graph:&Value,expression:&Value,language:Option<&str>,choice
     json!({"schema":"slr.native-abstract-composition-candidate.v1","value":value,"held":held,
         "trace":trace,"frontier":frontier,"candidate_choices":choices,"explicit_language":language,"fuel_used":4096-fuel,"candidate_only":true,"type_check_paid":false,
         "runtime_selection_paid":false,"tester_acceptance_paid":false,"world_truth_paid":false})
+}
+/// Inventory exact historical tester ownership, input call shape and
+/// comparator expression. A comparator is not an expected value by fiat.
+fn call_shape(call:&Value,id:&str,fun:&Value)->bool{
+    if reference(&call["Z1K1"])!=Some("Z7")||reference(&call["Z7K1"])!=Some(id){return false}
+    let Some(sig)=fun["Z8K1"].as_array()else{return false};
+    if sig.first().and_then(reference)!=Some("Z17"){return false}
+    let mut keys=BTreeSet::new();
+    for d in sig.iter().skip(1){
+        if reference(&d["Z1K1"])!=Some("Z17"){return false}
+        let Some(k)=reference(&d["Z17K2"])else{return false};
+        if !keys.insert(k)||call.get(k).is_none(){return false}
+    }
+    call.as_object().is_some_and(|o|o.len()==keys.len()+2)
+}
+pub fn inspect_historical_tester_contracts(graph:&Value)->R<Value>{
+    let nodes=graph["nodes"].as_object().ok_or_else(||err("missing graph nodes"))?;
+    let mut contracts=Vec::new();
+    for (id,node) in nodes{
+        let fun=&node["body"];
+        if reference(&fun["Z1K1"])!=Some("Z8"){continue}
+        let Some(testers)=fun["Z8K3"].as_array()else{
+            contracts.push(json!({"function":id,"status":"tester_list_held"}));continue
+        };
+        if testers.first().and_then(reference)!=Some("Z20"){
+            contracts.push(json!({"function":id,"status":"tester_list_held"}));continue
+        }
+        let mut seen=BTreeSet::new();
+        for (i,item) in testers.iter().enumerate().skip(1){
+            let Some(t)=reference(item).filter(|x|zid(x))else{
+                contracts.push(json!({"function":id,"index":i,"status":"invalid_tester_reference"}));continue
+            };
+            if !seen.insert(t){
+                contracts.push(json!({"function":id,"tester":t,"index":i,"status":"duplicate_tester_reference"}));continue
+            }
+            let body=&graph["nodes"][t]["body"];
+            let status=if !nodes.contains_key(t){"missing_tester"}
+                else if reference(&body["Z1K1"])!=Some("Z20")||reference(&body["Z20K1"])!=Some(id.as_str()){"foreign_tester"}
+                else if !call_shape(&body["Z20K2"],id,fun){"input_call_shape_held"}
+                else if reference(&body["Z20K3"]["Z1K1"])!=Some("Z7"){"comparator_shape_held"}
+                else{"recorded_contract"};
+            contracts.push(json!({"function":id,"tester":t,"index":i,"status":status,
+                "tester_pointer":format!("/Z2K2/Z8K3/{i}"),"function_receipt":node["receipt"],
+                "tester_receipt":graph["nodes"][t]["receipt"],"input":body["Z20K2"],
+                "comparator":body["Z20K3"],"comparator_target":reference(&body["Z20K3"]["Z7K1"]),
+                "tester_acceptance_paid":false}));
+        }
+    }
+    Ok(json!({"schema":"slr.native-historical-tester-contracts.v1","contracts":contracts,
+        "candidate_only":true,"type_check_paid":false,"tester_acceptance_paid":false,"world_truth_paid":false}))
 }
 /// Enumerate the listed implementation alternatives reached by the symbolic
 /// evaluator. This is a bounded candidate envelope, not runtime selection,
@@ -259,6 +313,21 @@ mod tests{
         let root:Value=serde_json::from_str(include_str!("../../../artifacts/gwb/native-zobjects/Z38757.326825.64ee066e2c1cf0f4a924b87b7fc87211d344517509141748da70a0e6cf6babe4.json")).unwrap();
         let e=edges(&root["Z2K2"]);
         for (id,kind) in [("Z38758","implementation"),("Z38759","tester"),("Z39656","tester"),("Z881","call_target")]{assert!(e.iter().any(|x|x.target==id&&x.kind==kind));}
+    }
+    #[test]fn historical_tester_contracts_hold_on_foreign_and_missing(){
+        let mut g=json!({"nodes":{
+            "Z100":{"body":{"Z1K1":"Z8","Z8K1":["Z17",{"Z1K1":"Z17","Z17K2":"Z100K1"}],"Z8K3":["Z20","Z101","Z102"]}},
+            "Z101":{"body":{"Z1K1":"Z20","Z20K1":"Z100","Z20K2":{"Z1K1":"Z7","Z7K1":"Z100","Z100K1":"arg"},"Z20K3":{"Z1K1":"Z7","Z7K1":"Z877"}}}
+        }});
+        let r=inspect_historical_tester_contracts(&g).unwrap();
+        assert_eq!(r["contracts"][0]["status"],"recorded_contract");
+        assert_eq!(r["contracts"][1]["status"],"missing_tester");
+        assert_eq!(r["tester_acceptance_paid"],false);
+        g["nodes"]["Z101"]["body"]["Z20K1"]=json!("Z999");
+        assert_eq!(inspect_historical_tester_contracts(&g).unwrap()["contracts"][0]["status"],"foreign_tester");
+        g["nodes"]["Z101"]["body"]["Z20K1"]=json!("Z100");
+        g["nodes"]["Z101"]["body"]["Z20K2"].as_object_mut().unwrap().remove("Z100K1");
+        assert_eq!(inspect_historical_tester_contracts(&g).unwrap()["contracts"][0]["status"],"input_call_shape_held");
     }
     #[test]fn bounded_choice_envelope_preserves_alternatives_and_holds(){
         let mut g=json!({"nodes":{
