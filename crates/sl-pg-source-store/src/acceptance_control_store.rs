@@ -466,7 +466,7 @@ pub fn seed_relational_pnf_pair_scoped(
     // Resolve source class from the same transaction as the native batch.
     let mut families=Vec::new();
     let mut source_metadata=Vec::new();
-    for batch in [&left,&right]{
+    for (batch,batch_ref,predicate) in [(&left,left_batch_ref,left_predicate_ref),(&right,right_batch_ref,right_predicate_ref)]{
         let statement=crate::statement_trace_store::load_source_statement_with_client(&mut tx,&batch.statement_ref)
             .map_err(|e|AcceptanceControlStoreError::Upstream(e.to_string()))?
             .ok_or_else(||AcceptanceControlStoreError::NotFound(batch.statement_ref.clone()))?;
@@ -477,6 +477,14 @@ pub fn seed_relational_pnf_pair_scoped(
             return Err(AcceptanceControlStoreError::ExistingRowConflict);
         }
         let family=relational_family_for_ingest(&source.source_family_ref);
+        let checked=crate::workbench_projection::persisted_relational_observation::relational_observations_from_checked_batch_on_client(
+            &mut tx,batch_ref,family,&ObservationContext::default(),&[])
+            .map_err(|e|AcceptanceControlStoreError::Upstream(e.to_string()))?;
+        if checked.source_revision_ref!=statement.source_revision_ref
+            || checked.source_content_digest_ref!=source.content_digest_ref
+            || !checked.predicate_candidate_refs.iter().any(|p|p==predicate){
+            return Err(AcceptanceControlStoreError::ExistingRowConflict);
+        }
         families.push(family);
         source_metadata.push(serde_json::json!({"source_revision_ref":source.source_revision_ref,
             "native_source_family":source.source_family_ref,"source_family":family,
@@ -500,6 +508,9 @@ pub fn seed_relational_pnf_pair_scoped(
         Ok(_)=>return Err(AcceptanceControlStoreError::ExistingRowConflict),
         Err(AcceptanceControlStoreError::NotFound(_))=>persist_consumer(&mut tx,&consumer)?,
         Err(e)=>return Err(e),
+    }
+    if load_consumer(&mut tx,consumer_ref)?!=consumer{
+        return Err(AcceptanceControlStoreError::ExistingRowConflict);
     }
     let selector = |side: &str, batch_ref: &str, predicate_ref: &str, family:RelationalSourceFamily| {
         let digest = Sha256::digest(
