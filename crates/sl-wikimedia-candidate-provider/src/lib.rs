@@ -1,4 +1,6 @@
 mod latest_revision;
+mod historical_zobject;
+pub use historical_zobject::{fetch_historical_zobject,parse_historical_zobject,HistoricalZObject};
 
 pub use latest_revision::{
     fetch_latest_entity_rdf_revision_receipt, fetch_latest_revision_id,
