@@ -19,6 +19,25 @@ pub fn run(args:&[String])->Result<(),String>{
             return print_json(&out);
         }
     }
+    // Operator supplies an original JMD receipt; native chart is reopened
+    // from persisted source owners, not supplied as arbitrary JSON.
+    if let [mode,receipt_path,consumer,revision,run,doc,snapshot,digest,batches_json]=args{
+        if mode=="inspect-indexed-native-meet"{
+            let raw=std::fs::read(receipt_path).map_err(|e|e.to_string())?;
+            let receipt:serde_json::Value=serde_json::from_slice(&raw).map_err(|e|e.to_string())?;
+            if batches_json.len()>262144{return Err("batch reference request too large".into());}
+            let batches:Vec<String>=serde_json::from_str(batches_json).map_err(|e|e.to_string())?;
+            if batches.is_empty()||batches.len()>4096||batches.iter().any(|b|b.trim().is_empty()||b.len()>2048){
+                return Err("invalid bounded batch references".into());
+            }
+            let config=load_database_config(None).map_err(|e|e.to_string())?;
+            let native=sensiblaw_pg_source_store::read_article_numeric_predicate_transport(
+                &config,revision,&batches,run,doc,snapshot,digest).map_err(|e|e.to_string())?;
+            let out=sensiblaw_proof_search_loop::world_observation::inspect_indexed_native_predicate_meet(
+                &receipt,&native,consumer).map_err(|e|format!("{e:?}"))?;
+            return print_json(&out);
+        }
+    }
     let config=load_database_config(None).map_err(|e|e.to_string())?;
     match args {
         [mode,revision,batches_path,run,doc,snapshot,digest,observation,consumer,query,evidence,repo,sha,path,thread] if mode=="licensed-semantic"=>{
@@ -134,6 +153,6 @@ pub fn run(args:&[String])->Result<(),String>{
                 "candidate_review_status":format!("{:?}",item.current_status),"creates_semantic_authority":false}))
         },
         _ if (4..=12).contains(&args.len())=>print_json(&run_persisted_relational_family(&config,&args[0],&args[1],&args[2..]).map_err(|e|e.to_string())?),
-        _=>Err("usage: relational-family inspect-indexed-inventory RECEIPT CONSUMER REQUIRED_LANES_JSON | CONSUMER ACCESS SELECTOR SELECTOR ... | licensed-semantic REVISION BATCH_REFS_JSON RUN DOC SNAPSHOT DIGEST OBSERVATION CONSUMER QUERY EVIDENCE REPO SHA PATH THREAD | predicate-transport REVISION BATCH_REFS_JSON RUN DOC SNAPSHOT DIGEST | semantic-candidates REVISION BATCH_REFS_JSON RUN DOC SNAPSHOT DIGEST | coordinate-meet REVISION BATCH_REFS_JSON RUN DOC SNAPSHOT DIGEST | numeric-action-roles RUN DOC SNAPSHOT DIGEST MENTION_TOKEN_IDS_JSON | article-actions REVISION BATCH_REFS_JSON MENTION_REFS_JSON | licensed-reciprocal FAMILY LEFT RIGHT QUERY EVIDENCE REPO SHA PATH THREAD | reciprocal FAMILY LEFT RIGHT | participant FAMILY FILLER_REF | inspect FAMILY | prepare-revision FAMILY OLD_SELECTOR NEW_SELECTOR | inspect-revision TRANSITION | review-revision TRANSITION COMMAND REVIEWER accept|reject|abstain | publish-revision TRANSITION".into())
+        _=>Err("usage: relational-family inspect-indexed-native-meet RECEIPT CONSUMER REVISION RUN DOC SNAPSHOT DIGEST BATCH_REFS_JSON | inspect-indexed-inventory RECEIPT CONSUMER REQUIRED_LANES_JSON | CONSUMER ACCESS SELECTOR SELECTOR ... | licensed-semantic REVISION BATCH_REFS_JSON RUN DOC SNAPSHOT DIGEST OBSERVATION CONSUMER QUERY EVIDENCE REPO SHA PATH THREAD | predicate-transport REVISION BATCH_REFS_JSON RUN DOC SNAPSHOT DIGEST | semantic-candidates REVISION BATCH_REFS_JSON RUN DOC SNAPSHOT DIGEST | coordinate-meet REVISION BATCH_REFS_JSON RUN DOC SNAPSHOT DIGEST | numeric-action-roles RUN DOC SNAPSHOT DIGEST MENTION_TOKEN_IDS_JSON | article-actions REVISION BATCH_REFS_JSON MENTION_REFS_JSON | licensed-reciprocal FAMILY LEFT RIGHT QUERY EVIDENCE REPO SHA PATH THREAD | reciprocal FAMILY LEFT RIGHT | participant FAMILY FILLER_REF | inspect FAMILY | prepare-revision FAMILY OLD_SELECTOR NEW_SELECTOR | inspect-revision TRANSITION | review-revision TRANSITION COMMAND REVIEWER accept|reject|abstain | publish-revision TRANSITION".into())
     }
 }
