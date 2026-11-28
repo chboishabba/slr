@@ -1343,6 +1343,20 @@ fn reciprocal_proof_binding(
     }))
 }
 
+/// Prepare the exact binding expected by the existing independent referee.
+/// This is caller-supplied CANDIDATE answer data, never a proof or payment.
+pub fn prepare_reciprocal_referee_binding(
+    config:&DatabaseConfig,family_ref:&str,left:&str,right:&str,query:&str,
+    statement_digest:&str,evidence_ref:&str,answer:&serde_json::Value,
+)->Result<serde_json::Value,RelationalFamilyError>{
+    let family=inspect_persisted_relational_family(config,family_ref)?;
+    signed_view_answer(answer,query)?;
+    let binding=reciprocal_proof_binding(&family,left,right,query,statement_digest,evidence_ref,answer)?;
+    Ok(serde_json::json!({"schema":"slr.reciprocal-referee-binding-candidate.v1",
+        "proposed_binding":binding,"proposed_answer":answer,"candidate_only":true,
+        "formal_premise_paid":false,"world_truth_paid":false,"writes_database":false}))
+}
+
 /// Reopen current native family and the existing independently authenticated
 /// formal evidence in ONE serializable read-only transaction. The exact
 /// domain binding is issued by the trusted referee for the same pair/query.

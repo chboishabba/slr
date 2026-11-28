@@ -703,6 +703,11 @@ pub fn run(args:&[String])->Result<(),String>{
             print_json(&sensiblaw_pg_source_store::read_authenticated_view_cohort(
                 &config,family,query,&requests).map_err(|e|e.to_string())?)
         },
+        [mode,family,left,right,query,statement,evidence,answer_path] if mode=="prepare-reciprocal-referee-binding"=>{
+            let answer:serde_json::Value=bounded_json(answer_path,16384)?;
+            print_json(&sensiblaw_pg_source_store::prepare_reciprocal_referee_binding(
+                &config,family,left,right,query,statement,evidence,&answer).map_err(|e|e.to_string())?)
+        },
         [mode,family,left,right,query,evidence,repo,sha,path,thread] if mode=="licensed-reciprocal"=>{
             let locator=sensiblaw_pg_source_store::RefereeReceiptLocator{
                 repo:repo.clone(),sha:sha.clone(),path:path.clone(),canonical_thread_id:thread.clone(),

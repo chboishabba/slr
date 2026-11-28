@@ -17,6 +17,7 @@ import subprocess
 import sys
 
 from bind_gwb_native_receipt import bind
+from gwb_office_attachment import attach, bind_family
 
 ROOT = Path(__file__).resolve().parents[1]
 BASE = ROOT / "artifacts/gwb/multiview-native"
@@ -200,6 +201,7 @@ def main():
         summary["abstract_constructor"] = "structural_inventory_only_signature_interpretation_held"
     except (ValueError, RuntimeError, OSError, KeyError) as exc:
         summary["abstract_constructor"] = {"held": str(exc)}
+    attachments=[]
     # Always emit the per-view failures, even if another edition is held.
     rows={"positive":[], "negative":[]}
     for v in cohort["views"]:
@@ -219,6 +221,12 @@ def main():
         for name,selection in (("positive",v),("negative",neg)):
             try:
                 row=selected(selection,view,out/name/edition,args.commit,args.max_steps)
+                if name=="positive":
+                    evaluation_path=out/"controlled-office.log"
+                    attached=attach(v,row,load(evaluation_path),load(out/name/edition/"checked-inverse.json"),
+                                    load(Path(row["receipt_path"])),evaluation_path)
+                    put(out/name/edition/"office-attachment.json",attached)
+                    attachments.append(attached)
                 rows[name].append(row)
                 result["stages"][name]="packet_reopened" if args.commit else "checked_inverse_and_plan"
             except (ValueError, RuntimeError, OSError, KeyError) as exc:
@@ -243,6 +251,10 @@ def main():
                 if name=="negative" and p.returncode==0:
                     raise ValueError("negative control unexpectedly reported authenticated parity")
                 summary["cohorts"][name]="bounded_parity_reported" if p.returncode==0 else "held_or_partial"
+                if name=="positive" and (out/name/"family"/"journey.json").exists():
+                    family=load(out/name/"family"/"journey.json")["family"]
+                    handoff=bind_family(family,attachments)
+                    put(out/name/"referee-handoff.json",handoff)
             except (ValueError,RuntimeError,OSError) as exc:
                 summary["cohorts"][name]={"held":str(exc)}
         put(out/"campaign.json",summary)
