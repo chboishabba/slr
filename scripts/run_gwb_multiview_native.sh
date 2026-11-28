@@ -83,6 +83,28 @@ fi
 invoke proof-cohort.json inspect-licensed-view-cohort "$family" "$GWB_VIEW_QUERY_REF" "$evidence"
 jq -e '.schema=="slr.authenticated-view-cohort.v1" and
   (.world_truth_paid==false) and (.derives_transitive_licences==false)' "$OUT/proof-cohort.json" >/dev/null
+# Context capsule acceptance applies even if proof pairs are held.
+invoke context-capsule.json inspect-query-context-capsule "$family" "$GWB_VIEW_QUERY_REF" "$evidence"
+invoke context-capsule-repeat.json inspect-query-context-capsule "$family" "$GWB_VIEW_QUERY_REF" "$evidence"
+cmp "$OUT/context-capsule.json" "$OUT/context-capsule-repeat.json"
+cap_digest="$(jq -er .capsule_digest "$OUT/context-capsule.json")"
+invoke context-expanded.json expand-query-context-capsule "$family" "$GWB_VIEW_QUERY_REF" "$evidence" "$cap_digest"
+jq -e --arg digest "$cap_digest" '.exact_current_replay and .capsule_digest==$digest and
+  (.world_truth_paid // false | not) and (.writes_database==false)' "$OUT/context-expanded.json" >/dev/null
+# Compare full readback and exact residual inverse, not just counts.
+jq -e --slurpfile proof "$OUT/proof-cohort.json" --slurpfile journey "$OUT/journey.json" '
+  .cohort==$proof[0] and
+  (.family.family_ref==$journey[0].family.family_ref) and
+  ((.capsule_envelope.capsule.residuals|map(.residual_ref)|sort)==
+   ($journey[0].investigation.gap_rows|map(.residual_ref)|sort))' "$OUT/context-expanded.json" >/dev/null
+wrong="sha256:$(printf '%064d' 0)"
+rm -f "$OUT/context-stale.json"
+if timeout --kill-after=5s "$LIMIT" "$BIN" relational-family expand-query-context-capsule \
+  "$family" "$GWB_VIEW_QUERY_REF" "$evidence" "$wrong" >"$OUT/context-stale.tmp" 2>"$OUT/context-stale.stderr"; then
+  echo "UNSOUND: accepted wrong context digest" >&2; exit 1
+fi
+[[ ! -s "$OUT/context-stale.tmp" ]] || { echo "Rejected expansion emitted result" >&2; exit 1; }
+jq '{full_readback_json_bytes,capsule_body_json_bytes,body_smaller_than_full_readback,measurement}' "$OUT/context-capsule.json"
 if ! jq -e '.all_pairs_bounded_signed_support_equal' "$OUT/proof-cohort.json" >/dev/null; then
   echo "GWB bounded cohort reopened; missing/different/unavailable authenticated answers retained."
   exit 3
