@@ -1497,16 +1497,23 @@ pub fn read_authenticated_view_cohort(config:&DatabaseConfig,family_ref:&str,que
 
 fn read_view_cohort_snapshot(config:&DatabaseConfig,family_ref:&str,query:&str,
     requests:&[ViewPairEvidence])->Result<(PersistedRelationalFamily,serde_json::Value),RelationalFamilyError>{
+    let mut connection=Client::connect(config.database_url(),NoTls)?;
+    let mut tx=connection.transaction()?;
+    tx.batch_execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE READ ONLY; SET LOCAL statement_timeout='90000ms'")?;
+    let result=read_view_cohort_snapshot_on_tx(&mut tx,family_ref,query,requests)?;
+    tx.commit()?;
+    Ok(result)
+}
+
+fn read_view_cohort_snapshot_on_tx(tx:&mut postgres::Transaction<'_>,family_ref:&str,query:&str,
+    requests:&[ViewPairEvidence])->Result<(PersistedRelationalFamily,serde_json::Value),RelationalFamilyError>{
     use serde_json::{json,Value};
     let valid=|s:&str|!s.trim().is_empty()&&s.len()<=2048&&!s.contains('\0');
     if !valid(family_ref)||!valid(query)||requests.len()>45{
         return Err(RelationalFamilyError::ReciprocalProofBinding);
     }
-    let mut connection=Client::connect(config.database_url(),NoTls)?;
-    let mut tx=connection.transaction()?;
-    tx.batch_execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE READ ONLY; SET LOCAL statement_timeout='90000ms'")?;
-    let manifest=read_manifest(&mut tx,family_ref)?;
-    let family=read_family_on_client(&mut tx,&manifest)?;
+    let manifest=read_manifest(tx,family_ref)?;
+    let family=read_family_on_client(tx,&manifest)?;
     if family.superseded_by.is_some(){return Err(RelationalFamilyError::ChangedReplay);}
     let selectors:BTreeSet<_>=family.projection.sources.iter().map(|s|s.selector_ref.as_str()).collect();
     let mut evidence=BTreeMap::new();
@@ -1542,7 +1549,7 @@ fn read_view_cohort_snapshot(config:&DatabaseConfig,family_ref:&str,query:&str,
                 let locator=sensiblaw_formal_proof_bridge::RefereeReceiptLocator{
                     repo:req.repo.clone(),sha:req.sha.clone(),path:req.path.clone(),
                     canonical_thread_id:req.canonical_thread_id.clone()};
-                let proof=authenticated_reciprocal_on_tx(&mut tx,&family,&req.left_selector_ref,
+                let proof=authenticated_reciprocal_on_tx(tx,&family,&req.left_selector_ref,
                     &req.right_selector_ref,query,&req.evidence_ref,&locator)?;
                 let answer=signed_view_answer(&proof["answer"],query)?;
                 let (a,b)=if req.left_selector_ref==l{(answer.left_support,answer.right_support)}
@@ -1577,7 +1584,6 @@ fn read_view_cohort_snapshot(config:&DatabaseConfig,family_ref:&str,query:&str,
         "formal_consumer_equivalence_paid":false,"all_live_semantic_readings_covered":false,
         "creates_semantic_authority":false,"source_independence_paid":false,
         "world_truth_paid":false,"writes_database":false});
-    tx.commit()?;
     Ok((family,result))
 }
 
@@ -1724,10 +1730,14 @@ pub fn read_query_context_capsule(config:&DatabaseConfig,family_ref:&str,query:&
 pub fn read_signed_query_frontier(config:&DatabaseConfig,family_ref:&str,query:&str,
     requests:&[ViewPairEvidence],expected_digest:&str)
     ->Result<serde_json::Value,RelationalFamilyError>{
+    let (family,cohort)=read_view_cohort_snapshot(config,family_ref,query,requests)?;
+    let capsule=context_capsule(&family,&cohort,requests)?;
+    if capsule["capsule_digest"]!=expected_digest{return Err(RelationalFamilyError::ChangedReplay);}
+    signed_query_frontier_projection(family_ref,query,expected_digest,&capsule["capsule"],&cohort)
+}
+fn signed_query_frontier_projection(family_ref:&str,query:&str,expected_digest:&str,
+    cap:&serde_json::Value,cohort:&serde_json::Value)->Result<serde_json::Value,RelationalFamilyError>{
     use serde_json::{json,Value};
-    let expanded=read_query_context_capsule(config,family_ref,query,requests,Some(expected_digest))?;
-    let cap=&expanded["capsule_envelope"]["capsule"];
-    let cohort=&expanded["cohort"];
     let mut obligations=Vec::new();
     for pair in cohort["pairs"].as_array().ok_or(RelationalFamilyError::ChangedReplay)?{
         let f=&pair["forward"];
@@ -1760,11 +1770,73 @@ pub fn read_signed_query_frontier(config:&DatabaseConfig,family_ref:&str,query:&
             "selector_ref":selector,"requires_reviewed_reentry":true,"candidate_only":true,"paid":false}));
     }
     Ok(json!({"schema":"slr.signed-query-frontier.v1","family_ref":family_ref,"query_ref":query,
-        "capsule_digest":expected_digest,"obligations":obligations,
+        "capsule_digest":expected_digest,"consumer_ref":cohort["consumer_ref"],"obligations":obligations,
         "structural_residuals":cap["residuals"],"existing_queues":cap["queues"],
         "exact_current_replay":true,"candidate_only":true,
         "formal_consumer_equivalence_paid":false,"world_truth_paid":false,
         "writes_database":false,"executes_acquisition":false}))
+}
+
+
+/** Reopen an actual published S29 replacement, current child family, authenticated
+ *  query and exact capsule in ONE serializable read-only transaction.
+ *  A retained structural comparison is not a transferable proof licence:
+ *  all proof pairs are independently rebound to the child family. */
+pub fn read_reviewed_signed_reentry(config:&DatabaseConfig,transition_ref:&str,query:&str,
+    requests:&[ViewPairEvidence],expected_digest:&str)
+    ->Result<serde_json::Value,RelationalFamilyError>{
+    use serde_json::json;
+    let mut connection=Client::connect(config.database_url(),NoTls)?;
+    let mut tx=connection.transaction()?;
+    tx.batch_execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE READ ONLY; SET LOCAL statement_timeout='90000ms'")?;
+    let t=read_transition(&mut tx,transition_ref)?;
+    let old=read_manifest(&mut tx,&t.old_family_ref)?;
+    let new=read_manifest(&mut tx,&t.new_family_ref)?;
+    if revision_transition(&old,&new,&t.old_selector_ref,&t.new_selector_ref)?!=t{
+        return Err(RelationalFamilyError::ChangedReplay);
+    }
+    let publication=tx.query_opt("SELECT transition_ref,new_family_ref FROM semantic.itir_relational_family_successor WHERE old_family_ref=$1",&[&t.old_family_ref])?
+        .ok_or(RelationalFamilyError::ReviewRequired)?;
+    if publication.get::<_,String>(0)!=t.transition_ref||publication.get::<_,String>(1)!=t.new_family_ref{
+        return Err(RelationalFamilyError::InvalidTransition);
+    }
+    let item=inspect_review(&mut tx,&transition_review(&t,&old.consumer_ref))?;
+    let accepted=tx.query_one(
+        "SELECT EXISTS(SELECT 1 FROM semantic.review_receipt WHERE review_item_ref=$1
+          AND semantic_ref=$2 AND action_ref='accept' AND effect_ref='status_changed'
+          AND effect_value_ref='accepted' AND candidate_only AND NOT creates_semantic_authority
+          AND NOT applicability_promoted AND NOT claim_truth_promoted)",&[&t.review_item_ref,&t.transition_ref])?.get::<_,bool>(0);
+    if item.current_status!=ReviewStatus::Accepted||!accepted{return Err(RelationalFamilyError::ReviewRequired);}
+    let old_family=read_family_on_client(&mut tx,&old)?;
+    let (family,cohort)=read_view_cohort_snapshot_on_tx(&mut tx,&t.new_family_ref,query,requests)?;
+    if !family.published_parent_transition_refs.contains(&t.transition_ref)
+        ||old_family.superseded_by.as_deref()!=Some(t.new_family_ref.as_str()){
+        return Err(RelationalFamilyError::ChangedReplay);
+    }
+    let capsule=context_capsule(&family,&cohort,requests)?;
+    if capsule["capsule_digest"]!=expected_digest{return Err(RelationalFamilyError::ChangedReplay);}
+    let frontier=signed_query_frontier_projection(&t.new_family_ref,query,expected_digest,&capsule["capsule"],&cohort)?;
+    let mut affected=Vec::new();
+    let mut retained=Vec::new();
+    for pair in cohort["pairs"].as_array().ok_or(RelationalFamilyError::ChangedReplay)?{
+        let changed=pair["left_selector_ref"]==t.new_selector_ref||pair["right_selector_ref"]==t.new_selector_ref;
+        let keys=[pair["forward_comparison_ref"].as_str().ok_or(RelationalFamilyError::ChangedReplay)?,
+            pair["backward_comparison_ref"].as_str().ok_or(RelationalFamilyError::ChangedReplay)?];
+        let expected=if changed{&t.new_comparison_refs}else{&t.retained_comparison_refs};
+        if !keys.iter().all(|k|expected.iter().any(|v|v.as_str()==*k)){
+            return Err(RelationalFamilyError::ChangedReplay);
+        }
+        if changed{affected.push(pair["pair_ref"].clone());}else{retained.push(pair["pair_ref"].clone());}
+    }
+    let result=json!({"schema":"slr.reviewed-signed-reentry.v1","transition":t,
+        "frontier":frontier,"affected_pair_refs":affected,"retained_structural_pair_refs":retained,
+        "native_reopening_by_source":family.projection.potential_reopening_by_source,
+        "shared_transaction_snapshot":true,"accepted_published_review_reopened":true,
+        "transfers_prior_pair_licences":false,"candidate_only":true,
+        "formal_consumer_equivalence_paid":false,"world_truth_paid":false,
+        "writes_database":false,"executes_acquisition":false});
+    tx.commit()?;
+    Ok(result)
 }
 
 #[cfg(test)]

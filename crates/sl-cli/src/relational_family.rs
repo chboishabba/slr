@@ -98,6 +98,54 @@ fn family_research_frontier(family:&sensiblaw_pg_source_store::PersistedRelation
 }
 
 
+
+/// Existing proof-search frontier owns candidate generation. Reentry does not
+/// mark a missing proof satisfied and does not infer authority from review.
+fn signed_frontier_hypotheses(raw:&serde_json::Value)->Result<serde_json::Value,String>{
+    use sensiblaw_proof_search_loop::{frontier::{ProofFrontier,ProofResidual,ResidualStatus},
+        hypothesis::families_for_frontier};
+    use std::collections::BTreeSet;
+    use serde_json::json;
+    let consumer=raw["consumer_ref"].as_str().ok_or("missing consumer")?;
+    let query=raw["query_ref"].as_str().ok_or("missing query")?;
+    let mut frontier=ProofFrontier{consumer_ref:consumer.into(),
+        frontier_ref:format!("frontier:signed:{}",raw["capsule_digest"].as_str().ok_or("missing capsule")?),
+        residuals:vec![],satisfied_payment_refs:vec![],contested_coordinate_refs:vec![],
+        authority_blocked_refs:vec![],authority:"experimental_candidate_only"};
+    for row in raw["obligations"].as_array().ok_or("missing exact obligations")?{
+        let id=row["obligation_ref"].as_str().ok_or("missing obligation")?;
+        let reason=row["reason"].as_str().ok_or("missing discriminator")?;
+        let producer=match reason{
+            "independent_pair_evidence_required"=>"producer:formal-referee",
+            "source_consumer_coverage_required"=>"producer:source-consumer-coverage",
+            "signed_support_discriminator_required"=>"producer:relational-discriminator",
+            "inconsistent_selector_answer"=>"producer:source-binding-repair",
+            _=>return Err("unknown query obligation".into())
+        };
+        if row["candidate_only"]!=true||row["paid"]!=false{return Err("promotion-bearing obligation".into());}
+        let mut deps=BTreeSet::from([query.to_owned(),id.to_owned()]);
+        for key in ["pair_ref","left_selector_ref","right_selector_ref","selector_ref",
+            "forward_comparison_ref","backward_comparison_ref"]{
+            if let Some(v)=row[key].as_str(){deps.insert(v.into());}
+        }
+        if let Some(refs)=row["existing_residual_refs"].as_array(){
+            for r in refs{deps.insert(r.as_str().ok_or("invalid residual ref")?.into());}
+        }
+        frontier.residuals.push(ProofResidual{residual_ref:id.into(),proposition_ref:query.into(),
+            producer_class_ref:producer.into(),jurisdiction_ref:None,authority_requirement_ref:None,
+            salience:1,dependency_refs:deps.into_iter().collect(),status:ResidualStatus::Open});
+    }
+    let hypotheses=families_for_frontier(&frontier).into_iter().map(|h|json!({
+        "hypothesis_ref":h.hypothesis_ref,"residual_ref":h.residual_ref,
+        "kind":format!("{:?}",h.kind),"producer_class_ref":h.producer_class_ref,
+        "candidate_only":true})).collect::<Vec<_>>();
+    let residuals=frontier.residuals.iter().map(|r|json!({"residual_ref":r.residual_ref,
+        "producer_class_ref":r.producer_class_ref,"dependency_refs":r.dependency_refs,
+        "status":"open"})).collect::<Vec<_>>();
+    Ok(json!({"frontier_ref":frontier.frontier_ref,"residuals":residuals,"hypotheses":hypotheses,
+        "satisfied_payment_refs":[],"candidate_only":true,"executes_acquisition":false}))
+}
+
 #[derive(serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 struct LocalCalibration {
@@ -686,6 +734,16 @@ pub fn run(args:&[String])->Result<(),String>{
                 .map_err(|e|e.to_string())?;
             print_json(&sensiblaw_pg_source_store::read_query_context_capsule(
                 &config,family,query,&requests,None).map_err(|e|e.to_string())?)
+        },
+        [mode,transition,query,requests_json,expected] if mode=="inspect-reviewed-signed-reentry"=>{
+            if requests_json.len()>65536{return Err("cohort evidence request too large".into());}
+            let requests:Vec<sensiblaw_pg_source_store::ViewPairEvidence>=serde_json::from_str(requests_json)
+                .map_err(|e|e.to_string())?;
+            let mut receipt=sensiblaw_pg_source_store::read_reviewed_signed_reentry(
+                &config,transition,query,&requests,expected).map_err(|e|e.to_string())?;
+            let hypotheses=signed_frontier_hypotheses(&receipt["frontier"])?;
+            receipt["proof_search"]=hypotheses;
+            print_json(&receipt)
         },
         [mode,family,query,requests_json,expected] if mode=="inspect-signed-query-frontier"=>{
             if requests_json.len()>65536{return Err("cohort evidence request too large".into());}
