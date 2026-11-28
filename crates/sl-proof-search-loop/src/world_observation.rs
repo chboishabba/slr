@@ -687,6 +687,9 @@ pub fn select_heterogeneous_native_pair(receipt:&serde_json::Value,
     if indexed_member.trim().is_empty()||other_relation.trim().is_empty(){return Err(bad());}
     let overlap=inspect_heterogeneous_predicate_overlap(receipt,other_predicates,consumer)?;
     let article=inspect_indexed_native_predicate_meet(receipt,article_transport,consumer)?;
+    if article_transport["source_coordinate_meet"]["native_source_family"]!="wiki"{
+        return Err(bad());
+    }
     let meet=&other_transport["source_coordinate_meet"];
     if other_transport["schema"]!="slr.predicate-role-transport.v1"
         ||other_transport["semantic_coverage_paid"]!=false||other_transport["world_truth_paid"]!=false
@@ -694,6 +697,8 @@ pub fn select_heterogeneous_native_pair(receipt:&serde_json::Value,
         ||meet["source_revision_ref"]!=overlap["right_source"]["revision"]
         ||meet["source_content_digest_ref"]!=format!("sha256:{}",overlap["right_source"]["sha256"].as_str().ok_or_else(bad)?)
         ||meet["common_current_authority_snapshot"]!=false
+        ||["packet_sha256","numeric_run_ref","snapshot_ref"].iter().any(|k|
+            !other_predicates[*k].as_str().is_some_and(|s|!s.is_empty()))
         ||meet["numeric_original"]["packet_sha256"]!=other_predicates["packet_sha256"]
         ||meet["numeric_original"]["numeric_run_ref"]!=other_predicates["numeric_run_ref"]
         ||meet["numeric_original"]["snapshot_ref"]!=other_predicates["snapshot_ref"]
@@ -857,6 +862,50 @@ mod heterogeneous_overlap_tests {
         assert_eq!(out["right_members"][0]["original"],native["answers"][0]);
     }
 
+
+    #[test]
+    fn selected_heterogeneous_pair_retains_both_inverses_and_holds_ambiguity(){
+        let (mut indexed,mut native)=fixture();
+        let events=indexed["inventory"]["article_lanes"]["event_candidates"].as_array_mut().unwrap();
+        for (i,e) in events.iter_mut().enumerate(){
+            let n=e["predicate"]["surface"].as_str().unwrap().chars().count();
+            e["predicate"]["start_char"]=json!(i*20);
+            e["predicate"]["end_char"]=json!(i*20+n);
+        }
+        native["packet_sha256"]=json!("packet");
+        native["numeric_run_ref"]=json!("book-run");
+        native["snapshot_ref"]=json!("snapshot");
+        let inv=indexed_inventory_observations(&indexed).unwrap();
+        let member=inv.members.iter().find(|m|m.lane=="article_lanes:event_candidates"&&m.ordinal==0)
+            .unwrap().observation.request_ref.clone();
+        let article=json!({"schema":"slr.predicate-role-transport.v1","semantic_coverage_paid":false,
+            "world_truth_paid":false,"source_coordinate_meet":{"schema":"slr.article-numeric-coordinate-meet.v1",
+                "source_revision_ref":"enwiki-revid:23","source_content_digest_ref":format!("sha256:{}","a".repeat(64)),
+                "native_source_family":"wiki","common_current_authority_snapshot":false,
+                "coordinates":[{"span":[0,9],"literal":"appointed","checked":[{"batch_ref":"a-batch","factor_ref":"a-pred"}],"numeric":[]}]},
+            "checked_predicates":[{"batch_ref":"a-batch","checked_observation":{"predicate_candidate_ref":"a-pred"}}],
+            "numeric_only_predicates":[]});
+        let book_row=json!({"batch_ref":"b-batch","checked_observation":{"predicate_candidate_ref":"b-pred"},
+            "numeric_alternatives":[{"numeric_relation":native["answers"][0]}]});
+        let mut book=json!({"schema":"slr.predicate-role-transport.v1","semantic_coverage_paid":false,"world_truth_paid":false,
+            "source_coordinate_meet":{"schema":"slr.article-numeric-coordinate-meet.v1",
+                "source_revision_ref":"book:rev:1","source_content_digest_ref":format!("sha256:{}","b".repeat(64)),
+                "common_current_authority_snapshot":false,"numeric_original":{"packet_sha256":"packet",
+                    "numeric_run_ref":"book-run","snapshot_ref":"snapshot"}},
+            "checked_predicates":[book_row]});
+        let out=select_heterogeneous_native_pair(&indexed,&article,&book,&native,"consumer:test",&member,"r1").unwrap();
+        assert_eq!(out["candidate_selector_ready"],true);
+        assert_eq!(out["left_inverse"][0]["predicate_candidate_ref"],"a-pred");
+        assert_eq!(out["right_inverse"][0]["predicate_candidate_ref"],"b-pred");
+        assert_eq!(out["semantic_alignment_paid"],false);
+        let dup=book["checked_predicates"][0].clone();
+        book["checked_predicates"].as_array_mut().unwrap().push(dup);
+        let held=select_heterogeneous_native_pair(&indexed,&article,&book,&native,"consumer:test",&member,"r1").unwrap();
+        assert_eq!(held["candidate_selector_ready"],false);
+        assert_eq!(held["right_inverse"].as_array().unwrap().len(),2);
+        book["source_coordinate_meet"]["numeric_original"]["packet_sha256"]=json!("foreign");
+        assert!(select_heterogeneous_native_pair(&indexed,&article,&book,&native,"consumer:test",&member,"r1").is_err());
+    }
     #[test]
     fn rejects_same_manifestation_and_promotion_and_marks_unavailable() {
         let (mut indexed,mut native)=fixture();
