@@ -4305,6 +4305,72 @@ pub fn query_native_original_relations(
         "governed_identity_paid":false,"level_three_paid":false,"world_truth_paid":false}))
 }
 
+/// Consumer projection of the existing original relation grammar. Preserve the
+/// exact inverse and residuals; never reinterpret donor action metadata
+/// ("asserted" is a historical default, not a semantic scope certificate).
+/// Queries use original numeric token coordinates, not surface strings.
+pub fn query_native_recorded_action_roles(
+    url:&str,run:&str,doc:&str,snapshot:&str,digest:&str,mention_tokens:&[i64],
+)->Result<serde_json::Value,NativeNumericAuditError>{
+    let original=query_native_original_relations(url,run,doc,snapshot,digest,"all")?;
+    project_native_recorded_action_roles(&original,mention_tokens)
+}
+
+fn project_native_recorded_action_roles(
+    original:&serde_json::Value,mention_tokens:&[i64],
+)->Result<serde_json::Value,NativeNumericAuditError>{
+    use serde_json::{Value,json};
+    let selected=mention_tokens.iter().copied().collect::<BTreeSet<_>>();
+    if selected.len()!=mention_tokens.len()||selected.iter().any(|t|*t<=0){
+        return Err(NativeNumericAuditError::ForeignSource);
+    }
+    let answers=original["answers"].as_array().ok_or(NativeNumericAuditError::ForeignSource)?;
+    let mut inventory=Vec::new();
+    for row in answers{
+        let kind=row["original_relation"]["type"].as_str().ok_or(NativeNumericAuditError::ForeignSource)?;
+        if kind!="predicate"&&kind!="composition"&&kind!="conjunction"&&kind!="temporal"{continue;}
+        let roles=row["role_inverse"].as_array().ok_or(NativeNumericAuditError::ForeignSource)?;
+        let matches=roles.iter().filter(|r|r["numeric_token_id"].as_i64()
+            .is_some_and(|id|selected.contains(&id))).collect::<Vec<_>>();
+        inventory.push(json!({"original_relation_row":row,"matched_role_coordinates":matches,
+            "actor_attribution_paid":false,"asserted_action_paid":false,
+            "semantic_scope_paid":false}));
+    }
+    let mut result=original.clone();
+    let map=result.as_object_mut().ok_or(NativeNumericAuditError::ForeignSource)?;
+    map.remove("answers");
+    map.insert("schema".into(),json!("slr.recorded-numeric-action-roles.v1"));
+    map.insert("mention_token_ids".into(),json!(selected));
+    map.insert("original_answer_count".into(),original["answer_count"].clone());
+    map.insert("answer_count".into(),json!(inventory.len()));
+    map.insert("answers".into(),Value::Array(inventory));
+    map.insert("query_relation_type".into(),json!("action-role-inventory"));
+    map.insert("semantic_scope_paid".into(),json!(false));
+    Ok(result)
+}
+
+#[cfg(test)]
+mod recorded_numeric_action_role_tests{
+    use super::*;
+    use serde_json::json;
+    #[test]
+    fn retains_unmatched_and_composition_without_promoting_donor_scope(){
+        let raw=json!({"answer_count":3,"answers":[
+            {"original_relation":{"type":"predicate","metadata":{"modality":"asserted"}},
+             "role_inverse":[{"numeric_token_id":42,"ordinal":1}]},
+            {"original_relation":{"type":"composition"},"role_inverse":[{"numeric_token_id":43,"ordinal":0}]},
+            {"original_relation":{"type":"modifier"},"role_inverse":[]}
+        ]});
+        let out=project_native_recorded_action_roles(&raw,&[42]).unwrap();
+        assert_eq!(out["answer_count"],2);
+        assert_eq!(out["answers"][0]["matched_role_coordinates"].as_array().unwrap().len(),1);
+        assert_eq!(out["answers"][1]["matched_role_coordinates"].as_array().unwrap().len(),0);
+        assert_eq!(out["answers"][0]["asserted_action_paid"],false);
+        assert_eq!(out["answers"][0]["original_relation_row"],raw["answers"][0]);
+        assert!(project_native_recorded_action_roles(&raw,&[42,42]).is_err());
+    }
+}
+
 /// Generic pre-admission demand witness input, using the existing numeric
 /// H3/H6/H9 state owners (not the GWB named-topic policy). Includes the
 /// entire represented universe, even deferred, neutral and refuted members.
