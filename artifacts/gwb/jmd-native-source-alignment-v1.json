@@ -1,0 +1,26 @@
+{
+  "schema": "slr.jmd-native-source-alignment.v1",
+  "jmd_source": {
+    "revision_ref": "enwiki-revid:1385850169",
+    "source_unit_ref": "wikipedia:en:George_W._Bush:1385850169",
+    "sha256": "a88ef63b9c109f0f09c2fc2a266373a9ecaae855104cb0e11c4e6c53d90d3233",
+    "byte_length": 93642
+  },
+  "native_source": {
+    "revision_ref": "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+    "document_ref": "document:sha256:7ff2ec8ffe6243871ad682e7d7060fe3b84025fb15dbe229154d7aa7f6a72b30",
+    "source_ref": "source:gwb:raw-sha256:1a83adf481ad2f97819719c102d7770f30c3a058572bf364982d15ee34db4e00",
+    "provider_ref": "gwb-source-projection:pypdf:6.18.0",
+    "acquisition_receipt_ref": "gwb-scale1-book-acquisition:sha256:f5ff82d4a8cfbb930b0dcd7d666aefed10d7a3d9dea76fe3115c8e9bedff2829",
+    "canonical_ref": "canonical:sha256:7ff2ec8ffe6243871ad682e7d7060fe3b84025fb15dbe229154d7aa7f6a72b30",
+    "sha256": "7ff2ec8ffe6243871ad682e7d7060fe3b84025fb15dbe229154d7aa7f6a72b30",
+    "byte_length": 783635
+  },
+  "exact_digest_match": false,
+  "source_work_match": false,
+  "literal_candidate_count": 0,
+  "licensed_crosswalk_count": 0,
+  "crosswalk_status": "blocked-different-source-manifestations",
+  "reason": "The JMD input is a George W. Bush Wikipedia article; the native input is a GWB book/PDF projection. Literal overlap is retained as diagnostic evidence, never promoted to source-coordinate identity.",
+  "literal_candidates": []
+}
