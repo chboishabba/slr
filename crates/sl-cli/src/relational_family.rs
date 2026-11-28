@@ -687,6 +687,13 @@ pub fn run(args:&[String])->Result<(),String>{
             print_json(&sensiblaw_pg_source_store::read_query_context_capsule(
                 &config,family,query,&requests,None).map_err(|e|e.to_string())?)
         },
+        [mode,family,query,requests_json,expected] if mode=="inspect-signed-query-frontier"=>{
+            if requests_json.len()>65536{return Err("cohort evidence request too large".into());}
+            let requests:Vec<sensiblaw_pg_source_store::ViewPairEvidence>=serde_json::from_str(requests_json)
+                .map_err(|e|e.to_string())?;
+            print_json(&sensiblaw_pg_source_store::read_signed_query_frontier(
+                &config,family,query,&requests,expected).map_err(|e|e.to_string())?)
+        },
         [mode,family,query,requests_json,expected] if mode=="expand-query-context-capsule"=>{
             if requests_json.len()>65536{return Err("cohort evidence request too large".into());}
             let requests:Vec<sensiblaw_pg_source_store::ViewPairEvidence>=serde_json::from_str(requests_json)

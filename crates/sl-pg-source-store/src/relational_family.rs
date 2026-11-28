@@ -1716,6 +1716,57 @@ pub fn read_query_context_capsule(config:&DatabaseConfig,family_ref:&str,query:&
     }else{Ok(capsule)}
 }
 
+
+/// Re-open the exact current capsule before projecting query-specific proof
+/// debt. The stable pair ref is already query/family scoped; retain the
+/// original comparison coordinates and existing structural residuals.
+/// Nothing here pays, schedules or applies an acquisition.
+pub fn read_signed_query_frontier(config:&DatabaseConfig,family_ref:&str,query:&str,
+    requests:&[ViewPairEvidence],expected_digest:&str)
+    ->Result<serde_json::Value,RelationalFamilyError>{
+    use serde_json::{json,Value};
+    let expanded=read_query_context_capsule(config,family_ref,query,requests,Some(expected_digest))?;
+    let cap=&expanded["capsule_envelope"]["capsule"];
+    let cohort=&expanded["cohort"];
+    let mut obligations=Vec::new();
+    for pair in cohort["pairs"].as_array().ok_or(RelationalFamilyError::ChangedReplay)?{
+        let f=&pair["forward"];
+        let status=f["status"].as_str().ok_or(RelationalFamilyError::ChangedReplay)?;
+        let reason=if status=="missing_authenticated_pair"{
+            "independent_pair_evidence_required"
+        }else if status=="unavailable_answer"{
+            "source_consumer_coverage_required"
+        }else if f["bounded_signed_support_equal"]==true{
+            continue
+        }else if f["bounded_signed_support_equal"]==false{
+            "signed_support_discriminator_required"
+        }else{return Err(RelationalFamilyError::ChangedReplay)};
+        let residuals=cap["residuals"].as_array().ok_or(RelationalFamilyError::ChangedReplay)?
+            .iter().filter(|r|r["comparison_ref"]==pair["forward_comparison_ref"]||
+                                r["comparison_ref"]==pair["backward_comparison_ref"])
+            .map(|r|r["residual_ref"].clone()).collect::<Vec<Value>>();
+        let id=context_digest("slr.signed.query.debt.v1",&json!([family_ref,query,pair["pair_ref"],reason]))?;
+        obligations.push(json!({"obligation_ref":id,"reason":reason,
+            "pair_ref":pair["pair_ref"],"left_selector_ref":pair["left_selector_ref"],
+            "right_selector_ref":pair["right_selector_ref"],
+            "forward_comparison_ref":pair["forward_comparison_ref"],
+            "backward_comparison_ref":pair["backward_comparison_ref"],
+            "forward":f,"backward":pair["backward"],"existing_residual_refs":residuals,
+            "requires_reviewed_reentry":true,"candidate_only":true,"paid":false}));
+    }
+    for selector in cohort["inconsistent_selector_refs"].as_array().ok_or(RelationalFamilyError::ChangedReplay)?{
+        let id=context_digest("slr.signed.query.debt.v1",&json!([family_ref,query,selector,"inconsistent_selector"]))?;
+        obligations.push(json!({"obligation_ref":id,"reason":"inconsistent_selector_answer",
+            "selector_ref":selector,"requires_reviewed_reentry":true,"candidate_only":true,"paid":false}));
+    }
+    Ok(json!({"schema":"slr.signed-query-frontier.v1","family_ref":family_ref,"query_ref":query,
+        "capsule_digest":expected_digest,"obligations":obligations,
+        "structural_residuals":cap["residuals"],"existing_queues":cap["queues"],
+        "exact_current_replay":true,"candidate_only":true,
+        "formal_consumer_equivalence_paid":false,"world_truth_paid":false,
+        "writes_database":false,"executes_acquisition":false}))
+}
+
 #[cfg(test)]
 mod query_context_digest_tests{
     use super::*;
