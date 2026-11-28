@@ -329,6 +329,66 @@ pub fn indexed_inventory_observations(receipt: &serde_json::Value)
     Ok(out)
 }
 
+/// A recorded inventory may expose missing observation lanes without
+/// implying a missing fact. Only explicitly demanded unavailable lanes
+/// become open producer residuals. An observed empty lane is not a denial.
+pub fn indexed_inventory_frontier(inventory:&IndexedObservationInventory,
+    consumer_ref:&str, frontier_ref:&str, required_lanes:&[String])
+    ->Result<crate::frontier::ProofFrontier,IndexedObservationError>{
+    use crate::frontier::ProofFrontier;
+    use std::collections::BTreeSet;
+    if consumer_ref.trim().is_empty()||frontier_ref.trim().is_empty(){
+        return Err(IndexedObservationError::InvalidObservation);
+    }
+    let required:BTreeSet<&str>=required_lanes.iter().map(String::as_str).collect();
+    if required.len()!=required_lanes.len()||required.iter().any(|k|k.trim().is_empty()){
+        return Err(IndexedObservationError::InvalidLane);
+    }
+    let present:BTreeSet<&str>=inventory.members.iter().map(|m|m.lane.as_str())
+        .chain(inventory.empty_lanes.iter().map(String::as_str)).collect();
+    let residuals=required.into_iter().filter(|lane|!present.contains(lane))
+        .map(|lane|ProofResidual{
+            residual_ref:format!("{frontier_ref}:unobserved:{lane}"),
+            proposition_ref:format!("recorded-lane:{lane}"),
+            producer_class_ref:"producer:indexed-source-observation".into(),
+            jurisdiction_ref:None,authority_requirement_ref:None,salience:1,
+            dependency_refs:vec![format!("consumer:{consumer_ref}"),format!("lane:{lane}")],
+            status:ResidualStatus::Open,
+        }).collect();
+    Ok(ProofFrontier{consumer_ref:consumer_ref.into(),frontier_ref:frontier_ref.into(),
+        residuals,satisfied_payment_refs:vec![],contested_coordinate_refs:vec![],
+        authority_blocked_refs:vec![],authority:"experimental_candidate_only"})
+}
+
+/// Native read-only inspection of normalized members and their inverse.
+pub fn inspect_indexed_inventory(receipt:&serde_json::Value,consumer:&str,
+    required_lanes:&[String])->Result<serde_json::Value,IndexedObservationError>{
+    use serde_json::json;
+    use sha2::{Digest,Sha256};
+    let inventory=indexed_inventory_observations(receipt)?;
+    let digest=format!("sha256:{:x}",Sha256::digest(
+        serde_json::to_vec(receipt).map_err(|_|IndexedObservationError::InvalidReceipt)?));
+    let frontier=indexed_inventory_frontier(&inventory,consumer,&format!("frontier:{digest}"),required_lanes)?;
+    let members:Vec<_>=inventory.members.iter().map(|m|{
+        let o=m.observation.normalized();
+        json!({"request_ref":o.request_ref,"object_ref":o.object_ref,"relation_ref":o.relation_ref,
+            "source_ref":o.source_ref,"source_revision_ref":o.source_revision_ref,
+            "content_digest_ref":o.content_digest_ref,"value_ref":o.value_ref,
+            "retrieval_status":"retrieved","freshness_status":"unknown",
+            "lane":m.lane,"ordinal":m.ordinal,"original":m.original})
+    }).collect();
+    let residuals:Vec<_>=frontier.open_residuals().map(|r|json!({
+        "residual_ref":r.residual_ref,"proposition_ref":r.proposition_ref,
+        "producer_class_ref":r.producer_class_ref,"dependency_refs":r.dependency_refs,
+        "status":"open"})).collect();
+    Ok(json!({"schema":"slr.indexed-observation-inspection.v1","receipt_sha256":digest,
+        "consumer_ref":consumer,"members":members,"unavailable_lanes":inventory.unavailable_lanes,
+        "empty_lanes":inventory.empty_lanes,"required_lanes":required_lanes,
+        "frontier_ref":frontier.frontier_ref,"residuals":residuals,
+        "candidate_only":true,"original_checker_replayed":false,
+        "semantic_coverage_paid":false,"world_truth_paid":false,"writes_database":false}))
+}
+
 #[cfg(test)]
 mod indexed_inventory_tests {
     use super::*;
@@ -350,6 +410,12 @@ mod indexed_inventory_tests {
         assert_eq!(out.unavailable_lanes,vec!["article_lanes:named_entities"]);
         assert_eq!(out.empty_lanes,vec!["article_lanes:time_mentions"]);
         assert_eq!(out.members[2].observation.source_revision_ref,"wikidata:Q9:oldid:42");
+        let required=vec!["article_lanes:named_entities".into(),"article_lanes:time_mentions".into(),
+            "article_lanes:missing".into()];
+        let inspected=inspect_indexed_inventory(&r,"consumer:test",&required).unwrap();
+        assert_eq!(inspected["residuals"].as_array().unwrap().len(),2);
+        assert_eq!(inspected["members"].as_array().unwrap().len(),3);
+        assert_eq!(inspected["original_checker_replayed"],false);
         r["world_truth_paid"]=json!(true);
         assert!(indexed_inventory_observations(&r).is_err());
     }
