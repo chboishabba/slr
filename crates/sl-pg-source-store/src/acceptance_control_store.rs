@@ -423,57 +423,89 @@ pub fn seed_relational_pnf_pair_scoped(
     left_predicate_ref:&str, right_batch_ref:&str,right_predicate_ref:&str,
     context_axes:&[&str],
 )->Result<serde_json::Value,AcceptanceControlStoreError>{
+    seed_pnf_view_coordinates(config,consumer_ref,&[
+        ("left",left_batch_ref,left_predicate_ref,None,None),
+        ("right",right_batch_ref,right_predicate_ref,None,None)],
+        context_axes,true)
+}
+
+/// Operator selection of an actual checked native predicate in an original
+/// source chart. Expected revision and digest are mandatory for cohorts;
+/// source family and observation are resolved by the existing PG owners.
+#[derive(Debug,Clone,serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct NativePnfViewCoordinate{
+    pub source_revision_ref:String,
+    pub content_digest_ref:String,
+    pub batch_ref:String,
+    pub predicate_candidate_ref:String,
+}
+
+pub fn seed_relational_pnf_cohort(
+    config:&DatabaseConfig,consumer_ref:&str,views:&[NativePnfViewCoordinate],
+    context_axes:&[&str],
+)->Result<serde_json::Value,AcceptanceControlStoreError>{
+    if !(2..=10).contains(&views.len()){
+        return Err(AcceptanceControlStoreError::InvalidCoordinate("view_count"));
+    }
+    let coords:Vec<_>=views.iter().map(|v|("view",v.batch_ref.as_str(),
+        v.predicate_candidate_ref.as_str(),Some(v.source_revision_ref.as_str()),
+        Some(v.content_digest_ref.as_str()))).collect();
+    seed_pnf_view_coordinates(config,consumer_ref,&coords,context_axes,false)
+}
+
+fn seed_pnf_view_coordinates(
+    config:&DatabaseConfig,consumer_ref:&str,
+    coordinates:&[(&str,&str,&str,Option<&str>,Option<&str>)],
+    context_axes:&[&str],legacy_pair:bool,
+)->Result<serde_json::Value,AcceptanceControlStoreError>{
     let axes:std::collections::BTreeSet<_>=context_axes.iter().copied().collect();
     if axes.len()!=context_axes.len() || axes.iter().any(|a|!NATIVE_CONTEXT_AXES.contains(a)){
         return Err(AcceptanceControlStoreError::InvalidCoordinate("context_axes"));
     }
-    for (name, value) in [
-        ("consumer_ref", consumer_ref),
-        ("left_batch_ref", left_batch_ref),
-        ("left_predicate_ref", left_predicate_ref),
-        ("right_batch_ref", right_batch_ref),
-        ("right_predicate_ref", right_predicate_ref),
-    ] {
-        validate_nonempty(name, value)?;
+    validate_nonempty("consumer_ref",consumer_ref)?;
+    for &(_,batch,predicate,revision,digest) in coordinates{
+        validate_nonempty("batch_ref",batch)?;
+        validate_nonempty("predicate_candidate_ref",predicate)?;
+        if !legacy_pair{
+            let rev=revision.ok_or(AcceptanceControlStoreError::InvalidCoordinate("source_revision_ref"))?;
+            validate_nonempty("source_revision_ref",rev)?;
+            let sha=digest.and_then(|s|s.strip_prefix("sha256:"))
+                .ok_or(AcceptanceControlStoreError::InvalidCoordinate("content_digest_ref"))?;
+            if sha.len()!=64||!sha.bytes().all(|b|b.is_ascii_digit()||(b'a'..=b'f').contains(&b)){
+                return Err(AcceptanceControlStoreError::InvalidCoordinate("content_digest_ref"));
+            }
+        }
     }
     install_rel_acceptance_schema(config)?;
-    let mut client = Client::connect(config.database_url(), NoTls)?;
-    let mut tx = client.transaction()?;
-    tx.batch_execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")?;
-    let left = load_candidate_pnf_batch_with_client(&mut tx, left_batch_ref)
-        .map_err(|e| AcceptanceControlStoreError::Upstream(e.to_string()))?
-        .ok_or_else(|| AcceptanceControlStoreError::NotFound(left_batch_ref.to_owned()))?;
-    let right = load_candidate_pnf_batch_with_client(&mut tx, right_batch_ref)
-        .map_err(|e| AcceptanceControlStoreError::Upstream(e.to_string()))?
-        .ok_or_else(|| AcceptanceControlStoreError::NotFound(right_batch_ref.to_owned()))?;
-    for (name, batch, predicate) in [
-        ("left", &left, left_predicate_ref),
-        ("right", &right, right_predicate_ref),
-    ] {
-        if !batch.candidate_only || batch.semantic_admission_paid
-            || batch.proposition_support_paid || batch.applicability_paid
-            || batch.claim_truth_paid {
-            return Err(AcceptanceControlStoreError::ExistingRowConflict);
-        }
-        if !batch.factors.iter().any(|f| {
-            f.candidate_ref == predicate && f.role == CandidatePnfRole::Predicate
-        }) {
-            return Err(AcceptanceControlStoreError::NotFound(format!(
-                "{name} predicate {predicate}"
-            )));
-        }
-    }
-    // Resolve source class from the same transaction as the native batch.
+    let mut client=Client::connect(config.database_url(),NoTls)?;
+    let mut tx=client.transaction()?;
+    tx.batch_execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ; SET LOCAL statement_timeout='90000ms'")?;
     let mut families=Vec::new();
     let mut source_metadata=Vec::new();
-    for (batch,batch_ref,predicate) in [(&left,left_batch_ref,left_predicate_ref),(&right,right_batch_ref,right_predicate_ref)]{
+    let mut revisions=std::collections::BTreeSet::new();
+    // Every source is checked before writing any consumer or selector row.
+    for &(_,batch_ref,predicate,expected_revision,expected_digest) in coordinates{
+        let batch=load_candidate_pnf_batch_with_client(&mut tx,batch_ref)
+            .map_err(|e|AcceptanceControlStoreError::Upstream(e.to_string()))?
+            .ok_or_else(||AcceptanceControlStoreError::NotFound(batch_ref.to_owned()))?;
+        if !batch.candidate_only || batch.semantic_admission_paid
+            || batch.proposition_support_paid || batch.applicability_paid || batch.claim_truth_paid {
+            return Err(AcceptanceControlStoreError::ExistingRowConflict);
+        }
+        if !batch.factors.iter().any(|f|f.candidate_ref==predicate&&f.role==CandidatePnfRole::Predicate){
+            return Err(AcceptanceControlStoreError::NotFound(predicate.to_owned()));
+        }
         let statement=crate::statement_trace_store::load_source_statement_with_client(&mut tx,&batch.statement_ref)
             .map_err(|e|AcceptanceControlStoreError::Upstream(e.to_string()))?
             .ok_or_else(||AcceptanceControlStoreError::NotFound(batch.statement_ref.clone()))?;
         let (source,_)=crate::generic_source_content_store::load_generic_text_source_on_client(
             &mut tx,&statement.source_revision_ref)
             .map_err(|e|AcceptanceControlStoreError::Upstream(e.to_string()))?;
-        if source.document_ref!=statement.document_ref || statement.exact_span_ref!=batch.exact_span_ref {
+        if source.document_ref!=statement.document_ref || statement.exact_span_ref!=batch.exact_span_ref
+            ||expected_revision.is_some_and(|r|r!=source.source_revision_ref)
+            ||expected_digest.is_some_and(|d|d!=source.content_digest_ref)
+            ||(!legacy_pair&&!revisions.insert(source.source_revision_ref.clone())){
             return Err(AcceptanceControlStoreError::ExistingRowConflict);
         }
         let family=relational_family_for_ingest(&source.source_family_ref);
@@ -481,8 +513,8 @@ pub fn seed_relational_pnf_pair_scoped(
             &mut tx,batch_ref,family,&ObservationContext::default(),&[])
             .map_err(|e|AcceptanceControlStoreError::Upstream(e.to_string()))?;
         if checked.source_revision_ref!=statement.source_revision_ref
-            || checked.source_content_digest_ref!=source.content_digest_ref
-            || !checked.predicate_candidate_refs.iter().any(|p|p==predicate){
+            ||checked.source_content_digest_ref!=source.content_digest_ref
+            ||!checked.predicate_candidate_refs.iter().any(|p|p==predicate){
             return Err(AcceptanceControlStoreError::ExistingRowConflict);
         }
         families.push(family);
@@ -512,40 +544,47 @@ pub fn seed_relational_pnf_pair_scoped(
     if load_consumer(&mut tx,consumer_ref)?!=consumer{
         return Err(AcceptanceControlStoreError::ExistingRowConflict);
     }
-    let selector = |side: &str, batch_ref: &str, predicate_ref: &str, family:RelationalSourceFamily| {
-        let digest = Sha256::digest(
-            format!("{consumer_ref}|{side}|{batch_ref}|{predicate_ref}").as_bytes(),
-        );
-        let digest = format!("{digest:x}");
-        AcceptanceObservationSelector {
-            selector_ref: format!("selector:native-pnf:sha256:{digest}"),
-            kind: AcceptanceObservationKind::CandidatePnf,
-            batch_ref: Some(batch_ref.to_owned()),
-            selected_predicate_candidate_ref: Some(predicate_ref.to_owned()),
-            diagnostic_ref: None, native_statement_ref: None,
-            observation_ref: format!("observation:native-pnf:sha256:{digest}"),
-            source_family: Some(family),
-            context: ObservationContext::default(),
-            provenance_refs: vec![batch_ref.to_owned(), "native-pnf-existing-run".to_owned()],
-        }
-    };
-    let left_selector = selector("left", left_batch_ref, left_predicate_ref,families[0]);
-    let right_selector = selector("right", right_batch_ref, right_predicate_ref,families[1]);
-    persist_selector(&mut tx, &left_selector)?;
-    persist_selector(&mut tx, &right_selector)?;
+
+    let mut selector_refs=Vec::new();
+    let mut view_rows=Vec::new();
+    for (i,&(side,batch_ref,predicate_ref,_,_)) in coordinates.iter().enumerate(){
+        // Preserve existing pair identifiers. Cohort identifiers instead
+        // bind a canonical tuple and are independent of display order.
+        let bytes=if legacy_pair{format!("{consumer_ref}|{side}|{batch_ref}|{predicate_ref}").into_bytes()}
+            else{serde_json::to_vec(&(consumer_ref,"cohort-v1",batch_ref,predicate_ref))
+                .map_err(|e|AcceptanceControlStoreError::Upstream(e.to_string()))?};
+        let digest=format!("{:x}",Sha256::digest(bytes));
+        let selector=AcceptanceObservationSelector{
+            selector_ref:format!("selector:native-pnf:sha256:{digest}"),
+            kind:AcceptanceObservationKind::CandidatePnf,
+            batch_ref:Some(batch_ref.to_owned()),
+            selected_predicate_candidate_ref:Some(predicate_ref.to_owned()),
+            diagnostic_ref:None,native_statement_ref:None,
+            observation_ref:format!("observation:native-pnf:sha256:{digest}"),
+            source_family:Some(families[i]),context:ObservationContext::default(),
+            provenance_refs:vec![batch_ref.to_owned(),"native-pnf-existing-run".to_owned()],
+        };
+        persist_selector(&mut tx,&selector)?;
+        selector_refs.push(selector.selector_ref.clone());
+        view_rows.push(serde_json::json!({"selector_ref":selector.selector_ref,
+            "batch_ref":batch_ref,"predicate_candidate_ref":predicate_ref,
+            "source":source_metadata[i]}));
+    }
     tx.commit()?;
-    Ok(serde_json::json!({
-        "schema": "slr.native-pnf-relational-selection-seed.v1",
-        "consumer_ref": consumer_ref,
-        "source_metadata":source_metadata,
-        "requested_context_axes":context_axes,
-        "context_values_supplied":false,
-        "left_selector_ref": left_selector.selector_ref,
-        "right_selector_ref": right_selector.selector_ref,
-        "left_batch_ref": left_batch_ref, "right_batch_ref": right_batch_ref,
-        "candidate_only": true, "creates_semantic_authority": false,
-        "claim_truth_promoted": false,
-    }))
+    if legacy_pair{
+        Ok(serde_json::json!({"schema":"slr.native-pnf-relational-selection-seed.v1",
+            "consumer_ref":consumer_ref,"source_metadata":source_metadata,
+            "requested_context_axes":context_axes,"context_values_supplied":false,
+            "left_selector_ref":selector_refs[0],"right_selector_ref":selector_refs[1],
+            "left_batch_ref":coordinates[0].1,"right_batch_ref":coordinates[1].1,
+            "candidate_only":true,"creates_semantic_authority":false,"claim_truth_promoted":false}))
+    }else{
+        Ok(serde_json::json!({"schema":"slr.native-pnf-cohort-selection-seed.v1",
+            "consumer_ref":consumer_ref,"requested_context_axes":context_axes,
+            "context_values_supplied":false,"selector_refs":selector_refs,"views":view_rows,
+            "candidate_only":true,"creates_semantic_authority":false,
+            "claim_truth_promoted":false,"source_independence_paid":false}))
+    }
 }
 
 pub fn load_rel_acceptance_corpus(
