@@ -389,6 +389,105 @@ pub fn inspect_indexed_inventory(receipt:&serde_json::Value,consumer:&str,
         "semantic_coverage_paid":false,"world_truth_paid":false,"writes_database":false}))
 }
 
+/// Compare the same source manifestation across the JMD event inventory and
+/// native token/role coordinate chart. Group by literal source occurrence,
+/// never by name, lemma, row hash, or claimed world identity. The native
+/// chart includes nonpredicate tokens, so native-only rows are restricted
+/// to actual checked or numeric predicate heads.
+pub fn inspect_indexed_native_predicate_meet(receipt:&serde_json::Value,
+    native:&serde_json::Value,consumer:&str)->Result<serde_json::Value,IndexedObservationError>{
+    use serde_json::{json,Value};
+    use sha2::{Digest,Sha256};
+    use std::collections::{BTreeMap,BTreeSet};
+    let bad=||IndexedObservationError::InvalidReceipt;
+    let inv=indexed_inventory_observations(receipt)?;
+    if consumer.trim().is_empty(){return Err(bad());}
+    let meet=&native["source_coordinate_meet"];
+    if native["schema"]!="slr.predicate-role-transport.v1"
+        ||native["semantic_coverage_paid"]!=false||native["world_truth_paid"]!=false
+        ||meet["schema"]!="slr.article-numeric-coordinate-meet.v1"
+        ||meet["source_revision_ref"]!=receipt["inventory"]["article_revision"]
+        ||meet["source_content_digest_ref"]!=format!("sha256:{}",receipt["source_sha256"].as_str().ok_or_else(bad)?)
+        ||meet["common_current_authority_snapshot"]!=false{return Err(bad());}
+    type Key=(u64,u64,String);
+    let key=|a:&Value,b:&Value,t:&Value|->Result<Key,IndexedObservationError>{
+        let a=a.as_u64().ok_or_else(bad)?;
+        let b=b.as_u64().ok_or_else(bad)?;
+        let t=t.as_str().ok_or_else(bad)?;
+        if a>=b||t.chars().count() as u64!=b-a{return Err(bad());}
+        Ok((a,b,t.to_owned()))
+    };
+    let mut groups:BTreeMap<Key,(Vec<Value>,Vec<Value>)>=BTreeMap::new();
+    for m in inv.members.iter().filter(|m|m.lane=="article_lanes:event_candidates"){
+        let p=&m.original["predicate"];
+        let k=key(&p["start_char"],&p["end_char"],&p["surface"])?;
+        groups.entry(k).or_default().0.push(json!({"request_ref":m.observation.request_ref,
+            "ordinal":m.ordinal,"original":m.original}));
+    }
+    let mut checked=BTreeMap::<(String,String),Key>::new();
+    let mut tokens=BTreeMap::<i64,Key>::new();
+    for g in meet["coordinates"].as_array().ok_or_else(bad)?{
+        let k=key(&g["span"][0],&g["span"][1],&g["literal"])?;
+        for c in g["checked"].as_array().ok_or_else(bad)?{
+            let id=(c["batch_ref"].as_str().ok_or_else(bad)?.to_owned(),
+                c["factor_ref"].as_str().ok_or_else(bad)?.to_owned());
+            if checked.insert(id,k.clone()).is_some(){return Err(bad());}
+        }
+        for n in g["numeric"].as_array().ok_or_else(bad)?{
+            if tokens.insert(n["numeric_token_id"].as_i64().ok_or_else(bad)?,k.clone()).is_some(){return Err(bad());}
+        }
+    }
+    for row in native["checked_predicates"].as_array().ok_or_else(bad)?{
+        let id=(row["batch_ref"].as_str().ok_or_else(bad)?.to_owned(),
+            row["checked_observation"]["predicate_candidate_ref"].as_str().ok_or_else(bad)?.to_owned());
+        let k=checked.get(&id).ok_or_else(bad)?;
+        groups.entry(k.clone()).or_default().1.push(json!({"kind":"checked_predicate","original":row}));
+    }
+    for row in native["numeric_only_predicates"].as_array().ok_or_else(bad)?{
+        let heads:Vec<_>=row["role_inverse"].as_array().ok_or_else(bad)?.iter()
+            .filter(|r|r["original_role"]["role"]=="head").collect();
+        if heads.len()!=1{return Err(bad());}
+        let token=heads[0]["numeric_token_id"].as_i64().ok_or_else(bad)?;
+        let k=tokens.get(&token).ok_or_else(bad)?;
+        groups.entry(k.clone()).or_default().1.push(json!({"kind":"numeric_only_predicate","original":row}));
+    }
+    let digest=format!("sha256:{:x}",Sha256::digest(serde_json::to_vec(&(receipt,native))
+        .map_err(|_|bad())?));
+    let frontier_ref=format!("frontier:predicate-coordinate:{digest}");
+    let mut residuals=Vec::new();
+    let mut rows=Vec::new();
+    for (i,(k,(left,right))) in groups.into_iter().enumerate(){
+        let status=match (left.len(),right.len()){
+            (1,1)=>"unique_coordinate_match",(_,0)=>"indexed_only",
+            (0,_)=>"native_only",_=>"ambiguous_coordinate_match"};
+        if status!="unique_coordinate_match"{
+            residuals.push(ProofResidual{residual_ref:format!("{frontier_ref}:{i}"),
+                proposition_ref:format!("predicate-occurrence:{}:{}",k.0,k.1),
+                producer_class_ref:"producer:source-coordinate-reconciliation".into(),
+                jurisdiction_ref:None,authority_requirement_ref:None,salience:1,
+                dependency_refs:vec![format!("source:{}",meet["source_content_digest_ref"].as_str().ok_or_else(bad)?),
+                    format!("coordinate:{}:{}",k.0,k.1),format!("status:{status}")],
+                status:ResidualStatus::Open});
+        }
+        rows.push(json!({"span":[k.0,k.1],"literal":k.2,"indexed":left,"native":right,
+            "status":status,"semantic_alignment_paid":false}));
+    }
+    let frontier=crate::frontier::ProofFrontier{consumer_ref:consumer.into(),frontier_ref,
+        residuals,satisfied_payment_refs:vec![],contested_coordinate_refs:vec![],
+        authority_blocked_refs:vec![],authority:"experimental_candidate_only"};
+    let open:Vec<_>=frontier.open_residuals().map(|r|json!({
+        "residual_ref":r.residual_ref,"proposition_ref":r.proposition_ref,
+        "producer_class_ref":r.producer_class_ref,"dependency_refs":r.dependency_refs,
+        "status":"open"})).collect();
+    let outside_lanes:BTreeSet<_>=inv.members.iter().filter(|m|m.lane!="article_lanes:event_candidates")
+        .map(|m|m.lane.clone()).collect();
+    Ok(json!({"schema":"slr.indexed-native-predicate-meet.v1","consumer_ref":consumer,
+        "source_revision_ref":meet["source_revision_ref"],"source_content_digest_ref":meet["source_content_digest_ref"],
+        "frontier_ref":frontier.frontier_ref,"coordinates":rows,"residuals":open,
+        "other_recorded_lanes":outside_lanes,"candidate_only":true,"original_checker_replayed":false,
+        "semantic_coverage_paid":false,"world_truth_paid":false,"writes_database":false}))
+}
+
 #[cfg(test)]
 mod indexed_inventory_tests {
     use super::*;
