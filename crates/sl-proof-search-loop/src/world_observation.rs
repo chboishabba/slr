@@ -270,17 +270,17 @@ pub fn indexed_inventory_observations(receipt: &serde_json::Value)
 {
     use serde_json::Value;
     use sha2::{Digest,Sha256};
-    let bad=IndexedObservationError::InvalidReceipt;
+    let bad=||IndexedObservationError::InvalidReceipt;
     let version=receipt["schema"].as_str().ok_or_else(bad)?;
     if !["slr.jmd-indexed-world-fibre-receipt.v1","slr.jmd-indexed-world-fibre-receipt.v2"].contains(&version)
         || receipt["source_observation_checked"]!=true
         || receipt["cross_source_alignment_paid"]!=false
-        || receipt["world_truth_paid"]!=false {return Err(bad);}
+        || receipt["world_truth_paid"]!=false {return Err(bad());}
     let inv=&receipt["inventory"];
     if inv["schema"]!="slr.jmd-indexed-world-fibre.v1"
         || inv["semantic_coverage_paid"]!=false
         || inv["cross_source_alignment_paid"]!=false
-        || inv["world_truth_paid"]!=false {return Err(bad);}
+        || inv["world_truth_paid"]!=false {return Err(bad());}
     let qid=inv["qid"].as_str().filter(|s|s.starts_with('Q')&&s.len()>1&&s[1..].bytes().all(|b|b.is_ascii_digit())).ok_or(IndexedObservationError::InvalidReceipt)?;
     if receipt["qid"]!=qid || receipt["title"]!=inv["title"] {return Err(IndexedObservationError::InvalidReceipt);}
     let article_revision=inv["article_revision"].as_str().filter(|s|!s.trim().is_empty()).ok_or(IndexedObservationError::InvalidReceipt)?;
