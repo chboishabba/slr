@@ -251,14 +251,30 @@ pub struct DeclaredTransportMeet{
     pub candidate_only:bool,
     pub formal_preservation_paid:bool,
 }
-fn coordinate_match(a:&ObservedCoordinate,b:&ObservedCoordinate,c:&RelationalConsumer)
+fn shared_content_digest(a:&RelationalObservation,b:&RelationalObservation)->bool{
+    let left=a.provenance_refs.iter().filter(|r|r.starts_with("sha256:")).collect::<BTreeSet<_>>();
+    let right=b.provenance_refs.iter().filter(|r|r.starts_with("sha256:")).collect::<BTreeSet<_>>();
+    !left.is_disjoint(&right)
+}
+fn native_coordinate_key(value:&str)->Option<&str>{
+    let (_,tail)=value.split_once("candidate-pnf-db:")?;
+    let (_,tail)=tail.rsplit_once(":sentence:")?;
+    Some(tail)
+}
+fn coordinate_value_matches(left:&str,right:&str,source_coordinate_bridge:bool)->bool{
+    left==right || (source_coordinate_bridge
+        && native_coordinate_key(left).is_some()
+        && native_coordinate_key(left)==native_coordinate_key(right))
+}
+fn coordinate_match(a:&ObservedCoordinate,b:&ObservedCoordinate,c:&RelationalConsumer,
+    source_coordinate_bridge:bool)
     ->Option<(Vec<String>,Vec<String>)>{
     use crate::relational_interlingua::alignment;
     if a.axis!=b.axis||a.occurrence!=b.occurrence{return None;}
     let mut witnesses=BTreeSet::new();
     let mut licences=BTreeSet::new();
     let mut match_ref=|x:&str,y:&str,list:&[crate::LicensedAlignment]|{
-        if x==y{return true;}
+        if coordinate_value_matches(x,y,source_coordinate_bridge){return true;}
         let Some(forward)=alignment(x,y,c,list) else{return false};
         let Some(reverse)=alignment(y,x,c,list) else{return false};
         for w in [forward,reverse]{
@@ -294,14 +310,15 @@ fn declared_transport_meet(sources:&[SelectedRelationalSource],consumer:&Relatio
         let mut held=BTreeSet::new();
         let mut holds=BTreeSet::new();
         for (source,source_coords) in &charts{
-            let matching=source_coords.iter().filter(|candidate|coordinate_match(coordinate,candidate,consumer).is_some())
+            let source_coordinate_bridge=shared_content_digest(&anchor.observation,&source.observation);
+            let matching=source_coords.iter().filter(|candidate|coordinate_match(coordinate,candidate,consumer,source_coordinate_bridge).is_some())
                 .collect::<Vec<_>>();
             let [candidate]=matching.as_slice() else{
                 held.insert(source.selector_ref.clone());
                 holds.insert(if matching.is_empty(){"missing_bidirectional_coordinate"}else{"ambiguous_bidirectional_coordinate"}.to_owned());
                 continue;
             };
-            if coordinates.iter().filter(|a|coordinate_match(a,candidate,consumer).is_some()).count()!=1{
+            if coordinates.iter().filter(|a|coordinate_match(a,candidate,consumer,source_coordinate_bridge).is_some()).count()!=1{
                 held.insert(source.selector_ref.clone());holds.insert("noninjective_inverse".into());continue;
             }
             members.push(TransportCoordinateMember{selector_ref:source.selector_ref.clone(),
@@ -311,7 +328,9 @@ fn declared_transport_meet(sources:&[SelectedRelationalSource],consumer:&Relatio
         for a in &members{
             for b in &members{
                 if a.selector_ref==b.selector_ref{continue;}
-                if let Some((witness_refs,licence_refs))=coordinate_match(&a.coordinate,&b.coordinate,consumer){
+                let source_a=&sources.iter().find(|s|s.selector_ref==a.selector_ref).expect("member selector").observation;
+                let source_b=&sources.iter().find(|s|s.selector_ref==b.selector_ref).expect("member selector").observation;
+                if let Some((witness_refs,licence_refs))=coordinate_match(&a.coordinate,&b.coordinate,consumer,shared_content_digest(source_a,source_b)){
                     matches.push(TransportCoordinateMatch{from_selector_ref:a.selector_ref.clone(),
                         to_selector_ref:b.selector_ref.clone(),from:a.coordinate.clone(),to:b.coordinate.clone(),
                         witness_refs,licence_refs});
@@ -1018,6 +1037,27 @@ mod tests{
         assert!(next.declared_transport_meet.rows[0].complete_declared_coordinate_transport);
         assert_eq!(next.declared_transport_meet.rows[0].matches.len(),6);
         assert!(!next.declared_transport_meet.formal_preservation_paid);
+    }
+    #[test]
+    fn native_run_specific_refs_match_only_through_shared_source_coordinates(){
+        let mut a=source("a","candidate-pnf-db:parser-run:run-a:document-region:source-revision:rev-a:sentence:1000:10-20:8:12:20",Polarity::Supports);
+        let mut b=source("b","candidate-pnf-db:parser-run:run-b:document-region:source-revision:rev-b:sentence:1000:10-20:8:12:20",Polarity::Supports);
+        a.observation.provenance_refs=vec!["sha256:shared-content".into()];
+        b.observation.provenance_refs=vec!["sha256:shared-content".into()];
+        let q=consumer();
+        let result=project_relational_family(&[a,b],&q,"coordinate-review").unwrap();
+        let row=result.declared_transport_meet.rows.iter()
+            .find(|r|r.anchor_coordinate.axis=="predicate").unwrap();
+        assert!(row.complete_declared_coordinate_transport);
+        assert!(row.holds.is_empty());
+
+        let mut c=source("c","candidate-pnf-db:parser-run:run-c:document-region:source-revision:rev-c:sentence:1000:10-20:8:13:20",Polarity::Supports);
+        c.observation.provenance_refs=vec!["sha256:shared-content".into()];
+        let unmatched=project_relational_family(&[source("a","candidate-pnf-db:parser-run:run-a:document-region:source-revision:rev-a:sentence:1000:10-20:8:12:20",Polarity::Supports),c],&q,"coordinate-review").unwrap();
+        let row=unmatched.declared_transport_meet.rows.iter()
+            .find(|r|r.anchor_coordinate.axis=="predicate").unwrap();
+        assert!(!row.complete_declared_coordinate_transport);
+        assert!(row.holds.contains(&"missing_bidirectional_coordinate".into()));
     }
     #[test]
     fn grouped_residuals_and_missing_context_survive(){
