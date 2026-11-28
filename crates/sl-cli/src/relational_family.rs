@@ -426,9 +426,22 @@ fn inspect_heterogeneous_selection(config:&sensiblaw_pg_source_store::DatabaseCo
     let c=&request.other;
     let predicates=sensiblaw_pg_source_store::query_native_original_relations(
         config.database_url(),&c.run,&c.document,&c.snapshot,&c.packet_digest,"predicate").map_err(|e|e.to_string())?;
-    sensiblaw_proof_search_loop::world_observation::select_heterogeneous_native_pair(
+    let mut selected=sensiblaw_proof_search_loop::world_observation::select_heterogeneous_native_pair(
         &receipt,&article,&other,&predicates,&request.consumer_ref,&request.indexed_member_ref,
-        &request.other_relation_ref).map_err(|e|format!("{e:?}"))
+        &request.other_relation_ref).map_err(|e|format!("{e:?}"))?;
+    use sha2::{Digest,Sha256};
+    use std::collections::BTreeSet;
+    let axes:BTreeSet<_>=request.context_axes.iter().map(String::as_str).collect();
+    if axes.len()!=request.context_axes.len()||axes.iter().any(|a|
+        !["scope","time","modality","quantifier","attribution","ontology","language"].contains(a)){
+        return Err("invalid explicit context demand".into());
+    }
+    let selection_ref=selected["selection_ref"].clone();
+    let binding=serde_json::to_vec(&(&selection_ref,&axes)).map_err(|e|e.to_string())?;
+    selected["coordinate_selection_ref"]=selection_ref;
+    selected["requested_context_axes"]=serde_json::json!(axes);
+    selected["selection_ref"]=serde_json::json!(format!("selection:scoped:sha256:{:x}",Sha256::digest(binding)));
+    Ok(selected)
 }
 /// Explicit operator action. A prior JSON selection cannot be substituted
 /// for native readback; reopen both original charts and derive the selection
@@ -437,6 +450,7 @@ fn run_heterogeneous_family(config:&sensiblaw_pg_source_store::DatabaseConfig,
     request:&HeterogeneousSelectionRequest,access:&str,expected_selection:&str)
     ->Result<serde_json::Value,String>{
     use serde_json::json;
+    if access.trim().is_empty(){return Err("explicit access constraint required".into());}
     let selection=inspect_heterogeneous_selection(config,request)?;
     if selection["candidate_selector_ready"]!=true||selection["selection_ref"]!=expected_selection{
         return Err("heterogeneous candidate held or changed since inspection".into());
@@ -518,7 +532,8 @@ pub fn run(args:&[String])->Result<(),String>{
             let request:HeterogeneousSelectionRequest=bounded_json(path,4*1024*1024)?;
             print_json(&inspect_heterogeneous_selection(&config,&request)?)
         },
-        [mode,path,access,expected,flag] if mode=="run-heterogeneous-family"&&flag=="--commit"=>{
+        [mode,path,access,expected,flag] if mode=="run-heterogeneous-family"=>{
+            if flag!="--commit"{return Err("explicit --commit required".into());}
             let request:HeterogeneousSelectionRequest=bounded_json(path,4*1024*1024)?;
             print_json(&run_heterogeneous_family(&config,&request,access,expected)?)
         },
