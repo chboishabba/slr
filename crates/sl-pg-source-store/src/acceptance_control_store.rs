@@ -389,7 +389,7 @@ pub fn persist_rel_acceptance_corpus(
 
 /// Map only the original ingest family. Generic documents and unknown
 /// domains remain Other; a book must never become Wikipedia by selection.
-fn relational_family_for_ingest(family:&str)->RelationalSourceFamily {
+pub(crate) fn relational_family_for_ingest(family:&str)->RelationalSourceFamily {
     match family {
         "wiki"=>RelationalSourceFamily::Wikipedia,
         "legal_authority"=>RelationalSourceFamily::Legal,
