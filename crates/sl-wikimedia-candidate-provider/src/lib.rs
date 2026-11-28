@@ -1,5 +1,7 @@
 mod latest_revision;
 mod historical_zobject;
+mod historical_graph;
+pub use historical_graph::{resolve_historical_graph,evaluate_composition_candidate};
 pub use historical_zobject::{fetch_historical_zobject,parse_historical_zobject,HistoricalZObject};
 
 pub use latest_revision::{
