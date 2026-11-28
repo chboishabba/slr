@@ -10,6 +10,12 @@ fn print_json<T:serde::Serialize>(value:&T)->Result<(),String>{
 pub fn run(args:&[String])->Result<(),String>{
     let config=load_database_config(None).map_err(|e|e.to_string())?;
     match args {
+        [mode,run,doc,snapshot,digest,mentions_path] if mode=="numeric-action-roles"=>{
+            let raw=std::fs::read_to_string(mentions_path).map_err(|e|e.to_string())?;
+            let mentions:Vec<i64>=serde_json::from_str(&raw).map_err(|e|e.to_string())?;
+            print_json(&sensiblaw_pg_source_store::query_native_recorded_action_roles(
+                config.database_url(),run,doc,snapshot,digest,&mentions).map_err(|e|e.to_string())?)
+        },
         [mode,revision,batches_path,mentions_path] if mode=="article-actions"=>{
             let read = |path:&str| -> Result<Vec<String>,String> {
                 let raw=std::fs::read_to_string(path).map_err(|e|e.to_string())?;
@@ -78,6 +84,6 @@ pub fn run(args:&[String])->Result<(),String>{
                 "candidate_review_status":format!("{:?}",item.current_status),"creates_semantic_authority":false}))
         },
         _ if (4..=12).contains(&args.len())=>print_json(&run_persisted_relational_family(&config,&args[0],&args[1],&args[2..]).map_err(|e|e.to_string())?),
-        _=>Err("usage: relational-family CONSUMER ACCESS SELECTOR SELECTOR ... | article-actions REVISION BATCH_REFS_JSON MENTION_REFS_JSON | licensed-reciprocal FAMILY LEFT RIGHT QUERY EVIDENCE REPO SHA PATH THREAD | reciprocal FAMILY LEFT RIGHT | participant FAMILY FILLER_REF | inspect FAMILY | prepare-revision FAMILY OLD_SELECTOR NEW_SELECTOR | inspect-revision TRANSITION | review-revision TRANSITION COMMAND REVIEWER accept|reject|abstain | publish-revision TRANSITION".into())
+        _=>Err("usage: relational-family CONSUMER ACCESS SELECTOR SELECTOR ... | numeric-action-roles RUN DOC SNAPSHOT DIGEST MENTION_TOKEN_IDS_JSON | article-actions REVISION BATCH_REFS_JSON MENTION_REFS_JSON | licensed-reciprocal FAMILY LEFT RIGHT QUERY EVIDENCE REPO SHA PATH THREAD | reciprocal FAMILY LEFT RIGHT | participant FAMILY FILLER_REF | inspect FAMILY | prepare-revision FAMILY OLD_SELECTOR NEW_SELECTOR | inspect-revision TRANSITION | review-revision TRANSITION COMMAND REVIEWER accept|reject|abstain | publish-revision TRANSITION".into())
     }
 }
