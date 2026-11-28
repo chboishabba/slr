@@ -1352,20 +1352,31 @@ pub fn read_authenticated_reciprocal_query(
     config:&DatabaseConfig,family_ref:&str,left:&str,right:&str,query:&str,
     evidence_ref:&str,locator:&sensiblaw_formal_proof_bridge::RefereeReceiptLocator,
 )->Result<serde_json::Value,RelationalFamilyError>{
-    use serde_json::{json,Value};
-    use sensiblaw_formal_proof_bridge::{reopen_authenticated_formal_evidence_tx,
-        read_source_bound_referee_receipt};
     let mut connection=Client::connect(config.database_url(),NoTls)?;
     let mut tx=connection.transaction()?;
     tx.batch_execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE READ ONLY; SET LOCAL statement_timeout='90000ms'")?;
     let manifest=read_manifest(&mut tx,family_ref)?;
     let family=read_family_on_client(&mut tx,&manifest)?;
-    let recorded=recorded_reciprocal_query(&family,left,right)?;
-    let checked=reopen_authenticated_formal_evidence_tx(&mut tx,evidence_ref,locator)?;
+    let result=authenticated_reciprocal_on_tx(&mut tx,&family,left,right,query,evidence_ref,locator)?;
+    tx.commit()?;
+    Ok(result)
+}
+
+fn authenticated_reciprocal_on_tx(
+    tx:&mut postgres::Transaction<'_>,family:&PersistedRelationalFamily,
+    left:&str,right:&str,query:&str,evidence_ref:&str,
+    locator:&sensiblaw_formal_proof_bridge::RefereeReceiptLocator,
+)->Result<serde_json::Value,RelationalFamilyError>{
+    use serde_json::{json,Value};
+    use sensiblaw_formal_proof_bridge::{reopen_authenticated_formal_evidence_tx,
+        read_source_bound_referee_receipt};
+    let family_ref=&family.family_ref;
+    let recorded=recorded_reciprocal_query(family,left,right)?;
+    let checked=reopen_authenticated_formal_evidence_tx(tx,evidence_ref,locator)?;
     let payment=checked.payment();
-    let referee:Value=serde_json::from_str(&read_source_bound_referee_receipt(&mut tx,locator)?)?;
+    let referee:Value=serde_json::from_str(&read_source_bound_referee_receipt(tx,locator)?)?;
     let answer=referee.get("slr_reciprocal_query_answer").ok_or(RelationalFamilyError::ReciprocalProofBinding)?;
-    let binding=reciprocal_proof_binding(&family,left,right,query,&payment.statement_digest,evidence_ref,answer)?;
+    let binding=reciprocal_proof_binding(family,left,right,query,&payment.statement_digest,evidence_ref,answer)?;
     let premise=&referee["slr_premise_binding"];
     let revisions=premise["source_revisions"].as_array().ok_or(RelationalFamilyError::ReciprocalProofBinding)?;
     if referee["slr_reciprocal_query_binding"]!=binding
@@ -1396,10 +1407,192 @@ pub fn read_authenticated_reciprocal_query(
         "governed_identity_paid":false,"world_truth_paid":false,
         "writes_database":false
     });
+    Ok(result)
+}
+
+
+
+/// The referee owns the signed pair answer. A caller supplies coordinates
+/// only, never signs, a coverage assertion, or a theorem result.
+#[derive(Debug,Clone,Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ViewPairEvidence {
+    pub left_selector_ref:String,
+    pub right_selector_ref:String,
+    pub evidence_ref:String,
+    pub repo:String,
+    pub sha:String,
+    pub path:String,
+    pub canonical_thread_id:String,
+}
+
+#[derive(Debug,Clone,Copy,PartialEq,Eq,Serialize,Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SignedViewSupport { positive:bool, negative:bool }
+
+impl SignedViewSupport {
+    fn minus(self,other:Self)->Self{
+        Self{positive:self.positive&&!other.positive,negative:self.negative&&!other.negative}
+    }
+    fn empty(self)->bool{!self.positive&&!self.negative}
+}
+
+#[derive(Debug,Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SignedViewAnswer {
+    schema:String,query_ref:String,
+    left_support:Option<SignedViewSupport>,
+    right_support:Option<SignedViewSupport>,
+}
+fn signed_view_answer(raw:&serde_json::Value,query:&str)->Result<SignedViewAnswer,RelationalFamilyError>{
+    // Option fields must be present even when explicitly unavailable.
+    if raw.get("left_support").is_none()||raw.get("right_support").is_none(){
+        return Err(RelationalFamilyError::ReciprocalProofBinding);
+    }
+    let answer:SignedViewAnswer=serde_json::from_value(raw.clone())?;
+    if answer.schema!="slr.signed-view-query-answer.v1"||answer.query_ref!=query{
+        return Err(RelationalFamilyError::ReciprocalProofBinding);
+    }
+    Ok(answer)
+}
+
+fn signed_pair_delta(left:Option<SignedViewSupport>,right:Option<SignedViewSupport>)->serde_json::Value{
+    use serde_json::json;
+    match (left,right){
+        (Some(l),Some(r))=>{
+            let lost=l.minus(r);let gained=r.minus(l);
+            json!({"status":if lost.empty()&&gained.empty(){"preserved"}else{"different"},
+                "left_support":l,"right_support":r,"lost":lost,"gained":gained,
+                "opposed_signs":(l.positive&&r.negative)||(l.negative&&r.positive),
+                "bounded_signed_support_equal":l==r})
+        },
+        _=>json!({"status":"unavailable_answer","left_support":left,"right_support":right,
+            "lost":null,"gained":null,"opposed_signs":null,"bounded_signed_support_equal":null})
+    }
+}
+
+/// Reopen one current native family and the exact independently authenticated
+/// pair receipts under the same read-only transaction. All unordered pairs
+/// remain eligible; missing pair evidence stays held (even on a connected
+/// proof graph). Never infer a pair licence by transitivity or source identity.
+/// Only the bounded signed answer is compared, not all-language coverage.
+pub fn read_authenticated_view_cohort(config:&DatabaseConfig,family_ref:&str,query:&str,
+    requests:&[ViewPairEvidence])->Result<serde_json::Value,RelationalFamilyError>{
+    use serde_json::{json,Value};
+    let valid=|s:&str|!s.trim().is_empty()&&s.len()<=2048&&!s.contains('\0');
+    if !valid(family_ref)||!valid(query)||requests.len()>45{
+        return Err(RelationalFamilyError::ReciprocalProofBinding);
+    }
+    let mut connection=Client::connect(config.database_url(),NoTls)?;
+    let mut tx=connection.transaction()?;
+    tx.batch_execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE READ ONLY; SET LOCAL statement_timeout='90000ms'")?;
+    let manifest=read_manifest(&mut tx,family_ref)?;
+    let family=read_family_on_client(&mut tx,&manifest)?;
+    if family.superseded_by.is_some(){return Err(RelationalFamilyError::ChangedReplay);}
+    let selectors:BTreeSet<_>=family.projection.sources.iter().map(|s|s.selector_ref.as_str()).collect();
+    let mut evidence=BTreeMap::new();
+    let mut evidence_ids=BTreeSet::new();
+    // Validate entire request before any referee reopens.
+    for req in requests{
+        let l=req.left_selector_ref.as_str();let r=req.right_selector_ref.as_str();
+        if l==r||!selectors.contains(l)||!selectors.contains(r)
+            ||[req.evidence_ref.as_str(),&req.repo,&req.sha,&req.path,&req.canonical_thread_id]
+                .iter().any(|s|!valid(s))
+            ||!evidence_ids.insert(req.evidence_ref.as_str()){
+            return Err(RelationalFamilyError::ReciprocalProofBinding);
+        }
+        let key=if l<r{(l,r)}else{(r,l)};
+        if evidence.insert(key,req).is_some(){return Err(RelationalFamilyError::ReciprocalProofBinding);}
+    }
+    let mut rows=Vec::<Value>::new();
+    let mut seen=BTreeMap::<&str,Option<SignedViewSupport>>::new();
+    let mut inconsistent=BTreeSet::new();
+    let mut authenticated=0usize;
+    let mut available=0usize;
+    let mut equal=0usize;
+    let mut pair_refs=BTreeSet::new();
+    for &l in &selectors{
+        for &r in &selectors{
+            if l>=r{continue;}
+            let recorded=recorded_reciprocal_query(&family,l,r)?;
+            let pair_ref=digest_bytes(&serde_json::to_vec(&(family_ref,query,l,r))?);
+            pair_refs.insert(pair_ref.clone());
+            let forward_ref=recorded["forward"]["comparison"]["comparison_ref"].clone();
+            let backward_ref=recorded["backward"]["comparison"]["comparison_ref"].clone();
+            let (forward,backward,proof)=if let Some(req)=evidence.get(&(l,r)){
+                let locator=sensiblaw_formal_proof_bridge::RefereeReceiptLocator{
+                    repo:req.repo.clone(),sha:req.sha.clone(),path:req.path.clone(),
+                    canonical_thread_id:req.canonical_thread_id.clone()};
+                let proof=authenticated_reciprocal_on_tx(&mut tx,&family,&req.left_selector_ref,
+                    &req.right_selector_ref,query,&req.evidence_ref,&locator)?;
+                let answer=signed_view_answer(&proof["answer"],query)?;
+                let (a,b)=if req.left_selector_ref==l{(answer.left_support,answer.right_support)}
+                    else{(answer.right_support,answer.left_support)};
+                for (selector,answer) in [(l,a),(r,b)]{
+                    if let Some(prior)=seen.insert(selector,answer){
+                        if prior!=answer{inconsistent.insert(selector);}
+                    }
+                }
+                authenticated+=1;
+                if let (Some(a),Some(b))=(a,b){available+=1;if a==b{equal+=1;}}
+                (signed_pair_delta(a,b),signed_pair_delta(b,a),proof)
+            }else{
+                let held=json!({"status":"missing_authenticated_pair","left_support":null,"right_support":null,
+                    "lost":null,"gained":null,"opposed_signs":null,"bounded_signed_support_equal":null});
+                (held.clone(),held,Value::Null)
+            };
+            rows.push(json!({"pair_ref":pair_ref,"left_selector_ref":l,"right_selector_ref":r,
+                "forward_comparison_ref":forward_ref,"backward_comparison_ref":backward_ref,
+                "forward":forward,"backward":backward,"authenticated_pair":proof,
+                "source_independence_paid":false,"residual_paid":false}));
+        }
+    }
+    let total=pair_refs.len();
+    let all_equal=total>0&&equal==total&&inconsistent.is_empty();
+    let result=json!({"schema":"slr.authenticated-view-cohort.v1","family_ref":family_ref,
+        "consumer_ref":family.projection.consumer_ref,"query_ref":query,"selector_refs":selectors,
+        "pairs":rows,"pair_count":total,"authenticated_pair_count":authenticated,
+        "available_pair_count":available,"equal_support_pair_count":equal,
+        "inconsistent_selector_refs":inconsistent,"all_pairs_bounded_signed_support_equal":all_equal,
+        "shared_transaction_snapshot":true,"derives_transitive_licences":false,
+        "formal_consumer_equivalence_paid":false,"all_live_semantic_readings_covered":false,
+        "creates_semantic_authority":false,"source_independence_paid":false,
+        "world_truth_paid":false,"writes_database":false});
     tx.commit()?;
     Ok(result)
 }
 
+#[cfg(test)]
+mod signed_view_cohort_tests {
+    use super::*;
+    use serde_json::json;
+    #[test]
+    fn signed_delta_exhaustive_and_reciprocal(){
+        let mut values=vec![None];
+        for p in [false,true]{for n in [false,true]{
+            values.push(Some(SignedViewSupport{positive:p,negative:n}));
+        }}
+        for &a in &values{for &b in &values{
+            let f=signed_pair_delta(a,b);let r=signed_pair_delta(b,a);
+            assert_eq!(f["lost"],r["gained"]);assert_eq!(f["gained"],r["lost"]);
+            match (a,b){
+                (Some(a),Some(b))=>assert_eq!(f["bounded_signed_support_equal"],a==b),
+                _=>{assert!(f["bounded_signed_support_equal"].is_null());assert_eq!(f["status"],"unavailable_answer");}
+            }
+        }}
+    }
+    #[test]
+    fn answer_requires_explicit_missingness_and_exact_query(){
+        let good=json!({"schema":"slr.signed-view-query-answer.v1","query_ref":"q",
+            "left_support":{"positive":true,"negative":true},"right_support":null});
+        assert!(signed_view_answer(&good,"q").is_ok());
+        assert!(signed_view_answer(&good,"foreign").is_err());
+        let mut missing=good.clone();missing.as_object_mut().unwrap().remove("right_support");
+        assert!(signed_view_answer(&missing,"q").is_err());
+        let mut fake=good.clone();fake["left_support"]["world_truth_paid"]=json!(true);
+        assert!(signed_view_answer(&fake,"q").is_err());
+    }
+}
 
 /// Bind the exact candidate receipt and one original predicate/query to the
 /// independently issued bounded answer. Receipt digest is over the complete
