@@ -66,7 +66,14 @@ fn validate_object(root:&Path,row:&Value,as_of:&str)->R<Value>{
 /// Checkpoint is the immutable receipt/object pair. At most one network
 /// acquisition per invocation; failed requests remain explicit debt.
 pub fn resolve_historical_graph(repo:&Path,manifest:&Path,cache:&Path,new_limit:usize,max_depth:usize,max_nodes:usize)->R<Value>{
+    resolve_historical_graph_targeted(repo,manifest,cache,new_limit,max_depth,max_nodes,None)
+}
+/// An explicit reachable dependency may be selected after an earlier
+/// failed request. This does not grant permission to fetch an unrelated ZID.
+pub fn resolve_historical_graph_targeted(repo:&Path,manifest:&Path,cache:&Path,new_limit:usize,
+    max_depth:usize,max_nodes:usize,target:Option<&str>)->R<Value>{
     req(new_limit<=1&&max_depth<=16&&(3..=512).contains(&max_nodes),"invalid work bounds")?;
+    req(target.map_or(true,|z|zid(z)&&new_limit==1),"explicit target requires one bounded request")?;
     let repo=repo.canonicalize()?;fs::create_dir_all(cache)?;let cache=cache.canonicalize()?;
     let m=load(manifest)?;
     req(m["schema"]=="slr.gwb-multiview-native-acquisition.v1"&&m["qid"]=="Q207","wrong seed manifest")?;
@@ -92,7 +99,7 @@ pub fn resolve_historical_graph(repo:&Path,manifest:&Path,cache:&Path,new_limit:
         if seen.contains(&id){continue;}
         if seen.len()>=max_nodes||depth>max_depth{pending.push(json!({"target":id,"depth":depth,"priority":priority,"reason":"bound"}));continue;}
         seen.insert(id.clone());
-        if !rows.contains_key(&id)&&attempts<new_limit{
+        if !rows.contains_key(&id)&&attempts<new_limit&&target.map_or(true,|z|z==id.as_str()){
             attempts+=1;
             match fetch_historical_zobject(&id,as_of){
                 Ok(mut a)=>{
@@ -117,7 +124,7 @@ pub fn resolve_historical_graph(repo:&Path,manifest:&Path,cache:&Path,new_limit:
     pending.retain(|v|!nodes.contains_key(v["target"].as_str().unwrap_or("")));
     Ok(json!({"schema":"slr.native-historical-zobject-graph.v1","as_of":as_of,
         "roots":["Z35370","Z38053","Z38757"],"nodes":nodes,"edges":links,"pending":pending,
-        "network_attempts":attempts,"candidate_only":true,"runtime_selection_paid":false,"world_truth_paid":false}))
+        "network_attempts":attempts,"requested_target":target,"candidate_only":true,"runtime_selection_paid":false,"world_truth_paid":false}))
 }
 /// Symbolic call-by-value subset. No arbitrary code or assumed builtins.
 fn eval(v:&Value,env:&BTreeMap<String,Value>,nodes:&Value,fuel:&mut usize,stack:&mut BTreeSet<String>,trace:&mut Vec<Value>)->R<Value>{
@@ -160,11 +167,20 @@ fn eval(v:&Value,env:&BTreeMap<String,Value>,nodes:&Value,fuel:&mut usize,stack:
     }
 }
 pub fn evaluate_composition_candidate(graph:&Value,expression:&Value)->Value{
+    evaluate_composition_with_language(graph,expression,None)
+}
+/// The enclosing Abstract language argument is an explicit input, never
+/// silently chosen. A language ZID is still a candidate, not a type proof.
+pub fn evaluate_composition_with_language(graph:&Value,expression:&Value,language:Option<&str>)->Value{
     let mut fuel=4096;let mut trace=Vec::new();
-    let result=eval(expression,&BTreeMap::new(),&graph["nodes"],&mut fuel,&mut BTreeSet::new(),&mut trace);
+    let mut env=BTreeMap::new();
+    let result=if language.map_or(true,zid){
+        if let Some(z)=language{env.insert("Z825K2".into(),json!({"Z1K1":"Z9","Z9K1":z}));}
+        eval(expression,&env,&graph["nodes"],&mut fuel,&mut BTreeSet::new(),&mut trace)
+    }else{Err(err("invalid explicit language reference"))};
     let (value,held)=match result{Ok(v)=>(v,Value::Null),Err(e)=>(Value::Null,json!(e.to_string()))};
     json!({"schema":"slr.native-abstract-composition-candidate.v1","value":value,"held":held,
-        "trace":trace,"fuel_used":4096-fuel,"candidate_only":true,"type_check_paid":false,
+        "trace":trace,"explicit_language":language,"fuel_used":4096-fuel,"candidate_only":true,"type_check_paid":false,
         "runtime_selection_paid":false,"tester_acceptance_paid":false,"world_truth_paid":false})
 }
 #[cfg(test)]
