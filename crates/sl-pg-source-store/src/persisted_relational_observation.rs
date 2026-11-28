@@ -544,7 +544,9 @@ pub fn read_article_numeric_coordinate_meet(config:&DatabaseConfig,
     revision:&str,batches:&[String],run:&str,doc:&str,snapshot:&str,digest:&str)
     ->Result<serde_json::Value,PersistedRelationalObservationError>{
     use serde_json::{json,Value};
-    let numeric=crate::query_native_original_relations(config.database_url(),run,doc,snapshot,digest,"all")
+    let numeric_url=std::env::var("SENSIBLAW_DATABASE_URL")
+        .unwrap_or_else(|_|config.database_url().to_owned());
+    let numeric=crate::query_native_original_relations(&numeric_url,run,doc,snapshot,digest,"all")
         .map_err(|_|PersistedRelationalObservationError::CheckedSourceMismatch)?;
     let sha=numeric["source_sha256"].as_str().ok_or(PersistedRelationalObservationError::CheckedSourceMismatch)?;
     if numeric["source_revision_ref"]!=revision || doc!=format!("document:sha256:{sha}")
@@ -567,6 +569,7 @@ pub fn read_article_numeric_coordinate_meet(config:&DatabaseConfig,
         let checked=relational_observations_from_checked_batch_on_client(&mut tx,batch_ref,
             source_family,&ObservationContext::default(),&[])?;
         if checked.source_revision_ref!=revision || checked.source_content_digest_ref!=expected_digest
+            || numeric["parser_run_ref"]!=checked.original_parser_run_ref
             || !regions.insert(checked.original_region_ref.clone()){
             return Err(PersistedRelationalObservationError::CheckedSourceMismatch);
         }

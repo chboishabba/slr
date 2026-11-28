@@ -41,7 +41,14 @@ while IFS= read -r row; do
   edition="$(jq -er .edition <<<"$row")"
   if [[ "$revision" == source-revision:sha256:* ]]; then
     bound="$OUT/view-$i-bound-receipt.json"
-    python3 tools/bind_gwb_native_receipt.py --edition "$edition" --receipt "$receipt" --output "$bound"
+    extra=()
+    source_record="$(jq -r '.source_record_path // empty' <<<"$row")"
+    projection_record="$(jq -r '.projection_path // empty' <<<"$row")"
+    if [[ -n "$source_record" || -n "$projection_record" ]]; then
+      [[ -n "$source_record" && -n "$projection_record" ]]
+      extra=(--source-record "$source_record" --projection-record "$projection_record")
+    fi
+    python3 tools/bind_gwb_native_receipt.py --edition "$edition" --receipt "$receipt" --output "$bound" "${extra[@]}"
     receipt="$bound"
   fi
   if [[ "$run" == native-numeric-chart:missing || "$run" == parser-run:* || "$digest" == native-numeric-chart:missing || "$snapshot" == native-numeric-chart:missing ]]; then

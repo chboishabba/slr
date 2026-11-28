@@ -20,7 +20,7 @@ def require(condition, message):
     if not condition:
         raise ValueError(message)
 
-def bind(edition, receipt, manifest_path=BASE / "native-acquisition-manifest-v1.json"):
+def bind(edition, receipt, manifest_path=BASE / "native-acquisition-manifest-v1.json", *, source_record=None, projection_record=None):
     manifest = load(manifest_path)
     entries = [s for s in manifest["sources"] if s["edition"] == edition]
     require(len(entries) == 1 and edition in ("en", "simple", "es"), "edition missing or ambiguous")
@@ -38,8 +38,8 @@ def bind(edition, receipt, manifest_path=BASE / "native-acquisition-manifest-v1.
     ext = int(unit[len(prefix):])
     require(ext > 0 and raw["inventory"]["article_revision"] == rev, "revision mismatch")
     require(raw["source_sha256"] == digest == sha(a / f"{edition}-canonical.txt"), "canonical digest mismatch")
-    source = a / f"{edition}-slr-record.json"
-    projection = a / f"{edition}-article-candidates.json"
+    source = source_record or a / f"{edition}-slr-record.json"
+    projection = projection_record or a / f"{edition}-article-candidates.json"
     require(sha(source) == raw["original_slr_sha256"], "original SLR digest mismatch")
     require(sha(projection) == raw["projection_sha256"], "projection digest mismatch")
     require(sha(a / "Q207-EntityData.json") == raw["entity_sha256"], "EntityData digest mismatch")
@@ -59,8 +59,10 @@ def main():
     p.add_argument("--edition", required=True)
     p.add_argument("--receipt", required=True, type=Path)
     p.add_argument("--output", required=True, type=Path)
+    p.add_argument("--source-record", type=Path)
+    p.add_argument("--projection-record", type=Path)
     args = p.parse_args()
-    result = bind(args.edition, args.receipt)
+    result = bind(args.edition, args.receipt, source_record=args.source_record, projection_record=args.projection_record)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     tmp = args.output.with_suffix(args.output.suffix + ".tmp")
     tmp.write_text(json.dumps(result, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
