@@ -125,6 +125,7 @@ pub use investigation_acquisition::{
     SelectiveReopeningReceipt, InvestigationAcquisitionError,
     obligation_from_residual, weakly_dominates,
     acquisition_pareto_frontier, apply_acquisition_update,
+    route_frontier_dispositions, potential_reopening_cone,
     selective_reopening,
 };
 pub use repair_vector::{
