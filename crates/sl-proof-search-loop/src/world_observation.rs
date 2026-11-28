@@ -238,3 +238,119 @@ mod tests {
     }
 
 }
+
+/** An original member and its exact inverse into a checked inventory.
+ * This is an adapter for the existing observation ABI, not an authority
+ * validator. The caller must independently reopen the original checker.
+ */
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IndexedObservationMember {
+    pub observation: WorldObservation,
+    pub lane: String,
+    pub ordinal: usize,
+    pub original: serde_json::Value,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IndexedObservationInventory {
+    pub members: Vec<IndexedObservationMember>,
+    pub unavailable_lanes: Vec<String>,
+    pub empty_lanes: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum IndexedObservationError { InvalidReceipt, InvalidLane, InvalidMember, InvalidObservation }
+
+/// Read a recorded inventory as candidate-only observations. Each row
+/// gets a content-addressed value and a distinct occurrence coordinate;
+/// duplicate values never erase original members. No source flags alone
+/// pay formal authority, semantic identity, or world truth.
+pub fn indexed_inventory_observations(receipt: &serde_json::Value)
+    -> Result<IndexedObservationInventory, IndexedObservationError>
+{
+    use serde_json::Value;
+    use sha2::{Digest,Sha256};
+    let bad=IndexedObservationError::InvalidReceipt;
+    if receipt["schema"]!="slr.jmd-indexed-world-fibre-receipt.v1"
+        || receipt["source_observation_checked"]!=true
+        || receipt["cross_source_alignment_paid"]!=false
+        || receipt["world_truth_paid"]!=false {return Err(bad);}
+    let inv=&receipt["inventory"];
+    if inv["schema"]!="slr.jmd-indexed-world-fibre.v1"
+        || inv["semantic_coverage_paid"]!=false
+        || inv["cross_source_alignment_paid"]!=false
+        || inv["world_truth_paid"]!=false {return Err(bad);}
+    let qid=inv["qid"].as_str().filter(|s|s.starts_with('Q')&&s.len()>1&&s[1..].bytes().all(|b|b.is_ascii_digit())).ok_or(IndexedObservationError::InvalidReceipt)?;
+    if receipt["qid"]!=qid || receipt["title"]!=inv["title"] {return Err(IndexedObservationError::InvalidReceipt);}
+    let article_revision=inv["article_revision"].as_str().filter(|s|!s.trim().is_empty()).ok_or(IndexedObservationError::InvalidReceipt)?;
+    let entity_revision=receipt["entity_revision"].as_u64().filter(|v|*v>0).ok_or(IndexedObservationError::InvalidReceipt)?;
+    let digest=|key:&str| -> Result<String,IndexedObservationError>{
+        receipt[key].as_str().filter(|s|s.len()==64&&s.bytes().all(|b|b.is_ascii_hexdigit()))
+            .map(|s|format!("sha256:{}",s.to_ascii_lowercase())).ok_or(IndexedObservationError::InvalidReceipt)
+    };
+    let article_digest=digest("source_sha256")?;
+    let entity_digest=digest("entity_sha256")?;
+    let projection_digest=digest("projection_sha256")?;
+    let original_slr_digest=digest("original_slr_sha256")?;
+    let entity_revision=format!("wikidata:{qid}:oldid:{entity_revision}");
+    let mut out=IndexedObservationInventory{members:Vec::new(),unavailable_lanes:Vec::new(),empty_lanes:Vec::new()};
+    for (chart,revision,source_digest) in [
+        ("article_lanes",article_revision,article_digest.as_str()),
+        ("wikidata_lanes",entity_revision.as_str(),entity_digest.as_str())
+    ]{
+        let lanes=inv[chart].as_object().ok_or(IndexedObservationError::InvalidLane)?;
+        for (lane,value) in lanes{
+            if lane.trim().is_empty(){return Err(IndexedObservationError::InvalidLane);}
+            let lane_ref=format!("{chart}:{lane}");
+            if value.is_null(){out.unavailable_lanes.push(lane_ref);continue;}
+            let rows=value.as_array().ok_or(IndexedObservationError::InvalidLane)?;
+            if rows.is_empty(){out.empty_lanes.push(lane_ref);continue;}
+            for (ordinal,row) in rows.iter().enumerate(){
+                if !row.is_object(){return Err(IndexedObservationError::InvalidMember);}
+                let bytes=serde_json::to_vec(row).map_err(|_|IndexedObservationError::InvalidMember)?;
+                let value_ref=format!("sha256:{:x}",Sha256::digest(bytes));
+                let chart_digest=if chart=="article_lanes"{
+                    if lane=="pnf_candidates"||lane=="named_entities"{&original_slr_digest}else{&projection_digest}
+                }else{&entity_digest};
+                let obs=WorldObservation{
+                    request_ref:format!("indexed-member:{qid}:{revision}:{chart_digest}:{lane}:{ordinal}"),
+                    object_ref:qid.to_owned(),relation_ref:lane_ref.clone(),
+                    source_ref:if chart=="article_lanes"{format!("wikipedia:en:{qid}")}else{format!("wikidata:{qid}")},
+                    source_revision_ref:revision.to_owned(),content_digest_ref:source_digest.to_owned(),
+                    value_ref,retrieval_status:RetrievalStatus::Retrieved,freshness_status:FreshnessStatus::Unknown,
+                    provenance_class:ProvenanceClass::RevisionPinnedExternalSource,backend:GetterBackend::LeanInterop,
+                    candidate_only:true,creates_semantic_authority:false,claim_truth_promoted:false,
+                };
+                obs.validate().map_err(|_|IndexedObservationError::InvalidObservation)?;
+                out.members.push(IndexedObservationMember{observation:obs,lane:lane_ref.clone(),ordinal,original:row.clone()});
+            }
+        }
+    }
+    Ok(out)
+}
+
+#[cfg(test)]
+mod indexed_inventory_tests {
+    use super::*;
+    use serde_json::json;
+    #[test]
+    fn preserves_duplicate_occurrences_and_unavailable_vs_empty_lanes(){
+        let h="a".repeat(64);
+        let mut r=json!({"schema":"slr.jmd-indexed-world-fibre-receipt.v1","qid":"Q9","title":"Example",
+            "source_observation_checked":true,"cross_source_alignment_paid":false,"world_truth_paid":false,
+            "source_sha256":h,"original_slr_sha256":h,"projection_sha256":h,"entity_sha256":h,"entity_revision":42,
+            "inventory":{"schema":"slr.jmd-indexed-world-fibre.v1","qid":"Q9","title":"Example","article_revision":"enwiki-revid:23",
+            "article_lanes":{"event_candidates":[{"x":1},{"x":1}],"named_entities":null,"time_mentions":[]},
+            "wikidata_lanes":{"P31":[{"id":"Q9$example"}]},"semantic_coverage_paid":false,
+            "cross_source_alignment_paid":false,"world_truth_paid":false}});
+        let out=indexed_inventory_observations(&r).unwrap();
+        assert_eq!(out.members.len(),3);
+        assert_eq!(out.members[0].observation.value_ref,out.members[1].observation.value_ref);
+        assert_ne!(out.members[0].observation.request_ref,out.members[1].observation.request_ref);
+        assert_eq!(out.unavailable_lanes,vec!["article_lanes:named_entities"]);
+        assert_eq!(out.empty_lanes,vec!["article_lanes:time_mentions"]);
+        assert_eq!(out.members[2].observation.source_revision_ref,"wikidata:Q9:oldid:42");
+        r["world_truth_paid"]=json!(true);
+        assert!(indexed_inventory_observations(&r).is_err());
+    }
+}
