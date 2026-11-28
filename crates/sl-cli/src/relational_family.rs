@@ -662,6 +662,24 @@ pub fn run(args:&[String])->Result<(),String>{
             print_json(&serde_json::json!({"schema":"itir.native-relational-corpus.v1","corpus_ref":corpus,
                 "cases":receipts,"semantic_coverage_paid":false}))
         },
+        [mode,consumer,access,views_path,axes_json,flag] if mode=="run-pnf-cohort"=>{
+            if flag!="--commit"||access.trim().is_empty(){return Err("explicit --commit and access constraint required".into());}
+            let views:Vec<sensiblaw_pg_source_store::NativePnfViewCoordinate>=bounded_json(views_path,262144)?;
+            let axes:Vec<String>=serde_json::from_str(axes_json).map_err(|e|e.to_string())?;
+            let axes:Vec<_>=axes.iter().map(String::as_str).collect();
+            let seed=sensiblaw_pg_source_store::seed_relational_pnf_cohort(&config,consumer,&views,&axes)
+                .map_err(|e|e.to_string())?;
+            let refs:Vec<String>=serde_json::from_value(seed["selector_refs"].clone()).map_err(|e|e.to_string())?;
+            let family=run_persisted_relational_family(&config,consumer,access,&refs).map_err(|e|e.to_string())?;
+            let reopened=inspect_persisted_relational_family(&config,&family.family_ref).map_err(|e|e.to_string())?;
+            if reopened!=family{return Err("cohort family changed on readback".into());}
+            let investigation=family_investigation_projection(&reopened)?;
+            print_json(&serde_json::json!({"schema":"slr.native-pnf-cohort-journey.v1",
+                "selector_seed":seed,"family":reopened,"investigation":investigation,
+                "candidate_only":true,"atomic_publication":false,
+                "formal_consumer_equivalence_paid":false,"source_independence_paid":false,
+                "world_truth_paid":false,"provider_acquisition_executed":false}))
+        },
         [mode,family,query,requests_json] if mode=="inspect-licensed-view-cohort"=>{
             // Inline exact native selectors and existing referee locators;
             // never accept proof answers or arbitrary local input files.
@@ -707,6 +725,6 @@ pub fn run(args:&[String])->Result<(),String>{
                 "candidate_review_status":format!("{:?}",item.current_status),"creates_semantic_authority":false}))
         },
         _ if (4..=12).contains(&args.len())=>print_json(&run_persisted_relational_family(&config,&args[0],&args[1],&args[2..]).map_err(|e|e.to_string())?),
-        _=>Err("usage: relational-family inspect-indexed-cohort MANIFEST_JSON CONSUMER | inspect-heterogeneous-selection REQUEST_JSON | run-heterogeneous-family REQUEST_JSON ACCESS EXPECTED_SELECTION --commit | inspect-heterogeneous-overlap RECEIPT CONSUMER RUN DOC SNAPSHOT DIGEST | inspect-indexed-native-meet RECEIPT CONSUMER REVISION RUN DOC SNAPSHOT DIGEST BATCH_REFS_JSON | inspect-indexed-inventory RECEIPT CONSUMER REQUIRED_LANES_JSON | CONSUMER ACCESS SELECTOR SELECTOR ... | licensed-semantic REVISION BATCH_REFS_JSON RUN DOC SNAPSHOT DIGEST OBSERVATION CONSUMER QUERY EVIDENCE REPO SHA PATH THREAD | predicate-transport REVISION BATCH_REFS_JSON RUN DOC SNAPSHOT DIGEST | semantic-candidates REVISION BATCH_REFS_JSON RUN DOC SNAPSHOT DIGEST | coordinate-meet REVISION BATCH_REFS_JSON RUN DOC SNAPSHOT DIGEST | numeric-action-roles RUN DOC SNAPSHOT DIGEST MENTION_TOKEN_IDS_JSON | article-actions REVISION BATCH_REFS_JSON MENTION_REFS_JSON | inspect-licensed-view-cohort FAMILY QUERY EVIDENCE_JSON | licensed-reciprocal FAMILY LEFT RIGHT QUERY EVIDENCE REPO SHA PATH THREAD | reciprocal FAMILY LEFT RIGHT | participant FAMILY FILLER_REF | seed-pnf-pair-scoped CONSUMER LEFT_BATCH LEFT_PRED RIGHT_BATCH RIGHT_PRED AXES_JSON | inspect-mabo-formal-demands OBLIGATION | inspect-investigation FAMILY | inspect-recorded-parity FAMILY | inspect-local-research FAMILY | plan-local-research FAMILY CALIBRATION_JSON_PATH | inspect-research-frontier FAMILY | inspect FAMILY | prepare-revision FAMILY OLD_SELECTOR NEW_SELECTOR | inspect-revision TRANSITION | review-revision TRANSITION COMMAND REVIEWER accept|reject|abstain | publish-revision TRANSITION".into())
+        _=>Err("usage: relational-family inspect-indexed-cohort MANIFEST_JSON CONSUMER | inspect-heterogeneous-selection REQUEST_JSON | run-heterogeneous-family REQUEST_JSON ACCESS EXPECTED_SELECTION --commit | inspect-heterogeneous-overlap RECEIPT CONSUMER RUN DOC SNAPSHOT DIGEST | inspect-indexed-native-meet RECEIPT CONSUMER REVISION RUN DOC SNAPSHOT DIGEST BATCH_REFS_JSON | inspect-indexed-inventory RECEIPT CONSUMER REQUIRED_LANES_JSON | CONSUMER ACCESS SELECTOR SELECTOR ... | licensed-semantic REVISION BATCH_REFS_JSON RUN DOC SNAPSHOT DIGEST OBSERVATION CONSUMER QUERY EVIDENCE REPO SHA PATH THREAD | predicate-transport REVISION BATCH_REFS_JSON RUN DOC SNAPSHOT DIGEST | semantic-candidates REVISION BATCH_REFS_JSON RUN DOC SNAPSHOT DIGEST | coordinate-meet REVISION BATCH_REFS_JSON RUN DOC SNAPSHOT DIGEST | numeric-action-roles RUN DOC SNAPSHOT DIGEST MENTION_TOKEN_IDS_JSON | article-actions REVISION BATCH_REFS_JSON MENTION_REFS_JSON | run-pnf-cohort CONSUMER ACCESS VIEWS_JSON AXES_JSON --commit | inspect-licensed-view-cohort FAMILY QUERY EVIDENCE_JSON | licensed-reciprocal FAMILY LEFT RIGHT QUERY EVIDENCE REPO SHA PATH THREAD | reciprocal FAMILY LEFT RIGHT | participant FAMILY FILLER_REF | seed-pnf-pair-scoped CONSUMER LEFT_BATCH LEFT_PRED RIGHT_BATCH RIGHT_PRED AXES_JSON | inspect-mabo-formal-demands OBLIGATION | inspect-investigation FAMILY | inspect-recorded-parity FAMILY | inspect-local-research FAMILY | plan-local-research FAMILY CALIBRATION_JSON_PATH | inspect-research-frontier FAMILY | inspect FAMILY | prepare-revision FAMILY OLD_SELECTOR NEW_SELECTOR | inspect-revision TRANSITION | review-revision TRANSITION COMMAND REVIEWER accept|reject|abstain | publish-revision TRANSITION".into())
     }
 }
