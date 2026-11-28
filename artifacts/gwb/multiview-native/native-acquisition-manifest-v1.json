@@ -42,6 +42,25 @@
       "indexed_jmd_receipt": "artifacts/gwb/multiview-native/acquired/es-indexed-world-fibre.json",
       "indexed_jmd_kernel_marker": "INDEXED_WORLD_FIBRE_KERNEL_OK",
       "status": "native-and-jmd-indexed-receipt-kernel-accepted"
+    },
+    {
+      "edition": "en",
+      "source_ref": "source:wikipedia:en:George_W._Bush:revid:1385850169",
+      "source_revision_ref": "source-revision:sha256:eba877f737b18412cc2e22095dd791b3e449f8fcf17af779df1432ea9fa62cdb",
+      "document_ref": "document:sha256:a88ef63b9c109f0f09c2fc2a266373a9ecaae855104cb0e11c4e6c53d90d3233",
+      "canonical_sha256": "a88ef63b9c109f0f09c2fc2a266373a9ecaae855104cb0e11c4e6c53d90d3233",
+      "parser_run_ref": "parser-run:sha256:8a3ce9b0738d583278497aeeae44f420bee0044b863a3b94d13a9e9eb8aab7ba",
+      "parser_model": "en_core_web_sm",
+      "parser_version": "3.8.11",
+      "parser_jobs": 795,
+      "candidate_factor_count": 17323,
+      "parser_residual_regions": 0,
+      "candidate_only": true,
+      "creates_semantic_authority": false,
+      "claim_truth_promoted": false,
+      "indexed_jmd_receipt": "artifacts/gwb/multiview-native/acquired/en-indexed-world-fibre.json",
+      "indexed_jmd_kernel_marker": "INDEXED_WORLD_FIBRE_KERNEL_OK",
+      "status": "native-and-jmd-indexed-receipt-kernel-accepted"
     }
   ],
   "existing_native_book_source": {
@@ -50,6 +69,6 @@
     "canonical_sha256": "7ff2ec8ffe6243871ad682e7d7060fe3b84025fb15dbe229154d7aa7f6a72b30",
     "status": "preexisting-book-pdf"
   },
-  "next_required": "Recover exact native predicate batch/member references and an exact native English manifestation before constructing GWB_NATIVE_VIEW_INPUTS_JSON.",
+  "next_required": "Recover exact native predicate batch/member references and construct GWB_NATIVE_VIEW_INPUTS_JSON for the accepted English, Simple English and Spanish source fibres.",
   "status": "native-acquisition-and-jmd-indexing-accepted-cross-view-weld-pending"
 }
