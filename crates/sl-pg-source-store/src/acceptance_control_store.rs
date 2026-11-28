@@ -387,6 +387,20 @@ pub fn persist_rel_acceptance_corpus(
     Ok(())
 }
 
+/// Map only the original ingest family. Generic documents and unknown
+/// domains remain Other; a book must never become Wikipedia by selection.
+fn relational_family_for_ingest(family:&str)->RelationalSourceFamily {
+    match family {
+        "wiki"=>RelationalSourceFamily::Wikipedia,
+        "legal_authority"=>RelationalSourceFamily::Legal,
+        "transcript"=>RelationalSourceFamily::Transcript,
+        "chat"=>RelationalSourceFamily::Chat,
+        "structured_dataset"=>RelationalSourceFamily::StructuredKnowledge,
+        _=>RelationalSourceFamily::Other,
+    }
+}
+const NATIVE_CONTEXT_AXES:[&str;7]=["scope","time","modality","quantifier","attribution","ontology","language"];
+
 /// Seed the existing relational-family control plane from two already
 /// persisted native PNF batches. This creates candidate-only selectors only;
 /// it never creates semantic authority or claim truth.
@@ -398,6 +412,21 @@ pub fn seed_relational_pnf_pair(
     right_batch_ref: &str,
     right_predicate_ref: &str,
 ) -> Result<serde_json::Value, AcceptanceControlStoreError> {
+    seed_relational_pnf_pair_scoped(config,consumer_ref,left_batch_ref,left_predicate_ref,
+        right_batch_ref,right_predicate_ref,&NATIVE_CONTEXT_AXES)
+}
+
+/// Explicit consumer demand; use a fresh consumer reference for a changed
+/// scope. An existing consumer is immutable, including permitted families.
+pub fn seed_relational_pnf_pair_scoped(
+    config:&DatabaseConfig, consumer_ref:&str, left_batch_ref:&str,
+    left_predicate_ref:&str, right_batch_ref:&str,right_predicate_ref:&str,
+    context_axes:&[&str],
+)->Result<serde_json::Value,AcceptanceControlStoreError>{
+    let axes:std::collections::BTreeSet<_>=context_axes.iter().copied().collect();
+    if axes.len()!=context_axes.len() || axes.iter().any(|a|!NATIVE_CONTEXT_AXES.contains(a)){
+        return Err(AcceptanceControlStoreError::InvalidCoordinate("context_axes"));
+    }
     for (name, value) in [
         ("consumer_ref", consumer_ref),
         ("left_batch_ref", left_batch_ref),
@@ -434,18 +463,45 @@ pub fn seed_relational_pnf_pair(
             )));
         }
     }
+    // Resolve source class from the same transaction as the native batch.
+    let mut families=Vec::new();
+    let mut source_metadata=Vec::new();
+    for batch in [&left,&right]{
+        let statement=crate::statement_trace_store::load_source_statement_with_client(&mut tx,&batch.statement_ref)
+            .map_err(|e|AcceptanceControlStoreError::Upstream(e.to_string()))?
+            .ok_or_else(||AcceptanceControlStoreError::NotFound(batch.statement_ref.clone()))?;
+        let (source,_)=crate::generic_source_content_store::load_generic_text_source_on_client(
+            &mut tx,&statement.source_revision_ref)
+            .map_err(|e|AcceptanceControlStoreError::Upstream(e.to_string()))?;
+        if source.document_ref!=statement.document_ref || statement.exact_span_ref!=batch.exact_span_ref {
+            return Err(AcceptanceControlStoreError::ExistingRowConflict);
+        }
+        let family=relational_family_for_ingest(&source.source_family_ref);
+        families.push(family);
+        source_metadata.push(serde_json::json!({"source_revision_ref":source.source_revision_ref,
+            "native_source_family":source.source_family_ref,"source_family":family,
+            "provider_ref":source.provider_ref,"content_digest_ref":source.content_digest_ref}));
+    }
+    let mut permitted=families.clone();
+    permitted.sort_by_key(|f|source_family_db(*f));permitted.dedup();
     let consumer = RelationalConsumer {
         consumer_ref: consumer_ref.to_owned(),
-        permitted_source_families: vec![RelationalSourceFamily::Wikipedia],
+        permitted_source_families: permitted,
         required_roles: vec![], required_role_types: vec![],
-        compare_scope: true, compare_time: true, compare_modality: true,
-        compare_quantifier: true, compare_attribution: true,
-        compare_ontology: true, compare_language: true,
+        compare_scope: axes.contains("scope"), compare_time: axes.contains("time"),
+        compare_modality: axes.contains("modality"), compare_quantifier: axes.contains("quantifier"),
+        compare_attribution: axes.contains("attribution"), compare_ontology: axes.contains("ontology"),
+        compare_language: axes.contains("language"),
         predicate_alignments: vec![], role_alignments: vec![],
         filler_alignments: vec![], type_alignments: vec![],
     };
-    persist_consumer(&mut tx, &consumer)?;
-    let selector = |side: &str, batch_ref: &str, predicate_ref: &str| {
+    match load_consumer(&mut tx,consumer_ref){
+        Ok(existing) if existing==consumer=>{},
+        Ok(_)=>return Err(AcceptanceControlStoreError::ExistingRowConflict),
+        Err(AcceptanceControlStoreError::NotFound(_))=>persist_consumer(&mut tx,&consumer)?,
+        Err(e)=>return Err(e),
+    }
+    let selector = |side: &str, batch_ref: &str, predicate_ref: &str, family:RelationalSourceFamily| {
         let digest = Sha256::digest(
             format!("{consumer_ref}|{side}|{batch_ref}|{predicate_ref}").as_bytes(),
         );
@@ -457,19 +513,22 @@ pub fn seed_relational_pnf_pair(
             selected_predicate_candidate_ref: Some(predicate_ref.to_owned()),
             diagnostic_ref: None, native_statement_ref: None,
             observation_ref: format!("observation:native-pnf:sha256:{digest}"),
-            source_family: Some(RelationalSourceFamily::Wikipedia),
+            source_family: Some(family),
             context: ObservationContext::default(),
             provenance_refs: vec![batch_ref.to_owned(), "native-pnf-existing-run".to_owned()],
         }
     };
-    let left_selector = selector("left", left_batch_ref, left_predicate_ref);
-    let right_selector = selector("right", right_batch_ref, right_predicate_ref);
+    let left_selector = selector("left", left_batch_ref, left_predicate_ref,families[0]);
+    let right_selector = selector("right", right_batch_ref, right_predicate_ref,families[1]);
     persist_selector(&mut tx, &left_selector)?;
     persist_selector(&mut tx, &right_selector)?;
     tx.commit()?;
     Ok(serde_json::json!({
         "schema": "slr.native-pnf-relational-selection-seed.v1",
         "consumer_ref": consumer_ref,
+        "source_metadata":source_metadata,
+        "requested_context_axes":context_axes,
+        "context_values_supplied":false,
         "left_selector_ref": left_selector.selector_ref,
         "right_selector_ref": right_selector.selector_ref,
         "left_batch_ref": left_batch_ref, "right_batch_ref": right_batch_ref,
@@ -1337,5 +1396,17 @@ mod tests {
         ] {
             assert_eq!(finding_from_db(finding_db(&value)).unwrap(), value);
         }
+    }
+}
+
+#[cfg(test)]
+mod native_seed_scope_tests{
+    use super::*;
+    #[test]
+    fn generic_book_is_not_wikipedia_and_unknown_is_not_authority(){
+        assert_eq!(relational_family_for_ingest("document"),RelationalSourceFamily::Other);
+        assert_eq!(relational_family_for_ingest("wiki"),RelationalSourceFamily::Wikipedia);
+        assert_eq!(relational_family_for_ingest("legal_authority"),RelationalSourceFamily::Legal);
+        assert_eq!(relational_family_for_ingest("web"),RelationalSourceFamily::Other);
     }
 }
