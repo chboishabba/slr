@@ -838,7 +838,7 @@ fn recorded_syntax_pair(left:&SelectedRelationalSource,right:&SelectedRelational
     let charts=recorded_syntax_chart(&left.observation).zip(recorded_syntax_chart(&right.observation));
     let Some((a,b))=charts.filter(|_|same) else {
         out["status"]=json!(if same{"invalid_checked_coordinate"}else{"different_source_content"});
-        out["recorded_answer_equal"]=json!(false);
+        out["recorded_answer_equal"]=serde_json::Value::Null;
         return out;
     };
     let common:Vec<_>=a.iter().filter_map(|(key,value)|b.get(key).map(|other|
@@ -1482,5 +1482,42 @@ mod source_semantic_binding_tests {
         changed["rows"][0]["outside_model_possible"]=json!(false);
         assert_ne!(baseline,bind(&changed,&a));
         assert!(source_semantic_proof_binding(&receipt,"rev","foreign","consumer","query","stmt","ev",&a).is_err());
+    }
+}
+
+#[cfg(test)]
+mod recorded_syntax_parity_tests{
+    use super::*;
+    use crate::relational_interlingua::{ObservationContext,RoleBinding};
+    fn source(id:&str,extra:bool)->SelectedRelationalSource{
+        let span=format!("document-region:source-revision:{id}:sentence:1:0-20");
+        let owner=format!("parser-run:{id}:{span}");
+        let candidate=|tail:&str|format!("candidate-pnf-db:{owner}:{tail}");
+        let mut roles=vec![RoleBinding{role_ref:"syntax:nsubj".into(),
+            filler_candidate_ref:candidate("0:0:3"),occurrence:0}];
+        if extra{roles.push(RoleBinding{role_ref:"syntax:dobj".into(),
+            filler_candidate_ref:candidate("2:9:12"),occurrence:0});}
+        SelectedRelationalSource{selector_ref:format!("selector:{id}"),observation:RelationalObservation{
+            observation_ref:format!("obs:{id}"),source_revision_ref:format!("source-revision:{id}"),
+            source_family:crate::RelationalSourceFamily::Other,source_span_ref:span,
+            parser_or_producer_ref:format!("db-parser:{owner}"),predicate_candidate_ref:candidate("1:4:8"),
+            role_bindings:roles,role_type_hypotheses:vec![],context:ObservationContext::default(),
+            candidate_type_refs:vec![],provenance_refs:vec![],native_metadata_refs:vec![],
+            polarity:Polarity::Undetermined,candidate_only:true,creates_semantic_authority:false,
+            claim_truth_promoted:false}}
+    }
+    #[test]
+    fn recorded_query_preserves_inverse_and_rejects_extra_right_member(){
+        let a=source("a",false);let b=source("b",false);
+        let equal=recorded_syntax_pair(&a,&b,"digest","digest");
+        assert_eq!(equal["recorded_answer_equal"],true);
+        assert_eq!(equal["common"].as_array().unwrap().len(),2);
+        let more=recorded_syntax_pair(&a,&source("b",true),"digest","digest");
+        assert_eq!(more["recorded_answer_equal"],false);
+        assert_eq!(more["right_only"].as_array().unwrap().len(),1);
+        let foreign=recorded_syntax_pair(&a,&b,"digest","different");
+        assert!(foreign["recorded_answer_equal"].is_null());
+        let mut forged=b;forged.observation.predicate_candidate_ref=a.observation.predicate_candidate_ref.clone();
+        assert_eq!(recorded_syntax_pair(&a,&forged,"digest","digest")["status"],"invalid_checked_coordinate");
     }
 }
