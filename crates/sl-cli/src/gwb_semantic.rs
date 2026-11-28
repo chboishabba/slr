@@ -256,6 +256,28 @@ fn verify_pair(args:&[String])->R<Value>{
         "isolated_kernel_certification_paid":false,"statement_digest_verified":false,
         "referee_authority_paid":false,"world_truth_paid":false,"writes_database":false}))
 }
+
+fn verify_entity_office(path:&Path,digest:&str,revision:u64,root:&Path,commit:&str)->R<Value>{
+    let path=path.canonicalize().map_err(|e|e.to_string())?;
+    let root=root.canonicalize().map_err(|e|e.to_string())?;
+    let bytes=raw(&path,32<<20)?;
+    let native=entity_office(&bytes,digest,revision)?;
+    check_checkout(&root,commit)?;
+    let runner=root.join("tools/GwbExactEntityOfficeRunner.lean");
+    let rev=revision.to_string();
+    let out=exec(Command::new("timeout").args(["--kill-after=5s","90s","lake","env","lean","--run"])
+        .arg(&runner).arg(&path).arg(&rev).current_dir(&root))?;
+    let golden:Value=serde_json::from_slice(&out).map_err(|e|e.to_string())?;
+    require(golden["schema"]=="slr.gwb-golden-entity-office.v1"&&golden["source_sha256"]==digest&&
+        golden["entity_revision"]==revision&&golden["matching_statement_count"]==native["matching_statement_count"]&&
+        golden["witness"]==native["witness"]["statement"]&&golden["world_truth_paid"]==false,
+        "golden exact EntityData witness mismatch")?;
+    check_checkout(&root,commit)?;
+    require(raw(&path,32<<20)?==bytes,"entity source changed during parity check")?;
+    Ok(json!({"schema":"slr.native-golden-entity-office-parity.v1","native":native,"golden":golden,
+        "golden_commit":commit,"exact_original_witness_parity":true,"candidate_only":true,
+        "runtime_interpretation_paid":false,"referee_authority_paid":false,"world_truth_paid":false}))
+}
 pub fn run(args:&[String])->R<()>{
     let result=match args{
         [mode,source,receipt] if mode=="inspect-abstract"=>abstract_source(Path::new(source),Path::new(receipt),None)?,
@@ -264,6 +286,8 @@ pub fn run(args:&[String])->R<()>{
             entity_office(&raw(Path::new(entity),32<<20)?,digest,revision.parse::<u64>().map_err(|e|e.to_string())?)?,
         [mode,source,receipt,definitions,entity,digest,revision] if mode=="inspect-dependency-join"=>
             dependency_join(Path::new(source),Path::new(receipt),Path::new(definitions),Path::new(entity),digest,revision.parse::<u64>().map_err(|e|e.to_string())?)?,
+        [mode,entity,digest,revision,root,commit] if mode=="verify-entity-office"=>
+            verify_entity_office(Path::new(entity),digest,revision.parse::<u64>().map_err(|e|e.to_string())?,Path::new(root),commit)?,
         [mode,rest @ ..] if mode=="verify-pair"=>verify_pair(rest)?,
         _=>return Err("gwb-semantic inspect-abstract SOURCE RECEIPT [DEFINITIONS_DIR] | verify-pair FAMILY LEFT RIGHT QUERY STATEMENT_DIGEST EVIDENCE_REF LEFT_EDITION LEFT_SOURCE RIGHT_EDITION RIGHT_SOURCE LEAN_ROOT LEAN_COMMIT".into())
     };

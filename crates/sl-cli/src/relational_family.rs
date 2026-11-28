@@ -735,6 +735,13 @@ pub fn run(args:&[String])->Result<(),String>{
             print_json(&sensiblaw_pg_source_store::read_query_context_capsule(
                 &config,family,query,&requests,None).map_err(|e|e.to_string())?)
         },
+        [mode,family,query,requests_json,expected,obligation,old_selector,new_selector,commit] if mode=="prepare-signed-query-repair"=>{
+            if commit!="--commit"||requests_json.len()>65536{return Err("explicit --commit and bounded evidence request required".into());}
+            let requests:Vec<sensiblaw_pg_source_store::ViewPairEvidence>=serde_json::from_str(requests_json)
+                .map_err(|e|e.to_string())?;
+            print_json(&sensiblaw_pg_source_store::prepare_signed_query_repair(
+                &config,family,query,&requests,expected,obligation,old_selector,new_selector).map_err(|e|e.to_string())?)
+        },
         [mode,transition,query,requests_json,expected] if mode=="inspect-reviewed-signed-reentry"=>{
             if requests_json.len()>65536{return Err("cohort evidence request too large".into());}
             let requests:Vec<sensiblaw_pg_source_store::ViewPairEvidence>=serde_json::from_str(requests_json)

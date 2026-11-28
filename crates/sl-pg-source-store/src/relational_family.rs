@@ -1013,27 +1013,32 @@ pub fn prepare_relational_family_revision(config:&DatabaseConfig,family_ref:&str
     let mut connection=Client::connect(config.database_url(),NoTls)?;
     let mut tx=connection.transaction()?;
     tx.batch_execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ; SET LOCAL statement_timeout='90000ms'; SET LOCAL lock_timeout='5000ms'")?;
-    let old=read_manifest(&mut tx,family_ref)?;
-    if successor(&mut tx,family_ref)?.is_some(){return Err(RelationalFamilyError::InvalidTransition);}
-    read_family_on_client(&mut tx,&old)?;
+    let t=prepare_relational_family_revision_on_tx(&mut tx,family_ref,old_selector,new_selector)?;
+    tx.commit()?;
+    Ok(t)
+}
+fn prepare_relational_family_revision_on_tx(tx:&mut postgres::Transaction<'_>,family_ref:&str,
+    old_selector:&str,new_selector:&str)->Result<FamilyRevisionTransition,RelationalFamilyError>{
+    let old=read_manifest(tx,family_ref)?;
+    if successor(tx,family_ref)?.is_some(){return Err(RelationalFamilyError::InvalidTransition);}
+    read_family_on_client(tx,&old)?;
     let mut selectors=old.members.iter().map(|s|s.selector_ref.clone()).collect::<Vec<_>>();
     let slot=selectors.iter_mut().find(|s|s.as_str()==old_selector)
         .ok_or(RelationalFamilyError::InvalidTransition)?;
     *slot=new_selector.into();
-    let (consumer,projection)=current_projection(&mut tx,&old.consumer_ref,&old.access_constraint_ref,&selectors)?;
+    let (consumer,projection)=current_projection(tx,&old.consumer_ref,&old.access_constraint_ref,&selectors)?;
     let new=family_manifest(&projection,&old.access_constraint_ref)?;
     let t=revision_transition(&old,&new,old_selector,new_selector)?;
-    materialize_family(&mut tx,&consumer,projection,&old.access_constraint_ref,true)?;
-    if successor(&mut tx,&new.family_ref)?.is_some(){return Err(RelationalFamilyError::InvalidTransition);}
-    persist_review_projection_on_tx(&mut tx,&transition_review(&t,&old.consumer_ref))?;
+    materialize_family(tx,&consumer,projection,&old.access_constraint_ref,true)?;
+    if successor(tx,&new.family_ref)?.is_some(){return Err(RelationalFamilyError::InvalidTransition);}
+    persist_review_projection_on_tx(tx,&transition_review(&t,&old.consumer_ref))?;
     let body=serde_json::to_string(&t)?;
     tx.execute(
         "INSERT INTO semantic.itir_relational_family_revision
          (transition_ref,old_family_ref,new_family_ref,review_item_ref,packet_sha256,packet_json)
          VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(transition_ref) DO NOTHING",
         &[&t.transition_ref,&t.old_family_ref,&t.new_family_ref,&t.review_item_ref,&digest_bytes(body.as_bytes()),&body])?;
-    if read_transition(&mut tx,&t.transition_ref)?!=t{return Err(RelationalFamilyError::ChangedReplay);}
-    tx.commit()?;
+    if read_transition(tx,&t.transition_ref)?!=t{return Err(RelationalFamilyError::ChangedReplay);}
     Ok(t)
 }
 /// A local S29 candidate review can retire an old *family selection*,
@@ -1782,6 +1787,50 @@ fn signed_query_frontier_projection(family_ref:&str,query:&str,expected_digest:&
  *  query and exact capsule in ONE serializable read-only transaction.
  *  A retained structural comparison is not a transferable proof licence:
  *  all proof pairs are independently rebound to the child family. */
+
+/** Prepare a repair only against an exact CURRENT signed query debt and an
+ * already acquired native replacement selector. Same transaction as the
+ * canonical candidate revision constructor. No review acceptance, provider
+ * execution, payment or publication is inferred from the proposed repair. */
+pub fn prepare_signed_query_repair(config:&DatabaseConfig,family_ref:&str,query:&str,
+    requests:&[ViewPairEvidence],expected_digest:&str,obligation_ref:&str,
+    old_selector:&str,new_selector:&str)->Result<serde_json::Value,RelationalFamilyError>{
+    use serde_json::json;
+    let mut connection=Client::connect(config.database_url(),NoTls)?;
+    let mut tx=connection.transaction()?;
+    tx.batch_execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE; SET LOCAL statement_timeout='90000ms'; SET LOCAL lock_timeout='5000ms'")?;
+    let (family,cohort)=read_view_cohort_snapshot_on_tx(&mut tx,family_ref,query,requests)?;
+    let capsule=context_capsule(&family,&cohort,requests)?;
+    if capsule["capsule_digest"]!=expected_digest{return Err(RelationalFamilyError::ChangedReplay);}
+    let frontier=signed_query_frontier_projection(family_ref,query,expected_digest,&capsule["capsule"],&cohort)?;
+    let rows=frontier["obligations"].as_array().ok_or(RelationalFamilyError::ChangedReplay)?;
+    let matching:Vec<_>=rows.iter().filter(|r|r["obligation_ref"]==obligation_ref).collect();
+    if matching.len()!=1{return Err(RelationalFamilyError::InvalidTransition);}
+    let debt=matching[0];
+    if debt["reason"]=="independent_pair_evidence_required"{
+        // Missing independent proof cannot be repaired by swapping sources.
+        return Err(RelationalFamilyError::ReciprocalProofBinding);
+    }
+    let selected=debt["selector_ref"]==old_selector||
+        debt["left_selector_ref"]==old_selector||debt["right_selector_ref"]==old_selector;
+    if !selected||old_selector==new_selector{return Err(RelationalFamilyError::InvalidTransition);}
+    // For a coverage hold, only replace a side whose bounded answer is
+    // unavailable. A known answer on the other side is not the debt.
+    if debt["reason"]=="source_consumer_coverage_required"{
+        let missing=(debt["left_selector_ref"]==old_selector&&debt["forward"]["left_support"].is_null())||
+            (debt["right_selector_ref"]==old_selector&&debt["forward"]["right_support"].is_null());
+        if !missing{return Err(RelationalFamilyError::InvalidTransition);}
+    }
+    let transition=prepare_relational_family_revision_on_tx(&mut tx,family_ref,old_selector,new_selector)?;
+    let receipt=json!({"schema":"slr.signed-query-repair-preparation.v1",
+        "parent_capsule_digest":expected_digest,"query_ref":query,"triggering_obligation":debt,
+        "transition":transition,"candidate_only":true,"requires_review":true,
+        "publishes_revision":false,"executes_acquisition":false,"formal_premise_paid":false,
+        "world_truth_paid":false,"writes_database":true});
+    tx.commit()?;
+    Ok(receipt)
+}
+
 pub fn read_reviewed_signed_reentry(config:&DatabaseConfig,transition_ref:&str,query:&str,
     requests:&[ViewPairEvidence],expected_digest:&str)
     ->Result<serde_json::Value,RelationalFamilyError>{
