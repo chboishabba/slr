@@ -229,6 +229,7 @@ fn inspect_local_research(config:&sensiblaw_pg_source_store::DatabaseConfig,
                 "network_requests":x.network_requests,"candidate_only":true}));
         }
     }
+    let calibrated=calibration.is_some();
     let (planned,pareto,selected)=if let Some(c)=calibration{
         let moves=plan_local_frontier_research(&frontier,&world,&index,&contexts,&values)
             .map_err(|e|format!("{e:?}"))?;
@@ -250,7 +251,8 @@ fn inspect_local_research(config:&sensiblaw_pg_source_store::DatabaseConfig,
         "source_manifest":source_manifest,"lexical_seeds":seeds,"retrieval":retrieval,
         "no_hit_hypothesis_refs":deferred,"planned_moves":planned,"pareto_move_refs":pareto,
         "selected_move_ref":selected,"scope":"selected persisted generic source revisions only",
-        "calibration_is_operator_declared":true,"candidate_only":true,"network_requests":0,
+        "retrieval_limitations":["source-local predicate literal seeds, not proposition correspondence","no separately loaded citations or world vocabulary","no provider dispatch; additional calibrated discriminator terms required for ranked planning"],
+        "calibration_is_operator_declared":calibrated,"candidate_only":true,"network_requests":0,
         "creates_access_authority":false,"world_truth_paid":false,"formal_consumer_equivalence_paid":false,
         "writes_database":false,"provider_acquisition_executed":false}))
 }
