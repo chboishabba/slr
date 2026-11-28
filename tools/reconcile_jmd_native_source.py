@@ -21,6 +21,47 @@ def occurrences(text, literal):
         if i < 0: return out
         out.append(i); start = i + max(1, len(literal))
 
+def indexed_event_lane(record, article):
+    """Accept the actual nested JMD receipt or the original projection.
+    An unavailable lane is not an empty observed event inventory."""
+    if record.get("schema") == "slr.jmd-indexed-world-fibre-receipt.v1":
+        inv = record.get("inventory")
+        if (not isinstance(inv, dict)
+                or inv.get("schema") != "slr.jmd-indexed-world-fibre.v1"
+                or record.get("source_observation_checked") is not True
+                or record.get("cross_source_alignment_paid") is not False
+                or record.get("world_truth_paid") is not False):
+            raise ValueError("invalid indexed JMD receipt")
+        if record.get("source_sha256") != hashlib.sha256(article.encode("utf-8")).hexdigest():
+            raise ValueError("indexed JMD source digest mismatch")
+        lanes = inv.get("article_lanes")
+        if not isinstance(lanes, dict):
+            raise ValueError("missing article lanes")
+        events = lanes.get("event_candidates")
+        revision = inv.get("article_revision")
+        unit = None  # runner does not export the original source-unit field
+    else:
+        events = record.get("event_candidates")
+        revision = record.get("revision_ref")
+        unit = record.get("source_unit_ref")
+        declared = record.get("source_text_sha256")
+        if declared is not None and declared != hashlib.sha256(article.encode("utf-8")).hexdigest():
+            raise ValueError("original projection source digest mismatch")
+    if events is None:
+        return revision, unit, None
+    if not isinstance(events, list):
+        raise ValueError("event_candidates must be an array or unavailable")
+    predicates = []
+    for event in events:
+        p = event["predicate"]
+        a, b, literal = p["start_char"], p["end_char"], p["surface"]
+        if (type(a) is not int or type(b) is not int or not 0 <= a < b <= len(article)
+                or not isinstance(literal, str) or article[a:b] != literal):
+            raise ValueError("indexed predicate does not match original source span")
+        predicates.append(p)
+    return revision, unit, predicates
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--database-url", default=os.environ.get("DATABASE_URL"), required=False)
@@ -40,11 +81,14 @@ def main():
     article = article_bytes.decode("utf-8")
     native = native_bytes.decode("utf-8")
     record = json.loads(Path(args.indexed_record).read_text())
-    predicates = [x["predicate"] for x in record.get("event_candidates", [])]
+    revision, unit, predicates = indexed_event_lane(record, article)
     candidates = []
-    for p in predicates:
+    diagnostics = []
+    for p in predicates or []:
         literal = p["surface"]
         hits = occurrences(native, literal)
+        diagnostics.append({"indexed_span": [p["start_char"], p["end_char"]],
+                            "literal": literal, "native_occurrence_count": len(hits)})
         if len(hits) == 1:
             i = hits[0]
             candidates.append({"indexed_span": [p["start_char"], p["end_char"]],
@@ -55,8 +99,8 @@ def main():
     result = {
         "schema": "slr.jmd-native-source-alignment.v1",
         "jmd_source": {
-            "revision_ref": record.get("revision_ref", "enwiki-revid:1385850169"),
-            "source_unit_ref": record.get("source_unit_ref", "wikipedia:en:George_W._Bush:1385850169"),
+            "revision_ref": revision,
+            "source_unit_ref": unit,
             "sha256": hashlib.sha256(article_bytes).hexdigest(),
             "byte_length": len(article_bytes)},
         "native_source": {"revision_ref": args.native_revision_ref,
@@ -67,11 +111,17 @@ def main():
             "sha256": hashlib.sha256(native_bytes).hexdigest(),
             "byte_length": len(native_bytes)},
         "exact_digest_match": hashlib.sha256(article_bytes).digest() == hashlib.sha256(native_bytes).digest(),
-        "source_work_match": False,
-        "literal_candidate_count": len(candidates),
+        "source_work_match": None,
+        "event_lane_available": predicates is not None,
+        "indexed_predicate_count": None if predicates is None else len(predicates),
+        "literal_candidate_count": None if predicates is None else len(candidates),
+        "literal_candidate_count_policy": "unique native literal occurrences only; not exhaustive semantic overlap",
+        "literal_occurrence_diagnostics": diagnostics,
         "licensed_crosswalk_count": 0,
-        "crosswalk_status": "blocked-different-source-manifestations",
-        "reason": "The JMD input is a George W. Bush Wikipedia article; the native input is a GWB book/PDF projection. Literal overlap is retained as diagnostic evidence, never promoted to source-coordinate identity.",
+        "crosswalk_status": ("held-unavailable-event-lane" if predicates is None else
+            "blocked-different-content" if article_bytes != native_bytes else
+            "held-source-revision-licence-required"),
+        "reason": "Content identity, source-work identity, and reviewed coordinate transport are distinct. Literal diagnostics never establish semantic or source-coordinate identity. Native source labels here are operator-supplied.",
         "literal_candidates": candidates}
     Path(args.output).write_text(json.dumps(result, indent=2, ensure_ascii=False) + "\n")
     print(json.dumps({k: result[k] for k in ("exact_digest_match", "literal_candidate_count", "licensed_crosswalk_count", "crosswalk_status")}))
