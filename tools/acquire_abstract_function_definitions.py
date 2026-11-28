@@ -50,7 +50,7 @@ def signature(obj, zid):
     return {"arguments":result,"return_type":body["Z8K2"],
             "tester_refs":body.get("Z8K3"),"implementation_refs":body.get("Z8K4")}
 
-def acquire(zid, timestamp, out):
+def acquire_object(zid, timestamp, out):
     query = urllib.parse.urlencode({"action":"query","prop":"revisions",
         "titles":zid,"rvstart":timestamp,"rvdir":"older","rvlimit":1,
         "rvprop":"ids|timestamp|content","rvslots":"main","format":"json","formatversion":2})
@@ -73,7 +73,12 @@ def acquire(zid, timestamp, out):
     else:
         path.write_bytes(raw)
     return {"function":zid,"revision":rev["revid"],"timestamp":rev["timestamp"],
-            "sha256":digest,"path":path.name,"api_url":url,"signature":signature(json.loads(raw),zid)}
+            "sha256":digest,"path":path.name,"api_url":url}
+
+def acquire(zid, timestamp, out):
+    record=acquire_object(zid,timestamp,out)
+    record["signature"]=signature(json.loads((out/record["path"]).read_bytes()),zid)
+    return record
 
 def main():
     ap=argparse.ArgumentParser(description=__doc__)
