@@ -11,6 +11,7 @@ mod waltons_live;
 mod pnf_candidate;
 mod pnf_db_checked;
 mod relational_family;
+mod gwb_semantic;
 mod native_antecedent_review;
 mod numeric_pnf_native_cli;
 mod timeline_candidates;
@@ -209,6 +210,7 @@ fn run() -> Result<(), String> {
         [command, rest @ ..] if command == "pnf-candidate" => {
             pnf_candidate::run(rest)
         }
+        [command, rest @ ..] if command == "gwb-semantic" => gwb_semantic::run(rest),
         [command, rest @ ..] if command == "relational-family" => {
             relational_family::run(rest)
         }

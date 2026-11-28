@@ -313,6 +313,13 @@ fn require_existing_inputs(tx: &mut Transaction<'_>, demand: &FormalProofDemand)
     Ok(())
 }
 
+pub fn load_open_demand_tx(tx:&mut Transaction<'_>,demand_ref:&str)->Result<FormalProofDemand,FormalProofBridgeError>{
+    let demand=load_demand_tx(tx,demand_ref)?;
+    demand.validate()?;
+    require_existing_inputs(tx,&demand)?;
+    Ok(demand)
+}
+
 fn load_demand_tx(tx: &mut Transaction<'_>, demand_ref: &str) -> Result<FormalProofDemand, FormalProofBridgeError> {
     let row = tx.query_one(
         "SELECT obligation_ref,consumer_ref,pnf_revision_ref,residual_ref,proposition_ref,statement_digest,statement_language,target_prover,da51_address,source_revision_refs,requested_result_kind,dependent_refs,candidate_only,creates_semantic_authority,creates_legal_authority,applicability_promoted,claim_truth_promoted FROM formal_bridge.demand WHERE demand_ref=$1",
@@ -652,11 +659,29 @@ fn persist_formal_evidence_inner(database_url: &str, evidence: &FormalEvidenceRe
     // Explicit install_schema owns schema setup for the strict runtime
     // role; do not require DDL rights on each authenticated payment.
     if locator.is_none() { tx.batch_execute(FORMAL_PROOF_BRIDGE_SQL)?; }
-    let demand = load_demand_tx(&mut tx, &evidence.demand_ref)?;
+    let payment=persist_formal_evidence_on_tx(&mut tx,evidence,locator)?;
+    tx.commit()?;
+    Ok(payment)
+}
+
+/// Domain owner may share its exact current-source snapshot with the formal
+/// bridge. No alternate payment implementation; same role and receipt gate.
+pub fn persist_authenticated_formal_evidence_tx(tx:&mut Transaction<'_>,
+    evidence:&FormalEvidenceReceiptInput,locator:&RefereeReceiptLocator)
+    ->Result<AuthenticatedFormalEvidencePayment,FormalProofBridgeError>{
+    let isolation:String=tx.query_one("SHOW transaction_isolation",&[])?.get(0);
+    if isolation!="serializable"{return Err(FormalProofBridgeError::UnauthenticatedRefereeReceipt);}
+    let payment=persist_formal_evidence_on_tx(tx,evidence,Some(locator))?;
+    Ok(AuthenticatedFormalEvidencePayment{payment,locator:locator.clone()})
+}
+fn persist_formal_evidence_on_tx(tx:&mut Transaction<'_>,evidence:&FormalEvidenceReceiptInput,
+    locator:Option<&RefereeReceiptLocator>)->Result<FormalEvidencePayment,FormalProofBridgeError>{
+    evidence.validate()?;
+    let demand = load_demand_tx(tx, &evidence.demand_ref)?;
     let payment = validate_formal_evidence_payment(&demand, evidence)?;
     if let Some(locator) = locator {
-        require_existing_inputs(&mut tx, &demand)?;
-        require_authenticated_referee_receipt(&mut tx, locator, &demand, evidence)?;
+        require_existing_inputs(tx, &demand)?;
+        require_authenticated_referee_receipt(tx, locator, &demand, evidence)?;
     }
     tx.execute(
         r#"INSERT INTO formal_bridge.evidence
@@ -665,7 +690,7 @@ fn persist_formal_evidence_inner(database_url: &str, evidence: &FormalEvidenceRe
         ON CONFLICT (evidence_ref) DO NOTHING"#,
         &[&evidence.evidence_ref,&evidence.demand_ref,&evidence.obligation_ref,&evidence.da51_address,&evidence.producer,&evidence.artifact_ref,&evidence.artifact_digest,&evidence.statement_digest,&evidence.checker,&evidence.checker_revision,&evidence.source_revision,&evidence.result_kind,&evidence.certification_state,&evidence.dependencies],
     )?;
-    let loaded_evidence = load_evidence_tx(&mut tx, &evidence.evidence_ref)?;
+    let loaded_evidence = load_evidence_tx(tx, &evidence.evidence_ref)?;
     if !evidence_replay_matches(&loaded_evidence, evidence) {
         return Err(FormalProofBridgeError::ExistingRowConflict);
     }
@@ -673,11 +698,10 @@ fn persist_formal_evidence_inner(database_url: &str, evidence: &FormalEvidenceRe
         "INSERT INTO formal_bridge.payment (evidence_ref,demand_ref,obligation_ref,statement_digest,reopen_refs,formal_premise_paid,creates_legal_authority,applicability_promoted,claim_truth_promoted) VALUES ($1,$2,$3,$4,$5,TRUE,FALSE,FALSE,FALSE) ON CONFLICT (evidence_ref) DO NOTHING",
         &[&payment.evidence_ref,&payment.demand_ref,&payment.obligation_ref,&payment.statement_digest,&payment.reopen_refs],
     )?;
-    let loaded_payment = load_payment_tx(&mut tx, &payment.evidence_ref)?;
+    let loaded_payment = load_payment_tx(tx, &payment.evidence_ref)?;
     if !payment_replay_matches(&loaded_payment, &payment) {
         return Err(FormalProofBridgeError::ExistingRowConflict);
     }
-    tx.commit()?;
     Ok(payment)
 }
 

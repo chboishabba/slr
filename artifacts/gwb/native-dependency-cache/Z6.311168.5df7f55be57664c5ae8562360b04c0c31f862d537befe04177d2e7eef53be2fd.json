@@ -1,0 +1,627 @@
+{
+    "Z1K1": "Z2",
+    "Z2K1": {
+        "Z1K1": "Z6",
+        "Z6K1": "Z6"
+    },
+    "Z2K2": {
+        "Z1K1": "Z4",
+        "Z4K1": "Z6",
+        "Z4K2": [
+            "Z3",
+            {
+                "Z1K1": "Z3",
+                "Z3K1": "Z6",
+                "Z3K2": "Z6K1",
+                "Z3K3": {
+                    "Z1K1": "Z12",
+                    "Z12K1": [
+                        "Z11",
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1002",
+                            "Z11K2": "value"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1025",
+                            "Z11K2": "wartość"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1645",
+                            "Z11K2": "值"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1062",
+                            "Z11K2": "hodnota"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1592",
+                            "Z11K2": "värde"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1186",
+                            "Z11K2": "ערך"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1430",
+                            "Z11K2": "Wert"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1113",
+                            "Z11K2": "value"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1078",
+                            "Z11K2": "nilai"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1157",
+                            "Z11K2": "waarde"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1672",
+                            "Z11K2": "值"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1004",
+                            "Z11K2": "valeur"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1005",
+                            "Z11K2": "значение"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1664",
+                            "Z11K2": "valoare"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1001",
+                            "Z11K2": "قيمة"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1787",
+                            "Z11K2": "valore"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1820",
+                            "Z11K2": "वैल्यू"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1207",
+                            "Z11K2": "қимат"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1844",
+                            "Z11K2": "halaga"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1823",
+                            "Z11K2": "стойност"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1830",
+                            "Z11K2": "値"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1728",
+                            "Z11K2": "مقدار"
+                        }
+                    ]
+                }
+            }
+        ],
+        "Z4K3": "Z106",
+        "Z4K4": "Z866",
+        "Z4K7": [
+            "Z46"
+        ],
+        "Z4K8": [
+            "Z64"
+        ]
+    },
+    "Z2K3": {
+        "Z1K1": "Z12",
+        "Z12K1": [
+            "Z11",
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1002",
+                "Z11K2": "String"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1011",
+                "Z11K2": "অক্ষর সারি"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1083",
+                "Z11K2": "لکھت"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1657",
+                "Z11K2": "ਲਿਖਤ"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1025",
+                "Z11K2": "tekst"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1592",
+                "Z11K2": "Textsträng"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1005",
+                "Z11K2": "Строка"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1576",
+                "Z11K2": "signoĉeno"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1062",
+                "Z11K2": "Řetězec"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1430",
+                "Z11K2": "Zeichenkette"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1830",
+                "Z11K2": "文字列"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1186",
+                "Z11K2": "מחרוזת"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1048",
+                "Z11K2": "Chuỗi"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1157",
+                "Z11K2": "tekenreeks"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1227",
+                "Z11K2": "Streng"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1004",
+                "Z11K2": "chaîne"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1851",
+                "Z11K2": "สตริง"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1003",
+                "Z11K2": "cadena de caracteres"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1381",
+                "Z11K2": "Cadeia de caracteres"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1237",
+                "Z11K2": "Metin"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1332",
+                "Z11K2": "Рядок"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1113",
+                "Z11K2": "String"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1272",
+                "Z11K2": "niz"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1078",
+                "Z11K2": "Untaian"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1643",
+                "Z11K2": "문자열"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1645",
+                "Z11K2": "字符串"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1672",
+                "Z11K2": "字串"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1827",
+                "Z11K2": "συμβολοσειρά"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1531",
+                "Z11K2": "Rentetan"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1434",
+                "Z11K2": "رينتيتن"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1099",
+                "Z11K2": "Zeecheketten"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1288",
+                "Z11K2": "زنجیرەنووسە"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1787",
+                "Z11K2": "Stringa"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1051",
+                "Z11K2": "merkkijono"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1664",
+                "Z11K2": "Șir"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1001",
+                "Z11K2": "سلسلة"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1181",
+                "Z11K2": "Ниска"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1820",
+                "Z11K2": "स्ट्रिंग"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1597",
+                "Z11K2": "Mətn"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1207",
+                "Z11K2": "сатр"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1844",
+                "Z11K2": "Hanay"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1823",
+                "Z11K2": "Низ"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1762",
+                "Z11K2": "nimi"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1728",
+                "Z11K2": "رشته"
+            }
+        ]
+    },
+    "Z2K4": {
+        "Z1K1": "Z32",
+        "Z32K1": [
+            "Z31",
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1592",
+                "Z31K2": [
+                    "Z6",
+                    "Unicode-text",
+                    "Sträng",
+                    "Text"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1048",
+                "Z31K2": [
+                    "Z6",
+                    "Chuỗi ký tự",
+                    "Chuỗi kí tự",
+                    "Chuỗi chữ",
+                    "Xâu",
+                    "Xâu ký tự"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1003",
+                "Z31K2": [
+                    "Z6",
+                    "string",
+                    "ristra de caracteres"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1272",
+                "Z31K2": [
+                    "Z6",
+                    "niska",
+                    "string"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1851",
+                "Z31K2": [
+                    "Z6",
+                    "สายอักขระ"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1078",
+                "Z31K2": [
+                    "Z6",
+                    "Teks"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1643",
+                "Z31K2": [
+                    "Z6",
+                    "스트링",
+                    "텍스트"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1011",
+                "Z31K2": [
+                    "Z6",
+                    "বর্ণশৈলী",
+                    "অক্ষর শ্রেণী",
+                    "স্ট্রিং",
+                    "শব্দগুচ্ছ"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1001",
+                "Z31K2": [
+                    "Z6",
+                    "سلسلة محارف، سلسلة حروف"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1181",
+                "Z31K2": [
+                    "Z6",
+                    "стринг"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1025",
+                "Z31K2": [
+                    "Z6",
+                    "ciąg znaków",
+                    "string"
+                ]
+            }
+        ]
+    },
+    "Z2K5": {
+        "Z1K1": "Z12",
+        "Z12K1": [
+            "Z11",
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1002",
+                "Z11K2": "A sequence of characters, and one of the fundamental Z4/Types available in the Wikifunctions system."
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1011",
+                "Z11K2": "বর্ণের অনুক্রম; এই উইকির একটি আদি Z4/(উপাত্তের ধরন)"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1025",
+                "Z11K2": "Ciąg znaków, jeden z podstawowych typów (Z4) w systemie Wikifunkcji."
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1592",
+                "Z11K2": "en serie skrivtecken, grundläggande datatyp i Wikifunctions"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1576",
+                "Z11K2": "sekvenco de signoj; unu el la fundamentaj Z4/tipoj disponeblaj en la sistemo de Vikifunkcioj"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1062",
+                "Z11K2": "Posloupnost znaků; jeden ze základních Z4/Typů dostupných v systému Wikifunkcí"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1430",
+                "Z11K2": "Folge von Zeichen und einer der grundlegenden Typen, die im Wikifunctions-System verfügbar sind"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1186",
+                "Z11K2": "רצף של תווים, אחד ה־Z4/סוגים היסודיים ביותר שזמינים בוויקיפונקציות."
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1157",
+                "Z11K2": "reeks tekens en is een van de fundamentele Z4/types beschikbaar in het Wikifuncties-systeem."
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1048",
+                "Z11K2": "Kiểu dữ liệu thể hiện một dãy ký tự; một trong các kiểu dữ liệu cốt lõi của Wikifunctions"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1004",
+                "Z11K2": "Une suite de caractères, ainsi qu'un des Z4/Types fondamentaux disponibles dans Wikifunctions"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1003",
+                "Z11K2": "Secuencia de caracteres, y uno de los Z4/Tipos fundamentates de Wikifunctions"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1381",
+                "Z11K2": "Uma sequência de caracteres e um dos Z4/Tipos fundamentais disponíveis no sistema da Wikifunções."
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1113",
+                "Z11K2": "A sequence of characters, and is one of the fundamental Z4/Types available in the Wikifunctions syst"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1851",
+                "Z11K2": "ลำดับของตัวอักษร หนึ่งใน Z4/ชนิด พื้นฐานในระบบวิกิฟังก์ชันส์"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1078",
+                "Z11K2": "Serangkaian karakter; salah satu Z4/Tipe fundamental yang tersedia di sistem Wikifunctions"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1643",
+                "Z11K2": "문자를 나열한 것으로 위키함수 시스템에서 사용 가능한 기초 Z4/유형의 하나입니다."
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1531",
+                "Z11K2": "Urutan aksara dan salah satu Z4/Jenis asas yang tersedia dalam sistem Wikifungsi."
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1434",
+                "Z11K2": "اوروتن اکسارا دان ساله ساتو Z4/جنيس اساس يڠ ترسديا دالم سيستم ويکيفوڠسي."
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1288",
+                "Z11K2": "زنجیرەیەکە لە نووسەکان، و یەک لە تایپە سەرەکییەکانە (Z4) کە لە سیستمی ویکیفانکشنز بەردەستە."
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1787",
+                "Z11K2": "Una sequenza di caratteri e uno dei tipi fondamentali nel sistema Wikifunctions"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1664",
+                "Z11K2": "O secvență de caractere și unul dintre tipurile fundamentale Z4/Tipuri disponibile în sistemul Wikifuncții."
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1001",
+                "Z11K2": "سلسلة من المحارف، وواحدة من Z4/الأنواع الأساسية المتوفرة في نظام ويكي الدوال"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1181",
+                "Z11K2": "Низ знакова. Један од основних Z4/Типова података у Викифункцијама."
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1820",
+                "Z11K2": "कैरेक्टर्स का एक अनुक्रम, और विकिफ़ंक्शन्स में उपलब्ध मौलिक Z4/प्रकारों में से एक।"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1844",
+                "Z11K2": "Isang hanay ng mga titik, at isa sa mga pangunahing Z4/Uri na magagamit sa sistemang Wikipunsiyon."
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1823",
+                "Z11K2": "Последователност от символи и един от основните Z4/типове, налични в системата Wikifunctions."
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1645",
+                "Z11K2": " 一个字符序列，也是维基函数系统中可用的基本 Z4/类之一。"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1830",
+                "Z11K2": "一連の文字であり、ウィキファンクションズシステムで利用可能な基本的なZ4/型の1つ。"
+            }
+        ]
+    }
+}

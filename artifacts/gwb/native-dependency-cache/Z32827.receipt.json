@@ -1,0 +1,15 @@
+{
+  "as_of": "2026-10-15T23:37:24Z",
+  "byte_length": 1927,
+  "candidate_only": true,
+  "exact_revision_url": "https://www.wikifunctions.org/w/api.php?action=query&format=json&formatversion=2&prop=revisions&revids=314546&rvprop=ids%7Ctimestamp%7Ccontent&rvslots=main",
+  "function": "Z32827",
+  "lookup_url": "https://www.wikifunctions.org/w/api.php?action=query&format=json&formatversion=2&prop=revisions&titles=Z32827&rvstart=2026-10-15T23:37:24Z&rvdir=older&rvlimit=1&rvprop=ids%7Ctimestamp",
+  "path": "Z32827.314546.8f01ab09e3aa13bce5db8773ea456b447597c2f84b10b9d68df72dd5f837ab74.json",
+  "revision": 314546,
+  "runtime_dependency_resolution_paid": false,
+  "schema": "slr.historical-zobject-acquisition.v1",
+  "sha256": "8f01ab09e3aa13bce5db8773ea456b447597c2f84b10b9d68df72dd5f837ab74",
+  "timestamp": "2026-09-17T03:58:23Z",
+  "world_truth_paid": false
+}

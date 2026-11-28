@@ -1,0 +1,189 @@
+{
+    "Z1K1": "Z2",
+    "Z2K1": {
+        "Z1K1": "Z6",
+        "Z6K1": "Z96"
+    },
+    "Z2K2": {
+        "Z1K1": "Z4",
+        "Z4K1": "Z96",
+        "Z4K2": [
+            "Z3",
+            {
+                "Z1K1": "Z3",
+                "Z3K1": "Z6",
+                "Z3K2": "Z96K1",
+                "Z3K3": {
+                    "Z1K1": "Z12",
+                    "Z12K1": [
+                        "Z11",
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1002",
+                            "Z11K2": "ZID"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1157",
+                            "Z11K2": "ZID"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1430",
+                            "Z11K2": "ZID"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1830",
+                            "Z11K2": "ZID"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1062",
+                            "Z11K2": "ZID"
+                        }
+                    ]
+                },
+                "Z3K4": {
+                    "Z1K1": "Z40",
+                    "Z40K1": "Z42"
+                }
+            }
+        ],
+        "Z4K3": "Z101",
+        "Z4K4": "Z40327",
+        "Z4K5": "Z40974",
+        "Z4K6": "Z41015",
+        "Z4K7": [
+            "Z46"
+        ],
+        "Z4K8": [
+            "Z64"
+        ]
+    },
+    "Z2K3": {
+        "Z1K1": "Z12",
+        "Z12K1": [
+            "Z11",
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1002",
+                "Z11K2": "Wikifunctions object reference"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1157",
+                "Z11K2": "Wikifuncties-objectreferentie"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1430",
+                "Z11K2": "Wikifunctions-Objektreferenz"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1025",
+                "Z11K2": "odwołanie do obiektu Wikifunkcji"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1830",
+                "Z11K2": "ウィキファンクションズのオブジェクト参照"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1062",
+                "Z11K2": "Reference na objekt Wikifunkcí"
+            }
+        ]
+    },
+    "Z2K4": {
+        "Z1K1": "Z32",
+        "Z32K1": [
+            "Z31",
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1002",
+                "Z31K2": [
+                    "Z6",
+                    "ZID",
+                    "object id",
+                    "reference string",
+                    "Persistent object id",
+                    "persistent object reference string",
+                    "id value string from Persistent object",
+                    "Z2K1"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1025",
+                "Z31K2": [
+                    "Z6",
+                    "obiekt Wikifunkcji",
+                    "Wikifunkcje",
+                    "ZID",
+                    "identyfikator obiektu",
+                    "ID obiektu",
+                    "identyfikator trwałego obiektu",
+                    "ID trwałego obiektu",
+                    "identyfikator stałego obiektu",
+                    "ID stałego obiektu",
+                    "Z2K1"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1830",
+                "Z31K2": [
+                    "Z6",
+                    "ウィキファンクションズのオブジェクトの参照",
+                    "ウィキファンクションズオブジェクト参照",
+                    "オブジェクトID",
+                    "参照文字列",
+                    "永続オブジェクトID"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1062",
+                "Z31K2": [
+                    "Z6",
+                    "ZID",
+                    "ID objektu"
+                ]
+            }
+        ]
+    },
+    "Z2K5": {
+        "Z1K1": "Z12",
+        "Z12K1": [
+            "Z11",
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1002",
+                "Z11K2": "the string identifier of a persistent Wikifunctions object: its ZID (the value for its Z2K1); a simple reference to the object"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1157",
+                "Z11K2": "de tekenreeks-identificatie van een persistent Wikifuncties-object: de ZID ervan (de waarde van de Z2K1); een eenvoudige verwijzing naar het object"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1430",
+                "Z11K2": "der Zeichenkettenidentifikator eines persistenten Wikifunctions-Objekts"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1025",
+                "Z11K2": "Identyfikator w postaci ciągu znaków trwałego obiektu Wikifunctions: jego identyfikator Z (ZID, wartość pola Z2K1); proste odwołanie do obiektu"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1062",
+                "Z11K2": "řetězcový identifikátor perzistentního objektu Wikifunkcí: jeho ZID (hodnota jeho Z2K1); jednoduchá reference na tento objekt"
+            }
+        ]
+    }
+}

@@ -1,0 +1,1004 @@
+{
+  "body_smaller_than_full_readback": true,
+  "capsule": {
+    "all_pairs_bounded_signed_support_equal": false,
+    "consumer_ref": "consumer:native-pnf-p3b",
+    "creates_semantic_authority": false,
+    "family_digest": "sha256:5d2d512fa0d070187b071974e2a576eda76cfc0eab3d54abc14192a45a4824c1",
+    "family_ref": "relational-family:sha256:31ee0c184b30c2f75a46d410077b70789b47cb881297ec027acff7d3f106cd45",
+    "full_readback_digest": "sha256:031895534863d4244ff47e570dab78c7e170bf3809d4f747e14730bd9caa85cd",
+    "inconsistent_selector_refs": [],
+    "lifecycles": [
+      {
+        "effective_availability": "not_located",
+        "effective_executable_frontier_route_refs": [],
+        "obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:consumer:context-unobserved:attribution",
+        "reopening": null,
+        "terminal_update": null
+      },
+      {
+        "effective_availability": "not_located",
+        "effective_executable_frontier_route_refs": [],
+        "obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:consumer:context-unobserved:language",
+        "reopening": null,
+        "terminal_update": null
+      },
+      {
+        "effective_availability": "not_located",
+        "effective_executable_frontier_route_refs": [],
+        "obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:consumer:context-unobserved:modality",
+        "reopening": null,
+        "terminal_update": null
+      },
+      {
+        "effective_availability": "not_located",
+        "effective_executable_frontier_route_refs": [],
+        "obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:consumer:context-unobserved:ontology",
+        "reopening": null,
+        "terminal_update": null
+      },
+      {
+        "effective_availability": "not_located",
+        "effective_executable_frontier_route_refs": [],
+        "obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:consumer:context-unobserved:quantifier",
+        "reopening": null,
+        "terminal_update": null
+      },
+      {
+        "effective_availability": "not_located",
+        "effective_executable_frontier_route_refs": [],
+        "obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:consumer:context-unobserved:scope",
+        "reopening": null,
+        "terminal_update": null
+      },
+      {
+        "effective_availability": "not_located",
+        "effective_executable_frontier_route_refs": [],
+        "obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:consumer:context-unobserved:time",
+        "reopening": null,
+        "terminal_update": null
+      },
+      {
+        "effective_availability": "not_located",
+        "effective_executable_frontier_route_refs": [],
+        "obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:evidence-polarity-unknown",
+        "reopening": null,
+        "terminal_update": null
+      },
+      {
+        "effective_availability": "not_located",
+        "effective_executable_frontier_route_refs": [],
+        "obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:filler-compatibility:syntax:dobj:0",
+        "reopening": null,
+        "terminal_update": null
+      },
+      {
+        "effective_availability": "not_located",
+        "effective_executable_frontier_route_refs": [],
+        "obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:filler-compatibility:syntax:nsubj:0",
+        "reopening": null,
+        "terminal_update": null
+      },
+      {
+        "effective_availability": "not_located",
+        "effective_executable_frontier_route_refs": [],
+        "obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:filler-compatibility:syntax:punct:0",
+        "reopening": null,
+        "terminal_update": null
+      },
+      {
+        "effective_availability": "not_located",
+        "effective_executable_frontier_route_refs": [],
+        "obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:predicate-alignment-review",
+        "reopening": null,
+        "terminal_update": null
+      },
+      {
+        "effective_availability": "not_located",
+        "effective_executable_frontier_route_refs": [],
+        "obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:consumer:context-unobserved:attribution",
+        "reopening": null,
+        "terminal_update": null
+      },
+      {
+        "effective_availability": "not_located",
+        "effective_executable_frontier_route_refs": [],
+        "obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:consumer:context-unobserved:language",
+        "reopening": null,
+        "terminal_update": null
+      },
+      {
+        "effective_availability": "not_located",
+        "effective_executable_frontier_route_refs": [],
+        "obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:consumer:context-unobserved:modality",
+        "reopening": null,
+        "terminal_update": null
+      },
+      {
+        "effective_availability": "not_located",
+        "effective_executable_frontier_route_refs": [],
+        "obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:consumer:context-unobserved:ontology",
+        "reopening": null,
+        "terminal_update": null
+      },
+      {
+        "effective_availability": "not_located",
+        "effective_executable_frontier_route_refs": [],
+        "obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:consumer:context-unobserved:quantifier",
+        "reopening": null,
+        "terminal_update": null
+      },
+      {
+        "effective_availability": "not_located",
+        "effective_executable_frontier_route_refs": [],
+        "obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:consumer:context-unobserved:scope",
+        "reopening": null,
+        "terminal_update": null
+      },
+      {
+        "effective_availability": "not_located",
+        "effective_executable_frontier_route_refs": [],
+        "obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:consumer:context-unobserved:time",
+        "reopening": null,
+        "terminal_update": null
+      },
+      {
+        "effective_availability": "not_located",
+        "effective_executable_frontier_route_refs": [],
+        "obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:evidence-polarity-unknown",
+        "reopening": null,
+        "terminal_update": null
+      },
+      {
+        "effective_availability": "not_located",
+        "effective_executable_frontier_route_refs": [],
+        "obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:filler-compatibility:syntax:dobj:0",
+        "reopening": null,
+        "terminal_update": null
+      },
+      {
+        "effective_availability": "not_located",
+        "effective_executable_frontier_route_refs": [],
+        "obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:filler-compatibility:syntax:nsubj:0",
+        "reopening": null,
+        "terminal_update": null
+      },
+      {
+        "effective_availability": "not_located",
+        "effective_executable_frontier_route_refs": [],
+        "obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:filler-compatibility:syntax:punct:0",
+        "reopening": null,
+        "terminal_update": null
+      },
+      {
+        "effective_availability": "not_located",
+        "effective_executable_frontier_route_refs": [],
+        "obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:predicate-alignment-review",
+        "reopening": null,
+        "terminal_update": null
+      }
+    ],
+    "loss_profile": {
+      "canonical_owners_retained": true,
+      "expansion_requires_exact_current_replay": true,
+      "omission_implies_irrelevance": false,
+      "omitted_inline": [
+        "full_observation_payloads",
+        "full_comparison_and_transport_payloads",
+        "full_acquisition_route_bodies",
+        "full_review_and_lifecycle_payloads",
+        "full_referee_readbacks",
+        "full_reopening_cones_and_synthesis_candidates"
+      ]
+    },
+    "noncanonical": true,
+    "pair_evidence": [],
+    "pairs": [
+      {
+        "backward": {
+          "bounded_signed_support_equal": null,
+          "gained": null,
+          "left_support": null,
+          "lost": null,
+          "opposed_signs": null,
+          "right_support": null,
+          "status": "missing_authenticated_pair"
+        },
+        "backward_comparison_ref": "relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53",
+        "formal_premise": null,
+        "forward": {
+          "bounded_signed_support_equal": null,
+          "gained": null,
+          "left_support": null,
+          "lost": null,
+          "opposed_signs": null,
+          "right_support": null,
+          "status": "missing_authenticated_pair"
+        },
+        "forward_comparison_ref": "relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9",
+        "left_selector_ref": "selector:native-pnf:sha256:596b779fd654cea370b7b56eb44dc84e971dc57cba3455160226f43a39bf4115",
+        "pair_ref": "sha256:95f3c186dd81ec05221ce246f612b34bcb0b2cb2509f5f439dac24d078dc0b74",
+        "proof_binding": null,
+        "proof_readback_digest": null,
+        "residual_paid": false,
+        "right_selector_ref": "selector:native-pnf:sha256:9098941676f6e418b9f3b973286aac38edd191e9d8e5a687d2bafb043aac00e8",
+        "source_independence_paid": false
+      }
+    ],
+    "prepared_revision_refs": [],
+    "published_parent_transition_refs": [],
+    "query_ref": "consumer:native-pnf-p3b",
+    "query_scoped": true,
+    "queues": [
+      {
+        "obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:consumer:context-unobserved:attribution",
+        "queue_digest": "sha256:51743018eb1528374c9d3e3718a5da218eaebb08283cdb3d229bce68bd1e69eb",
+        "route_refs": []
+      },
+      {
+        "obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:consumer:context-unobserved:language",
+        "queue_digest": "sha256:8579cca787d45293e0f4a01bc900c2b9025a55fe7253e2838d1a7d2841884350",
+        "route_refs": []
+      },
+      {
+        "obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:consumer:context-unobserved:modality",
+        "queue_digest": "sha256:e64cfc1810a27f7dd9c5d6b2b2cab460ed71f21a31e9dcfe3a7fe97b378ffac3",
+        "route_refs": []
+      },
+      {
+        "obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:consumer:context-unobserved:ontology",
+        "queue_digest": "sha256:d3dc51ea848b5d23451a6b1061cfca75b80762be59ac6f962a30c0bbd6b6f85b",
+        "route_refs": []
+      },
+      {
+        "obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:consumer:context-unobserved:quantifier",
+        "queue_digest": "sha256:103dfad3bc1d0de10f514bfbd9ebf67fea7ade2a376655f09bcb9fe9c1859825",
+        "route_refs": []
+      },
+      {
+        "obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:consumer:context-unobserved:scope",
+        "queue_digest": "sha256:7698628f3b2c9d0db941434a3a5e2b1be6769e517094ba6e1cd4f74f6cec1f14",
+        "route_refs": []
+      },
+      {
+        "obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:consumer:context-unobserved:time",
+        "queue_digest": "sha256:aff47a68dd77faded9a601cb26bd5b30ca0bc31f55d46514414c88f82f88cd3f",
+        "route_refs": []
+      },
+      {
+        "obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:evidence-polarity-unknown",
+        "queue_digest": "sha256:c54ea25bcb534d91f5b4de6cc90519d08b3836aac184a586f37abcc2fad270fd",
+        "route_refs": []
+      },
+      {
+        "obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:filler-compatibility:syntax:dobj:0",
+        "queue_digest": "sha256:be22d17f12165b6386eb698c111cbe1e62583388d834b6e2e85cfb04a513dea9",
+        "route_refs": []
+      },
+      {
+        "obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:filler-compatibility:syntax:nsubj:0",
+        "queue_digest": "sha256:af512b0cc64301cd2b0a37aae64c36aa82d6cf5056ea35f44162e86ec18536ac",
+        "route_refs": []
+      },
+      {
+        "obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:filler-compatibility:syntax:punct:0",
+        "queue_digest": "sha256:81b244a985a5b3553c12a9e7e1fe25c1cf9c12476d3fad6389a6280548cf3f91",
+        "route_refs": []
+      },
+      {
+        "obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:predicate-alignment-review",
+        "queue_digest": "sha256:d13e09f0a8f73e84f90ac87c64974800ff2802a916cf45b0e78513c1c8a143cb",
+        "route_refs": []
+      },
+      {
+        "obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:consumer:context-unobserved:attribution",
+        "queue_digest": "sha256:d05fa2c6c53c9cd1f1bfb83dd9fddf7a8adea56a1baed6cf8d716050774f6cbe",
+        "route_refs": []
+      },
+      {
+        "obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:consumer:context-unobserved:language",
+        "queue_digest": "sha256:0ce2ecdbf718dabf77369dedc0a274b93b12e2ec77c041727a9b9338cb0eceda",
+        "route_refs": []
+      },
+      {
+        "obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:consumer:context-unobserved:modality",
+        "queue_digest": "sha256:0caef9872831a791fcec11fc52e4833af4df5c5e2e96e196669e6f2eaf0f2e63",
+        "route_refs": []
+      },
+      {
+        "obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:consumer:context-unobserved:ontology",
+        "queue_digest": "sha256:a8a16267aa2a6b1e7cebf04b37a8602b1cd950ea4724562e9df24f6b32ec3931",
+        "route_refs": []
+      },
+      {
+        "obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:consumer:context-unobserved:quantifier",
+        "queue_digest": "sha256:71bdec632a7ff722227cb3f0048a0d1e7662a1e65d3fa52ee62b42f3d93e7694",
+        "route_refs": []
+      },
+      {
+        "obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:consumer:context-unobserved:scope",
+        "queue_digest": "sha256:edbb7dc6f0af85aaa79143cf2297173151f3a4e8c7d121564f149faf3df093b8",
+        "route_refs": []
+      },
+      {
+        "obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:consumer:context-unobserved:time",
+        "queue_digest": "sha256:5edfdc62a71c32a1bdb8d96cffe1d8823cc18ee1ab560667cb993f74236147fc",
+        "route_refs": []
+      },
+      {
+        "obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:evidence-polarity-unknown",
+        "queue_digest": "sha256:638b7dc652563d121b77509cba5a762d2f737cf29a67f634c75b675f7491eb70",
+        "route_refs": []
+      },
+      {
+        "obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:filler-compatibility:syntax:dobj:0",
+        "queue_digest": "sha256:a003a400dc003d5323f8ca4d2bf20fa629631f84215d251b3e380c456a93438b",
+        "route_refs": []
+      },
+      {
+        "obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:filler-compatibility:syntax:nsubj:0",
+        "queue_digest": "sha256:29a0f7f6d04de17dd296e24d61297da9649d80f63a12a8b81c0aac5620f80375",
+        "route_refs": []
+      },
+      {
+        "obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:filler-compatibility:syntax:punct:0",
+        "queue_digest": "sha256:30b6f73ccdd7825b12d1ab25d937cadbbb3fe11ebe6f1c764acf051119792014",
+        "route_refs": []
+      },
+      {
+        "obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:predicate-alignment-review",
+        "queue_digest": "sha256:51ab723272af6cfeda9efed2ad0148e88cbf29e8adfa18a632119d977f745351",
+        "route_refs": []
+      }
+    ],
+    "residuals": [
+      {
+        "acquisition_obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:predicate-alignment-review",
+        "comparison_ref": "relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9",
+        "exact_residual": {
+          "kind": "unaligned_predicate",
+          "left_ref": "candidate-pnf-db:parser-run:sha256:0071e359b56b3e31342f45a59752cbbeb35636e7d4180ad6ad892b9884723b7c:document-region:source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8:sentence:1000:130437-130646:8:130470:130479",
+          "obligation_ref": "predicate-alignment-review",
+          "right_ref": "candidate-pnf-db:parser-run:sha256:56ea4c0a05c3beb97f05dfe447570c7d753f15d8b8bf76cb86145ca41f8f2d63:document-region:source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00:sentence:1000:130437-130646:8:130470:130479"
+        },
+        "left_selector_ref": "selector:native-pnf:sha256:596b779fd654cea370b7b56eb44dc84e971dc57cba3455160226f43a39bf4115",
+        "ordinal": 0,
+        "residual_ref": "residual:relational:sha256:15b70ecbfea5a4420d698e37087a8f580f40211393cc3d5dd6aa1ec4a5d40d5d",
+        "right_selector_ref": "selector:native-pnf:sha256:9098941676f6e418b9f3b973286aac38edd191e9d8e5a687d2bafb043aac00e8"
+      },
+      {
+        "acquisition_obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:filler-compatibility:syntax:dobj:0",
+        "comparison_ref": "relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9",
+        "exact_residual": {
+          "kind": "unaligned_role_filler",
+          "left_ref": "candidate-pnf-db:parser-run:sha256:0071e359b56b3e31342f45a59752cbbeb35636e7d4180ad6ad892b9884723b7c:document-region:source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8:sentence:1000:130437-130646:15:130531:130539",
+          "obligation_ref": "filler-compatibility:syntax:dobj:0",
+          "right_ref": "candidate-pnf-db:parser-run:sha256:56ea4c0a05c3beb97f05dfe447570c7d753f15d8b8bf76cb86145ca41f8f2d63:document-region:source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00:sentence:1000:130437-130646:15:130531:130539"
+        },
+        "left_selector_ref": "selector:native-pnf:sha256:596b779fd654cea370b7b56eb44dc84e971dc57cba3455160226f43a39bf4115",
+        "ordinal": 1,
+        "residual_ref": "residual:relational:sha256:22665cb02265fe0920692a73fde721e4426b2017d1445bad739ac404dae47d38",
+        "right_selector_ref": "selector:native-pnf:sha256:9098941676f6e418b9f3b973286aac38edd191e9d8e5a687d2bafb043aac00e8"
+      },
+      {
+        "acquisition_obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:filler-compatibility:syntax:nsubj:0",
+        "comparison_ref": "relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9",
+        "exact_residual": {
+          "kind": "unaligned_role_filler",
+          "left_ref": "candidate-pnf-db:parser-run:sha256:0071e359b56b3e31342f45a59752cbbeb35636e7d4180ad6ad892b9884723b7c:document-region:source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8:sentence:1000:130437-130646:7:130463:130469",
+          "obligation_ref": "filler-compatibility:syntax:nsubj:0",
+          "right_ref": "candidate-pnf-db:parser-run:sha256:56ea4c0a05c3beb97f05dfe447570c7d753f15d8b8bf76cb86145ca41f8f2d63:document-region:source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00:sentence:1000:130437-130646:7:130463:130469"
+        },
+        "left_selector_ref": "selector:native-pnf:sha256:596b779fd654cea370b7b56eb44dc84e971dc57cba3455160226f43a39bf4115",
+        "ordinal": 2,
+        "residual_ref": "residual:relational:sha256:cd9982e47160998ee15541e963107ca91e1cec51e9de8a2ce1c162ee553fa19b",
+        "right_selector_ref": "selector:native-pnf:sha256:9098941676f6e418b9f3b973286aac38edd191e9d8e5a687d2bafb043aac00e8"
+      },
+      {
+        "acquisition_obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:filler-compatibility:syntax:punct:0",
+        "comparison_ref": "relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9",
+        "exact_residual": {
+          "kind": "unaligned_role_filler",
+          "left_ref": "candidate-pnf-db:parser-run:sha256:0071e359b56b3e31342f45a59752cbbeb35636e7d4180ad6ad892b9884723b7c:document-region:source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8:sentence:1000:130437-130646:38:130645:130646",
+          "obligation_ref": "filler-compatibility:syntax:punct:0",
+          "right_ref": "candidate-pnf-db:parser-run:sha256:56ea4c0a05c3beb97f05dfe447570c7d753f15d8b8bf76cb86145ca41f8f2d63:document-region:source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00:sentence:1000:130437-130646:38:130645:130646"
+        },
+        "left_selector_ref": "selector:native-pnf:sha256:596b779fd654cea370b7b56eb44dc84e971dc57cba3455160226f43a39bf4115",
+        "ordinal": 3,
+        "residual_ref": "residual:relational:sha256:5dbeb3a992e7b8261775c0935731acb4f043f5e878fb5a42c42da9f7c6dfd1e7",
+        "right_selector_ref": "selector:native-pnf:sha256:9098941676f6e418b9f3b973286aac38edd191e9d8e5a687d2bafb043aac00e8"
+      },
+      {
+        "acquisition_obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:evidence-polarity-unknown",
+        "comparison_ref": "relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9",
+        "exact_residual": {
+          "kind": "unresolved_polarity",
+          "left_ref": "checked-pnf-observation:sha256:87f9e19cc8e12d57adf63a9b65eaaa82bfd33efad641e8407fbb6575c1361b7c",
+          "obligation_ref": "evidence-polarity-unknown",
+          "right_ref": "checked-pnf-observation:sha256:6fb9204f2be1ea56205a8e90d986b972da03c19b8391f691cb13d1c06710527e"
+        },
+        "left_selector_ref": "selector:native-pnf:sha256:596b779fd654cea370b7b56eb44dc84e971dc57cba3455160226f43a39bf4115",
+        "ordinal": 4,
+        "residual_ref": "residual:relational:sha256:66a7fce87a670ad74272df820e8a7116b7d2cf9d38abf577c9d4e43a9688de42",
+        "right_selector_ref": "selector:native-pnf:sha256:9098941676f6e418b9f3b973286aac38edd191e9d8e5a687d2bafb043aac00e8"
+      },
+      {
+        "acquisition_obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:consumer:context-unobserved:scope",
+        "comparison_ref": "relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9",
+        "exact_residual": {
+          "kind": "scope_mismatch",
+          "left_ref": null,
+          "obligation_ref": "consumer:context-unobserved:scope",
+          "right_ref": null
+        },
+        "left_selector_ref": "selector:native-pnf:sha256:596b779fd654cea370b7b56eb44dc84e971dc57cba3455160226f43a39bf4115",
+        "ordinal": 5,
+        "residual_ref": "residual:relational:sha256:2a33dd3096ae331b6d43299f93f49ce1463e046812984d8c57de5578d0feeddd",
+        "right_selector_ref": "selector:native-pnf:sha256:9098941676f6e418b9f3b973286aac38edd191e9d8e5a687d2bafb043aac00e8"
+      },
+      {
+        "acquisition_obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:consumer:context-unobserved:time",
+        "comparison_ref": "relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9",
+        "exact_residual": {
+          "kind": "time_mismatch",
+          "left_ref": null,
+          "obligation_ref": "consumer:context-unobserved:time",
+          "right_ref": null
+        },
+        "left_selector_ref": "selector:native-pnf:sha256:596b779fd654cea370b7b56eb44dc84e971dc57cba3455160226f43a39bf4115",
+        "ordinal": 6,
+        "residual_ref": "residual:relational:sha256:34a6c9c869b9a1e314f8f96d2fdf13fcc10fbdf92484fa2679aad4cdba75b985",
+        "right_selector_ref": "selector:native-pnf:sha256:9098941676f6e418b9f3b973286aac38edd191e9d8e5a687d2bafb043aac00e8"
+      },
+      {
+        "acquisition_obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:consumer:context-unobserved:modality",
+        "comparison_ref": "relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9",
+        "exact_residual": {
+          "kind": "modality_mismatch",
+          "left_ref": null,
+          "obligation_ref": "consumer:context-unobserved:modality",
+          "right_ref": null
+        },
+        "left_selector_ref": "selector:native-pnf:sha256:596b779fd654cea370b7b56eb44dc84e971dc57cba3455160226f43a39bf4115",
+        "ordinal": 7,
+        "residual_ref": "residual:relational:sha256:cefee7ceeb5955f95f8348fc23ad97fe79f60d3e0b72b872dcc8651f02fe7c4b",
+        "right_selector_ref": "selector:native-pnf:sha256:9098941676f6e418b9f3b973286aac38edd191e9d8e5a687d2bafb043aac00e8"
+      },
+      {
+        "acquisition_obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:consumer:context-unobserved:quantifier",
+        "comparison_ref": "relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9",
+        "exact_residual": {
+          "kind": "quantifier_mismatch",
+          "left_ref": null,
+          "obligation_ref": "consumer:context-unobserved:quantifier",
+          "right_ref": null
+        },
+        "left_selector_ref": "selector:native-pnf:sha256:596b779fd654cea370b7b56eb44dc84e971dc57cba3455160226f43a39bf4115",
+        "ordinal": 8,
+        "residual_ref": "residual:relational:sha256:9762b50453cc0ce038100416bd231dfe4bf56ab9a40b61b517efee7fed2feb69",
+        "right_selector_ref": "selector:native-pnf:sha256:9098941676f6e418b9f3b973286aac38edd191e9d8e5a687d2bafb043aac00e8"
+      },
+      {
+        "acquisition_obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:consumer:context-unobserved:attribution",
+        "comparison_ref": "relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9",
+        "exact_residual": {
+          "kind": "attribution_mismatch",
+          "left_ref": null,
+          "obligation_ref": "consumer:context-unobserved:attribution",
+          "right_ref": null
+        },
+        "left_selector_ref": "selector:native-pnf:sha256:596b779fd654cea370b7b56eb44dc84e971dc57cba3455160226f43a39bf4115",
+        "ordinal": 9,
+        "residual_ref": "residual:relational:sha256:81dec68095d14185a0cd966b4ddb8f22ad5822ef4374ac91e8a393aa09044f3e",
+        "right_selector_ref": "selector:native-pnf:sha256:9098941676f6e418b9f3b973286aac38edd191e9d8e5a687d2bafb043aac00e8"
+      },
+      {
+        "acquisition_obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:consumer:context-unobserved:ontology",
+        "comparison_ref": "relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9",
+        "exact_residual": {
+          "kind": "ontology_mismatch",
+          "left_ref": null,
+          "obligation_ref": "consumer:context-unobserved:ontology",
+          "right_ref": null
+        },
+        "left_selector_ref": "selector:native-pnf:sha256:596b779fd654cea370b7b56eb44dc84e971dc57cba3455160226f43a39bf4115",
+        "ordinal": 10,
+        "residual_ref": "residual:relational:sha256:7d481f8ac77cc066208ca1c9896089d8a44394c90088a13017467c736f57ea72",
+        "right_selector_ref": "selector:native-pnf:sha256:9098941676f6e418b9f3b973286aac38edd191e9d8e5a687d2bafb043aac00e8"
+      },
+      {
+        "acquisition_obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:consumer:context-unobserved:language",
+        "comparison_ref": "relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9",
+        "exact_residual": {
+          "kind": "language_mismatch",
+          "left_ref": null,
+          "obligation_ref": "consumer:context-unobserved:language",
+          "right_ref": null
+        },
+        "left_selector_ref": "selector:native-pnf:sha256:596b779fd654cea370b7b56eb44dc84e971dc57cba3455160226f43a39bf4115",
+        "ordinal": 11,
+        "residual_ref": "residual:relational:sha256:8115e41c85578d3218e05fecf45ced21e142825179c79b6ca2eed4edd488ebd4",
+        "right_selector_ref": "selector:native-pnf:sha256:9098941676f6e418b9f3b973286aac38edd191e9d8e5a687d2bafb043aac00e8"
+      },
+      {
+        "acquisition_obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:predicate-alignment-review",
+        "comparison_ref": "relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53",
+        "exact_residual": {
+          "kind": "unaligned_predicate",
+          "left_ref": "candidate-pnf-db:parser-run:sha256:56ea4c0a05c3beb97f05dfe447570c7d753f15d8b8bf76cb86145ca41f8f2d63:document-region:source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00:sentence:1000:130437-130646:8:130470:130479",
+          "obligation_ref": "predicate-alignment-review",
+          "right_ref": "candidate-pnf-db:parser-run:sha256:0071e359b56b3e31342f45a59752cbbeb35636e7d4180ad6ad892b9884723b7c:document-region:source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8:sentence:1000:130437-130646:8:130470:130479"
+        },
+        "left_selector_ref": "selector:native-pnf:sha256:9098941676f6e418b9f3b973286aac38edd191e9d8e5a687d2bafb043aac00e8",
+        "ordinal": 0,
+        "residual_ref": "residual:relational:sha256:dad36c891813220a540ca257d0f7ff13713f793500481663556a5b13aedbc5d6",
+        "right_selector_ref": "selector:native-pnf:sha256:596b779fd654cea370b7b56eb44dc84e971dc57cba3455160226f43a39bf4115"
+      },
+      {
+        "acquisition_obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:filler-compatibility:syntax:dobj:0",
+        "comparison_ref": "relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53",
+        "exact_residual": {
+          "kind": "unaligned_role_filler",
+          "left_ref": "candidate-pnf-db:parser-run:sha256:56ea4c0a05c3beb97f05dfe447570c7d753f15d8b8bf76cb86145ca41f8f2d63:document-region:source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00:sentence:1000:130437-130646:15:130531:130539",
+          "obligation_ref": "filler-compatibility:syntax:dobj:0",
+          "right_ref": "candidate-pnf-db:parser-run:sha256:0071e359b56b3e31342f45a59752cbbeb35636e7d4180ad6ad892b9884723b7c:document-region:source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8:sentence:1000:130437-130646:15:130531:130539"
+        },
+        "left_selector_ref": "selector:native-pnf:sha256:9098941676f6e418b9f3b973286aac38edd191e9d8e5a687d2bafb043aac00e8",
+        "ordinal": 1,
+        "residual_ref": "residual:relational:sha256:15da9ff420f1e0822d7c35f82ddbca3aa30782dd3ebfe3c2b69d61c73722523e",
+        "right_selector_ref": "selector:native-pnf:sha256:596b779fd654cea370b7b56eb44dc84e971dc57cba3455160226f43a39bf4115"
+      },
+      {
+        "acquisition_obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:filler-compatibility:syntax:nsubj:0",
+        "comparison_ref": "relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53",
+        "exact_residual": {
+          "kind": "unaligned_role_filler",
+          "left_ref": "candidate-pnf-db:parser-run:sha256:56ea4c0a05c3beb97f05dfe447570c7d753f15d8b8bf76cb86145ca41f8f2d63:document-region:source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00:sentence:1000:130437-130646:7:130463:130469",
+          "obligation_ref": "filler-compatibility:syntax:nsubj:0",
+          "right_ref": "candidate-pnf-db:parser-run:sha256:0071e359b56b3e31342f45a59752cbbeb35636e7d4180ad6ad892b9884723b7c:document-region:source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8:sentence:1000:130437-130646:7:130463:130469"
+        },
+        "left_selector_ref": "selector:native-pnf:sha256:9098941676f6e418b9f3b973286aac38edd191e9d8e5a687d2bafb043aac00e8",
+        "ordinal": 2,
+        "residual_ref": "residual:relational:sha256:7cc996937a3521b16634c965257914441cb98e529b41a687a4fe9811b7a9868c",
+        "right_selector_ref": "selector:native-pnf:sha256:596b779fd654cea370b7b56eb44dc84e971dc57cba3455160226f43a39bf4115"
+      },
+      {
+        "acquisition_obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:filler-compatibility:syntax:punct:0",
+        "comparison_ref": "relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53",
+        "exact_residual": {
+          "kind": "unaligned_role_filler",
+          "left_ref": "candidate-pnf-db:parser-run:sha256:56ea4c0a05c3beb97f05dfe447570c7d753f15d8b8bf76cb86145ca41f8f2d63:document-region:source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00:sentence:1000:130437-130646:38:130645:130646",
+          "obligation_ref": "filler-compatibility:syntax:punct:0",
+          "right_ref": "candidate-pnf-db:parser-run:sha256:0071e359b56b3e31342f45a59752cbbeb35636e7d4180ad6ad892b9884723b7c:document-region:source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8:sentence:1000:130437-130646:38:130645:130646"
+        },
+        "left_selector_ref": "selector:native-pnf:sha256:9098941676f6e418b9f3b973286aac38edd191e9d8e5a687d2bafb043aac00e8",
+        "ordinal": 3,
+        "residual_ref": "residual:relational:sha256:2562b1593f9ad34a8f002b0a46d24a10d699a6ca6285511bb05bc01007ae21b9",
+        "right_selector_ref": "selector:native-pnf:sha256:596b779fd654cea370b7b56eb44dc84e971dc57cba3455160226f43a39bf4115"
+      },
+      {
+        "acquisition_obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:evidence-polarity-unknown",
+        "comparison_ref": "relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53",
+        "exact_residual": {
+          "kind": "unresolved_polarity",
+          "left_ref": "checked-pnf-observation:sha256:6fb9204f2be1ea56205a8e90d986b972da03c19b8391f691cb13d1c06710527e",
+          "obligation_ref": "evidence-polarity-unknown",
+          "right_ref": "checked-pnf-observation:sha256:87f9e19cc8e12d57adf63a9b65eaaa82bfd33efad641e8407fbb6575c1361b7c"
+        },
+        "left_selector_ref": "selector:native-pnf:sha256:9098941676f6e418b9f3b973286aac38edd191e9d8e5a687d2bafb043aac00e8",
+        "ordinal": 4,
+        "residual_ref": "residual:relational:sha256:c8587d41d5f37abceb6b6d5623db4ae653f4b872de2a623f9058a48ab15cf224",
+        "right_selector_ref": "selector:native-pnf:sha256:596b779fd654cea370b7b56eb44dc84e971dc57cba3455160226f43a39bf4115"
+      },
+      {
+        "acquisition_obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:consumer:context-unobserved:scope",
+        "comparison_ref": "relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53",
+        "exact_residual": {
+          "kind": "scope_mismatch",
+          "left_ref": null,
+          "obligation_ref": "consumer:context-unobserved:scope",
+          "right_ref": null
+        },
+        "left_selector_ref": "selector:native-pnf:sha256:9098941676f6e418b9f3b973286aac38edd191e9d8e5a687d2bafb043aac00e8",
+        "ordinal": 5,
+        "residual_ref": "residual:relational:sha256:b9d00ba1e0dc2dc6e81dc93dc3a9551327ab0cbf10cd8cfbae071ee87c7823d4",
+        "right_selector_ref": "selector:native-pnf:sha256:596b779fd654cea370b7b56eb44dc84e971dc57cba3455160226f43a39bf4115"
+      },
+      {
+        "acquisition_obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:consumer:context-unobserved:time",
+        "comparison_ref": "relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53",
+        "exact_residual": {
+          "kind": "time_mismatch",
+          "left_ref": null,
+          "obligation_ref": "consumer:context-unobserved:time",
+          "right_ref": null
+        },
+        "left_selector_ref": "selector:native-pnf:sha256:9098941676f6e418b9f3b973286aac38edd191e9d8e5a687d2bafb043aac00e8",
+        "ordinal": 6,
+        "residual_ref": "residual:relational:sha256:e067ca4f026e23a2e81938a9329925621b0b5b36add6c727a0b0e3b73069db05",
+        "right_selector_ref": "selector:native-pnf:sha256:596b779fd654cea370b7b56eb44dc84e971dc57cba3455160226f43a39bf4115"
+      },
+      {
+        "acquisition_obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:consumer:context-unobserved:modality",
+        "comparison_ref": "relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53",
+        "exact_residual": {
+          "kind": "modality_mismatch",
+          "left_ref": null,
+          "obligation_ref": "consumer:context-unobserved:modality",
+          "right_ref": null
+        },
+        "left_selector_ref": "selector:native-pnf:sha256:9098941676f6e418b9f3b973286aac38edd191e9d8e5a687d2bafb043aac00e8",
+        "ordinal": 7,
+        "residual_ref": "residual:relational:sha256:0685d4da9d6e1d7c5e914a2bae314897c85347ff2e608129476520a9bdd9a6f5",
+        "right_selector_ref": "selector:native-pnf:sha256:596b779fd654cea370b7b56eb44dc84e971dc57cba3455160226f43a39bf4115"
+      },
+      {
+        "acquisition_obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:consumer:context-unobserved:quantifier",
+        "comparison_ref": "relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53",
+        "exact_residual": {
+          "kind": "quantifier_mismatch",
+          "left_ref": null,
+          "obligation_ref": "consumer:context-unobserved:quantifier",
+          "right_ref": null
+        },
+        "left_selector_ref": "selector:native-pnf:sha256:9098941676f6e418b9f3b973286aac38edd191e9d8e5a687d2bafb043aac00e8",
+        "ordinal": 8,
+        "residual_ref": "residual:relational:sha256:318c6eba5b4beaccd432d8547b398f2b6e149a222fd90a24fc7ece0b136c3a68",
+        "right_selector_ref": "selector:native-pnf:sha256:596b779fd654cea370b7b56eb44dc84e971dc57cba3455160226f43a39bf4115"
+      },
+      {
+        "acquisition_obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:consumer:context-unobserved:attribution",
+        "comparison_ref": "relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53",
+        "exact_residual": {
+          "kind": "attribution_mismatch",
+          "left_ref": null,
+          "obligation_ref": "consumer:context-unobserved:attribution",
+          "right_ref": null
+        },
+        "left_selector_ref": "selector:native-pnf:sha256:9098941676f6e418b9f3b973286aac38edd191e9d8e5a687d2bafb043aac00e8",
+        "ordinal": 9,
+        "residual_ref": "residual:relational:sha256:712bbb871feb4618f15481c9b57ab56fed3f809e43bf88d9fa26ff63fd02c3a5",
+        "right_selector_ref": "selector:native-pnf:sha256:596b779fd654cea370b7b56eb44dc84e971dc57cba3455160226f43a39bf4115"
+      },
+      {
+        "acquisition_obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:consumer:context-unobserved:ontology",
+        "comparison_ref": "relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53",
+        "exact_residual": {
+          "kind": "ontology_mismatch",
+          "left_ref": null,
+          "obligation_ref": "consumer:context-unobserved:ontology",
+          "right_ref": null
+        },
+        "left_selector_ref": "selector:native-pnf:sha256:9098941676f6e418b9f3b973286aac38edd191e9d8e5a687d2bafb043aac00e8",
+        "ordinal": 10,
+        "residual_ref": "residual:relational:sha256:99e24ef0696ba3d758dc78508c0ac52bc4e8fcf8f01902185a45841baa9d9bc3",
+        "right_selector_ref": "selector:native-pnf:sha256:596b779fd654cea370b7b56eb44dc84e971dc57cba3455160226f43a39bf4115"
+      },
+      {
+        "acquisition_obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:consumer:context-unobserved:language",
+        "comparison_ref": "relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53",
+        "exact_residual": {
+          "kind": "language_mismatch",
+          "left_ref": null,
+          "obligation_ref": "consumer:context-unobserved:language",
+          "right_ref": null
+        },
+        "left_selector_ref": "selector:native-pnf:sha256:9098941676f6e418b9f3b973286aac38edd191e9d8e5a687d2bafb043aac00e8",
+        "ordinal": 11,
+        "residual_ref": "residual:relational:sha256:7f8a1f75353617d8c35fcc64bce00580b7a0fb1f8a6fe85d0339af8833366829",
+        "right_selector_ref": "selector:native-pnf:sha256:596b779fd654cea370b7b56eb44dc84e971dc57cba3455160226f43a39bf4115"
+      }
+    ],
+    "reviews": [
+      {
+        "comparison_ref": "relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9",
+        "current_status": "pending",
+        "obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:consumer:context-unobserved:attribution",
+        "review_item_ref": "review-item:acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:consumer:context-unobserved:attribution",
+        "source_revision_refs": [
+          "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+          "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+        ]
+      },
+      {
+        "comparison_ref": "relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9",
+        "current_status": "pending",
+        "obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:consumer:context-unobserved:language",
+        "review_item_ref": "review-item:acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:consumer:context-unobserved:language",
+        "source_revision_refs": [
+          "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+          "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+        ]
+      },
+      {
+        "comparison_ref": "relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9",
+        "current_status": "pending",
+        "obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:consumer:context-unobserved:modality",
+        "review_item_ref": "review-item:acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:consumer:context-unobserved:modality",
+        "source_revision_refs": [
+          "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+          "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+        ]
+      },
+      {
+        "comparison_ref": "relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9",
+        "current_status": "pending",
+        "obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:consumer:context-unobserved:ontology",
+        "review_item_ref": "review-item:acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:consumer:context-unobserved:ontology",
+        "source_revision_refs": [
+          "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+          "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+        ]
+      },
+      {
+        "comparison_ref": "relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9",
+        "current_status": "pending",
+        "obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:consumer:context-unobserved:quantifier",
+        "review_item_ref": "review-item:acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:consumer:context-unobserved:quantifier",
+        "source_revision_refs": [
+          "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+          "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+        ]
+      },
+      {
+        "comparison_ref": "relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9",
+        "current_status": "pending",
+        "obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:consumer:context-unobserved:scope",
+        "review_item_ref": "review-item:acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:consumer:context-unobserved:scope",
+        "source_revision_refs": [
+          "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+          "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+        ]
+      },
+      {
+        "comparison_ref": "relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9",
+        "current_status": "pending",
+        "obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:consumer:context-unobserved:time",
+        "review_item_ref": "review-item:acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:consumer:context-unobserved:time",
+        "source_revision_refs": [
+          "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+          "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+        ]
+      },
+      {
+        "comparison_ref": "relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9",
+        "current_status": "pending",
+        "obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:evidence-polarity-unknown",
+        "review_item_ref": "review-item:acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:evidence-polarity-unknown",
+        "source_revision_refs": [
+          "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+          "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+        ]
+      },
+      {
+        "comparison_ref": "relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9",
+        "current_status": "pending",
+        "obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:filler-compatibility:syntax:dobj:0",
+        "review_item_ref": "review-item:acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:filler-compatibility:syntax:dobj:0",
+        "source_revision_refs": [
+          "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+          "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+        ]
+      },
+      {
+        "comparison_ref": "relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9",
+        "current_status": "pending",
+        "obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:filler-compatibility:syntax:nsubj:0",
+        "review_item_ref": "review-item:acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:filler-compatibility:syntax:nsubj:0",
+        "source_revision_refs": [
+          "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+          "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+        ]
+      },
+      {
+        "comparison_ref": "relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9",
+        "current_status": "pending",
+        "obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:filler-compatibility:syntax:punct:0",
+        "review_item_ref": "review-item:acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:filler-compatibility:syntax:punct:0",
+        "source_revision_refs": [
+          "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+          "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+        ]
+      },
+      {
+        "comparison_ref": "relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9",
+        "current_status": "pending",
+        "obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:predicate-alignment-review",
+        "review_item_ref": "review-item:acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:predicate-alignment-review",
+        "source_revision_refs": [
+          "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+          "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+        ]
+      },
+      {
+        "comparison_ref": "relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53",
+        "current_status": "pending",
+        "obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:consumer:context-unobserved:attribution",
+        "review_item_ref": "review-item:acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:consumer:context-unobserved:attribution",
+        "source_revision_refs": [
+          "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+          "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+        ]
+      },
+      {
+        "comparison_ref": "relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53",
+        "current_status": "pending",
+        "obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:consumer:context-unobserved:language",
+        "review_item_ref": "review-item:acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:consumer:context-unobserved:language",
+        "source_revision_refs": [
+          "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+          "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+        ]
+      },
+      {
+        "comparison_ref": "relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53",
+        "current_status": "pending",
+        "obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:consumer:context-unobserved:modality",
+        "review_item_ref": "review-item:acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:consumer:context-unobserved:modality",
+        "source_revision_refs": [
+          "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+          "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+        ]
+      },
+      {
+        "comparison_ref": "relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53",
+        "current_status": "pending",
+        "obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:consumer:context-unobserved:ontology",
+        "review_item_ref": "review-item:acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:consumer:context-unobserved:ontology",
+        "source_revision_refs": [
+          "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+          "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+        ]
+      },
+      {
+        "comparison_ref": "relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53",
+        "current_status": "pending",
+        "obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:consumer:context-unobserved:quantifier",
+        "review_item_ref": "review-item:acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:consumer:context-unobserved:quantifier",
+        "source_revision_refs": [
+          "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+          "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+        ]
+      },
+      {
+        "comparison_ref": "relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53",
+        "current_status": "pending",
+        "obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:consumer:context-unobserved:scope",
+        "review_item_ref": "review-item:acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:consumer:context-unobserved:scope",
+        "source_revision_refs": [
+          "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+          "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+        ]
+      },
+      {
+        "comparison_ref": "relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53",
+        "current_status": "pending",
+        "obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:consumer:context-unobserved:time",
+        "review_item_ref": "review-item:acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:consumer:context-unobserved:time",
+        "source_revision_refs": [
+          "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+          "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+        ]
+      },
+      {
+        "comparison_ref": "relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53",
+        "current_status": "pending",
+        "obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:evidence-polarity-unknown",
+        "review_item_ref": "review-item:acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:evidence-polarity-unknown",
+        "source_revision_refs": [
+          "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+          "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+        ]
+      },
+      {
+        "comparison_ref": "relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53",
+        "current_status": "pending",
+        "obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:filler-compatibility:syntax:dobj:0",
+        "review_item_ref": "review-item:acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:filler-compatibility:syntax:dobj:0",
+        "source_revision_refs": [
+          "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+          "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+        ]
+      },
+      {
+        "comparison_ref": "relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53",
+        "current_status": "pending",
+        "obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:filler-compatibility:syntax:nsubj:0",
+        "review_item_ref": "review-item:acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:filler-compatibility:syntax:nsubj:0",
+        "source_revision_refs": [
+          "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+          "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+        ]
+      },
+      {
+        "comparison_ref": "relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53",
+        "current_status": "pending",
+        "obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:filler-compatibility:syntax:punct:0",
+        "review_item_ref": "review-item:acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:filler-compatibility:syntax:punct:0",
+        "source_revision_refs": [
+          "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+          "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+        ]
+      },
+      {
+        "comparison_ref": "relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53",
+        "current_status": "pending",
+        "obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:predicate-alignment-review",
+        "review_item_ref": "review-item:acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:predicate-alignment-review",
+        "source_revision_refs": [
+          "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+          "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+        ]
+      }
+    ],
+    "schema": "slr.query-context-capsule.v1",
+    "shared_transaction_snapshot": true,
+    "sources": [
+      {
+        "context": {
+          "attribution_ref": null,
+          "language_ref": null,
+          "modality_ref": null,
+          "ontology_ref": null,
+          "quantifier_ref": null,
+          "scope_ref": null,
+          "time_ref": null
+        },
+        "observation_digest": "sha256:45c1b63181cb4a71347bbd869efce3ac5a74e7fb116bf7e9743f26e8e46b7139",
+        "observation_ref": "checked-pnf-observation:sha256:87f9e19cc8e12d57adf63a9b65eaaa82bfd33efad641e8407fbb6575c1361b7c",
+        "parser_or_producer_ref": "db-parser:parser-run:sha256:0071e359b56b3e31342f45a59752cbbeb35636e7d4180ad6ad892b9884723b7c:document-region:source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8:sentence:1000:130437-130646",
+        "polarity": "undetermined",
+        "predicate_candidate_ref": "candidate-pnf-db:parser-run:sha256:0071e359b56b3e31342f45a59752cbbeb35636e7d4180ad6ad892b9884723b7c:document-region:source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8:sentence:1000:130437-130646:8:130470:130479",
+        "provenance_refs": [
+          "candidate-pnf-batch:sha256:efc6f121f50f1130cdc547a5b5b303594557f8f7d63d7f99b3db5db9e48afcad",
+          "db-parser:parser-run:sha256:0071e359b56b3e31342f45a59752cbbeb35636e7d4180ad6ad892b9884723b7c:document-region:source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8:sentence:1000:130437-130646",
+          "gwb-small-edit-locality-acquisition:v1",
+          "native-pnf-existing-run",
+          "sha256:7ff2ec8ffe6243871ad682e7d7060fe3b84025fb15dbe229154d7aa7f6a72b30",
+          "statement:sha256:64dd4e6d083a3d99989d46c47be3e1688a7a500c3044f4f2e3c284ae542845e0"
+        ],
+        "selector_ref": "selector:native-pnf:sha256:596b779fd654cea370b7b56eb44dc84e971dc57cba3455160226f43a39bf4115",
+        "source_family": "wikipedia",
+        "source_revision_ref": "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8",
+        "source_span_ref": "document-region:source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8:sentence:1000:130437-130646"
+      },
+      {
+        "context": {
+          "attribution_ref": null,
+          "language_ref": null,
+          "modality_ref": null,
+          "ontology_ref": null,
+          "quantifier_ref": null,
+          "scope_ref": null,
+          "time_ref": null
+        },
+        "observation_digest": "sha256:42231ae7a28730a0d2f3d1983586eb75af338e074b0c6def487161dc8e33095c",
+        "observation_ref": "checked-pnf-observation:sha256:6fb9204f2be1ea56205a8e90d986b972da03c19b8391f691cb13d1c06710527e",
+        "parser_or_producer_ref": "db-parser:parser-run:sha256:56ea4c0a05c3beb97f05dfe447570c7d753f15d8b8bf76cb86145ca41f8f2d63:document-region:source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00:sentence:1000:130437-130646",
+        "polarity": "undetermined",
+        "predicate_candidate_ref": "candidate-pnf-db:parser-run:sha256:56ea4c0a05c3beb97f05dfe447570c7d753f15d8b8bf76cb86145ca41f8f2d63:document-region:source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00:sentence:1000:130437-130646:8:130470:130479",
+        "provenance_refs": [
+          "candidate-pnf-batch:sha256:0e0fedef021998f6a7607d994f760283fe4265a437c6808b6484979d4b38f73f",
+          "db-parser:parser-run:sha256:56ea4c0a05c3beb97f05dfe447570c7d753f15d8b8bf76cb86145ca41f8f2d63:document-region:source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00:sentence:1000:130437-130646",
+          "gwb-scale1-book-acquisition:sha256:f5ff82d4a8cfbb930b0dcd7d666aefed10d7a3d9dea76fe3115c8e9bedff2829",
+          "native-pnf-existing-run",
+          "sha256:7ff2ec8ffe6243871ad682e7d7060fe3b84025fb15dbe229154d7aa7f6a72b30",
+          "statement:sha256:5c5abb409494d70e468e271a2fa958d27f6b6aa029015732c36bd92a19323c01"
+        ],
+        "selector_ref": "selector:native-pnf:sha256:9098941676f6e418b9f3b973286aac38edd191e9d8e5a687d2bafb043aac00e8",
+        "source_family": "wikipedia",
+        "source_revision_ref": "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+        "source_span_ref": "document-region:source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00:sentence:1000:130437-130646"
+      }
+    ],
+    "world_truth_paid": false,
+    "writes_database": false
+  },
+  "capsule_body_json_bytes": 58089,
+  "capsule_digest": "sha256:b221bc36d56c7c6eab500cce7054a384eea0c8689231b5b28d006a092b61e666",
+  "creates_semantic_authority": false,
+  "full_readback_json_bytes": 165344,
+  "measurement": "compact JSON byte length, not tokens or wire compression",
+  "schema": "slr.query-context-capsule-envelope.v1",
+  "writes_database": false
+}

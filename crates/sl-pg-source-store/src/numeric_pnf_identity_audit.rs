@@ -2426,6 +2426,40 @@ fn persisted_numeric_relation_digest<T:Serialize>(
     )).map_err(|_|NativeNumericAuditError::ForeignSource)?).to_vec())
 }
 
+ // A new immutable carrier is keyed separately from the historical V1
+ // carrier. No old factor, object, hyperedge or derivation is rewritten.
+fn exact_repair_relation_digest<T:Serialize>(
+    run:&str,doc:&str,relation_ref:&str,head:i64,roles:&T,
+)->Result<Vec<u8>,NativeNumericAuditError>{
+    Ok(Sha256::digest(serde_json::to_vec(&(
+        "slr:native-persisted-relation:exact-role-v2",run,doc,relation_ref,head,roles
+    )).map_err(|_|NativeNumericAuditError::ForeignSource)?).to_vec())
+}
+
+fn numeric_relation_inverse_on_tx(
+    tx:&mut postgres::Transaction<'_>,factor:i64,
+    expected:&[(String,i64)],head:i64,
+)->Result<bool,NativeNumericAuditError>{
+    let support=tx.query("SELECT DISTINCT token_id FROM execution.semantic_pnf_factor_token_support
+        WHERE factor_id=$1 ORDER BY token_id",&[&factor])?.iter()
+        .map(|r|r.get::<_,i64>(0)).collect::<BTreeSet<_>>();
+    let mut expected_support=expected.iter().map(|(_,id)|*id).collect::<BTreeSet<_>>();
+    expected_support.insert(head);
+    if tx.query_one("SELECT EXISTS(SELECT 1 FROM execution.semantic_pnf_hyperedge e
+        LEFT JOIN execution.semantic_pnf_object o ON o.object_id=e.object_id
+        WHERE e.factor_id=$1 AND o.active IS DISTINCT FROM TRUE)",&[&factor])?.get::<_,bool>(0){return Ok(false);}
+    let roles=tx.query("SELECT e.slot_ordinal,s.symbol_text,
+        ARRAY(SELECT DISTINCT os.token_id FROM execution.semantic_pnf_object_token_support os
+            WHERE os.object_id=e.object_id ORDER BY os.token_id)
+        FROM execution.semantic_pnf_hyperedge e
+        JOIN execution.semantic_symbol s ON s.symbol_id=e.role_symbol_id
+        JOIN execution.semantic_pnf_object o ON o.object_id=e.object_id AND o.active
+        WHERE e.factor_id=$1 ORDER BY e.slot_ordinal",&[&factor])?.iter()
+        .map(|r|(r.get::<_,i16>(0),r.get::<_,String>(1),r.get::<_,Vec<i64>>(2))).collect::<Vec<_>>();
+    Ok(support==expected_support&&exact_numeric_role_inverse(&roles,expected))
+}
+
+
 /// Candidate-only predicate and composition carriers. Reopen existing
 /// immutable factors instead of updating their argument rows on replay.
 /// A source role is not an identity choice: pin the actual focus demand
@@ -2452,7 +2486,7 @@ fn materialize_native_numeric_relation_arguments(
     for relation in relations.iter().filter(|r|matches!(r.relation_type,"predicate"|"composition")){
         let head=tokens.get(&relation.head_token_id).ok_or(NativeNumericAuditError::ForeignSource)?;
         let relation_ref=format!("native-projected-relation:{}",bridge_digest(&(run_ref,doc,relation))?);
-        let digest=persisted_numeric_relation_digest(run_ref,doc,&relation_ref,relation.head_token_id,&relation.roles)?;
+        let mut digest=persisted_numeric_relation_digest(run_ref,doc,&relation_ref,relation.head_token_id,&relation.roles)?;
         let factor_type=if relation.relation_type=="predicate"{eventuality}else{proposition};
         let predicate=relation_symbol(tx,11,&format!("parser.{}:{}",relation.relation_type,head.lemma))?;
         let existing=tx.query_opt("SELECT factor_id,factor_type_symbol_id,predicate_symbol_id,active
@@ -2462,9 +2496,23 @@ fn materialize_native_numeric_relation_arguments(
             if row.get::<_,i64>(1)!=factor_type||row.get::<_,i64>(2)!=predicate||!row.get::<_,bool>(3){
                 return Err(NativeNumericAuditError::ForeignSource);
             }
-            // Old carriers may have unresolved inverse discrepancies; the
-            // exact readback reports those, never rewrites a Level-1 premise.
-            continue;
+            let expected=relation.roles.iter().map(|(r,id)|(r.to_string(),*id)).collect::<Vec<_>>();
+            if numeric_relation_inverse_on_tx(tx,row.get(0),&expected,relation.head_token_id)?{
+                continue;
+            }
+            // Historical V1 is retained verbatim. Only a separately keyed
+            // unresolved L0 candidate may repair its structural inverse.
+            digest=exact_repair_relation_digest(run_ref,doc,&relation_ref,relation.head_token_id,&relation.roles)?;
+            if let Some(repaired)=tx.query_opt("SELECT factor_id,factor_type_symbol_id,predicate_symbol_id,active
+                FROM execution.semantic_pnf_factor WHERE factor_digest=$1 AND region_id=$2",
+                &[&digest,&head.region])?{
+                if repaired.get::<_,i64>(1)!=factor_type||repaired.get::<_,i64>(2)!=predicate
+                    ||!repaired.get::<_,bool>(3)
+                    ||!numeric_relation_inverse_on_tx(tx,repaired.get(0),&expected,relation.head_token_id)?{
+                    return Err(NativeNumericAuditError::ForeignSource);
+                }
+                continue;
+            }
         }
         let factor:i64=tx.query_one(
             "INSERT INTO execution.semantic_pnf_factor
@@ -2524,14 +2572,30 @@ fn materialize_native_numeric_relation_arguments(
                  VALUES($1,$2,$3,$4,2,TRUE)",
                 &[&factor,&i16::try_from(ordinal).map_err(|_|NativeNumericAuditError::ForeignSource)?,&role_id,&object])?;
         }
+        let expected=relation.roles.iter().map(|(role,id)|(role.to_string(),*id)).collect::<Vec<_>>();
+        if !numeric_relation_inverse_on_tx(tx,factor,&expected,relation.head_token_id)?{
+            return Err(NativeNumericAuditError::ForeignSource);
+        }
     }
     Ok((factors_inserted,objects_inserted))
 }
 
-fn materialize_native_binding_bridge(
-    tx:&mut postgres::Transaction<'_>,run_ref:&str,doc:&str,sha:&str,
-    focus_token:i64,demand:i64,campaign:&NativeMentionBindingCampaign,
-)->Result<NativeBindingBridgeReceipt,NativeNumericAuditError>{
+// Common immutable source-prefix projection. This is independent of
+// antecedent policy; the original binding consumer still enforces PRON.
+struct NativeRelationPrefix {
+    source:String,
+    tokens:BTreeMap<i64,BridgeToken>,
+    relations:Vec<ProjectedRelation>,
+    relation_reductions:Vec<NativeRelationReductionRow>,
+    question_mode:Option<serde_json::Value>,
+    missing_original_tags:usize,
+    uncovered:usize,
+    original_relation_packet:NativeOriginalRelationPacketReceipt,
+    original_relation_payload:serde_json::Value,
+}
+fn load_native_relation_prefix(
+    tx:&mut postgres::Transaction<'_>,run_ref:&str,doc:&str,sha:&str,focus_token:i64,extended:bool,
+)->Result<NativeRelationPrefix,NativeNumericAuditError>{
     let locator:String=tx.query_one(
         "SELECT locator FROM execution.semantic_parser_source
          WHERE run_ref=$1 AND document_ref=$2 AND encode(content_sha256,'hex')=$3",
@@ -2589,8 +2653,7 @@ fn materialize_native_binding_bridge(
             morphology:bridge_morphology(&row.get::<_,Vec<String>>(11))};
         if tokens.insert(id,t).is_some(){return Err(NativeNumericAuditError::ForeignSource);}
     }
-    let focus=tokens.get(&focus_token).ok_or(NativeNumericAuditError::ForeignSource)?;
-    if focus.pos!="PRON" {return Err(NativeNumericAuditError::ForeignSource);}
+    if !tokens.contains_key(&focus_token){return Err(NativeNumericAuditError::ForeignSource);}
     let mut relation_tokens=tokens.values().map(|t|NativeRelationToken{
         id:t.id,region:t.region,lemma_id:t.lemma_id,head:t.head,start:t.start,end:t.end,
         orth:t.orth.clone(),lemma:t.lemma.clone(),pos:t.pos.clone(),dep:t.dep.clone(),
@@ -2599,7 +2662,7 @@ fn materialize_native_binding_bridge(
     if relation_tokens.iter().any(|t|tokens.get(&t.head).map_or(true,|h|h.region!=t.region)){
         return Err(NativeNumericAuditError::ForeignSource);
     }
-    let relations=native_relation_grammar(&relation_tokens);
+    let relations=native_relation_grammar_for_policy(&relation_tokens,extended);
     let (relation_reductions,question_mode,missing_original_tags)=native_relation_reductions(tx,run_ref,doc,&relation_tokens,&relations)?;
     // The selected region includes the full containing sentence. Bind
     // the comparison to that exact supplied parser prefix, not the whole
@@ -2631,9 +2694,87 @@ fn materialize_native_binding_bridge(
     let uncovered=chars[..prefix_end_usize].iter().zip(&coverage)
         .filter(|(c,seen)|!c.is_whitespace()&&!**seen).count();
     let prefix=chars[..prefix_end_usize].iter().collect::<String>();
-    let (original_relation_packet,original_relation_payload)=assemble_original_relation_packet(
+    let (mut original_relation_packet,mut original_relation_payload)=assemble_original_relation_packet(
         doc,sha,&source_revision,&parser_run,&prefix,missing_original_tags,uncovered,
         &relation_reductions,question_mode.as_ref())?;
+    if extended {
+        // Distinct policy: original donor reference cannot certify the added
+        // structural predicates. Preserve comparison debt and hash the policy.
+        original_relation_payload["comparison"]["projection_policy"]=
+            serde_json::json!("native-multilingual-syntax-v2");
+        original_relation_payload["comparison"]["producer_revision"]=
+            serde_json::json!("SLR:native-multilingual-syntax-v2;derived-from:SensibLaw:f9c4670ef04b40e8153caa7dd00fa1eba7013ef4");
+        original_relation_packet.packet_sha256=original_relation_digest(&original_relation_payload)?;
+        original_relation_packet.independent_reference_exact=false;
+        original_relation_packet.complete_supplied_prefix_relation_parity=false;
+    }
+    Ok(NativeRelationPrefix{source,tokens,relations,relation_reductions,question_mode,
+        missing_original_tags,uncovered,original_relation_packet,original_relation_payload})
+}
+
+/// Publish the detached, candidate-only relation packet for an explicitly
+/// selected source coordinate, without creating a pronoun demand, modifying
+/// current anchor snapshots or admitting semantic identity.
+pub fn publish_native_source_relation_prefix(
+    url:&str,run:&str,doc:&str,revision:&str,parser_run:&str,sha:&str,
+    start:i64,end:i64,literal:&str,
+)->Result<serde_json::Value,NativeNumericAuditError>{
+    if start<0||end<=start||literal.chars().count() as i64!=end-start
+        ||doc!=format!("document:sha256:{sha}"){return Err(NativeNumericAuditError::ForeignSource);}
+    let mut db=Client::connect(url,NoTls)?;
+    let mut tx=db.transaction()?;
+    tx.batch_execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE; SET LOCAL statement_timeout='90000ms'; SET LOCAL lock_timeout='5000ms'")?;
+    tx.query_one("SELECT pg_advisory_xact_lock(hashtext($1),hashtext($2))",&[&run,&doc])?;
+    let rows=tx.query("SELECT t.token_id FROM execution.semantic_parser_token t
+        JOIN execution.semantic_symbol orth ON orth.symbol_id=t.orth_symbol_id
+        WHERE t.run_ref=$1 AND t.document_ref=$2 AND t.representation_version=2
+          AND t.start_char=$3 AND t.end_char=$4 AND orth.symbol_text=$5",
+        &[&run,&doc,&start,&end,&literal])?;
+    if rows.len()!=1{return Err(NativeNumericAuditError::ForeignSource);}
+    let focus_token:i64=rows[0].get(0);
+    let prefix=load_native_relation_prefix(&mut tx,run,doc,sha,focus_token,true)?;
+    let comparison=&prefix.original_relation_payload["comparison"];
+    if comparison["source_revision_ref"]!=revision||comparison["parser_run_ref"]!=parser_run{
+        return Err(NativeNumericAuditError::ForeignSource);
+    }
+    validate_reopened_relation_packet(&prefix.original_relation_payload,doc,sha,prefix.source.as_bytes())?;
+    let digest=&prefix.original_relation_packet.packet_sha256;
+    let snapshot=format!("slr-native-source-relation-prefix:v1:{}",bridge_digest(&(run,doc,revision,parser_run,digest))?);
+    let key=format!("native-original-relation-packet:{digest}");
+    tx.batch_execute("CREATE TABLE IF NOT EXISTS execution.slr_native_relation_reduction(
+        run_ref text NOT NULL,document_ref text NOT NULL,snapshot_ref text NOT NULL,
+        relation_ref text NOT NULL,payload jsonb NOT NULL,
+        PRIMARY KEY(run_ref,document_ref,snapshot_ref,relation_ref))")?;
+    tx.execute("INSERT INTO execution.slr_native_relation_reduction(run_ref,document_ref,snapshot_ref,relation_ref,payload)
+        VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING",
+        &[&run,&doc,&snapshot,&key,&prefix.original_relation_payload])?;
+    let stored:serde_json::Value=tx.query_one("SELECT payload FROM execution.slr_native_relation_reduction
+        WHERE run_ref=$1 AND document_ref=$2 AND snapshot_ref=$3 AND relation_ref=$4",
+        &[&run,&doc,&snapshot,&key])?.get(0);
+    if stored!=prefix.original_relation_payload{return Err(NativeNumericAuditError::ForeignSource);}
+    let selected_predicate_count=prefix.relations.iter().filter(|p|
+        p.relation_type=="predicate"&&p.head_token_id==focus_token).count();
+    tx.commit()?;
+    Ok(serde_json::json!({"schema":"slr.native-source-relation-prefix.v1",
+        "numeric_run_ref":run,"document_ref":doc,"source_revision_ref":revision,
+        "parser_run_ref":parser_run,"source_sha256":sha,"snapshot_ref":snapshot,
+        "packet_sha256":digest,"packet_receipt":prefix.original_relation_packet,
+        "selected_span":[start,end],"selected_literal":literal,
+        "selected_predicate_count":selected_predicate_count,
+        "candidate_only":true,"writes_database":true,"current_snapshot_certified":false,
+        "semantic_alignment_paid":false,"world_truth_paid":false}))
+}
+
+fn materialize_native_binding_bridge(
+    tx:&mut postgres::Transaction<'_>,run_ref:&str,doc:&str,sha:&str,
+    focus_token:i64,demand:i64,campaign:&NativeMentionBindingCampaign,
+)->Result<NativeBindingBridgeReceipt,NativeNumericAuditError>{
+    let NativeRelationPrefix{source,tokens,relations,relation_reductions,question_mode,
+        missing_original_tags,uncovered,original_relation_packet,original_relation_payload}=
+        load_native_relation_prefix(tx,run_ref,doc,sha,focus_token,false)?;
+    if tokens.get(&focus_token).map(|t|t.pos.as_str())!=Some("PRON"){
+        return Err(NativeNumericAuditError::ForeignSource);
+    }
     // Keep the native numeric relation argument in the committed producer
     // lane.  The rollback-only probe below remains an independent regression
     // check; it must not be the sole owner of this Level-1 source carrier.
@@ -3311,26 +3452,31 @@ struct ProjectedRelation{
     roles:Vec<(&'static str,i64)>,
 }
 fn projected_predicate_relations(tokens:&[NativeRelationToken])->Vec<ProjectedRelation>{
+    projected_predicate_relations_for_policy(tokens,false)
+}
+fn projected_predicate_relations_for_policy(tokens:&[NativeRelationToken],extended:bool)->Vec<ProjectedRelation>{
     let mut children=BTreeMap::<i64,Vec<&NativeRelationToken>>::new();
     for t in tokens{children.entry(t.head).or_default().push(t);}
     let nounish=|t:&&NativeRelationToken|matches!(t.pos.as_str(),"NOUN"|"PROPN"|"PRON"|"NUM");
     let mut out=Vec::new();
     for t in tokens{
         if !matches!(t.pos.as_str(),"VERB"|"AUX")
-            ||!matches!(t.dep.as_str(),"root"|"acl"|"xcomp"|"ccomp"|"advcl"){continue;}
+            ||!(matches!(t.dep.as_str(),"root"|"acl"|"xcomp"|"ccomp"|"advcl")
+                ||extended&&matches!(t.dep.as_str(),"conj"|"relcl"|"acl:relcl"|"pcomp")){continue;}
         let direct=children.get(&t.id).map(Vec::as_slice).unwrap_or(&[]);
-        let aux=direct.iter().copied().filter(|c|matches!(c.dep.as_str(),"aux"|"auxpass")&&c.pos=="AUX").collect::<Vec<_>>();
-        let mut subjects=direct.iter().copied().filter(|c|matches!(c.dep.as_str(),"nsubj"|"nsubjpass")).filter(nounish).collect::<Vec<_>>();
+        let aux=direct.iter().copied().filter(|c|(matches!(c.dep.as_str(),"aux"|"auxpass")||extended&&c.dep=="aux:pass")&&c.pos=="AUX").collect::<Vec<_>>();
+        let mut subjects=direct.iter().copied().filter(|c|matches!(c.dep.as_str(),"nsubj"|"nsubjpass")||extended&&matches!(c.dep.as_str(),"nsubj:pass")).filter(nounish).collect::<Vec<_>>();
         for a in &aux{
             subjects.extend(children.get(&a.id).into_iter().flatten().copied()
-                .filter(|c|matches!(c.dep.as_str(),"nsubj"|"nsubjpass")).filter(nounish));
+                .filter(|c|matches!(c.dep.as_str(),"nsubj"|"nsubjpass")||extended&&matches!(c.dep.as_str(),"nsubj:pass")).filter(nounish));
         }
         let objects=direct.iter().copied().filter(|c|matches!(c.dep.as_str(),"dobj"|"obj"|"attr"|"oprd")).filter(nounish).collect::<Vec<_>>();
         let oblique=direct.iter().copied().filter(|c|matches!(c.dep.as_str(),"obl"|"pobj"|"iobj")).filter(nounish).collect::<Vec<_>>();
         let complements=direct.iter().copied().filter(|c|matches!(c.dep.as_str(),"attr"|"acomp"|"ccomp"|"xcomp"|"oprd")).collect::<Vec<_>>();
         // Original shared_reducer uses dependency negation OR its pinned
         // lexical negation cue; do not infer a claim truth judgement.
-        let neg=direct.iter().copied().filter(|c|c.dep=="neg"||matches!(c.lemma.to_lowercase().as_str(),"not"|"never"|"no")).collect::<Vec<_>>();
+        let neg=direct.iter().copied().filter(|c|c.dep=="neg"||matches!(c.lemma.to_lowercase().as_str(),"not"|"never"|"no")
+            ||extended&&c.dep=="advmod"&&matches!(c.lemma.to_lowercase().as_str(),"nunca"|"jamás")).collect::<Vec<_>>();
         let base=||{
             let mut roles=vec![("head",t.id)];
             roles.extend(subjects.iter().map(|s|("subject",s.id)));roles
@@ -3365,7 +3511,10 @@ fn projected_predicate_relations(tokens:&[NativeRelationToken])->Vec<ProjectedRe
  * a239d2c14255, pinned SensibLaw f9c4670e. Candidate relation syntax only.
  * Question mode is a value role, not an atom, and is retained separately. */
 fn native_relation_grammar(tokens:&[NativeRelationToken])->Vec<ProjectedRelation>{
-    let mut rows=projected_predicate_relations(tokens);
+    native_relation_grammar_for_policy(tokens,false)
+}
+fn native_relation_grammar_for_policy(tokens:&[NativeRelationToken],extended:bool)->Vec<ProjectedRelation>{
+    let mut rows=projected_predicate_relations_for_policy(tokens,extended);
     let by_id=tokens.iter().map(|t|(t.id,t)).collect::<BTreeMap<_,_>>();
     for t in tokens {
         if let Some(head)=by_id.get(&t.head) {
@@ -3841,6 +3990,15 @@ fn reopen_focus_relation_correspondence(
                     return Err(NativeNumericAuditError::ForeignSource);
                 }
                 let expected_support=expected_roles.iter().map(|(_,id)|*id).collect::<BTreeSet<_>>();
+                let head=reduction["relation"]["head_token_id"].as_i64().ok_or(NativeNumericAuditError::ForeignSource)?;
+                let historical_digest=persisted_numeric_relation_digest(run,doc,&native_ref,head,&expected_roles)?;
+                let repaired_digest=exact_repair_relation_digest(run,doc,&native_ref,head,&expected_roles)?;
+                let region=reduction["relation"]["region"].as_i64().ok_or(NativeNumericAuditError::ForeignSource)?;
+                let lemma:String=tx.query_one("SELECT s.symbol_text FROM execution.semantic_parser_token t
+                    JOIN execution.semantic_symbol s ON s.symbol_id=t.lemma_symbol_id
+                    WHERE t.token_id=$1 AND t.run_ref=$2 AND t.document_ref=$3
+                      AND t.representation_version=2",&[&head,&run,&doc])?.get(0);
+                let expected_predicate=format!("parser.predicate:{lemma}");
                 let mut numeric=Vec::new();
                 for d in demands{
                     let demand:i64=d.get(0);let object:i64=d.get(1);let outside:bool=d.get(2);
@@ -3854,16 +4012,24 @@ fn reopen_focus_relation_correspondence(
                     // Raw horizon observations are retained including zero
                     // and negative signs; stale validity is not repaired here.
                     let class_projection=project_original_identity_fibre(&horizons,&classes,outside);
-                    let arguments=tx.query("SELECT e.factor_id,e.slot_ordinal
+                    let arguments=tx.query("SELECT e.factor_id,e.slot_ordinal,f.factor_digest,
+                          f.region_id,typ.symbol_text,pred.symbol_text
                       FROM execution.semantic_pnf_hyperedge e
                       JOIN execution.semantic_pnf_factor f ON f.factor_id=e.factor_id AND f.active
                       JOIN execution.semantic_pnf_region r ON r.region_id=f.region_id
                       JOIN execution.semantic_symbol s ON s.symbol_id=e.role_symbol_id
+                      JOIN execution.semantic_symbol typ ON typ.symbol_id=f.factor_type_symbol_id
+                      JOIN execution.semantic_symbol pred ON pred.symbol_id=f.predicate_symbol_id
                       WHERE r.run_ref=$1 AND r.document_ref=$2 AND e.object_id=$3
                       ORDER BY e.factor_id,e.slot_ordinal",&[&run,&doc,&object])?;
                     let mut observed=Vec::new();
                     for arg in arguments{
                         let factor:i64=arg.get(0);let slot:i16=arg.get(1);
+                        let digest:Vec<u8>=arg.get(2);
+                        let exact_owner=(digest==historical_digest||digest==repaired_digest)
+                            &&arg.get::<_,i64>(3)==region
+                            &&arg.get::<_,String>(4)=="semantic.eventuality"
+                            &&arg.get::<_,String>(5)==expected_predicate;
                         let support=tx.query("SELECT DISTINCT token_id FROM execution.semantic_pnf_factor_token_support
                           WHERE factor_id=$1 ORDER BY token_id",&[&factor])?.iter().map(|r|r.get::<_,i64>(0)).collect::<BTreeSet<_>>();
                         let roles=tx.query("SELECT e.slot_ordinal,s.symbol_text,
@@ -3872,7 +4038,8 @@ fn reopen_focus_relation_correspondence(
                           FROM execution.semantic_pnf_hyperedge e JOIN execution.semantic_symbol s ON s.symbol_id=e.role_symbol_id
                           WHERE e.factor_id=$1 ORDER BY e.slot_ordinal",&[&factor])?
                           .iter().map(|r|(r.get::<_,i16>(0),r.get::<_,String>(1),r.get::<_,Vec<i64>>(2))).collect::<Vec<_>>();
-                        let exact=support==expected_support&&exact_numeric_role_inverse(&roles,&expected_roles)
+                        let exact=exact_owner&&support==expected_support&&exact_numeric_role_inverse(&roles,&expected_roles)
+                            &&numeric_relation_inverse_on_tx(tx,factor,&expected_roles,head)?
                             &&u64::try_from(slot).ok()==Some(ordinal);
                         let derivations=tx.query("SELECT DISTINCT d.derivation_ref,a.identity_entity_id,a.identity_witness_ids
                           FROM execution.semantic_pnf_factor_derivation d
@@ -3885,13 +4052,14 @@ fn reopen_focus_relation_correspondence(
                           &[&factor,&slot,&object])?.iter().map(|r|json!({"derivation_ref":r.get::<_,String>(0),
                             "identity_entity_id":r.get::<_,i64>(1),"identity_witness_ids":r.get::<_,Vec<i64>>(2)})).collect::<Vec<_>>();
                         observed.push(json!({"numeric_factor_id":factor,"slot_ordinal":slot,"support":support,
-                            "roles":roles,"exact_ordered_role_and_support":exact,"current_level_three_arguments":derivations}));
+                            "roles":roles,"exact_relation_owner_digest":exact_owner,"exact_ordered_role_and_support":exact,"current_level_three_arguments":derivations}));
                     }
                     let exact_count=observed.iter().filter(|x|x["exact_ordered_role_and_support"]==true).count();
+                    let selected=if exact_count==1 {observed.iter().find(|x|x["exact_ordered_role_and_support"]==true).map(|x|x["numeric_factor_id"].clone())}else{None};
                     numeric.push(json!({"demand_id":demand,"source_object_id":object,"outside_model_possible":outside,
                         "typed_candidate_rows":typed,"represented_keys_exact":represented_exact,
                         "raw_signed_horizon_observations":horizons,"observed_document_identity_classes":classes,
-                        "observed_class_projection_not_coverage":class_projection,"observed_numeric_arguments":observed,"exact_numeric_argument_count":exact_count}));
+                        "observed_class_projection_not_coverage":class_projection,"observed_numeric_arguments":observed,"exact_numeric_argument_count":exact_count,"selected_exact_numeric_factor_id":selected}));
                 }
                 let exact=revisions.len()==1&&revisions[0]["exact_three_candidate_sets"]==true
                     &&numeric.len()==1&&numeric[0]["exact_numeric_argument_count"]==1&&numeric[0]["represented_keys_exact"]==true;
@@ -3969,6 +4137,8 @@ fn reopen_typed_relation_member(
         return Err(NativeNumericAuditError::ForeignSource);
     }
     let digest=persisted_numeric_relation_digest(run,doc,&native_ref,head,&expected_roles)?;
+    let repair_digest=exact_repair_relation_digest(run,doc,&native_ref,head,&expected_roles)?;
+    let digests=vec![digest,repair_digest];
     let rows=tx.query("SELECT f.factor_id,typ.symbol_text,pred.symbol_text,lemma.symbol_text
         FROM execution.semantic_pnf_factor f
         JOIN execution.semantic_pnf_region r ON r.region_id=f.region_id
@@ -3977,8 +4147,8 @@ fn reopen_typed_relation_member(
         JOIN execution.semantic_parser_token t ON t.token_id=$4 AND t.run_ref=r.run_ref AND t.document_ref=r.document_ref
             AND t.representation_version=2
         JOIN execution.semantic_symbol lemma ON lemma.symbol_id=t.lemma_symbol_id
-        WHERE f.factor_digest=$1 AND r.run_ref=$2 AND r.document_ref=$3 AND f.region_id=$5 AND f.active
-        ORDER BY f.factor_id",&[&digest,&run,&doc,&head,&region])?;
+        WHERE f.factor_digest=ANY($1::bytea[]) AND r.run_ref=$2 AND r.document_ref=$3 AND f.region_id=$5 AND f.active
+        ORDER BY f.factor_id",&[&digests,&run,&doc,&head,&region])?;
     let mut numeric=Vec::new();
     for row in rows{
         let id:i64=row.get(0);let stored_type:String=row.get(1);let predicate:String=row.get(2);let lemma:String=row.get(3);
@@ -3991,12 +4161,14 @@ fn reopen_typed_relation_member(
             WHERE e.factor_id=$1 ORDER BY e.slot_ordinal",&[&id])?.iter().map(|r|
                 (r.get::<_,i16>(0),r.get::<_,String>(1),r.get::<_,Vec<i64>>(2))).collect::<Vec<_>>();
         let exact=stored_type==factor_type&&predicate==format!("parser.{kind}:{lemma}")
-            &&support==expected_support&&exact_numeric_role_inverse(&roles,&expected_roles);
+            &&support==expected_support&&exact_numeric_role_inverse(&roles,&expected_roles)
+            &&numeric_relation_inverse_on_tx(tx,id,&expected_roles,head)?;
         numeric.push(json!({"numeric_factor_id":id,"support":support,"roles":roles,"exact":exact}));
     }
-    let exact=numeric.len()==1&&numeric[0]["exact"]==true;
+    let exact=numeric.iter().filter(|n|n["exact"]==true).count()==1;
+    let selected=if exact {numeric.iter().find(|n|n["exact"]==true).map(|n|n["numeric_factor_id"].clone())}else{None};
     Ok(json!({"factor_revision_ref":revision,"source_key":native_ref,"original_root_factor_ref":original_root,
-        "source_link_count":1,"exact_numeric_factor_inverse":exact,"numeric_factors":numeric,
+        "source_link_count":1,"exact_numeric_factor_inverse":exact,"selected_exact_numeric_factor_id":selected,"numeric_factors":numeric,
         "semantic_disposition":"unresolved"}))
 }
 
@@ -4044,11 +4216,13 @@ fn focus_relation_has_witnessed_level_three(
     relation:&serde_json::Value,witnesses:&[i64],derivations:&[String],
 )->bool{
     if relation["exact_persisted_correspondence"]!=true||witnesses.len()!=1{return false;}
-    let Some(args)=relation.pointer("/subjects/0/matches/0/numeric_demands/0/observed_numeric_arguments")
-        .and_then(|a|a.as_array())else{return false;};
+    let Some(demand)=relation.pointer("/subjects/0/matches/0/numeric_demands/0")else{return false;};
+    let Some(args)=demand["observed_numeric_arguments"].as_array()else{return false;};
     let mut exact=args.iter().filter(|a|a["exact_ordered_role_and_support"]==true);
     let Some(arg)=exact.next()else{return false;};
-    if exact.next().is_some(){return false;}
+    if exact.next().is_some()||arg["exact_relation_owner_digest"]!=true
+        ||arg["numeric_factor_id"].as_i64().is_none()
+        ||demand["selected_exact_numeric_factor_id"]!=arg["numeric_factor_id"]{return false;}
     arg["current_level_three_arguments"].as_array().is_some_and(|rows|rows.iter().any(|row|
         row["derivation_ref"].as_str().is_some_and(|r|derivations.iter().any(|d|d==r))
         &&row["identity_witness_ids"].as_array().is_some_and(|ids|ids.iter().any(|id|id.as_i64()==Some(witnesses[0])))))
@@ -4226,6 +4400,72 @@ pub fn query_native_original_relations(
         "exact_persisted_packet_readback":true,"complete_recorded_query":true,
         "all_live_semantic_readings_covered":false,"outside_model_possible":true,
         "governed_identity_paid":false,"level_three_paid":false,"world_truth_paid":false}))
+}
+
+/// Consumer projection of the existing original relation grammar. Preserve the
+/// exact inverse and residuals; never reinterpret donor action metadata
+/// ("asserted" is a historical default, not a semantic scope certificate).
+/// Queries use original numeric token coordinates, not surface strings.
+pub fn query_native_recorded_action_roles(
+    url:&str,run:&str,doc:&str,snapshot:&str,digest:&str,mention_tokens:&[i64],
+)->Result<serde_json::Value,NativeNumericAuditError>{
+    let original=query_native_original_relations(url,run,doc,snapshot,digest,"all")?;
+    project_native_recorded_action_roles(&original,mention_tokens)
+}
+
+fn project_native_recorded_action_roles(
+    original:&serde_json::Value,mention_tokens:&[i64],
+)->Result<serde_json::Value,NativeNumericAuditError>{
+    use serde_json::{Value,json};
+    let selected=mention_tokens.iter().copied().collect::<BTreeSet<_>>();
+    if selected.len()!=mention_tokens.len()||selected.iter().any(|t|*t<=0){
+        return Err(NativeNumericAuditError::ForeignSource);
+    }
+    let answers=original["answers"].as_array().ok_or(NativeNumericAuditError::ForeignSource)?;
+    let mut inventory=Vec::new();
+    for row in answers{
+        let kind=row["original_relation"]["type"].as_str().ok_or(NativeNumericAuditError::ForeignSource)?;
+        if kind!="predicate"&&kind!="composition"&&kind!="conjunction"&&kind!="temporal"{continue;}
+        let roles=row["role_inverse"].as_array().ok_or(NativeNumericAuditError::ForeignSource)?;
+        let matches=roles.iter().filter(|r|r["numeric_token_id"].as_i64()
+            .is_some_and(|id|selected.contains(&id))).collect::<Vec<_>>();
+        inventory.push(json!({"original_relation_row":row,"matched_role_coordinates":matches,
+            "actor_attribution_paid":false,"asserted_action_paid":false,
+            "semantic_scope_paid":false}));
+    }
+    let mut result=original.clone();
+    let map=result.as_object_mut().ok_or(NativeNumericAuditError::ForeignSource)?;
+    map.remove("answers");
+    map.insert("schema".into(),json!("slr.recorded-numeric-action-roles.v1"));
+    map.insert("mention_token_ids".into(),json!(selected));
+    map.insert("original_answer_count".into(),original["answer_count"].clone());
+    map.insert("answer_count".into(),json!(inventory.len()));
+    map.insert("answers".into(),Value::Array(inventory));
+    map.insert("query_relation_type".into(),json!("action-role-inventory"));
+    map.insert("semantic_scope_paid".into(),json!(false));
+    Ok(result)
+}
+
+#[cfg(test)]
+mod recorded_numeric_action_role_tests{
+    use super::*;
+    use serde_json::json;
+    #[test]
+    fn retains_unmatched_and_composition_without_promoting_donor_scope(){
+        let raw=json!({"answer_count":3,"answers":[
+            {"original_relation":{"type":"predicate","metadata":{"modality":"asserted"}},
+             "role_inverse":[{"numeric_token_id":42,"ordinal":1}]},
+            {"original_relation":{"type":"composition"},"role_inverse":[{"numeric_token_id":43,"ordinal":0}]},
+            {"original_relation":{"type":"modifier"},"role_inverse":[]}
+        ]});
+        let out=project_native_recorded_action_roles(&raw,&[42]).unwrap();
+        assert_eq!(out["answer_count"],2);
+        assert_eq!(out["answers"][0]["matched_role_coordinates"].as_array().unwrap().len(),1);
+        assert_eq!(out["answers"][1]["matched_role_coordinates"].as_array().unwrap().len(),0);
+        assert_eq!(out["answers"][0]["asserted_action_paid"],false);
+        assert_eq!(out["answers"][0]["original_relation_row"],raw["answers"][0]);
+        assert!(project_native_recorded_action_roles(&raw,&[42,42]).is_err());
+    }
 }
 
 /// Generic pre-admission demand witness input, using the existing numeric
@@ -7038,16 +7278,49 @@ mod tests{
         assert_ne!(persisted_numeric_relation_digest("run","doc","ref",1,&swapped).unwrap(),old);
     }
     #[test]
+    fn repair_digest_is_separate_and_preserves_order_and_source(){
+        let roles=vec![("head",1i64),("subject",2),("argument",2)];
+        let repaired=exact_repair_relation_digest("run","doc","ref",1,&roles).unwrap();
+        assert_ne!(repaired,persisted_numeric_relation_digest("run","doc","ref",1,&roles).unwrap());
+        let owned=roles.iter().map(|(r,id)|(r.to_string(),*id)).collect::<Vec<_>>();
+        assert_eq!(repaired,exact_repair_relation_digest("run","doc","ref",1,&owned).unwrap());
+        assert_ne!(repaired,exact_repair_relation_digest("run","other","ref",1,&roles).unwrap());
+        let mut swapped=owned.clone();swapped.swap(1,2);
+        assert_ne!(repaired,exact_repair_relation_digest("run","doc","ref",1,&swapped).unwrap());
+    }
+    #[test]
+    fn exact_singleton_role_inverse_rejects_historical_v8_shape(){
+        let expected=vec![("head".to_string(),619776),("subject".to_string(),619769),
+            ("subject".to_string(),619775),("object".to_string(),619782),("argument".to_string(),619782)];
+        let historical=vec![(0,"head".into(),vec![619776]),(1,"subject".into(),vec![619769]),
+            (2,"subject".into(),vec![619775]),(3,"object".into(),vec![619781,619782]),
+            (4,"argument".into(),vec![619781,619782])];
+        assert!(!exact_numeric_role_inverse(&historical,&expected));
+        let exact=expected.iter().enumerate().map(|(i,(r,t))|(i as i16,r.clone(),vec![*t])).collect::<Vec<_>>();
+        assert!(exact_numeric_role_inverse(&exact,&expected));
+        let mut wrong=exact.clone();wrong[1].2=vec![619775];
+        assert!(!exact_numeric_role_inverse(&wrong,&expected));
+        let mut wrong=exact.clone();wrong[2].0=1;
+        assert!(!exact_numeric_role_inverse(&wrong,&expected));
+    }
+    #[test]
     fn level_three_must_be_on_the_exact_original_argument(){
         let mut r=serde_json::json!({"exact_persisted_correspondence":true,"subjects":[{"matches":[{"numeric_demands":[{
+          "selected_exact_numeric_factor_id":32,
           "observed_numeric_arguments":[
-            {"exact_ordered_role_and_support":false,"current_level_three_arguments":[{"derivation_ref":"other","identity_witness_ids":[8]}]},
-            {"exact_ordered_role_and_support":true,"current_level_three_arguments":[{"derivation_ref":"focus","identity_witness_ids":[7]}]}
+            {"numeric_factor_id":31,"exact_relation_owner_digest":true,"exact_ordered_role_and_support":false,"current_level_three_arguments":[{"derivation_ref":"other","identity_witness_ids":[8]}]},
+            {"numeric_factor_id":32,"exact_relation_owner_digest":true,"exact_ordered_role_and_support":true,"current_level_three_arguments":[{"derivation_ref":"focus","identity_witness_ids":[7]}]}
           ]}]}]}]});
         assert!(focus_relation_has_witnessed_level_three(&r,&[7],&["focus".into()]));
         assert!(!focus_relation_has_witnessed_level_three(&r,&[8],&["other".into()]));
         assert!(!focus_relation_has_witnessed_level_three(&r,&[7],&["other".into()]));
         assert!(!focus_relation_has_witnessed_level_three(&r,&[7,8],&["focus".into()]));
+        let mut wrong_owner=r.clone();
+        wrong_owner["subjects"][0]["matches"][0]["numeric_demands"][0]["observed_numeric_arguments"][1]["exact_relation_owner_digest"]=serde_json::json!(false);
+        assert!(!focus_relation_has_witnessed_level_three(&wrong_owner,&[7],&["focus".into()]));
+        let mut wrong_selection=r.clone();
+        wrong_selection["subjects"][0]["matches"][0]["numeric_demands"][0]["selected_exact_numeric_factor_id"]=serde_json::json!(31);
+        assert!(!focus_relation_has_witnessed_level_three(&wrong_selection,&[7],&["focus".into()]));
         r["exact_persisted_correspondence"]=serde_json::json!(false);
         assert!(!focus_relation_has_witnessed_level_three(&r,&[7],&["focus".into()]));
     }

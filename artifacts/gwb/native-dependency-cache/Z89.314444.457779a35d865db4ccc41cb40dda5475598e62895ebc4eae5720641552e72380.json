@@ -1,0 +1,314 @@
+{
+    "Z1K1": "Z2",
+    "Z2K1": {
+        "Z1K1": "Z6",
+        "Z6K1": "Z89"
+    },
+    "Z2K2": {
+        "Z1K1": "Z4",
+        "Z4K1": "Z89",
+        "Z4K2": [
+            "Z3",
+            {
+                "Z1K1": "Z3",
+                "Z3K1": "Z6",
+                "Z3K2": "Z89K1",
+                "Z3K3": {
+                    "Z1K1": "Z12",
+                    "Z12K1": [
+                        "Z11",
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1002",
+                            "Z11K2": "value"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1430",
+                            "Z11K2": "Wert"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1004",
+                            "Z11K2": "valeur"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1011",
+                            "Z11K2": "মান"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1005",
+                            "Z11K2": "значение"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1787",
+                            "Z11K2": "valore"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1181",
+                            "Z11K2": "вредност"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1820",
+                            "Z11K2": "वैल्यू"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1078",
+                            "Z11K2": "nilai"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1062",
+                            "Z11K2": "hodnota"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1823",
+                            "Z11K2": "стойност"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1157",
+                            "Z11K2": "waarde"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1830",
+                            "Z11K2": "値"
+                        }
+                    ]
+                },
+                "Z3K4": {
+                    "Z1K1": "Z40",
+                    "Z40K1": "Z42"
+                }
+            }
+        ],
+        "Z4K3": "Z189",
+        "Z4K4": "Z877",
+        "Z4K7": [
+            "Z46"
+        ],
+        "Z4K8": [
+            "Z64"
+        ]
+    },
+    "Z2K3": {
+        "Z1K1": "Z12",
+        "Z12K1": [
+            "Z11",
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1002",
+                "Z11K2": "HTML fragment"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1430",
+                "Z11K2": "HTML-Fragment"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1709",
+                "Z11K2": "HTML fragments"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1078",
+                "Z11K2": "Fragmen HTML"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1186",
+                "Z11K2": "מקטע HTML"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1004",
+                "Z11K2": "fragment HTML"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1011",
+                "Z11K2": "এইচটিএমএল অংশ"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1005",
+                "Z11K2": "Фрагмент HTML"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1820",
+                "Z11K2": "HTML का टुकड़ा"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1787",
+                "Z11K2": "Frammento HTML"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1003",
+                "Z11K2": "fragmento HTML"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1062",
+                "Z11K2": "Fragment HTML"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1645",
+                "Z11K2": "HTML片段"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1823",
+                "Z11K2": "Фрагмент от HTML"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1592",
+                "Z11K2": "HTML-fragment"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1025",
+                "Z11K2": "fragment kodu HTML"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1157",
+                "Z11K2": "HTML-fragment"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1830",
+                "Z11K2": "HTMLフラグメント"
+            }
+        ]
+    },
+    "Z2K4": {
+        "Z1K1": "Z32",
+        "Z32K1": [
+            "Z31",
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1002",
+                "Z31K2": [
+                    "Z6",
+                    "HTML",
+                    "rich text"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1078",
+                "Z31K2": [
+                    "Z6",
+                    "HTML"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1004",
+                "Z31K2": [
+                    "Z6",
+                    "HTML"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1011",
+                "Z31K2": [
+                    "Z6",
+                    "এইচটিএমএল "
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1787",
+                "Z31K2": [
+                    "Z6",
+                    "HTML",
+                    "codice HTML"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1062",
+                "Z31K2": [
+                    "Z6",
+                    "HTML",
+                    "HTML fragment"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1025",
+                "Z31K2": [
+                    "Z6",
+                    "HTML",
+                    "kod HTML"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1157",
+                "Z31K2": [
+                    "Z6",
+                    "HTML",
+                    "opmaaktekst"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1830",
+                "Z31K2": [
+                    "Z6",
+                    "HTML断片",
+                    "HTML",
+                    "リッチテキスト"
+                ]
+            }
+        ]
+    },
+    "Z2K5": {
+        "Z1K1": "Z12",
+        "Z12K1": [
+            "Z11",
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1002",
+                "Z11K2": "represents strings of (limited) HTML markup, to be displayed as rich text in Abstract Wikipedia and sister projects; see docs on talk page and [[WF:Embedded function calls]]"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1592",
+                "Z11K2": "sträng med begränsad uppsättning HTML-taggar, avsedd för att visas som rik text på Abstrakta Wikipedia och dess systerprojekt, dokumentation på diskussionssidan och [[WF:Embedded function calls]]"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1025",
+                "Z11K2": "oznacza ciągi (ograniczonego) kodu HTML, które mają być wyświetlane jako tekst sformatowany w Wikipedii Abstrakcyjnej i projektach siostrzanych; zobacz dokumentację na stronie dyskusji"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1157",
+                "Z11K2": "vertegenwoordigt tekenreeksen met (beperkte) HTML-opmaak, die als opgemaakte tekst moeten worden weergegeven in Abstracte Wikipedia en zusterprojecten"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1830",
+                "Z11K2": "制限された HTML マークアップの文字列を表し、抽象ウィキペディアおよび姉妹プロジェクトでリッチテキストとして表示するために使用される。詳細はトークページの文書および [[WF:Embedded function calls]] を参照。"
+            }
+        ]
+    }
+}

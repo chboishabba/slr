@@ -1,0 +1,65 @@
+{
+    "Z1K1": "Z2",
+    "Z2K1": {
+        "Z1K1": "Z6",
+        "Z6K1": "Z37469"
+    },
+    "Z2K2": {
+        "Z1K1": "Z20",
+        "Z20K1": "Z37464",
+        "Z20K2": {
+            "Z1K1": "Z7",
+            "Z7K1": "Z37464",
+            "Z37464K1": {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1002",
+                "Z11K2": "Paris is the capital city of France."
+            },
+            "Z37464K2": {
+                "Z1K1": "Z96",
+                "Z96K1": {
+                    "Z1K1": "Z6",
+                    "Z6K1": "Z28020"
+                }
+            },
+            "Z37464K3": [
+                "Z6091"
+            ],
+            "Z37464K4": [
+                "Z6091"
+            ],
+            "Z37464K5": "Z1001"
+        },
+        "Z20K3": {
+            "Z1K1": "Z7",
+            "Z7K1": "Z877",
+            "Z877K2": {
+                "Z1K1": "Z89",
+                "Z89K1": "\u003Cspan lang=\"en\" style=\"color: #FF00FF;\"\u003EParis is the capital city of France.\u003C/span\u003E\u003Ca href=\"https://www.wikifunctions.org/wiki/Z28020\"\u003E🔧\u003C/a\u003E"
+            }
+        }
+    },
+    "Z2K3": {
+        "Z1K1": "Z12",
+        "Z12K1": [
+            "Z11",
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1002",
+                "Z11K2": "\"Paris is the capital...\" magenta with 🔧 link"
+            }
+        ]
+    },
+    "Z2K4": {
+        "Z1K1": "Z32",
+        "Z32K1": [
+            "Z31"
+        ]
+    },
+    "Z2K5": {
+        "Z1K1": "Z12",
+        "Z12K1": [
+            "Z11"
+        ]
+    }
+}

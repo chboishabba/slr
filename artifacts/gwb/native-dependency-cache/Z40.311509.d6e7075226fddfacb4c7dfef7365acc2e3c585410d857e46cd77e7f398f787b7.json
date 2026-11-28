@@ -1,0 +1,781 @@
+{
+    "Z1K1": "Z2",
+    "Z2K1": {
+        "Z1K1": "Z6",
+        "Z6K1": "Z40"
+    },
+    "Z2K2": {
+        "Z1K1": "Z4",
+        "Z4K1": "Z40",
+        "Z4K2": [
+            "Z3",
+            {
+                "Z1K1": "Z3",
+                "Z3K1": "Z40",
+                "Z3K2": "Z40K1",
+                "Z3K3": {
+                    "Z1K1": "Z12",
+                    "Z12K1": [
+                        "Z11",
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1002",
+                            "Z11K2": "identity"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1025",
+                            "Z11K2": "tożsamość"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1011",
+                            "Z11K2": "পরিচয়"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1645",
+                            "Z11K2": "身份"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1592",
+                            "Z11K2": "id"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1430",
+                            "Z11K2": "Identität"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1113",
+                            "Z11K2": "identity"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1078",
+                            "Z11K2": "pengenal"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1004",
+                            "Z11K2": "identité"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1664",
+                            "Z11K2": "identitate"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1787",
+                            "Z11K2": "identità"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1820",
+                            "Z11K2": "पहचान"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1157",
+                            "Z11K2": "identiteit"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1844",
+                            "Z11K2": "pagkakakilanlan"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1823",
+                            "Z11K2": "идентичност"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1830",
+                            "Z11K2": "識別子"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1728",
+                            "Z11K2": "هویت"
+                        }
+                    ]
+                },
+                "Z3K4": "Z41"
+            }
+        ],
+        "Z4K3": "Z140",
+        "Z4K4": "Z844",
+        "Z4K7": [
+            "Z46"
+        ],
+        "Z4K8": [
+            "Z64"
+        ]
+    },
+    "Z2K3": {
+        "Z1K1": "Z12",
+        "Z12K1": [
+            "Z11",
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1002",
+                "Z11K2": "Boolean"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1025",
+                "Z11K2": "wartość logiczna"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1011",
+                "Z11K2": "বুলিয়ান"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1430",
+                "Z11K2": "boolesch"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1592",
+                "Z11K2": "Boolesk"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1576",
+                "Z11K2": "buleano"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1062",
+                "Z11K2": "Logická hodnota"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1830",
+                "Z11K2": "真偽値"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1709",
+                "Z11K2": "Loģiskais tips"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1127",
+                "Z11K2": "tipo lógico"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1186",
+                "Z11K2": "בוליאני"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1048",
+                "Z11K2": "Luận lý"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1157",
+                "Z11K2": "booleaan"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1851",
+                "Z11K2": "ตรรกะ"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1004",
+                "Z11K2": "booléen"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1237",
+                "Z11K2": "Booleca"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1787",
+                "Z11K2": "Booleano"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1332",
+                "Z11K2": "Булевий"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1113",
+                "Z11K2": "Boolean"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1625",
+                "Z11K2": "Booleanina"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1381",
+                "Z11K2": "Booleano"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1051",
+                "Z11K2": "totuusarvo"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1078",
+                "Z11K2": "Boolean"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1645",
+                "Z11K2": "布尔值"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1672",
+                "Z11K2": "布林值"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1827",
+                "Z11K2": "λογική τιμή"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1531",
+                "Z11K2": "Boolean"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1434",
+                "Z11K2": "بوليئن"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1014",
+                "Z11K2": "Boolean "
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1003",
+                "Z11K2": "booleano"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1061",
+                "Z11K2": "Boolsk"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1789",
+                "Z11K2": "booleà"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1005",
+                "Z11K2": "Логический тип"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1664",
+                "Z11K2": "Tip logic"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1001",
+                "Z11K2": "منطقي"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1643",
+                "Z11K2": "불리언"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1181",
+                "Z11K2": "Булова вредност"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1820",
+                "Z11K2": "बूलियन"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1106",
+                "Z11K2": "Boole-breyta"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1207",
+                "Z11K2": "навъи мантиқӣ"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1179",
+                "Z11K2": "Boolean"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1844",
+                "Z11K2": "Buleano"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1823",
+                "Z11K2": "Булева стойност"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1762",
+                "Z11K2": "lon anu ala"
+            }
+        ]
+    },
+    "Z2K4": {
+        "Z1K1": "Z32",
+        "Z32K1": [
+            "Z31",
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1002",
+                "Z31K2": [
+                    "Z6",
+                    "bool",
+                    "true/false"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1025",
+                "Z31K2": [
+                    "Z6",
+                    "bool",
+                    "wartość boolowska"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1592",
+                "Z31K2": [
+                    "Z6",
+                    "Bool",
+                    "Boolean"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1062",
+                "Z31K2": [
+                    "Z6",
+                    "Boolean",
+                    "bool"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1127",
+                "Z31K2": [
+                    "Z6",
+                    "booleano",
+                    "bool"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1186",
+                "Z31K2": [
+                    "Z6",
+                    "בוליאן",
+                    "בול",
+                    "אמת או שקר"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1048",
+                "Z31K2": [
+                    "Z6",
+                    "Luận lí",
+                    "Lôgic",
+                    "Lô-gíc",
+                    "Boole",
+                    "Boolean",
+                    "Đúng/Sai"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1787",
+                "Z31K2": [
+                    "Z6",
+                    "bool",
+                    "vero/falso"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1381",
+                "Z31K2": [
+                    "Z6",
+                    "Booleana",
+                    "bool",
+                    "verdadeiro/falso"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1851",
+                "Z31K2": [
+                    "Z6",
+                    "บูลีน",
+                    "จริง/เท็จ",
+                    "บูเลียน"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1078",
+                "Z31K2": [
+                    "Z6",
+                    "Boole",
+                    "benar/salah"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1011",
+                "Z31K2": [
+                    "Z6",
+                    "সঠিক না ভুল",
+                    "সত্য-মিথ্যা"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1827",
+                "Z31K2": [
+                    "Z6",
+                    "τιμή Μπουλ",
+                    "αληθές/ψευδές",
+                    "αληθής/ψευδής"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1531",
+                "Z31K2": [
+                    "Z6",
+                    "bool",
+                    "benar/palsu"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1434",
+                "Z31K2": [
+                    "Z6",
+                    "بول",
+                    "بنر/ڤلسو"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1003",
+                "Z31K2": [
+                    "Z6",
+                    "bool",
+                    "tipo lógico",
+                    "tipo de dato lógico"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1789",
+                "Z31K2": [
+                    "Z6",
+                    "tipus de dades booleanes",
+                    "bool"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1004",
+                "Z31K2": [
+                    "Z6",
+                    "vrai/faux"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1664",
+                "Z31K2": [
+                    "Z6",
+                    "tip boolean",
+                    "bool",
+                    "boolean",
+                    "adevărat/fals"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1005",
+                "Z31K2": [
+                    "Z6",
+                    "Булевый",
+                    "Булевое значение",
+                    "Булевое",
+                    "Логическое значение",
+                    "Правда или ложь",
+                    "Булев"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1181",
+                "Z31K2": [
+                    "Z6",
+                    "Булијан"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1106",
+                "Z31K2": [
+                    "Z6",
+                    "bool",
+                    "boole-breyta",
+                    "satt/ósatt"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1157",
+                "Z31K2": [
+                    "Z6",
+                    "bool",
+                    "waar/onwaar"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1844",
+                "Z31K2": [
+                    "Z6",
+                    "totoo/mali"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1823",
+                "Z31K2": [
+                    "Z6",
+                    "бул",
+                    "истина/неистина"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1645",
+                "Z31K2": [
+                    "Z6",
+                    "布尔",
+                    "真/假"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1830",
+                "Z31K2": [
+                    "Z6",
+                    "ブーリアン",
+                    "ブール",
+                    "ブール値",
+                    "真偽",
+                    "真/偽"
+                ]
+            }
+        ]
+    },
+    "Z2K5": {
+        "Z1K1": "Z12",
+        "Z12K1": [
+            "Z11",
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1002",
+                "Z11K2": "Either 'true' or 'false', and is one of the fundamental Z4/Types available in the Wikifunctions system"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1025",
+                "Z11K2": "Albo „prawda” (Z41), albo „fałsz” (Z42). Jeden z podstawowych typów (Z4) w systemie Wikifunkcji."
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1011",
+                "Z11K2": "'সত্য' অথবা 'মিথ্যা'; এই উইকির একটি ব্যবহারযোগ্য মূল Z4/ধরন"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1592",
+                "Z11K2": "grundläggande datatyp som kan anta ett av två värden: sant eller falskt"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1576",
+                "Z11K2": "ĉu 'vera' aŭ 'malvera'; unu el la fundamentaj Z4/tipoj disponeblaj en la sistemo de Vikifunkcioj"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1062",
+                "Z11K2": "Buď „pravda“, nebo „nepravda“; jeden ze základních Z4/Typů dostupných v systému Wikifunkcí"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1430",
+                "Z11K2": "entweder wahr oder falsch und einer der grundlegenden Typen im Wikifunctions-System "
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1127",
+                "Z11K2": "O bien \"verdadero\" o \"falso\", y uno de los Z4/tipos fundamentales disponibles en Wikifunctions"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1186",
+                "Z11K2": "סוג נתונים עם שני ערכים, אמת או שקר."
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1048",
+                "Z11K2": "đúng hay sai"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1004",
+                "Z11K2": "soit \"vrai\" soit \"faux\", l'un des Z4/Types fondamentaux disponibles dans le système Wikifunction"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1787",
+                "Z11K2": "O 'vero' o 'falso' ed è uno dei Z4/Tipi fondamentali disponibili nel sistema di Wikifunzioni"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1113",
+                "Z11K2": "Either 'true' or 'false'. One of the fundamental Z4/Types available in the Wikifunctions system."
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1625",
+                "Z11K2": "Karazana mandray sanda roa: 'marina' na 'diso'"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1332",
+                "Z11K2": "Або «істина», або «хиба», є одним із основних Z4/Типів, доступних у системі Вікіфункцій."
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1381",
+                "Z11K2": "Seja 'verdadeiro' ou 'falso', e é um dos Z4/Tipos fundamentais disponíveis no sistema da Wikifunções."
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1851",
+                "Z11K2": "มีค่าเป็น 'จริง' หรือ 'เท็จ' และเป็นหนึ่งใน Z4/ชนิด พื้นฐานในระบบวิกิฟังก์ชันส์"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1078",
+                "Z11K2": "Nilainya antara 'benar' atau 'salah'; salah satu Z4/Tipe fundamental yang tersedia di sistem Wikifunctions"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1531",
+                "Z11K2": "Sama ada 'benar' atau 'palsu' dan salah satu Z4/Jenis asas yang tersedia dalam sistem Wikifungsi."
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1434",
+                "Z11K2": "سام اد 'بنر' اتاو 'ڤلسو' دان ساله ساتو Z4/جنيس اساس يڠ ترسديا دالم سيستم ويکيفوڠسي."
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1014",
+                "Z11K2": "Ma 'eziokwu' ma ọ bụ 'ụgha', ọ bụkwa otu n'ime isi Z4/Ụdị dị na sistemụ Wikifunctions."
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1003",
+                "Z11K2": "O bien \"verdadero\" o \"falso\", y uno de los Z4/tipos fundamentales disponibles en Wikifunctions"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1789",
+                "Z11K2": "O bé \"vertader\" o \"fals\", i un dels Z4/tipus fonamentals disponibles a Wikifunctions"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1664",
+                "Z11K2": "Fie „adevărat”, fie „fals”; este unul dintre tipurile fundamentale Z4/Tipuri disponibile în sistemul Wikifuncții."
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1001",
+                "Z11K2": "إما \"صحيح\" أو \"خطأ\"، وهو أحد أنواع Z4 الأساسية المتوفرة في نظام Wikifunctions."
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1181",
+                "Z11K2": "Један од основних Z4/типова података у Викифункцијама. Садржи или 'тачно' или 'нетачно'."
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1820",
+                "Z11K2": "या तो 'सच' या 'झूठ'; यह विकिफ़ंक्शन्स की प्रणाली में उपलब्ध मौलिक Z4/प्रकारों में से एक है।"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1106",
+                "Z11K2": "Boole-breyta er tvígild breyta, gildið er annað hvort 'satt' eða 'ósatt', þetta er ein af grundvallar Z4/gagnatögum Wikifunctions kerfisins"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1157",
+                "Z11K2": "Ofwel ‘waar’ of ‘onwaar’, en is een van de fundamentele Z4/Types die beschikbaar zijn in het Wikifuncties-systeem."
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1844",
+                "Z11K2": "Alinman sa 'totoo' o 'mali', at isa sa mga pangunahing Z4/Uri na magagamit sa sistemang Wikipunsiyon"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1823",
+                "Z11K2": "Или истина, или неистина и е един от основните Z4/Типове, налични в системата на Wikifunctions"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1645",
+                "Z11K2": "为“真”或“假”，是维基函数系统中可用的基本 Z4/类之一"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1830",
+                "Z11K2": "「true」または「false」のいずれかであり、ウィキファンクションズシステムで使用できる基本的なZ4/型の1つ。"
+            }
+        ]
+    }
+}

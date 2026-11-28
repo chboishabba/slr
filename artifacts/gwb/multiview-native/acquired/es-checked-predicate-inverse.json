@@ -1,0 +1,79 @@
+{
+  "candidate_only": true,
+  "candidates": [
+    {
+      "batch_ref": "candidate-pnf-batch:sha256:e4ba5fb69d08cd53b0d20edcb387955f1c31c157cf46acfca2e4906c989ffd86",
+      "observation": {
+        "candidate_only": true,
+        "candidate_type_refs": [],
+        "claim_truth_promoted": false,
+        "context": {
+          "attribution_ref": null,
+          "language_ref": null,
+          "modality_ref": null,
+          "ontology_ref": null,
+          "quantifier_ref": null,
+          "scope_ref": null,
+          "time_ref": null
+        },
+        "creates_semantic_authority": false,
+        "native_metadata_refs": [
+          "syntax:predicate-ordinal:2",
+          "syntax:predicate-span:481:490",
+          "syntax:predicate-dependency:advcl",
+          "syntax:parent-factor:candidate-pnf-db:parser-run:sha256:b6f8f03575d344b8fe98f159ed8990896ae10a501d8d4a3be4fe3aa0757843b6:document-region:source-revision:sha256:2c323f2b7434a256332e5840bb4eee9a1ab2db06ba250d85c3afaef450a9bac4:sentence:5:470-597:0:470:477",
+          "native-source-family:document",
+          "native-source-provider:wikipedia-api:es:George_W._Bush:plain-heading-v1",
+          "native-parser-compilation:sha256:f1d67f7b1c4af5662f57437ef2c447c707a79a507ba1b8afb60af38f7bdf83cf"
+        ],
+        "observation_ref": "checked-pnf-observation:sha256:3f5b12e9928da1eb80b2d2b38e79ff7a06ad98f75949e3fde75d7403915fb30a",
+        "parser_or_producer_ref": "db-parser:parser-run:sha256:b6f8f03575d344b8fe98f159ed8990896ae10a501d8d4a3be4fe3aa0757843b6:document-region:source-revision:sha256:2c323f2b7434a256332e5840bb4eee9a1ab2db06ba250d85c3afaef450a9bac4:sentence:5:470-597",
+        "polarity": "undetermined",
+        "predicate_candidate_ref": "candidate-pnf-db:parser-run:sha256:b6f8f03575d344b8fe98f159ed8990896ae10a501d8d4a3be4fe3aa0757843b6:document-region:source-revision:sha256:2c323f2b7434a256332e5840bb4eee9a1ab2db06ba250d85c3afaef450a9bac4:sentence:5:470-597:2:481:490",
+        "provenance_refs": [
+          "acquisition:wikipedia:es:George_W._Bush:revid:176217381:projection:plain-heading-v1:sha256:81434a7f74ee08989cdcfb6996b48aa2cd2da3c9b2a508302ba67722e4ffe075",
+          "candidate-pnf-batch:sha256:e4ba5fb69d08cd53b0d20edcb387955f1c31c157cf46acfca2e4906c989ffd86",
+          "db-parser:parser-run:sha256:b6f8f03575d344b8fe98f159ed8990896ae10a501d8d4a3be4fe3aa0757843b6:document-region:source-revision:sha256:2c323f2b7434a256332e5840bb4eee9a1ab2db06ba250d85c3afaef450a9bac4:sentence:5:470-597",
+          "sha256:81434a7f74ee08989cdcfb6996b48aa2cd2da3c9b2a508302ba67722e4ffe075",
+          "statement:sha256:8ca45cc23002d8f30aa2f1d6551e8eb9d7ea3c1c9ddc7bd543d1d3e8e2229a1f"
+        ],
+        "role_bindings": [
+          {
+            "filler_candidate_ref": "candidate-pnf-db:parser-run:sha256:b6f8f03575d344b8fe98f159ed8990896ae10a501d8d4a3be4fe3aa0757843b6:document-region:source-revision:sha256:2c323f2b7434a256332e5840bb4eee9a1ab2db06ba250d85c3afaef450a9bac4:sentence:5:470-597:1:478:480",
+            "occurrence": 0,
+            "role_ref": "syntax:mark"
+          },
+          {
+            "filler_candidate_ref": "candidate-pnf-db:parser-run:sha256:b6f8f03575d344b8fe98f159ed8990896ae10a501d8d4a3be4fe3aa0757843b6:document-region:source-revision:sha256:2c323f2b7434a256332e5840bb4eee9a1ab2db06ba250d85c3afaef450a9bac4:sentence:5:470-597:5:497:508",
+            "occurrence": 0,
+            "role_ref": "syntax:obl"
+          },
+          {
+            "filler_candidate_ref": "candidate-pnf-db:parser-run:sha256:b6f8f03575d344b8fe98f159ed8990896ae10a501d8d4a3be4fe3aa0757843b6:document-region:source-revision:sha256:2c323f2b7434a256332e5840bb4eee9a1ab2db06ba250d85c3afaef450a9bac4:sentence:5:470-597:9:520:524",
+            "occurrence": 1,
+            "role_ref": "syntax:obl"
+          }
+        ],
+        "role_type_hypotheses": [],
+        "source_family": "other",
+        "source_revision_ref": "source-revision:sha256:2c323f2b7434a256332e5840bb4eee9a1ab2db06ba250d85c3afaef450a9bac4",
+        "source_span_ref": "document-region:source-revision:sha256:2c323f2b7434a256332e5840bb4eee9a1ab2db06ba250d85c3afaef450a9bac4:sentence:5:470-597"
+      },
+      "parser_run_ref": "parser-run:sha256:b6f8f03575d344b8fe98f159ed8990896ae10a501d8d4a3be4fe3aa0757843b6",
+      "predicate_candidate_ref": "candidate-pnf-db:parser-run:sha256:b6f8f03575d344b8fe98f159ed8990896ae10a501d8d4a3be4fe3aa0757843b6:document-region:source-revision:sha256:2c323f2b7434a256332e5840bb4eee9a1ab2db06ba250d85c3afaef450a9bac4:sentence:5:470-597:2:481:490",
+      "region_ref": "document-region:source-revision:sha256:2c323f2b7434a256332e5840bb4eee9a1ab2db06ba250d85c3afaef450a9bac4:sentence:5:470-597"
+    }
+  ],
+  "literal": "graduarse",
+  "parser_run_constraint": "parser-run:sha256:b6f8f03575d344b8fe98f159ed8990896ae10a501d8d4a3be4fe3aa0757843b6",
+  "schema": "slr.checked-predicate-occurrence-discovery.v1",
+  "semantic_coverage_paid": false,
+  "source_end_char": 490,
+  "source_revision_ref": "source-revision:sha256:2c323f2b7434a256332e5840bb4eee9a1ab2db06ba250d85c3afaef450a9bac4",
+  "source_sha256": "81434a7f74ee08989cdcfb6996b48aa2cd2da3c9b2a508302ba67722e4ffe075",
+  "source_start_char": 481,
+  "status": "unique_checked_candidate",
+  "truncated": false,
+  "world_truth_paid": false,
+  "writes_database": false
+}

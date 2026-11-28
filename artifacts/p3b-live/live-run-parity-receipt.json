@@ -1,0 +1,42 @@
+{
+  "schema": "slr.gwb.p3b.live-run-parity.v1",
+  "source": {
+    "canonical_sha256": "7ff2ec8ffe6243871ad682e7d7060fe3b84025fb15dbe229154d7aa7f6a72b30",
+    "left_source_revision": "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+    "right_source_revision": "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8",
+    "shared_coordinate": {
+      "sentence": 1000,
+      "span": "130437-130646",
+      "predicate": "convinced",
+      "predicate_span": "130470-130479"
+    }
+  },
+  "selectors": {
+    "left": "selector:native-pnf:sha256:9098941676f6e418b9f3b973286aac38edd191e9d8e5a687d2bafb043aac00e8",
+    "right": "selector:native-pnf:sha256:596b779fd654cea370b7b56eb44dc84e971dc57cba3455160226f43a39bf4115"
+  },
+  "family_ref": "relational-family:sha256:31ee0c184b30c2f75a46d410077b70789b47cb881297ec027acff7d3f106cd45",
+  "frontier_ref": "frontier:relational:relational-family:sha256:31ee0c184b30c2f75a46d410077b70789b47cb881297ec027acff7d3f106cd45",
+  "counts": {
+    "directed_comparisons": 2,
+    "acquisition_demands": 24,
+    "synthesis_candidates": 2,
+    "frontier_residuals": 24,
+    "frontier_hypotheses": 144
+  },
+  "status": {
+    "candidate_only": true,
+    "formal_consumer_equivalence_paid": false,
+    "world_truth_paid": false,
+    "semantic_authority_promoted": false,
+    "claim_truth_promoted": false,
+    "database_written_by_frontier_inspection": false,
+    "creates_access_authority": false,
+    "note": "Run A and Run B share canonical bytes and literal coordinates, but native candidate references are run-specific; unmatched cross-run coordinates remain explicit residuals."
+  },
+  "artifacts": {
+    "selection_seed": "selection-seed-run-parity.json",
+    "family": "family-run-parity.json",
+    "frontier": "frontier-run-parity.json"
+  }
+}

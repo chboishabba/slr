@@ -1,0 +1,722 @@
+{
+    "Z1K1": "Z2",
+    "Z2K1": {
+        "Z1K1": "Z6",
+        "Z6K1": "Z11"
+    },
+    "Z2K2": {
+        "Z1K1": "Z4",
+        "Z4K1": "Z11",
+        "Z4K2": [
+            "Z3",
+            {
+                "Z1K1": "Z3",
+                "Z3K1": "Z60",
+                "Z3K2": "Z11K1",
+                "Z3K3": {
+                    "Z1K1": "Z12",
+                    "Z12K1": [
+                        "Z11",
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1002",
+                            "Z11K2": "language"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1025",
+                            "Z11K2": "język"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1011",
+                            "Z11K2": "ভাষা"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1645",
+                            "Z11K2": "语言"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1062",
+                            "Z11K2": "jazyk"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1592",
+                            "Z11K2": "språk"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1186",
+                            "Z11K2": "שפה"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1430",
+                            "Z11K2": "Sprache"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1113",
+                            "Z11K2": "language"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1157",
+                            "Z11K2": "taal"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1078",
+                            "Z11K2": "bahasa"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1672",
+                            "Z11K2": "語言"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1004",
+                            "Z11K2": "langue"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1005",
+                            "Z11K2": "язык"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1664",
+                            "Z11K2": "limbă"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1787",
+                            "Z11K2": "lingua"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1181",
+                            "Z11K2": "језик"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1820",
+                            "Z11K2": "भाषा"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1844",
+                            "Z11K2": "wika"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1823",
+                            "Z11K2": "език"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1762",
+                            "Z11K2": "toki"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1830",
+                            "Z11K2": "言語"
+                        }
+                    ]
+                },
+                "Z3K4": {
+                    "Z1K1": "Z40",
+                    "Z40K1": "Z42"
+                }
+            },
+            {
+                "Z1K1": "Z3",
+                "Z3K1": "Z6",
+                "Z3K2": "Z11K2",
+                "Z3K3": {
+                    "Z1K1": "Z12",
+                    "Z12K1": [
+                        "Z11",
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1002",
+                            "Z11K2": "text"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1025",
+                            "Z11K2": "tekst"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1011",
+                            "Z11K2": "পাঠ্য"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1645",
+                            "Z11K2": "文本"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1062",
+                            "Z11K2": "text"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1592",
+                            "Z11K2": "text"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1186",
+                            "Z11K2": "טקסט"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1430",
+                            "Z11K2": "Text"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1113",
+                            "Z11K2": "text"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1625",
+                            "Z11K2": "soratra"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1157",
+                            "Z11K2": "tekst"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1078",
+                            "Z11K2": "teks"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1672",
+                            "Z11K2": "文字"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1004",
+                            "Z11K2": "texte"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1005",
+                            "Z11K2": "текст"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1664",
+                            "Z11K2": "text"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1787",
+                            "Z11K2": "testo"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1181",
+                            "Z11K2": "текст"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1820",
+                            "Z11K2": "टेक्स्ट"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1844",
+                            "Z11K2": "teksto"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1823",
+                            "Z11K2": "текст"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1762",
+                            "Z11K2": "nimi"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1830",
+                            "Z11K2": "テキスト"
+                        }
+                    ]
+                },
+                "Z3K4": {
+                    "Z1K1": "Z40",
+                    "Z40K1": "Z42"
+                }
+            }
+        ],
+        "Z4K3": "Z111",
+        "Z4K4": "Z14392",
+        "Z4K5": "Z21583",
+        "Z4K7": [
+            "Z46"
+        ],
+        "Z4K8": [
+            "Z64"
+        ]
+    },
+    "Z2K3": {
+        "Z1K1": "Z12",
+        "Z12K1": [
+            "Z11",
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1002",
+                "Z11K2": "Monolingual text"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1025",
+                "Z11K2": "tekst jednojęzyczny"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1592",
+                "Z11K2": "Enspråkig text"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1011",
+                "Z11K2": "একভাষিক পাঠ্য"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1430",
+                "Z11K2": "einsprachiger Text"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1576",
+                "Z11K2": "unulingva teksto"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1062",
+                "Z11K2": "Jednojazyčný text"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1830",
+                "Z11K2": "単一言語テキスト"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1709",
+                "Z11K2": "Teksts vienā valodā"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1005",
+                "Z11K2": "Одноязычный текст"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1186",
+                "Z11K2": "טקסט חד־לשוני"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1048",
+                "Z11K2": "Văn bản đơn ngôn ngữ"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1157",
+                "Z11K2": "eentalige tekst"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1227",
+                "Z11K2": "Enspråklig tekst"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1004",
+                "Z11K2": "texte monolingue"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1851",
+                "Z11K2": "ข้อความภาษาเดียว"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1237",
+                "Z11K2": "Tek dilli metin"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1381",
+                "Z11K2": "Texto monolíngue"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1332",
+                "Z11K2": "Одномовний текст"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1113",
+                "Z11K2": "Monolingual text"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1625",
+                "Z11K2": "Soratra amin'ny fiteny tokana"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1051",
+                "Z11K2": "yksikielinen teksti"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1078",
+                "Z11K2": "Teks satu bahasa"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1645",
+                "Z11K2": "单语言文本"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1672",
+                "Z11K2": "單語言文字"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1827",
+                "Z11K2": "μονόγλωσσο κείμενο"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1531",
+                "Z11K2": "Teks ekabahasa"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1434",
+                "Z11K2": "تيک‌س ايکابهاس"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1003",
+                "Z11K2": "Texto monolingüe"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1099",
+                "Z11K2": "eesproochegen Text"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1664",
+                "Z11K2": "Text monolingv"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1902",
+                "Z11K2": "單語文本"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1001",
+                "Z11K2": "نص أحادي اللغة"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1787",
+                "Z11K2": "Testo monolingue"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1643",
+                "Z11K2": "단일 언어 텍스트"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1820",
+                "Z11K2": "एकभाषी टेक्स्ट"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1181",
+                "Z11K2": "Једнојезични текст"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1597",
+                "Z11K2": "Birdilli mətn"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1207",
+                "Z11K2": "матни якзабона"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1844",
+                "Z11K2": "Teksto sa isang wika"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1823",
+                "Z11K2": "Едноезичен текст"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1762",
+                "Z11K2": "sitelen lon toki"
+            }
+        ]
+    },
+    "Z2K4": {
+        "Z1K1": "Z32",
+        "Z32K1": [
+            "Z31",
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1186",
+                "Z31K2": [
+                    "Z6",
+                    "טקסט חד-לשוני",
+                    "טקסט חד לשוני",
+                    "טקסט בלשון בודדת"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1048",
+                "Z31K2": [
+                    "Z6",
+                    "Văn bản đơn ngôn ngữ",
+                    "Văn bản đơn ngữ"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1078",
+                "Z31K2": [
+                    "Z6",
+                    "Teks monobahasa"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1645",
+                "Z31K2": [
+                    "Z6",
+                    "单语文本"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1672",
+                "Z31K2": [
+                    "Z6",
+                    "單語文字"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1003",
+                "Z31K2": [
+                    "Z6",
+                    "texto en una lengua"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1902",
+                "Z31K2": [
+                    "Z6",
+                    "單語言文本"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1820",
+                "Z31K2": [
+                    "Z6",
+                    "एकभाषी पाठ्य"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1062",
+                "Z31K2": [
+                    "Z6",
+                    "Monotext"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1830",
+                "Z31K2": [
+                    "Z6",
+                    "単言語テキスト"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1025",
+                "Z31K2": [
+                    "Z6",
+                    "tekst w jednym języku"
+                ]
+            }
+        ]
+    },
+    "Z2K5": {
+        "Z1K1": "Z12",
+        "Z12K1": [
+            "Z11",
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1002",
+                "Z11K2": "A Z6/String of text in a given Z60/Natural language, used to label things for humans to read."
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1025",
+                "Z11K2": "Ciąg znaków (Z6) w konkretnym języku naturalnym (Z60), stosowany w etykietach czytanych przez ludzi."
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1592",
+                "Z11K2": "textsträng på ett naturligt språk, avsedd för människor att läsa"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1011",
+                "Z11K2": "একটি Z60/স্বাভাবিক ভাষায় পাঠ্যের Z6/স্ট্রিং, যা দিয়ে মানুষদের পড়ার জন্য বস্তুর নাম দেওয়া হয়"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1576",
+                "Z11K2": "Z6/signoĉeno de teksto en difinita Z60/natura lingvo, uzata por etikedi aferojn por homoj legi"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1062",
+                "Z11K2": "Textový Z6/Řetězec v daném Z60/Přirozeném jazyce, používaný pro lidsky čitelné označení"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1430",
+                "Z11K2": "Zeichenkette in einer bestimmten natürlichen Sprache zur Bezeichnung von Dingen"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1157",
+                "Z11K2": "een Z6/tekenreeks in een bepaalde Z60/natuurlijke taal, gebruikt om dingen te labelen"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1048",
+                "Z11K2": "Một chuỗi (Z6) ký tự thể hiện một văn bản được viết bằng một ngôn ngữ tự nhiên (Z60)"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1004",
+                "Z11K2": "une Z6/Chaîne de texte dans un Z60/Langage naturel donné, utilisé pour être lisible par un humain"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1381",
+                "Z11K2": "Uma Z6/Cadeia de texto em uma determinada Z60/Linguagem natural, usada para rotular coisas para humanos lerem."
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1113",
+                "Z11K2": "A Z6/String of text in a given Z60/Natural language, used to label things for humans to read."
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1851",
+                "Z11K2": "Z6/สตริง ของข้อความใน Z60/ภาษาธรรมชาติ ภาษาหนึ่ง ใช้แปะป้ายสิ่งต่าง ๆ ให้มนุษย์อ่าน"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1078",
+                "Z11K2": "Sebuah Z6/Untaian teks dalam sebuah Z60/Bahasa alami tertentu, digunakan untuk memberi label untuk dibaca oleh manusia"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1827",
+                "Z11K2": "συμβολοσειρά χαρακτήρων σε μια συγκεκριμένη φυσική γλώσσα που χρησιμοποιείται για την ονομασία πραγμάτων"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1531",
+                "Z11K2": "Z6/Rentetan teks dalam Z60/Bahasa semula jadi yang diberi, digunakan untuk melabel benda untuk manusia baca."
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1434",
+                "Z11K2": "Z6/رينتيتن تيک‌س دالم Z60/بهاس سمولا جادي يڠ دبري، دݢوناکن اونتوق ملابل بندا اونتوق ماءنسي باچ."
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1003",
+                "Z11K2": "Una Z6/Cadena de texto en una Z60/Lengua natural dada, usada para etiquetar cosas con el fin de que los humanos las puedan leer."
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1664",
+                "Z11K2": "Un Z6/Șir de text într-o anumită Z60/Limbă naturală, utilizat pentru a eticheta lucruri pentru a fi citite de oameni."
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1001",
+                "Z11K2": "Z6/سلسلة نص بـ Z60/لغة طبيعية محددة، تستخدم لتسمية الأشياء لتمكين القراءة على الأشخاص."
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1787",
+                "Z11K2": "Una Z6/Stringa in una data Z60/Lingua naturale, usata per descrivere un'etichetta leggibile dagli umani"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1820",
+                "Z11K2": "किसी Z60/प्राकृतिक भाषा में एक Z6/स्ट्रिंग; इससे मनुष्यों द्वारा पढ़ने की चीज़ों को लेबल किया जाता है।"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1844",
+                "Z11K2": "Isang Z6/Hanay ng teksto sa isang partikular na Z60/Likas na wika, na ginagamit upang mag-etiketa ng mga bagay na mabasa ng mga tao."
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1823",
+                "Z11K2": "Z6/Низ от текст на даден Z60/Естествен език, използван за етикетиране на неща, които хората могат да четат."
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1830",
+                "Z11K2": "人間が読めるようにものにラベル付けするために使用される、特定のZ60/自然言語におけるZ6/テキストの文字列。"
+            }
+        ]
+    }
+}

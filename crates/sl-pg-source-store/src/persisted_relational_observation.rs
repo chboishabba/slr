@@ -425,6 +425,426 @@ pub fn relational_observation_from_checked_persisted_pnf(
         .ok_or(PersistedRelationalObservationError::MissingPredicate)
 }
 
+
+/// Source-local query over checked predicate occurrences. The caller supplies
+/// exact mention factors, not resolved person identifiers. Keep every predicate
+/// in the answer (including unlinked ones): absence of a direct role is not
+/// evidence that the person did not act.
+pub fn recorded_action_inventory(batch: &CheckedRelationalBatch, mentions: &[String])
+    -> serde_json::Value {
+    let selected: BTreeSet<&str> = mentions.iter().map(String::as_str).collect();
+    let rows: Vec<_> = batch.observations.iter().map(|o| {
+        let matched: Vec<_> = o.role_bindings.iter().filter(|r|
+            selected.contains(r.filler_candidate_ref.as_str())).collect();
+        let active: Vec<_> = matched.iter().filter(|r|
+            matches!(r.role_ref.as_str(), "syntax:nsubj" | "syntax:csubj")).collect();
+        let passive: Vec<_> = matched.iter().filter(|r|
+            matches!(r.role_ref.as_str(), "syntax:nsubjpass" | "syntax:nsubj:pass" |
+                "syntax:csubjpass" | "syntax:csubj:pass")).collect();
+        let embedded = o.native_metadata_refs.iter().any(|m|
+            m.starts_with("syntax:parent-factor:"));
+        let local_negation = o.native_metadata_refs.iter().any(|m|
+            m.starts_with("syntax:literal-negation-factor:"));
+        serde_json::json!({
+            "original_observation": o,
+            "matched_roles": matched,
+            "active_subject_candidates": active,
+            "passive_subject_candidates": passive,
+            "embedded_predicate": embedded,
+            "local_negation_recorded": local_negation,
+            "actor_attribution_paid": false,
+            "asserted_action_paid": false
+        })
+    }).collect();
+    serde_json::json!({
+        "schema": "slr.recorded-action-inventory.v1",
+        "batch_ref": batch.batch_ref,
+        "source_revision_ref": batch.source_revision_ref,
+        "source_content_digest_ref": batch.source_content_digest_ref,
+        "original_parser_run_ref": batch.original_parser_run_ref,
+        "original_region_ref": batch.original_region_ref,
+        "mention_factor_refs": selected,
+        "predicate_count": rows.len(),
+        "rows": rows,
+        "all_live_semantic_readings_covered": false,
+        "governed_identity_paid": false,
+        "world_truth_paid": false
+    })
+}
+
+/// Reopen a whole list of checked source regions in one snapshot. Reject
+/// revision mixing and duplicate regions rather than silently merging charts.
+/// This is an inventory of recorded syntax, not proof of article completeness.
+pub fn read_recorded_article_actions(config: &DatabaseConfig, revision: &str,
+    batches: &[String], mentions: &[String])
+    -> Result<serde_json::Value, PersistedRelationalObservationError> {
+    if revision.trim().is_empty() || batches.is_empty()
+        || batches.iter().collect::<BTreeSet<_>>().len() != batches.len()
+        || mentions.iter().any(|m| m.trim().is_empty()) {
+        return Err(PersistedRelationalObservationError::CheckedSourceMismatch);
+    }
+    let mut client = Client::connect(config.database_url(), NoTls)?;
+    let mut tx = client.transaction()?;
+    tx.batch_execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY; SET LOCAL statement_timeout='90000ms'")?;
+    let (source,_)=crate::generic_source_content_store::load_generic_text_source_on_client(&mut tx,revision)?;
+    let source_family=crate::workbench_projection::acceptance_control_store::relational_family_for_ingest(&source.source_family_ref);
+    let mut regions = BTreeSet::new();
+    let mut rows = Vec::new();
+    let mut digest = None;
+    for batch_ref in batches {
+        let batch = relational_observations_from_checked_batch_on_client(&mut tx,
+            batch_ref, source_family, &ObservationContext::default(), &[])?;
+        if batch.source_revision_ref != revision || !regions.insert(batch.original_region_ref.clone())
+            || digest.as_ref().is_some_and(|d| d != &batch.source_content_digest_ref) {
+            return Err(PersistedRelationalObservationError::CheckedSourceMismatch);
+        }
+        digest = Some(batch.source_content_digest_ref.clone());
+        rows.push(recorded_action_inventory(&batch, mentions));
+    }
+    tx.commit()?;
+    Ok(serde_json::json!({
+        "schema": "slr.recorded-article-actions.v1",
+        "source_revision_ref": revision,
+        "source_content_digest_ref": digest,
+        "regions": rows,
+        "article_region_coverage_paid": false,
+        "source_family_verified": true,
+        "native_source_family":source.source_family_ref,
+        "semantic_coverage_paid": false,
+        "world_truth_paid": false
+    }))
+}
+
+/// Original factor and numeric atom occurrences meet on exact character
+/// span and literal. Parser identities remain distinct; this is not a
+/// semantic role alignment or a claim of equal parser products.
+type SourceCoordinate = (u64,u64,String);
+
+fn coordinate_meet(left:&[(SourceCoordinate,serde_json::Value)],
+    right:&[(SourceCoordinate,serde_json::Value)]) -> Vec<serde_json::Value> {
+    let mut groups:BTreeMap<&SourceCoordinate,(Vec<&serde_json::Value>,Vec<&serde_json::Value>)>=BTreeMap::new();
+    for (key,row) in left {groups.entry(key).or_default().0.push(row);}
+    for (key,row) in right {groups.entry(key).or_default().1.push(row);}
+    groups.into_iter().map(|(key,(l,r))|{
+        let status=match (l.len(),r.len()){
+            (1,1)=>"unique_coordinate_match",
+            (_,0)=>"checked_only",
+            (0,_)=>"numeric_only",
+            _=>"ambiguous_coordinate_match",
+        };
+        serde_json::json!({"span":[key.0,key.1],"literal":key.2,
+            "checked":l,"numeric":r,"status":status,"semantic_alignment_paid":false})
+    }).collect()
+}
+
+/// Both source owners are reopened, not accepted from caller JSON. The
+/// numeric packet is immutable/content-addressed; the checked region read
+/// is a separate snapshot. No common current-authority snapshot is claimed.
+pub fn read_article_numeric_coordinate_meet(config:&DatabaseConfig,
+    revision:&str,batches:&[String],run:&str,doc:&str,snapshot:&str,digest:&str)
+    ->Result<serde_json::Value,PersistedRelationalObservationError>{
+    use serde_json::{json,Value};
+    let numeric_url=std::env::var("SENSIBLAW_DATABASE_URL")
+        .unwrap_or_else(|_|config.database_url().to_owned());
+    let numeric=crate::query_native_original_relations(&numeric_url,run,doc,snapshot,digest,"all")
+        .map_err(|_|PersistedRelationalObservationError::CheckedSourceMismatch)?;
+    let sha=numeric["source_sha256"].as_str().ok_or(PersistedRelationalObservationError::CheckedSourceMismatch)?;
+    if numeric["source_revision_ref"]!=revision || doc!=format!("document:sha256:{sha}")
+        || batches.is_empty() || batches.iter().collect::<BTreeSet<_>>().len()!=batches.len(){
+        return Err(PersistedRelationalObservationError::CheckedSourceMismatch);
+    }
+    let expected_digest=format!("sha256:{sha}");
+    let mut client=Client::connect(config.database_url(),NoTls)?;
+    let mut tx=client.transaction()?;
+    tx.batch_execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY; SET LOCAL statement_timeout='90000ms'")?;
+    let (source,_)=crate::generic_source_content_store::load_generic_text_source_on_client(&mut tx,revision)?;
+    if source.document_ref!=doc||source.content_digest_ref!=expected_digest{
+        return Err(PersistedRelationalObservationError::CheckedSourceMismatch);
+    }
+    let source_family=crate::workbench_projection::acceptance_control_store::relational_family_for_ingest(&source.source_family_ref);
+    let mut left=Vec::new();
+    let mut checked_batches=Vec::new();
+    let mut regions=BTreeSet::new();
+    for batch_ref in batches{
+        let checked=relational_observations_from_checked_batch_on_client(&mut tx,batch_ref,
+            source_family,&ObservationContext::default(),&[])?;
+        if checked.source_revision_ref!=revision || checked.source_content_digest_ref!=expected_digest
+            || numeric["parser_run_ref"]!=checked.original_parser_run_ref
+            || !regions.insert(checked.original_region_ref.clone()){
+            return Err(PersistedRelationalObservationError::CheckedSourceMismatch);
+        }
+        let batch=crate::candidate_pnf_store::load_candidate_pnf_batch_with_client(&mut tx,batch_ref)?
+            .ok_or(PersistedRelationalObservationError::MissingBatch)?;
+        for factor in &batch.factors{
+            let key=(u64::from(factor.source_start_char),u64::from(factor.source_end_char),factor.surface.clone());
+            if key.0>=key.1{return Err(PersistedRelationalObservationError::CheckedSourceMismatch);}
+            left.push((key,json!({"batch_ref":batch_ref,"region_ref":checked.original_region_ref,
+                "parser_run_ref":checked.original_parser_run_ref,"factor_ref":factor.candidate_ref,
+                "dependency":factor.dependency_ref,"lemma":factor.lemma})));
+        }
+        checked_batches.push(checked);
+    }
+    tx.commit()?;
+    let mut atoms:BTreeMap<i64,(SourceCoordinate,Value,Vec<Value>)>=BTreeMap::new();
+    for row in numeric["answers"].as_array().ok_or(PersistedRelationalObservationError::CheckedSourceMismatch)?{
+        for role in row["role_inverse"].as_array().ok_or(PersistedRelationalObservationError::CheckedSourceMismatch)?{
+            if role["numeric_token_id"].is_null(){continue;}
+            let token=role["numeric_token_id"].as_i64().ok_or(PersistedRelationalObservationError::CheckedSourceMismatch)?;
+            let atom=&role["original_atom"];
+            let start=atom["span"][0].as_u64().ok_or(PersistedRelationalObservationError::CheckedSourceMismatch)?;
+            let end=atom["span"][1].as_u64().ok_or(PersistedRelationalObservationError::CheckedSourceMismatch)?;
+            let literal=atom["text"].as_str().ok_or(PersistedRelationalObservationError::CheckedSourceMismatch)?;
+            let key=(start,end,literal.to_owned());
+            if token<=0||start>=end{return Err(PersistedRelationalObservationError::CheckedSourceMismatch);}
+            let entry=atoms.entry(token).or_insert_with(||(key.clone(),atom.clone(),Vec::new()));
+            if entry.0!=key||entry.1!=*atom{return Err(PersistedRelationalObservationError::CheckedSourceMismatch);}
+            entry.2.push(json!({"relation_ref":row["relation_ref"],"role":role}));
+        }
+    }
+    let right=atoms.into_iter().map(|(token,(key,atom,incidence))|
+        (key,json!({"numeric_token_id":token,"atom":atom,"relation_incidence":incidence}))).collect::<Vec<_>>();
+    let meet=coordinate_meet(&left,&right);
+    Ok(json!({"schema":"slr.article-numeric-coordinate-meet.v1","source_revision_ref":revision,
+        "source_content_digest_ref":expected_digest,"native_source_family":source.source_family_ref,
+        "checked_factor_count":left.len(),
+        "numeric_atom_count":right.len(),"coordinates":meet,"checked_batches":checked_batches,
+        "numeric_original":numeric,"common_current_authority_snapshot":false,
+        "parser_identity_paid":false,"semantic_coverage_paid":false,"world_truth_paid":false}))
+}
+
+/// Transport incidence, not isolated participant tokens. A checked child
+/// may match a numeric role only within a relation whose head independently
+/// matches the checked predicate. Keep all numeric relation alternatives.
+fn predicate_role_transport(meet:&serde_json::Value)
+    ->Result<serde_json::Value,PersistedRelationalObservationError>{
+    use serde_json::json;
+    let bad=||PersistedRelationalObservationError::CheckedSourceMismatch;
+    let groups=meet["coordinates"].as_array().ok_or_else(bad)?;
+    let batches=meet["checked_batches"].as_array().ok_or_else(bad)?;
+    let numeric=meet["numeric_original"]["answers"].as_array().ok_or_else(bad)?;
+    let mut forward=BTreeMap::<(String,String),i64>::new();
+    for group in groups{
+        if group["status"]!="unique_coordinate_match"{continue;}
+        let c=&group["checked"][0];let n=&group["numeric"][0];
+        let key=(c["batch_ref"].as_str().ok_or_else(bad)?.to_owned(),
+            c["factor_ref"].as_str().ok_or_else(bad)?.to_owned());
+        let token=n["numeric_token_id"].as_i64().ok_or_else(bad)?;
+        if forward.insert(key,token).is_some(){return Err(bad());}
+    }
+    let mut heads=BTreeMap::<i64,Vec<usize>>::new();
+    for (i,row) in numeric.iter().enumerate(){
+        if row["original_relation"]["type"]!="predicate"{continue;}
+        let roles=row["role_inverse"].as_array().ok_or_else(bad)?;
+        let ids=roles.iter().filter(|r|r["original_role"]["role"]=="head")
+            .map(|r|r["numeric_token_id"].as_i64().ok_or_else(bad))
+            .collect::<Result<Vec<_>,_>>()?;
+        if ids.len()!=1{return Err(bad());}
+        heads.entry(ids[0]).or_default().push(i);
+    }
+    let mut rows=Vec::new();
+    let mut used=BTreeSet::new();
+    for batch in batches{
+        let batch_ref=batch["batch_ref"].as_str().ok_or_else(bad)?;
+        for obs in batch["observations"].as_array().ok_or_else(bad)?{
+            let predicate=obs["predicate_candidate_ref"].as_str().ok_or_else(bad)?;
+            let head=forward.get(&(batch_ref.to_owned(),predicate.to_owned()));
+            let alternatives=head.and_then(|h|heads.get(h)).cloned().unwrap_or_default();
+            let mut transported=Vec::new();
+            for i in &alternatives{
+                used.insert(*i);
+                let relation=&numeric[*i];
+                let roles=relation["role_inverse"].as_array().ok_or_else(bad)?;
+                let mut matched_numeric=BTreeSet::new();
+                let mut incidence=Vec::new();
+                for child in obs["role_bindings"].as_array().ok_or_else(bad)?{
+                    let filler=child["filler_candidate_ref"].as_str().ok_or_else(bad)?;
+                    let token=forward.get(&(batch_ref.to_owned(),filler.to_owned()));
+                    let matches=roles.iter().enumerate().filter(|(_,r)|
+                        r["original_role"]["role"]!="head" && token.is_some()
+                        && r["numeric_token_id"].as_i64().as_ref()==token)
+                        .map(|(j,r)|{matched_numeric.insert(j);r}).collect::<Vec<_>>();
+                    let status=match matches.len(){0=>"checked_role_only",1=>"coordinate_incidence_match",
+                        _=>"multiple_numeric_role_incidences"};
+                    incidence.push(json!({"checked_role":child,"numeric_roles":matches,
+                        "status":status,"semantic_role_alignment_paid":false}));
+                }
+                let unmatched=roles.iter().enumerate().filter(|(j,r)|
+                    r["original_role"]["role"]!="head"&&!matched_numeric.contains(j))
+                    .map(|(_,r)|r).collect::<Vec<_>>();
+                transported.push(json!({"numeric_relation":relation,"role_incidence":incidence,
+                    "numeric_only_roles":unmatched,"semantic_scope_paid":false}));
+            }
+            rows.push(json!({"batch_ref":batch_ref,"checked_observation":obs,
+                "numeric_head_token":head,"predicate_transport_status":
+                    match alternatives.len(){0=>"checked_predicate_only",1=>"one_numeric_relation",
+                        _=>"multiple_numeric_relations"},
+                "numeric_alternatives":transported,"semantic_attribution_paid":false}));
+        }
+    }
+    let unmatched=numeric.iter().enumerate().filter(|(i,r)|
+        r["original_relation"]["type"]=="predicate"&&!used.contains(i))
+        .map(|(_,r)|r).collect::<Vec<_>>();
+    let context=numeric.iter().filter(|r|r["original_relation"]["type"]!="predicate")
+        .collect::<Vec<_>>();
+    Ok(json!({"schema":"slr.predicate-role-transport.v1","checked_predicates":rows,
+        "numeric_only_predicates":unmatched,"numeric_context_relations":context,
+        "source_coordinate_meet":meet,"semantic_coverage_paid":false,
+        "outside_model_possible":true,"world_truth_paid":false}))
+}
+
+/// Port the existing Agda SpacyDependencyToCandidateLogicalPNFExact
+/// constructors, as candidates only. Every emitted fragment retains the
+/// original dependency witness; no syntax implies an asserted world fact.
+fn candidate_semantic_fragments(transport:&serde_json::Value)
+    ->Result<serde_json::Value,PersistedRelationalObservationError>{
+    use serde_json::json;
+    let bad=||PersistedRelationalObservationError::CheckedSourceMismatch;
+    let mut rows=Vec::new();
+    for item in transport["checked_predicates"].as_array().ok_or_else(bad)?{
+        let obs=&item["checked_observation"];
+        let event=obs["predicate_candidate_ref"].as_str().ok_or_else(bad)?;
+        let mut fragments=Vec::new();
+        for role in obs["role_bindings"].as_array().ok_or_else(bad)?{
+            let dep=role["role_ref"].as_str().ok_or_else(bad)?;
+            let filler=role["filler_candidate_ref"].as_str().ok_or_else(bad)?;
+            let (kind,formula)=match dep{
+                "syntax:nsubj"|"syntax:csubj"=>("actor_fragment","Actor"),
+                "syntax:nsubjpass"|"syntax:nsubj:pass"|"syntax:csubjpass"|"syntax:csubj:pass"|
+                "syntax:obj"|"syntax:dobj"=>("patient_fragment","Patient"),
+                "syntax:ccomp"|"syntax:xcomp"=>("content_clause_fragment","ContentClause"),
+                "syntax:advcl"|"syntax:acl"|"syntax:relcl"=>("clause_attachment_fragment","ClauseAttachment"),
+                "syntax:conj"=>("conjunction_fragment","Conjunction"),
+                "syntax:neg"=>("negation_fragment","ScopedNegationCandidate"),
+                "syntax:aux"|"syntax:auxpass"|"syntax:aux:pass"=>("modality_fragment","AuxiliaryCandidate"),
+                "syntax:tmod"|"syntax:npadvmod"=>("temporal_fragment","TemporalCandidate"),
+                _=>("unresolved_fragment","UnresolvedDependency"),
+            };
+            fragments.push(json!({"kind":kind,"formula_candidate":{"predicate":formula,
+                "event_factor_ref":event,"dependent_factor_ref":filler},
+                "forward_witness":{"observation_ref":obs["observation_ref"],"role":role},
+                "candidate_only":true,"scope_resolved":false,"world_identity_paid":false}));
+        }
+        rows.push(json!({"original_predicate_transport":item,"fragments":fragments,
+            "referent_alternatives":["entity","eventuality","proposition","expletive","outside"],
+            "scope_alternatives":["asserted","reported","predicted","hypothetical","mentioned","unknown"],
+            "signed_alternatives":[-1,0,1],"outside_model_possible":true,
+            "live_coverage_paid":false,"source_factorisation_paid":false}));
+    }
+    Ok(json!({"schema":"slr.source-semantic-candidate-fragments.v1",
+        "golden_donor":"DASHI.Reasoning.SpacyDependencyToCandidateLogicalPNFExact",
+        "rows":rows,"original_transport":transport,"semantic_coverage_paid":false,
+        "world_truth_paid":false}))
+}
+
+pub fn read_article_semantic_candidates(config:&DatabaseConfig,
+    revision:&str,batches:&[String],run:&str,doc:&str,snapshot:&str,digest:&str)
+    ->Result<serde_json::Value,PersistedRelationalObservationError>{
+    let transport=read_article_numeric_predicate_transport(config,revision,batches,run,doc,snapshot,digest)?;
+    candidate_semantic_fragments(&transport)
+}
+
+pub fn read_article_numeric_predicate_transport(config:&DatabaseConfig,
+    revision:&str,batches:&[String],run:&str,doc:&str,snapshot:&str,digest:&str)
+    ->Result<serde_json::Value,PersistedRelationalObservationError>{
+    let meet=read_article_numeric_coordinate_meet(config,revision,batches,run,doc,snapshot,digest)?;
+    predicate_role_transport(&meet)
+}
+
+#[cfg(test)]
+mod coordinate_meet_tests {
+    use super::*;
+    use serde_json::json;
+    #[test]
+    fn predicate_owned_transport_and_fragments_preserve_scope_debt(){
+        let coordinate=|factor:&str,token:i64|json!({
+            "status":"unique_coordinate_match",
+            "checked":[{"batch_ref":"b","factor_ref":factor}],
+            "numeric":[{"numeric_token_id":token}]
+        });
+        let role=|name:&str,token:i64|json!({
+            "original_role":{"role":name},"numeric_token_id":token
+        });
+        let meet=json!({
+            "coordinates":[coordinate("p",1),coordinate("f",2),coordinate("q",3)],
+            "checked_batches":[{"batch_ref":"b","observations":[{
+                "observation_ref":"o","predicate_candidate_ref":"p",
+                "role_bindings":[{"role_ref":"syntax:nsubj:pass","filler_candidate_ref":"f"},
+                                 {"role_ref":"syntax:ccomp","filler_candidate_ref":"q"}]
+            }]}],
+            "numeric_original":{"answers":[
+                {"relation_ref":"r1","original_relation":{"type":"predicate"},
+                 "role_inverse":[role("head",1),role("subject",2),role("content",3)]},
+                {"relation_ref":"r2","original_relation":{"type":"predicate"},
+                 "role_inverse":[role("head",3),role("subject",2)]},
+                {"relation_ref":"r3","original_relation":{"type":"composition"},
+                 "role_inverse":[role("governor",1),role("content",3)]}
+            ]}
+        });
+        let out=predicate_role_transport(&meet).unwrap();
+        assert_eq!(out["checked_predicates"][0]["numeric_alternatives"].as_array().unwrap().len(),1);
+        assert_eq!(out["numeric_only_predicates"][0]["relation_ref"],"r2");
+        assert_eq!(out["numeric_context_relations"][0]["relation_ref"],"r3");
+        let fragments=candidate_semantic_fragments(&out).unwrap();
+        assert_eq!(fragments["rows"][0]["fragments"][0]["kind"],"patient_fragment");
+        assert_eq!(fragments["rows"][0]["fragments"][1]["kind"],"content_clause_fragment");
+        assert_eq!(fragments["rows"][0]["fragments"][1]["scope_resolved"],false);
+        assert_eq!(fragments["rows"][0]["signed_alternatives"],json!([-1,0,1]));
+        assert_eq!(fragments["rows"][0]["outside_model_possible"],true);
+    }
+
+    #[test]
+    fn retains_both_residual_directions_and_ambiguity(){
+        let k=|n| (n,n+1,format!("t{n}"));
+        let left=vec![(k(1),json!("a")),(k(2),json!("b")),(k(3),json!("c")),(k(3),json!("d"))];
+        let right=vec![(k(1),json!(11)),(k(3),json!(13)),(k(4),json!(14))];
+        let rows=coordinate_meet(&left,&right);
+        assert_eq!(rows.iter().map(|r|r["status"].as_str().unwrap()).collect::<Vec<_>>(),
+            vec!["unique_coordinate_match","checked_only","ambiguous_coordinate_match","numeric_only"]);
+        assert_eq!(rows[2]["checked"].as_array().unwrap().len(),2);
+        assert_eq!(rows[2]["numeric"].as_array().unwrap().len(),1);
+    }
+}
+
+/// Exact source-local inverse of the existing checked predicate projection.
+/// No QID, title, surface string or grammatical subject establishes identity.
+/// All roles survive; callers can select active-subject candidates separately
+/// from passive patients, mentions and unresolved syntax.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct PredicateParticipantIncidence {
+    pub batch_ref: String,
+    pub source_revision_ref: String,
+    pub source_span_ref: String,
+    pub observation_ref: String,
+    pub predicate_candidate_ref: String,
+    pub role: RoleBinding,
+    pub provenance_refs: Vec<String>,
+}
+
+impl CheckedRelationalBatch {
+    /// Enumerate the original incidence, retaining occurrence and role.
+    pub fn participant_incidence(&self) -> Vec<PredicateParticipantIncidence> {
+        self.observations.iter().flat_map(|o| {
+            o.role_bindings.iter().map(move |role| PredicateParticipantIncidence {
+                batch_ref: self.batch_ref.clone(),
+                source_revision_ref: o.source_revision_ref.clone(),
+                source_span_ref: o.source_span_ref.clone(),
+                observation_ref: o.observation_ref.clone(),
+                predicate_candidate_ref: o.predicate_candidate_ref.clone(),
+                role: role.clone(),
+                provenance_refs: o.provenance_refs.clone(),
+            })
+        }).collect()
+    }
+
+    /// Reverse traversal by an exact persisted factor, not by spelling.
+    pub fn predicates_for_participant(&self, factor_ref: &str)
+        -> Vec<PredicateParticipantIncidence>
+    {
+        self.participant_incidence().into_iter()
+            .filter(|i| i.role.filler_candidate_ref == factor_ref).collect()
+    }
+}
+
 #[cfg(test)]
 mod checked_dependency_tests {
     use super::*;
@@ -470,6 +890,40 @@ mod checked_dependency_tests {
     }
 
     #[test]
+    fn article_action_inventory_preserves_unmatched_and_embedded_predicates() {
+        let (tokens,pnf)=fixture();
+        let fibre=CheckedDependencyFibre::new(&tokens,&pnf).unwrap();
+        let observations=["factor:1","factor:5"].iter().map(|predicate|{
+            let (role_bindings,native_metadata_refs)=fibre.project(predicate).unwrap();
+            RelationalObservation {
+                observation_ref:format!("obs:{predicate}"),source_revision_ref:"rev".into(),
+                source_family:RelationalSourceFamily::Wikipedia,source_span_ref:"span:1".into(),
+                parser_or_producer_ref:"parser".into(),predicate_candidate_ref:(*predicate).into(),
+                role_bindings,role_type_hypotheses:vec![],context:ObservationContext::default(),
+                candidate_type_refs:vec![],provenance_refs:vec![],native_metadata_refs,
+                polarity:Polarity::Undetermined,candidate_only:true,creates_semantic_authority:false,
+                claim_truth_promoted:false,
+            }
+        }).collect();
+        let batch=CheckedRelationalBatch {
+            batch_ref:"batch".into(),source_revision_ref:"rev".into(),
+            source_content_digest_ref:"digest".into(),original_parser_run_ref:"run".into(),
+            original_region_ref:"span:1".into(),original_compilation_key:"key".into(),
+            original_token_count:tokens.len(),predicate_candidate_refs:vec!["factor:1".into(),"factor:5".into()],
+            observations,candidate_only:true,semantic_coverage_paid:false,
+        };
+        let result=recorded_action_inventory(&batch,&["factor:0".into()]);
+        assert_eq!(result["predicate_count"],2);
+        let rows=result["rows"].as_array().unwrap();
+        assert_eq!(rows[0]["active_subject_candidates"].as_array().unwrap().len(),1);
+        assert_eq!(rows[1]["matched_roles"].as_array().unwrap().len(),0);
+        assert_eq!(rows[1]["embedded_predicate"],true);
+        assert_eq!(rows[1]["local_negation_recorded"],true);
+        assert!(rows.iter().all(|r| r["actor_attribution_paid"]==false
+            && r["asserted_action_paid"]==false));
+    }
+
+    #[test]
     fn foreign_head_cycle_and_non_predicate_fail_closed() {
         let (mut tokens,batch)=fixture();
         assert!(CheckedDependencyFibre::new(&tokens,&batch).unwrap().project("factor:0").is_err());
@@ -478,4 +932,92 @@ mod checked_dependency_tests {
         tokens[1].head_ordinal=Some(999);
         assert!(CheckedDependencyFibre::new(&tokens,&batch).is_err());
     }
+}
+
+
+/// Reverse-solve an original literal predicate occurrence to existing checked
+/// parser products. SQL only nominates coordinates; the established checked
+/// batch owner independently reconstructs their dependency inverse. Never
+/// choose the first alternative or manufacture a batch if the source is absent.
+pub fn discover_checked_predicate(config:&DatabaseConfig,revision:&str,sha:&str,
+    start:u32,end:u32,literal:&str,parser_run:Option<&str>)
+    ->Result<serde_json::Value,PersistedRelationalObservationError>{
+    use serde_json::json;
+    if revision.trim().is_empty()||sha.len()!=64||!sha.bytes().all(|b|b.is_ascii_hexdigit())
+        ||start>=end||literal.is_empty()||literal.chars().count()!=((end-start) as usize){
+        return Err(PersistedRelationalObservationError::CheckedSourceMismatch);
+    }
+    let mut client=Client::connect(config.database_url(),NoTls)?;
+    let mut tx=client.transaction()?;
+    tx.batch_execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY; SET LOCAL statement_timeout='90000ms'")?;
+    let (source,text)=crate::generic_source_content_store::load_generic_text_source_on_client(&mut tx,revision)?;
+    if source.content_digest_ref!=format!("sha256:{sha}")
+        ||text.chars().skip(start as usize).take((end-start) as usize).collect::<String>()!=literal{
+        return Err(PersistedRelationalObservationError::CheckedSourceMismatch);
+    }
+    let start64=i64::from(start);let end64=i64::from(end);
+    let mut rows=tx.query("SELECT DISTINCT b.batch_ref,f.candidate_ref
+        FROM pnf.statement_candidate_batch b
+        JOIN corpus.source_statement s ON s.statement_ref=b.statement_ref
+        JOIN pnf.statement_candidate_factor f ON f.batch_ref=b.batch_ref AND f.statement_ref=b.statement_ref
+        WHERE s.source_revision_ref=$1 AND s.exact_span_ref=b.exact_span_ref
+        AND f.role_ref='predicate' AND f.source_start_char=$2 AND f.source_end_char=$3 AND f.surface=$4
+        AND b.parser_receipt_ref LIKE 'db-parser:%'
+        AND ($5::text IS NULL OR b.parser_receipt_ref='db-parser:'||$5||':'||b.exact_span_ref)
+        ORDER BY b.batch_ref,f.candidate_ref LIMIT 65",
+        &[&revision,&start64,&end64,&literal,&parser_run])?;
+    // New native SCALE-1 products retain the same checked batch owner, but
+    // store factors in candidate_semantic_product_factor.  Reopen that owner
+    // too; do not synthesize a candidate ref or choose a first row.  The
+    // candidate reference is exactly the one produced by
+    // load_candidate_pnf_batch_with_client for product-backed batches.
+    if rows.is_empty() {
+        rows=tx.query("SELECT DISTINCT b.batch_ref,
+                format('candidate-pnf-db:%s:%s:%s:%s:%s',
+                    j.parser_run_ref, b.exact_span_ref,
+                    pf.token_ordinal,
+                    j.region_start_char + pf.start_offset,
+                    j.region_start_char + pf.end_offset)
+            FROM pnf.statement_candidate_batch b
+            JOIN corpus.source_statement s ON s.statement_ref=b.statement_ref
+            JOIN pnf.candidate_semantic_product_factor pf
+              ON pf.product_ref=b.candidate_product_ref
+            JOIN ingest.parser_job j
+              ON j.source_revision_ref=s.source_revision_ref
+             AND j.region_ref=b.exact_span_ref
+             AND ('db-parser:' || j.parser_run_ref || ':' || j.region_ref)=b.parser_receipt_ref
+             AND j.status='succeeded'
+            WHERE s.source_revision_ref=$1 AND s.exact_span_ref=b.exact_span_ref
+              AND pf.role_ref='predicate'
+              AND j.region_start_char + pf.start_offset=$2
+              AND j.region_start_char + pf.end_offset=$3
+              AND pf.surface=$4
+              AND ($5::text IS NULL OR j.parser_run_ref=$5)
+            ORDER BY b.batch_ref LIMIT 65",
+            &[&revision,&start64,&end64,&literal,&parser_run])?;
+    }
+    let truncated=rows.len()>64;
+    let family=crate::workbench_projection::acceptance_control_store::relational_family_for_ingest(&source.source_family_ref);
+    let mut candidates=Vec::new();
+    for row in rows.iter().take(64){
+        let batch:String=row.get(0);let predicate:String=row.get(1);
+        let checked=relational_observations_from_checked_batch_on_client(&mut tx,&batch,family.clone(),
+            &ObservationContext::default(),&[])?;
+        if checked.source_revision_ref!=revision || checked.source_content_digest_ref!=source.content_digest_ref
+            || parser_run.is_some_and(|r|checked.original_parser_run_ref!=r){
+            return Err(PersistedRelationalObservationError::CheckedSourceMismatch);
+        }
+        let inverse=checked.observations.iter().find(|o|o.predicate_candidate_ref==predicate)
+            .ok_or(PersistedRelationalObservationError::MissingPredicate)?;
+        candidates.push(json!({"batch_ref":batch,"predicate_candidate_ref":predicate,
+            "parser_run_ref":checked.original_parser_run_ref,"region_ref":checked.original_region_ref,
+            "observation":inverse}));
+    }
+    tx.commit()?;
+    let status=if truncated{"held_truncated"}else if candidates.is_empty(){"held_missing"}
+        else if candidates.len()==1{"unique_checked_candidate"}else{"held_ambiguous"};
+    Ok(json!({"schema":"slr.checked-predicate-occurrence-discovery.v1","source_revision_ref":revision,
+        "source_sha256":sha,"source_start_char":start,"source_end_char":end,"literal":literal,
+        "parser_run_constraint":parser_run,"status":status,"truncated":truncated,"candidates":candidates,
+        "candidate_only":true,"semantic_coverage_paid":false,"world_truth_paid":false,"writes_database":false}))
 }

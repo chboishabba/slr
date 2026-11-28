@@ -1,0 +1,133 @@
+{
+    "Z1K1": "Z2",
+    "Z2K1": {
+        "Z1K1": "Z6",
+        "Z6K1": "Z23356"
+    },
+    "Z2K2": {
+        "Z1K1": "Z8",
+        "Z8K1": [
+            "Z17",
+            {
+                "Z1K1": "Z17",
+                "Z17K1": "Z1",
+                "Z17K2": "Z23356K1",
+                "Z17K3": {
+                    "Z1K1": "Z12",
+                    "Z12K1": [
+                        "Z11",
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1002",
+                            "Z11K2": "object to modify before comparison"
+                        }
+                    ]
+                }
+            },
+            {
+                "Z1K1": "Z17",
+                "Z17K1": "Z8",
+                "Z17K2": "Z23356K2",
+                "Z17K3": {
+                    "Z1K1": "Z12",
+                    "Z12K1": [
+                        "Z11",
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1002",
+                            "Z11K2": "unary function to apply"
+                        }
+                    ]
+                }
+            },
+            {
+                "Z1K1": "Z17",
+                "Z17K1": "Z1",
+                "Z17K2": "Z23356K3",
+                "Z17K3": {
+                    "Z1K1": "Z12",
+                    "Z12K1": [
+                        "Z11",
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1002",
+                            "Z11K2": "object to compare"
+                        }
+                    ]
+                }
+            },
+            {
+                "Z1K1": "Z17",
+                "Z17K1": "Z8",
+                "Z17K2": "Z23356K4",
+                "Z17K3": {
+                    "Z1K1": "Z12",
+                    "Z12K1": [
+                        "Z11",
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1002",
+                            "Z11K2": "comparison function"
+                        }
+                    ]
+                }
+            }
+        ],
+        "Z8K2": "Z40",
+        "Z8K3": [
+            "Z20",
+            "Z23358",
+            "Z23359",
+            "Z23368",
+            "Z23396"
+        ],
+        "Z8K4": [
+            "Z14",
+            "Z37380",
+            "Z23357",
+            "Z27625"
+        ],
+        "Z8K5": "Z23356"
+    },
+    "Z2K3": {
+        "Z1K1": "Z12",
+        "Z12K1": [
+            "Z11",
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1002",
+                "Z11K2": "compare after applying a single unary function"
+            }
+        ]
+    },
+    "Z2K4": {
+        "Z1K1": "Z32",
+        "Z32K1": [
+            "Z31",
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1002",
+                "Z31K2": [
+                    "Z6",
+                    "function evaluation result is equal to",
+                    "function evaluation result compares True",
+                    "compare Objects after applying function to the first",
+                    "compare Object after applied function",
+                    "transform result (object) before comparison",
+                    "compare after applying function to first argument"
+                ]
+            }
+        ]
+    },
+    "Z2K5": {
+        "Z1K1": "Z12",
+        "Z12K1": [
+            "Z11",
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1002",
+                "Z11K2": "the Boolean result from comparing some object with the result of applying a unary function to some other object (specified first so that it can be the result used in (modified) result validation)"
+            }
+        ]
+    }
+}

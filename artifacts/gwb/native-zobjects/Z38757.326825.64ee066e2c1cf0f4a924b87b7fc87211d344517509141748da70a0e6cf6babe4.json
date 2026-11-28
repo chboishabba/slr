@@ -1,0 +1,236 @@
+{
+    "Z1K1": "Z2",
+    "Z2K1": {
+        "Z1K1": "Z6",
+        "Z6K1": "Z38757"
+    },
+    "Z2K2": {
+        "Z1K1": "Z8",
+        "Z8K1": [
+            "Z17",
+            {
+                "Z1K1": "Z17",
+                "Z17K1": "Z6091",
+                "Z17K2": "Z38757K1",
+                "Z17K3": {
+                    "Z1K1": "Z12",
+                    "Z12K1": [
+                        "Z11",
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1002",
+                            "Z11K2": "person (QID)"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1004",
+                            "Z11K2": "personne (QID)"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1830",
+                            "Z11K2": "人物 (QID)"
+                        }
+                    ]
+                }
+            },
+            {
+                "Z1K1": "Z17",
+                "Z17K1": {
+                    "Z1K1": "Z7",
+                    "Z7K1": "Z881",
+                    "Z881K1": "Z6091"
+                },
+                "Z17K2": "Z38757K2",
+                "Z17K3": {
+                    "Z1K1": "Z12",
+                    "Z12K1": [
+                        "Z11",
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1002",
+                            "Z11K2": "list of countries"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1004",
+                            "Z11K2": "liste de nationalités"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1830",
+                            "Z11K2": "国リスト"
+                        }
+                    ]
+                }
+            },
+            {
+                "Z1K1": "Z17",
+                "Z17K1": {
+                    "Z1K1": "Z7",
+                    "Z7K1": "Z881",
+                    "Z881K1": "Z6091"
+                },
+                "Z17K2": "Z38757K3",
+                "Z17K3": {
+                    "Z1K1": "Z12",
+                    "Z12K1": [
+                        "Z11",
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1002",
+                            "Z11K2": "list of professions"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1004",
+                            "Z11K2": "liste de professions ou activités"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1830",
+                            "Z11K2": "職業リスト"
+                        }
+                    ]
+                }
+            },
+            {
+                "Z1K1": "Z17",
+                "Z17K1": "Z60",
+                "Z17K2": "Z38757K4",
+                "Z17K3": {
+                    "Z1K1": "Z12",
+                    "Z12K1": [
+                        "Z11",
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1002",
+                            "Z11K2": "language"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1004",
+                            "Z11K2": "langue"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1830",
+                            "Z11K2": "言語"
+                        }
+                    ]
+                }
+            }
+        ],
+        "Z8K2": "Z89",
+        "Z8K3": [
+            "Z20",
+            "Z38759",
+            "Z38760",
+            "Z39656"
+        ],
+        "Z8K4": [
+            "Z14",
+            "Z38758"
+        ],
+        "Z8K5": "Z38757"
+    },
+    "Z2K3": {
+        "Z1K1": "Z12",
+        "Z12K1": [
+            "Z11",
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1002",
+                "Z11K2": "person lead sentence with occupations"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1004",
+                "Z11K2": "première phrase de biographie avec activités"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1830",
+                "Z11K2": "職業を含む人物の導入文"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1820",
+                "Z11K2": "व्यवसायों के साथ व्यक्ति का मुख्य वाक्य"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1430",
+                "Z11K2": "Einleitungssatz einer Person mit deren Berufen"
+            }
+        ]
+    },
+    "Z2K4": {
+        "Z1K1": "Z32",
+        "Z32K1": [
+            "Z31",
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1002",
+                "Z31K2": [
+                    "Z6",
+                    "intro for person",
+                    "person intro sentence"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1004",
+                "Z31K2": [
+                    "Z6",
+                    "RI biographie",
+                    "né le et mort le est un",
+                    "née le et morte le est une"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1830",
+                "Z31K2": [
+                    "Z6",
+                    "人物の導入分"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1820",
+                "Z31K2": [
+                    "Z6",
+                    "व्यक्ति का परिचय वाक्य",
+                    "जीवनी मुख्य वाक्य"
+                ]
+            }
+        ]
+    },
+    "Z2K5": {
+        "Z1K1": "Z12",
+        "Z12K1": [
+            "Z11",
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1002",
+                "Z11K2": "draws dates of birth and death (and hence deceased status) from Wikidata. Needs P6553 (pronouns) to be fulfilled in Wikidata."
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1004",
+                "Z11K2": "utilise les dates de naissance et de mort de Wikidata, liste de professions ou activités en argument.\nNécessite que la propriété \"pronom d'usage\" (P6553) soit renseignée sur Wikidata pour fonctionner."
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1830",
+                "Z11K2": "人物の生没年月日、国、職業を出力する"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1820",
+                "Z11K2": "विकिडेटा से जन्म-मृत्यु की तिथियों और व्यवसायों के साथ किसी व्यक्ति का मुख्य जीवन परिचय वाक्य"
+            }
+        ]
+    }
+}

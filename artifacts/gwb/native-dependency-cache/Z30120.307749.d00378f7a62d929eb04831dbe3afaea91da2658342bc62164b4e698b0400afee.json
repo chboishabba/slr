@@ -1,0 +1,300 @@
+{
+    "Z1K1": "Z2",
+    "Z2K1": {
+        "Z1K1": "Z6",
+        "Z6K1": "Z30120"
+    },
+    "Z2K2": {
+        "Z1K1": "Z8",
+        "Z8K1": [
+            "Z17",
+            {
+                "Z1K1": "Z17",
+                "Z17K1": "Z6091",
+                "Z17K2": "Z30120K1",
+                "Z17K3": {
+                    "Z1K1": "Z12",
+                    "Z12K1": [
+                        "Z11",
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1002",
+                            "Z11K2": "Wikidata item reference"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1787",
+                            "Z11K2": "riferimento a elemento Wikidata"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1062",
+                            "Z11K2": "reference na položku Wikidat"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1157",
+                            "Z11K2": "Wikidata-itemverwijzing"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1830",
+                            "Z11K2": "ウィキデータ項目参照"
+                        }
+                    ]
+                }
+            },
+            {
+                "Z1K1": "Z17",
+                "Z17K1": {
+                    "Z1K1": "Z7",
+                    "Z7K1": "Z881",
+                    "Z881K1": "Z6030"
+                },
+                "Z17K2": "Z30120K2",
+                "Z17K3": {
+                    "Z1K1": "Z12",
+                    "Z12K1": [
+                        "Z11",
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1002",
+                            "Z11K2": "item parts to fetch"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1787",
+                            "Z11K2": "parti di elemento da selezionare"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1062",
+                            "Z11K2": "požadované části položky"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1157",
+                            "Z11K2": "onderdelen die moeten worden opgehaald"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1830",
+                            "Z11K2": "取得する項目構成要素"
+                        }
+                    ]
+                }
+            },
+            {
+                "Z1K1": "Z17",
+                "Z17K1": {
+                    "Z1K1": "Z7",
+                    "Z7K1": "Z881",
+                    "Z881K1": "Z60"
+                },
+                "Z17K2": "Z30120K3",
+                "Z17K3": {
+                    "Z1K1": "Z12",
+                    "Z12K1": [
+                        "Z11",
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1002",
+                            "Z11K2": "languages to fetch"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1787",
+                            "Z11K2": "lingue da selezionare"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1062",
+                            "Z11K2": "požadované jazyky"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1157",
+                            "Z11K2": "op te halen talen"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1830",
+                            "Z11K2": "取得する言語"
+                        }
+                    ]
+                }
+            },
+            {
+                "Z1K1": "Z17",
+                "Z17K1": {
+                    "Z1K1": "Z7",
+                    "Z7K1": "Z881",
+                    "Z881K1": "Z6092"
+                },
+                "Z17K2": "Z30120K4",
+                "Z17K3": {
+                    "Z1K1": "Z12",
+                    "Z12K1": [
+                        "Z11",
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1002",
+                            "Z11K2": "statement properties to fetch"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1787",
+                            "Z11K2": "proprietà le cui dichiarazioni da selezionare"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1062",
+                            "Z11K2": "požadované vlastnosti"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1157",
+                            "Z11K2": "op te halen verklaringseigenschappen"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1830",
+                            "Z11K2": "取得する文プロパティ"
+                        }
+                    ]
+                }
+            }
+        ],
+        "Z8K2": "Z6001",
+        "Z8K3": [
+            "Z20",
+            "Z30158",
+            "Z30205"
+        ],
+        "Z8K4": [
+            "Z14",
+            "Z30197",
+            "Z30121"
+        ],
+        "Z8K5": "Z30120"
+    },
+    "Z2K3": {
+        "Z1K1": "Z12",
+        "Z12K1": [
+            "Z11",
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1002",
+                "Z11K2": "fetch Wikidata item or parts"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1787",
+                "Z11K2": "ottieni singolo elemento Wikidata parziale"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1062",
+                "Z11K2": "načíst položku Wikidat nebo její části"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1157",
+                "Z11K2": "haal een Wikidata-item of onderdelen op"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1830",
+                "Z11K2": "ウィキデータの項目を選択取得"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1004",
+                "Z11K2": "récupérer tout ou partie d'un item"
+            }
+        ]
+    },
+    "Z2K4": {
+        "Z1K1": "Z32",
+        "Z32K1": [
+            "Z31",
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1002",
+                "Z31K2": [
+                    "Z6",
+                    "selectively fetch parts of Wikidata item",
+                    "selectively fetch partial Wikidata item",
+                    "fetch partial single Wikidata entity",
+                    "fetch Wikidata item parts",
+                    "selectively fetch partial WD item (from QID)"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1787",
+                "Z31K2": [
+                    "Z6",
+                    "ottieni singola entità Wikidata parziale"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1062",
+                "Z31K2": [
+                    "Z6",
+                    "položka Wikidat"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1157",
+                "Z31K2": [
+                    "Z6",
+                    "selectief delen van een Wikidata-item ophalen",
+                    "selectief een gedeeltelijk Wikidata-item ophalen",
+                    "haal een gedeeltelijke afzonderlijke Wikidata-entiteit op"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1830",
+                "Z31K2": [
+                    "Z6",
+                    "ウィキデータ項目またはその構成要素を取得",
+                    "ウィキデータの項目を一部取得",
+                    "ウィキデータの項目を取得",
+                    "ウィキデータ項目を選択取得",
+                    "ウィキデータの項目の選択取得",
+                    "ウィキデータ項目の選択取得"
+                ]
+            }
+        ]
+    },
+    "Z2K5": {
+        "Z1K1": "Z12",
+        "Z12K1": [
+            "Z11",
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1002",
+                "Z11K2": "Fetch a Wikidata item with only the chosen parts included. This should be more efficient than a general fetch with Z6821"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1062",
+                "Z11K2": "Pro danou referenci načte data požadovaných částí příslušné položky Wikidat. Mělo by to být efektivnější než načtení celé položky pomocí Z6821."
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1157",
+                "Z11K2": "Haal een Wikidata-item op waarin alleen de geselecteerde onderdelen zijn opgenomen. Dit zou efficiënter moeten zijn dan een algemene opvraging met Z6821"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1830",
+                "Z11K2": "選択した構成要素だけを含むウィキデータ項目を取得する。Z6821による一般的な取得より効率的。"
+            }
+        ]
+    }
+}

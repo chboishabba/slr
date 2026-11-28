@@ -152,6 +152,12 @@ pub fn derive_mabo_proof_search_graph(
     controversy_ref: &str,
     obligation_ref: &str,
 ) -> Result<MaboProofGraph, MaboProofGraphError> {
+    derive_mabo_proof_search_graph_with_demands(config,controversy_ref,obligation_ref).map(|(graph,_)|graph)
+}
+
+fn derive_mabo_proof_search_graph_with_demands(
+    config:&DatabaseConfig,controversy_ref:&str,obligation_ref:&str,
+)->Result<(MaboProofGraph,Vec<serde_json::Value>),MaboProofGraphError>{
     if controversy_ref != MABO_CONTROVERSY_REF {
         return Err(MaboProofGraphError::WrongOwner);
     }
@@ -266,6 +272,7 @@ pub fn derive_mabo_proof_search_graph(
             &reverse.reverse_ref));
     }
 
+    let mut formal_demands=BTreeMap::<String,serde_json::Value>::new();
     // Formal payment is a distinct, exact formal-premise fact, not a discharge.
     // Only show it when both demand and independent kernel evidence/payment
     // already exist and their digest/obligation joins agree.
@@ -273,7 +280,8 @@ pub fn derive_mabo_proof_search_graph(
         &[])?.get::<_, Option<String>>(0).is_some() {
         for row in client.query(
             "SELECT d.demand_ref, d.statement_digest, d.pnf_revision_ref,
-                    d.source_revision_refs, p.evidence_ref
+                    d.source_revision_refs, p.evidence_ref,
+                    d.consumer_ref,d.target_prover,d.da51_address,d.requested_result_kind
              FROM formal_bridge.demand d
              LEFT JOIN formal_bridge.payment p
                ON p.demand_ref=d.demand_ref AND p.obligation_ref=d.obligation_ref
@@ -308,6 +316,20 @@ pub fn derive_mabo_proof_search_graph(
                 "Formal premise demand", None, Some(&pnf_ref)))?;
             edges.push(edge(&obligation_ref, &demand_ref, "formal_demand_for_obligation",
                 &residual.residual_ref, &statement_digest));
+            let consumer_ref:String=row.get(5);
+            let target_prover:String=row.get(6);
+            let da51_address:Option<String>=row.get(7);
+            let requested_result_kind:String=row.get(8);
+            let all_source_refs_reviewed=!demand_sources.is_empty()
+                &&demand_sources.iter().all(|r|reviewed_source_refs.contains(r));
+            let demand_entry=formal_demands.entry(demand_ref.clone()).or_insert_with(||serde_json::json!({
+                "demand_ref":demand_ref,"obligation_ref":obligation_ref,"residual_ref":residual.residual_ref,
+                "consumer_ref":consumer_ref,"pnf_revision_ref":pnf_ref,"statement_digest":statement_digest,
+                "target_prover":target_prover,"da51_address":da51_address,"requested_result_kind":requested_result_kind,
+                "source_revision_refs":demand_sources,"all_source_refs_reviewed_in_graph":all_source_refs_reviewed,
+                "formal_premise_evidence_refs":[],"candidate_only":true,"establishes_proof":false,
+                "discharges_obligation":false
+            }));
             if let Some(evidence_ref) = payment_ref {
                 let certified = client.query_opt(
                     "SELECT 1 FROM formal_bridge.evidence
@@ -320,6 +342,8 @@ pub fn derive_mabo_proof_search_graph(
                     &[&evidence_ref, &demand_ref, &obligation_ref, &statement_digest],
                 )?;
                 if certified.is_none() { return Err(MaboProofGraphError::MissingAncestry); }
+                demand_entry["formal_premise_evidence_refs"].as_array_mut()
+                    .ok_or(MaboProofGraphError::MissingAncestry)?.push(serde_json::json!(evidence_ref));
                 insert_node(&mut nodes, node(&evidence_ref, "kernel_formal_premise_evidence",
                     "Formal premise paid (not legal truth)", None, Some(&pnf_ref)))?;
                 edges.push(edge(&demand_ref, &evidence_ref,
@@ -341,7 +365,30 @@ pub fn derive_mabo_proof_search_graph(
         residual_resolved: false, search_executed: false,
     };
     result.validate()?;
-    Ok(result)
+    Ok((result,formal_demands.into_values().collect()))
+}
+
+/// Native source-bound formal-routing inputs; never manufacture a formal
+/// demand from empirical gaps. Preserve the original prefixed digest.
+/// The existing Mabo graph uses separate owner reads; this is not a shared
+/// snapshot or an independent recertification of stored kernel evidence.
+pub fn inspect_mabo_formal_demands(config:&DatabaseConfig,obligation_ref:&str)
+    ->Result<serde_json::Value,MaboProofGraphError>{
+    let (graph,demands)=derive_mabo_proof_search_graph_with_demands(config,MABO_CONTROVERSY_REF,obligation_ref)?;
+    Ok(serde_json::json!({"schema":"slr.mabo-formal-demand-readback.v1",
+        "matter_ref":graph.matter_ref,"controversy_ref":graph.controversy_ref,
+        "obligation_ref":graph.obligation_ref,"residual_ref":graph.residual_ref,
+        "demands":demands,"source_review_nodes":graph.nodes.iter().map(|n|serde_json::json!({
+            "ref":n.semantic_ref,"kind":n.kind,"source_ref":n.source_ref,"factor_revision_ref":n.factor_revision_ref
+        })).collect::<Vec<_>>(),
+        "ancestry_edges":graph.edges.iter().map(|e|serde_json::json!({
+            "from_ref":e.from_ref,"to_ref":e.to_ref,"relation":e.relation,
+            "provenance_ref":e.provenance_ref,"evidence_ref":e.evidence_ref
+        })).collect::<Vec<_>>(),
+        "shared_transaction_snapshot":false,"kernel_recertified":false,
+        "candidate_only":true,"derived_only":true,"establishes_proof":false,
+        "discharges_obligation":false,"creates_legal_authority":false,
+        "claim_truth_promoted":false,"search_executed":false,"writes_database":false}))
 }
 
 /// Persist only the canonical legal-follow tables and the already-owned

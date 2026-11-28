@@ -1,0 +1,72 @@
+{
+    "Z1K1": "Z2",
+    "Z2K1": {
+        "Z1K1": "Z6",
+        "Z6K1": "Z18978"
+    },
+    "Z2K2": {
+        "Z1K1": "Z20",
+        "Z20K1": "Z10216",
+        "Z20K2": {
+            "Z1K1": "Z7",
+            "Z7K1": "Z10216",
+            "Z10216K1": "Z41"
+        },
+        "Z20K3": {
+            "Z1K1": "Z7",
+            "Z7K1": "Z844",
+            "Z844K2": {
+                "Z1K1": "Z40",
+                "Z40K1": "Z42"
+            }
+        }
+    },
+    "Z2K3": {
+        "Z1K1": "Z12",
+        "Z12K1": [
+            "Z11",
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1002",
+                "Z11K2": "not Reference (Z41) is False"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1157",
+                "Z11K2": "niet Referentie (Z41) is onwaar"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1430",
+                "Z11K2": "Verneinung von wahr ist falsch"
+            }
+        ]
+    },
+    "Z2K4": {
+        "Z1K1": "Z32",
+        "Z32K1": [
+            "Z31"
+        ]
+    },
+    "Z2K5": {
+        "Z1K1": "Z12",
+        "Z12K1": [
+            "Z11",
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1002",
+                "Z11K2": "negating a Reference to the Persistent object is equivalent to negating a value object but there is a performance overhead"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1157",
+                "Z11K2": "Negeren van een Referentie naar het Persistent object is gelijk aan het negeren van een waardeobject, maar er is extra prestatiebelasting."
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1430",
+                "Z11K2": "Verneinung der Referenz auf das persistente Objekt entspricht der Verneinung des Werts des Objekts"
+            }
+        ]
+    }
+}

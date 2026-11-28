@@ -1,0 +1,15 @@
+{
+  "as_of": "2026-10-15T23:37:24Z",
+  "byte_length": 24794,
+  "candidate_only": true,
+  "exact_revision_url": "https://www.wikifunctions.org/w/api.php?action=query&format=json&formatversion=2&prop=revisions&revids=311509&rvprop=ids%7Ctimestamp%7Ccontent&rvslots=main",
+  "function": "Z40",
+  "lookup_url": "https://www.wikifunctions.org/w/api.php?action=query&format=json&formatversion=2&prop=revisions&titles=Z40&rvstart=2026-10-15T23:37:24Z&rvdir=older&rvlimit=1&rvprop=ids%7Ctimestamp",
+  "path": "Z40.311509.d6e7075226fddfacb4c7dfef7365acc2e3c585410d857e46cd77e7f398f787b7.json",
+  "revision": 311509,
+  "runtime_dependency_resolution_paid": false,
+  "schema": "slr.historical-zobject-acquisition.v1",
+  "sha256": "d6e7075226fddfacb4c7dfef7365acc2e3c585410d857e46cd77e7f398f787b7",
+  "timestamp": "2026-09-09T20:32:07Z",
+  "world_truth_paid": false
+}

@@ -1,0 +1,54 @@
+{
+    "Z1K1": "Z2",
+    "Z2K1": {
+        "Z1K1": "Z6",
+        "Z6K1": "Z10586"
+    },
+    "Z2K2": {
+        "Z1K1": "Z14",
+        "Z14K1": "Z10216",
+        "Z14K3": {
+            "Z1K1": "Z16",
+            "Z16K1": "Z600",
+            "Z16K2": "function Z10216( Z10216K1 ) {\n\treturn !Z10216K1;\n}"
+        }
+    },
+    "Z2K3": {
+        "Z1K1": "Z12",
+        "Z12K1": [
+            "Z11",
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1002",
+                "Z11K2": "negation in JavaScript function syntax"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1430",
+                "Z11K2": "Negation in Funktionaler Syntax"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1014",
+                "Z11K2": "Nleghere anya na Javascript ọrụ syntax"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1157",
+                "Z11K2": "negatie in JavaScript-functiesyntaxis"
+            }
+        ]
+    },
+    "Z2K4": {
+        "Z1K1": "Z32",
+        "Z32K1": [
+            "Z31"
+        ]
+    },
+    "Z2K5": {
+        "Z1K1": "Z12",
+        "Z12K1": [
+            "Z11"
+        ]
+    }
+}

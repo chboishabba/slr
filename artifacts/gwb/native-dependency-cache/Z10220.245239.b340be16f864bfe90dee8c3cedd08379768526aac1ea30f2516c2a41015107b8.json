@@ -1,0 +1,59 @@
+{
+    "Z1K1": "Z2",
+    "Z2K1": {
+        "Z1K1": "Z6",
+        "Z6K1": "Z10220"
+    },
+    "Z2K2": {
+        "Z1K1": "Z14",
+        "Z14K1": "Z10216",
+        "Z14K3": {
+            "Z1K1": "Z16",
+            "Z16K1": "Z600",
+            "Z16K2": "const Z10216 = x =\u003E !x;"
+        }
+    },
+    "Z2K3": {
+        "Z1K1": "Z12",
+        "Z12K1": [
+            "Z11",
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1025",
+                "Z11K2": "negacja w JavaScripcie"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1002",
+                "Z11K2": "JavaScript negation"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1430",
+                "Z11K2": "Negation in JavaScript"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1014",
+                "Z11K2": "JavaScript na-eleghara anya"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1157",
+                "Z11K2": "JavaScript-negatie"
+            }
+        ]
+    },
+    "Z2K4": {
+        "Z1K1": "Z32",
+        "Z32K1": [
+            "Z31"
+        ]
+    },
+    "Z2K5": {
+        "Z1K1": "Z12",
+        "Z12K1": [
+            "Z11"
+        ]
+    }
+}

@@ -13,7 +13,7 @@ use sensiblaw_pg_source_store::{
     inspect_native_antecedent_review, native_antecedent_frontier,
     compile_native_source_local_answer,
     audit_original_numeric_identity_for_source_answer, certify_original_focus_identity,
-    reuse_original_binding_and_identity_owners, reopen_native_original_relation_packet, reopen_native_original_relation_packet_with_focus, compare_native_original_relation_reference, query_native_original_relations, query_native_recorded_factor_consumer, query_native_demand_fibre, probe_authenticated_native_query_admission, RefereeReceiptLocator,
+    publish_native_source_relation_prefix, reuse_original_binding_and_identity_owners, reopen_native_original_relation_packet, reopen_native_original_relation_packet_with_focus, compare_native_original_relation_reference, query_native_original_relations, query_native_recorded_factor_consumer, query_native_demand_fibre, probe_authenticated_native_query_admission, RefereeReceiptLocator,
     retract_original_numeric_identity_for_source_answer,
     transport_original_numeric_candidates_for_source_answer,
     prepare_native_prefix_recovery, publish_native_prefix_heading_repair, complete_parser_run,
@@ -83,6 +83,26 @@ fn print_json<T:Serialize>(value:&T)->Result<(),String>{
 }
 pub fn run(args:&[String])->Result<(),String>{
     match args {
+        [mode,revision,parser_run,start,budget,flag] if mode=="compile-prefix"&&flag=="--commit"=>{
+            let start=start.parse::<i64>().map_err(|_|"invalid focus start")?;
+            let budget=budget.parse::<usize>().map_err(|_|"invalid sentence budget")?;
+            if start<0||!(1..=64).contains(&budget){return Err("invalid bounded prefix".into());}
+            let url=env::var("SENSIBLAW_DATABASE_URL").map_err(|_|"SENSIBLAW_DATABASE_URL required")?;
+            let root=env::var("SLR_NATIVE_NUMERIC_SOURCE_ROOT").map(PathBuf::from)
+                .map_err(|_|"SLR_NATIVE_NUMERIC_SOURCE_ROOT required")?;
+            let config=load_database_config(None).map_err(|e|e.to_string())?;
+            print_json(&run_native_numeric_prefix_slice(&config,&url,revision,parser_run,&root,budget,start)
+                .map_err(|e|e.to_string())?)
+        }
+        [mode,revision,parser_run,start,end,literal,flag] if mode=="publish-relation-prefix"&&flag=="--commit"=>{
+            let start=start.parse::<i64>().map_err(|_|"invalid focus start")?;
+            let end=end.parse::<i64>().map_err(|_|"invalid focus end")?;
+            let (_,plan)=exact_plan(revision,parser_run)?;
+            let url=env::var("SENSIBLAW_DATABASE_URL").map_err(|_|"SENSIBLAW_DATABASE_URL required")?;
+            print_json(&publish_native_source_relation_prefix(&url,&plan.numeric_run_ref,&plan.document_ref,
+                revision,parser_run,&plan.canonical_source_sha256,start,end,literal)
+                .map_err(|e|e.to_string())?)
+        }
         [subcommand,run,doc,source_sha,demand,consumer,query,horizon,evidence,repo,sha,path,thread] if subcommand=="probe-query-admission"=>{
             let url=env::var("SENSIBLAW_DATABASE_URL").map_err(|_|"query admission requires SENSIBLAW_DATABASE_URL")?;
             let id=demand.parse::<i64>().map_err(|_|"invalid demand id")?;
@@ -569,7 +589,7 @@ pub fn run(args:&[String])->Result<(),String>{
             print_json(&receipt)
         }
         _=>Err(
-            "numeric-pnf-native usage: relation-reopen RUN DOCUMENT SNAPSHOT PACKET_SHA256 [FOCUS_START FOCUS_END] | relation-compare REOPENED_PACKET_JSON INDEPENDENT_REFERENCE_JSON | direct-inspect SOURCE_REV PARSER_RUN FIRST_SENTENCE MAX_SENTENCES | direct-stage SOURCE_REV PARSER_RUN FIRST_SENTENCE MAX_SENTENCES --commit | prefix-prepare REVIEW PARSER_RUN --inspect|--commit | prefix-repair REVIEW PARSER_RUN --commit | endpoint REVIEW PARSER_RUN --commit | inspect SOURCE_REV PARSER_RUN | plan SOURCE_REV PARSER_RUN | audit S29_REVIEW_ITEM_REF PARSER_RUN | reuse-original S29_REVIEW_ITEM_REF PARSER_RUN | bind S29_REVIEW_ITEM_REF PARSER_RUN MAX_CANDIDATES --commit | bind-campaign S29_REVIEW_ITEM_REF PARSER_RUN MAX_CANDIDATES --commit | retract S29_REVIEW_ITEM_REF PARSER_RUN WITNESS_ID --rollback-probe|--commit | compile SOURCE_REV PARSER_RUN MAX_SENTENCES --commit [--allow-partial-source] (numeric DB URL required for audit/compile, durable source root for compile)".into()
+            "numeric-pnf-native usage: compile-prefix SOURCE_REV PARSER_RUN FOCUS_START MAX_SENTENCES --commit | publish-relation-prefix SOURCE_REV PARSER_RUN START END LITERAL --commit | relation-reopen RUN DOCUMENT SNAPSHOT PACKET_SHA256 [FOCUS_START FOCUS_END] | relation-compare REOPENED_PACKET_JSON INDEPENDENT_REFERENCE_JSON | direct-inspect SOURCE_REV PARSER_RUN FIRST_SENTENCE MAX_SENTENCES | direct-stage SOURCE_REV PARSER_RUN FIRST_SENTENCE MAX_SENTENCES --commit | prefix-prepare REVIEW PARSER_RUN --inspect|--commit | prefix-repair REVIEW PARSER_RUN --commit | endpoint REVIEW PARSER_RUN --commit | inspect SOURCE_REV PARSER_RUN | plan SOURCE_REV PARSER_RUN | audit S29_REVIEW_ITEM_REF PARSER_RUN | reuse-original S29_REVIEW_ITEM_REF PARSER_RUN | bind S29_REVIEW_ITEM_REF PARSER_RUN MAX_CANDIDATES --commit | bind-campaign S29_REVIEW_ITEM_REF PARSER_RUN MAX_CANDIDATES --commit | retract S29_REVIEW_ITEM_REF PARSER_RUN WITNESS_ID --rollback-probe|--commit | compile SOURCE_REV PARSER_RUN MAX_SENTENCES --commit [--allow-partial-source] (numeric DB URL required for audit/compile, durable source root for compile)".into()
         )
     }
 }
@@ -580,6 +600,8 @@ mod tests {
     #[test]
     fn incomplete_or_wrong_commit_command_never_runs() {
         assert!(run(&["compile".into()]).is_err());
+        assert!(run(&["compile-prefix","rev","run","0","65","--commit"].map(str::to_owned)).is_err());
+        assert!(run(&["publish-relation-prefix","rev","run","0","1","a","--inspect"].map(str::to_owned)).is_err());
         assert!(run(&["relation-reopen".into(),"run".into(),"doc".into()]).is_err());
         assert!(run(&["relation-compare".into(),"packet".into()]).is_err());
         assert!(run(&["direct-stage".into(),"source".into(),"run".into(),"0".into(),"1".into()]).is_err());

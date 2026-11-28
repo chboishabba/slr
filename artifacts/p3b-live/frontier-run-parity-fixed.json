@@ -1,0 +1,2277 @@
+{
+  "candidate_only": true,
+  "consumer_ref": "consumer:native-pnf-p3b",
+  "creates_access_authority": false,
+  "family_ref": "relational-family:sha256:31ee0c184b30c2f75a46d410077b70789b47cb881297ec027acff7d3f106cd45",
+  "formal_consumer_equivalence_paid": false,
+  "frontier_ref": "frontier:relational:relational-family:sha256:31ee0c184b30c2f75a46d410077b70789b47cb881297ec027acff7d3f106cd45",
+  "hypotheses": [
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:15b70ecbfea5a4420d698e37087a8f580f40211393cc3d5dd6aa1ec4a5d40d5d:support",
+      "kind": "Support",
+      "residual_ref": "residual:relational:sha256:15b70ecbfea5a4420d698e37087a8f580f40211393cc3d5dd6aa1ec4a5d40d5d",
+      "target_proposition_ref": "consumer-obligation:predicate-alignment-review"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:15b70ecbfea5a4420d698e37087a8f580f40211393cc3d5dd6aa1ec4a5d40d5d:defeater",
+      "kind": "Defeater",
+      "residual_ref": "residual:relational:sha256:15b70ecbfea5a4420d698e37087a8f580f40211393cc3d5dd6aa1ec4a5d40d5d",
+      "target_proposition_ref": "consumer-obligation:predicate-alignment-review"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:15b70ecbfea5a4420d698e37087a8f580f40211393cc3d5dd6aa1ec4a5d40d5d:comparator",
+      "kind": "Comparator",
+      "residual_ref": "residual:relational:sha256:15b70ecbfea5a4420d698e37087a8f580f40211393cc3d5dd6aa1ec4a5d40d5d",
+      "target_proposition_ref": "consumer-obligation:predicate-alignment-review"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:15b70ecbfea5a4420d698e37087a8f580f40211393cc3d5dd6aa1ec4a5d40d5d:contradiction",
+      "kind": "Contradiction",
+      "residual_ref": "residual:relational:sha256:15b70ecbfea5a4420d698e37087a8f580f40211393cc3d5dd6aa1ec4a5d40d5d",
+      "target_proposition_ref": "consumer-obligation:predicate-alignment-review"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:15b70ecbfea5a4420d698e37087a8f580f40211393cc3d5dd6aa1ec4a5d40d5d:treatment",
+      "kind": "AuthorityTreatment",
+      "residual_ref": "residual:relational:sha256:15b70ecbfea5a4420d698e37087a8f580f40211393cc3d5dd6aa1ec4a5d40d5d",
+      "target_proposition_ref": "consumer-obligation:predicate-alignment-review"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:15b70ecbfea5a4420d698e37087a8f580f40211393cc3d5dd6aa1ec4a5d40d5d:terminology",
+      "kind": "TerminologyExpansion",
+      "residual_ref": "residual:relational:sha256:15b70ecbfea5a4420d698e37087a8f580f40211393cc3d5dd6aa1ec4a5d40d5d",
+      "target_proposition_ref": "consumer-obligation:predicate-alignment-review"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:22665cb02265fe0920692a73fde721e4426b2017d1445bad739ac404dae47d38:support",
+      "kind": "Support",
+      "residual_ref": "residual:relational:sha256:22665cb02265fe0920692a73fde721e4426b2017d1445bad739ac404dae47d38",
+      "target_proposition_ref": "consumer-obligation:filler-compatibility:syntax:dobj:0"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:22665cb02265fe0920692a73fde721e4426b2017d1445bad739ac404dae47d38:defeater",
+      "kind": "Defeater",
+      "residual_ref": "residual:relational:sha256:22665cb02265fe0920692a73fde721e4426b2017d1445bad739ac404dae47d38",
+      "target_proposition_ref": "consumer-obligation:filler-compatibility:syntax:dobj:0"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:22665cb02265fe0920692a73fde721e4426b2017d1445bad739ac404dae47d38:comparator",
+      "kind": "Comparator",
+      "residual_ref": "residual:relational:sha256:22665cb02265fe0920692a73fde721e4426b2017d1445bad739ac404dae47d38",
+      "target_proposition_ref": "consumer-obligation:filler-compatibility:syntax:dobj:0"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:22665cb02265fe0920692a73fde721e4426b2017d1445bad739ac404dae47d38:contradiction",
+      "kind": "Contradiction",
+      "residual_ref": "residual:relational:sha256:22665cb02265fe0920692a73fde721e4426b2017d1445bad739ac404dae47d38",
+      "target_proposition_ref": "consumer-obligation:filler-compatibility:syntax:dobj:0"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:22665cb02265fe0920692a73fde721e4426b2017d1445bad739ac404dae47d38:treatment",
+      "kind": "AuthorityTreatment",
+      "residual_ref": "residual:relational:sha256:22665cb02265fe0920692a73fde721e4426b2017d1445bad739ac404dae47d38",
+      "target_proposition_ref": "consumer-obligation:filler-compatibility:syntax:dobj:0"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:22665cb02265fe0920692a73fde721e4426b2017d1445bad739ac404dae47d38:terminology",
+      "kind": "TerminologyExpansion",
+      "residual_ref": "residual:relational:sha256:22665cb02265fe0920692a73fde721e4426b2017d1445bad739ac404dae47d38",
+      "target_proposition_ref": "consumer-obligation:filler-compatibility:syntax:dobj:0"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:cd9982e47160998ee15541e963107ca91e1cec51e9de8a2ce1c162ee553fa19b:support",
+      "kind": "Support",
+      "residual_ref": "residual:relational:sha256:cd9982e47160998ee15541e963107ca91e1cec51e9de8a2ce1c162ee553fa19b",
+      "target_proposition_ref": "consumer-obligation:filler-compatibility:syntax:nsubj:0"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:cd9982e47160998ee15541e963107ca91e1cec51e9de8a2ce1c162ee553fa19b:defeater",
+      "kind": "Defeater",
+      "residual_ref": "residual:relational:sha256:cd9982e47160998ee15541e963107ca91e1cec51e9de8a2ce1c162ee553fa19b",
+      "target_proposition_ref": "consumer-obligation:filler-compatibility:syntax:nsubj:0"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:cd9982e47160998ee15541e963107ca91e1cec51e9de8a2ce1c162ee553fa19b:comparator",
+      "kind": "Comparator",
+      "residual_ref": "residual:relational:sha256:cd9982e47160998ee15541e963107ca91e1cec51e9de8a2ce1c162ee553fa19b",
+      "target_proposition_ref": "consumer-obligation:filler-compatibility:syntax:nsubj:0"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:cd9982e47160998ee15541e963107ca91e1cec51e9de8a2ce1c162ee553fa19b:contradiction",
+      "kind": "Contradiction",
+      "residual_ref": "residual:relational:sha256:cd9982e47160998ee15541e963107ca91e1cec51e9de8a2ce1c162ee553fa19b",
+      "target_proposition_ref": "consumer-obligation:filler-compatibility:syntax:nsubj:0"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:cd9982e47160998ee15541e963107ca91e1cec51e9de8a2ce1c162ee553fa19b:treatment",
+      "kind": "AuthorityTreatment",
+      "residual_ref": "residual:relational:sha256:cd9982e47160998ee15541e963107ca91e1cec51e9de8a2ce1c162ee553fa19b",
+      "target_proposition_ref": "consumer-obligation:filler-compatibility:syntax:nsubj:0"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:cd9982e47160998ee15541e963107ca91e1cec51e9de8a2ce1c162ee553fa19b:terminology",
+      "kind": "TerminologyExpansion",
+      "residual_ref": "residual:relational:sha256:cd9982e47160998ee15541e963107ca91e1cec51e9de8a2ce1c162ee553fa19b",
+      "target_proposition_ref": "consumer-obligation:filler-compatibility:syntax:nsubj:0"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:5dbeb3a992e7b8261775c0935731acb4f043f5e878fb5a42c42da9f7c6dfd1e7:support",
+      "kind": "Support",
+      "residual_ref": "residual:relational:sha256:5dbeb3a992e7b8261775c0935731acb4f043f5e878fb5a42c42da9f7c6dfd1e7",
+      "target_proposition_ref": "consumer-obligation:filler-compatibility:syntax:punct:0"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:5dbeb3a992e7b8261775c0935731acb4f043f5e878fb5a42c42da9f7c6dfd1e7:defeater",
+      "kind": "Defeater",
+      "residual_ref": "residual:relational:sha256:5dbeb3a992e7b8261775c0935731acb4f043f5e878fb5a42c42da9f7c6dfd1e7",
+      "target_proposition_ref": "consumer-obligation:filler-compatibility:syntax:punct:0"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:5dbeb3a992e7b8261775c0935731acb4f043f5e878fb5a42c42da9f7c6dfd1e7:comparator",
+      "kind": "Comparator",
+      "residual_ref": "residual:relational:sha256:5dbeb3a992e7b8261775c0935731acb4f043f5e878fb5a42c42da9f7c6dfd1e7",
+      "target_proposition_ref": "consumer-obligation:filler-compatibility:syntax:punct:0"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:5dbeb3a992e7b8261775c0935731acb4f043f5e878fb5a42c42da9f7c6dfd1e7:contradiction",
+      "kind": "Contradiction",
+      "residual_ref": "residual:relational:sha256:5dbeb3a992e7b8261775c0935731acb4f043f5e878fb5a42c42da9f7c6dfd1e7",
+      "target_proposition_ref": "consumer-obligation:filler-compatibility:syntax:punct:0"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:5dbeb3a992e7b8261775c0935731acb4f043f5e878fb5a42c42da9f7c6dfd1e7:treatment",
+      "kind": "AuthorityTreatment",
+      "residual_ref": "residual:relational:sha256:5dbeb3a992e7b8261775c0935731acb4f043f5e878fb5a42c42da9f7c6dfd1e7",
+      "target_proposition_ref": "consumer-obligation:filler-compatibility:syntax:punct:0"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:5dbeb3a992e7b8261775c0935731acb4f043f5e878fb5a42c42da9f7c6dfd1e7:terminology",
+      "kind": "TerminologyExpansion",
+      "residual_ref": "residual:relational:sha256:5dbeb3a992e7b8261775c0935731acb4f043f5e878fb5a42c42da9f7c6dfd1e7",
+      "target_proposition_ref": "consumer-obligation:filler-compatibility:syntax:punct:0"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:66a7fce87a670ad74272df820e8a7116b7d2cf9d38abf577c9d4e43a9688de42:support",
+      "kind": "Support",
+      "residual_ref": "residual:relational:sha256:66a7fce87a670ad74272df820e8a7116b7d2cf9d38abf577c9d4e43a9688de42",
+      "target_proposition_ref": "consumer-obligation:evidence-polarity-unknown"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:66a7fce87a670ad74272df820e8a7116b7d2cf9d38abf577c9d4e43a9688de42:defeater",
+      "kind": "Defeater",
+      "residual_ref": "residual:relational:sha256:66a7fce87a670ad74272df820e8a7116b7d2cf9d38abf577c9d4e43a9688de42",
+      "target_proposition_ref": "consumer-obligation:evidence-polarity-unknown"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:66a7fce87a670ad74272df820e8a7116b7d2cf9d38abf577c9d4e43a9688de42:comparator",
+      "kind": "Comparator",
+      "residual_ref": "residual:relational:sha256:66a7fce87a670ad74272df820e8a7116b7d2cf9d38abf577c9d4e43a9688de42",
+      "target_proposition_ref": "consumer-obligation:evidence-polarity-unknown"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:66a7fce87a670ad74272df820e8a7116b7d2cf9d38abf577c9d4e43a9688de42:contradiction",
+      "kind": "Contradiction",
+      "residual_ref": "residual:relational:sha256:66a7fce87a670ad74272df820e8a7116b7d2cf9d38abf577c9d4e43a9688de42",
+      "target_proposition_ref": "consumer-obligation:evidence-polarity-unknown"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:66a7fce87a670ad74272df820e8a7116b7d2cf9d38abf577c9d4e43a9688de42:treatment",
+      "kind": "AuthorityTreatment",
+      "residual_ref": "residual:relational:sha256:66a7fce87a670ad74272df820e8a7116b7d2cf9d38abf577c9d4e43a9688de42",
+      "target_proposition_ref": "consumer-obligation:evidence-polarity-unknown"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:66a7fce87a670ad74272df820e8a7116b7d2cf9d38abf577c9d4e43a9688de42:terminology",
+      "kind": "TerminologyExpansion",
+      "residual_ref": "residual:relational:sha256:66a7fce87a670ad74272df820e8a7116b7d2cf9d38abf577c9d4e43a9688de42",
+      "target_proposition_ref": "consumer-obligation:evidence-polarity-unknown"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:2a33dd3096ae331b6d43299f93f49ce1463e046812984d8c57de5578d0feeddd:support",
+      "kind": "Support",
+      "residual_ref": "residual:relational:sha256:2a33dd3096ae331b6d43299f93f49ce1463e046812984d8c57de5578d0feeddd",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:scope"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:2a33dd3096ae331b6d43299f93f49ce1463e046812984d8c57de5578d0feeddd:defeater",
+      "kind": "Defeater",
+      "residual_ref": "residual:relational:sha256:2a33dd3096ae331b6d43299f93f49ce1463e046812984d8c57de5578d0feeddd",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:scope"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:2a33dd3096ae331b6d43299f93f49ce1463e046812984d8c57de5578d0feeddd:comparator",
+      "kind": "Comparator",
+      "residual_ref": "residual:relational:sha256:2a33dd3096ae331b6d43299f93f49ce1463e046812984d8c57de5578d0feeddd",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:scope"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:2a33dd3096ae331b6d43299f93f49ce1463e046812984d8c57de5578d0feeddd:contradiction",
+      "kind": "Contradiction",
+      "residual_ref": "residual:relational:sha256:2a33dd3096ae331b6d43299f93f49ce1463e046812984d8c57de5578d0feeddd",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:scope"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:2a33dd3096ae331b6d43299f93f49ce1463e046812984d8c57de5578d0feeddd:treatment",
+      "kind": "AuthorityTreatment",
+      "residual_ref": "residual:relational:sha256:2a33dd3096ae331b6d43299f93f49ce1463e046812984d8c57de5578d0feeddd",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:scope"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:2a33dd3096ae331b6d43299f93f49ce1463e046812984d8c57de5578d0feeddd:terminology",
+      "kind": "TerminologyExpansion",
+      "residual_ref": "residual:relational:sha256:2a33dd3096ae331b6d43299f93f49ce1463e046812984d8c57de5578d0feeddd",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:scope"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:34a6c9c869b9a1e314f8f96d2fdf13fcc10fbdf92484fa2679aad4cdba75b985:support",
+      "kind": "Support",
+      "residual_ref": "residual:relational:sha256:34a6c9c869b9a1e314f8f96d2fdf13fcc10fbdf92484fa2679aad4cdba75b985",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:time"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:34a6c9c869b9a1e314f8f96d2fdf13fcc10fbdf92484fa2679aad4cdba75b985:defeater",
+      "kind": "Defeater",
+      "residual_ref": "residual:relational:sha256:34a6c9c869b9a1e314f8f96d2fdf13fcc10fbdf92484fa2679aad4cdba75b985",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:time"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:34a6c9c869b9a1e314f8f96d2fdf13fcc10fbdf92484fa2679aad4cdba75b985:comparator",
+      "kind": "Comparator",
+      "residual_ref": "residual:relational:sha256:34a6c9c869b9a1e314f8f96d2fdf13fcc10fbdf92484fa2679aad4cdba75b985",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:time"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:34a6c9c869b9a1e314f8f96d2fdf13fcc10fbdf92484fa2679aad4cdba75b985:contradiction",
+      "kind": "Contradiction",
+      "residual_ref": "residual:relational:sha256:34a6c9c869b9a1e314f8f96d2fdf13fcc10fbdf92484fa2679aad4cdba75b985",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:time"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:34a6c9c869b9a1e314f8f96d2fdf13fcc10fbdf92484fa2679aad4cdba75b985:treatment",
+      "kind": "AuthorityTreatment",
+      "residual_ref": "residual:relational:sha256:34a6c9c869b9a1e314f8f96d2fdf13fcc10fbdf92484fa2679aad4cdba75b985",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:time"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:34a6c9c869b9a1e314f8f96d2fdf13fcc10fbdf92484fa2679aad4cdba75b985:terminology",
+      "kind": "TerminologyExpansion",
+      "residual_ref": "residual:relational:sha256:34a6c9c869b9a1e314f8f96d2fdf13fcc10fbdf92484fa2679aad4cdba75b985",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:time"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:cefee7ceeb5955f95f8348fc23ad97fe79f60d3e0b72b872dcc8651f02fe7c4b:support",
+      "kind": "Support",
+      "residual_ref": "residual:relational:sha256:cefee7ceeb5955f95f8348fc23ad97fe79f60d3e0b72b872dcc8651f02fe7c4b",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:modality"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:cefee7ceeb5955f95f8348fc23ad97fe79f60d3e0b72b872dcc8651f02fe7c4b:defeater",
+      "kind": "Defeater",
+      "residual_ref": "residual:relational:sha256:cefee7ceeb5955f95f8348fc23ad97fe79f60d3e0b72b872dcc8651f02fe7c4b",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:modality"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:cefee7ceeb5955f95f8348fc23ad97fe79f60d3e0b72b872dcc8651f02fe7c4b:comparator",
+      "kind": "Comparator",
+      "residual_ref": "residual:relational:sha256:cefee7ceeb5955f95f8348fc23ad97fe79f60d3e0b72b872dcc8651f02fe7c4b",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:modality"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:cefee7ceeb5955f95f8348fc23ad97fe79f60d3e0b72b872dcc8651f02fe7c4b:contradiction",
+      "kind": "Contradiction",
+      "residual_ref": "residual:relational:sha256:cefee7ceeb5955f95f8348fc23ad97fe79f60d3e0b72b872dcc8651f02fe7c4b",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:modality"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:cefee7ceeb5955f95f8348fc23ad97fe79f60d3e0b72b872dcc8651f02fe7c4b:treatment",
+      "kind": "AuthorityTreatment",
+      "residual_ref": "residual:relational:sha256:cefee7ceeb5955f95f8348fc23ad97fe79f60d3e0b72b872dcc8651f02fe7c4b",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:modality"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:cefee7ceeb5955f95f8348fc23ad97fe79f60d3e0b72b872dcc8651f02fe7c4b:terminology",
+      "kind": "TerminologyExpansion",
+      "residual_ref": "residual:relational:sha256:cefee7ceeb5955f95f8348fc23ad97fe79f60d3e0b72b872dcc8651f02fe7c4b",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:modality"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:9762b50453cc0ce038100416bd231dfe4bf56ab9a40b61b517efee7fed2feb69:support",
+      "kind": "Support",
+      "residual_ref": "residual:relational:sha256:9762b50453cc0ce038100416bd231dfe4bf56ab9a40b61b517efee7fed2feb69",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:quantifier"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:9762b50453cc0ce038100416bd231dfe4bf56ab9a40b61b517efee7fed2feb69:defeater",
+      "kind": "Defeater",
+      "residual_ref": "residual:relational:sha256:9762b50453cc0ce038100416bd231dfe4bf56ab9a40b61b517efee7fed2feb69",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:quantifier"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:9762b50453cc0ce038100416bd231dfe4bf56ab9a40b61b517efee7fed2feb69:comparator",
+      "kind": "Comparator",
+      "residual_ref": "residual:relational:sha256:9762b50453cc0ce038100416bd231dfe4bf56ab9a40b61b517efee7fed2feb69",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:quantifier"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:9762b50453cc0ce038100416bd231dfe4bf56ab9a40b61b517efee7fed2feb69:contradiction",
+      "kind": "Contradiction",
+      "residual_ref": "residual:relational:sha256:9762b50453cc0ce038100416bd231dfe4bf56ab9a40b61b517efee7fed2feb69",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:quantifier"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:9762b50453cc0ce038100416bd231dfe4bf56ab9a40b61b517efee7fed2feb69:treatment",
+      "kind": "AuthorityTreatment",
+      "residual_ref": "residual:relational:sha256:9762b50453cc0ce038100416bd231dfe4bf56ab9a40b61b517efee7fed2feb69",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:quantifier"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:9762b50453cc0ce038100416bd231dfe4bf56ab9a40b61b517efee7fed2feb69:terminology",
+      "kind": "TerminologyExpansion",
+      "residual_ref": "residual:relational:sha256:9762b50453cc0ce038100416bd231dfe4bf56ab9a40b61b517efee7fed2feb69",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:quantifier"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:81dec68095d14185a0cd966b4ddb8f22ad5822ef4374ac91e8a393aa09044f3e:support",
+      "kind": "Support",
+      "residual_ref": "residual:relational:sha256:81dec68095d14185a0cd966b4ddb8f22ad5822ef4374ac91e8a393aa09044f3e",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:attribution"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:81dec68095d14185a0cd966b4ddb8f22ad5822ef4374ac91e8a393aa09044f3e:defeater",
+      "kind": "Defeater",
+      "residual_ref": "residual:relational:sha256:81dec68095d14185a0cd966b4ddb8f22ad5822ef4374ac91e8a393aa09044f3e",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:attribution"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:81dec68095d14185a0cd966b4ddb8f22ad5822ef4374ac91e8a393aa09044f3e:comparator",
+      "kind": "Comparator",
+      "residual_ref": "residual:relational:sha256:81dec68095d14185a0cd966b4ddb8f22ad5822ef4374ac91e8a393aa09044f3e",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:attribution"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:81dec68095d14185a0cd966b4ddb8f22ad5822ef4374ac91e8a393aa09044f3e:contradiction",
+      "kind": "Contradiction",
+      "residual_ref": "residual:relational:sha256:81dec68095d14185a0cd966b4ddb8f22ad5822ef4374ac91e8a393aa09044f3e",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:attribution"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:81dec68095d14185a0cd966b4ddb8f22ad5822ef4374ac91e8a393aa09044f3e:treatment",
+      "kind": "AuthorityTreatment",
+      "residual_ref": "residual:relational:sha256:81dec68095d14185a0cd966b4ddb8f22ad5822ef4374ac91e8a393aa09044f3e",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:attribution"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:81dec68095d14185a0cd966b4ddb8f22ad5822ef4374ac91e8a393aa09044f3e:terminology",
+      "kind": "TerminologyExpansion",
+      "residual_ref": "residual:relational:sha256:81dec68095d14185a0cd966b4ddb8f22ad5822ef4374ac91e8a393aa09044f3e",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:attribution"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:7d481f8ac77cc066208ca1c9896089d8a44394c90088a13017467c736f57ea72:support",
+      "kind": "Support",
+      "residual_ref": "residual:relational:sha256:7d481f8ac77cc066208ca1c9896089d8a44394c90088a13017467c736f57ea72",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:ontology"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:7d481f8ac77cc066208ca1c9896089d8a44394c90088a13017467c736f57ea72:defeater",
+      "kind": "Defeater",
+      "residual_ref": "residual:relational:sha256:7d481f8ac77cc066208ca1c9896089d8a44394c90088a13017467c736f57ea72",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:ontology"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:7d481f8ac77cc066208ca1c9896089d8a44394c90088a13017467c736f57ea72:comparator",
+      "kind": "Comparator",
+      "residual_ref": "residual:relational:sha256:7d481f8ac77cc066208ca1c9896089d8a44394c90088a13017467c736f57ea72",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:ontology"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:7d481f8ac77cc066208ca1c9896089d8a44394c90088a13017467c736f57ea72:contradiction",
+      "kind": "Contradiction",
+      "residual_ref": "residual:relational:sha256:7d481f8ac77cc066208ca1c9896089d8a44394c90088a13017467c736f57ea72",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:ontology"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:7d481f8ac77cc066208ca1c9896089d8a44394c90088a13017467c736f57ea72:treatment",
+      "kind": "AuthorityTreatment",
+      "residual_ref": "residual:relational:sha256:7d481f8ac77cc066208ca1c9896089d8a44394c90088a13017467c736f57ea72",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:ontology"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:7d481f8ac77cc066208ca1c9896089d8a44394c90088a13017467c736f57ea72:terminology",
+      "kind": "TerminologyExpansion",
+      "residual_ref": "residual:relational:sha256:7d481f8ac77cc066208ca1c9896089d8a44394c90088a13017467c736f57ea72",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:ontology"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:8115e41c85578d3218e05fecf45ced21e142825179c79b6ca2eed4edd488ebd4:support",
+      "kind": "Support",
+      "residual_ref": "residual:relational:sha256:8115e41c85578d3218e05fecf45ced21e142825179c79b6ca2eed4edd488ebd4",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:language"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:8115e41c85578d3218e05fecf45ced21e142825179c79b6ca2eed4edd488ebd4:defeater",
+      "kind": "Defeater",
+      "residual_ref": "residual:relational:sha256:8115e41c85578d3218e05fecf45ced21e142825179c79b6ca2eed4edd488ebd4",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:language"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:8115e41c85578d3218e05fecf45ced21e142825179c79b6ca2eed4edd488ebd4:comparator",
+      "kind": "Comparator",
+      "residual_ref": "residual:relational:sha256:8115e41c85578d3218e05fecf45ced21e142825179c79b6ca2eed4edd488ebd4",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:language"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:8115e41c85578d3218e05fecf45ced21e142825179c79b6ca2eed4edd488ebd4:contradiction",
+      "kind": "Contradiction",
+      "residual_ref": "residual:relational:sha256:8115e41c85578d3218e05fecf45ced21e142825179c79b6ca2eed4edd488ebd4",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:language"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:8115e41c85578d3218e05fecf45ced21e142825179c79b6ca2eed4edd488ebd4:treatment",
+      "kind": "AuthorityTreatment",
+      "residual_ref": "residual:relational:sha256:8115e41c85578d3218e05fecf45ced21e142825179c79b6ca2eed4edd488ebd4",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:language"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:8115e41c85578d3218e05fecf45ced21e142825179c79b6ca2eed4edd488ebd4:terminology",
+      "kind": "TerminologyExpansion",
+      "residual_ref": "residual:relational:sha256:8115e41c85578d3218e05fecf45ced21e142825179c79b6ca2eed4edd488ebd4",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:language"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:dad36c891813220a540ca257d0f7ff13713f793500481663556a5b13aedbc5d6:support",
+      "kind": "Support",
+      "residual_ref": "residual:relational:sha256:dad36c891813220a540ca257d0f7ff13713f793500481663556a5b13aedbc5d6",
+      "target_proposition_ref": "consumer-obligation:predicate-alignment-review"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:dad36c891813220a540ca257d0f7ff13713f793500481663556a5b13aedbc5d6:defeater",
+      "kind": "Defeater",
+      "residual_ref": "residual:relational:sha256:dad36c891813220a540ca257d0f7ff13713f793500481663556a5b13aedbc5d6",
+      "target_proposition_ref": "consumer-obligation:predicate-alignment-review"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:dad36c891813220a540ca257d0f7ff13713f793500481663556a5b13aedbc5d6:comparator",
+      "kind": "Comparator",
+      "residual_ref": "residual:relational:sha256:dad36c891813220a540ca257d0f7ff13713f793500481663556a5b13aedbc5d6",
+      "target_proposition_ref": "consumer-obligation:predicate-alignment-review"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:dad36c891813220a540ca257d0f7ff13713f793500481663556a5b13aedbc5d6:contradiction",
+      "kind": "Contradiction",
+      "residual_ref": "residual:relational:sha256:dad36c891813220a540ca257d0f7ff13713f793500481663556a5b13aedbc5d6",
+      "target_proposition_ref": "consumer-obligation:predicate-alignment-review"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:dad36c891813220a540ca257d0f7ff13713f793500481663556a5b13aedbc5d6:treatment",
+      "kind": "AuthorityTreatment",
+      "residual_ref": "residual:relational:sha256:dad36c891813220a540ca257d0f7ff13713f793500481663556a5b13aedbc5d6",
+      "target_proposition_ref": "consumer-obligation:predicate-alignment-review"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:dad36c891813220a540ca257d0f7ff13713f793500481663556a5b13aedbc5d6:terminology",
+      "kind": "TerminologyExpansion",
+      "residual_ref": "residual:relational:sha256:dad36c891813220a540ca257d0f7ff13713f793500481663556a5b13aedbc5d6",
+      "target_proposition_ref": "consumer-obligation:predicate-alignment-review"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:15da9ff420f1e0822d7c35f82ddbca3aa30782dd3ebfe3c2b69d61c73722523e:support",
+      "kind": "Support",
+      "residual_ref": "residual:relational:sha256:15da9ff420f1e0822d7c35f82ddbca3aa30782dd3ebfe3c2b69d61c73722523e",
+      "target_proposition_ref": "consumer-obligation:filler-compatibility:syntax:dobj:0"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:15da9ff420f1e0822d7c35f82ddbca3aa30782dd3ebfe3c2b69d61c73722523e:defeater",
+      "kind": "Defeater",
+      "residual_ref": "residual:relational:sha256:15da9ff420f1e0822d7c35f82ddbca3aa30782dd3ebfe3c2b69d61c73722523e",
+      "target_proposition_ref": "consumer-obligation:filler-compatibility:syntax:dobj:0"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:15da9ff420f1e0822d7c35f82ddbca3aa30782dd3ebfe3c2b69d61c73722523e:comparator",
+      "kind": "Comparator",
+      "residual_ref": "residual:relational:sha256:15da9ff420f1e0822d7c35f82ddbca3aa30782dd3ebfe3c2b69d61c73722523e",
+      "target_proposition_ref": "consumer-obligation:filler-compatibility:syntax:dobj:0"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:15da9ff420f1e0822d7c35f82ddbca3aa30782dd3ebfe3c2b69d61c73722523e:contradiction",
+      "kind": "Contradiction",
+      "residual_ref": "residual:relational:sha256:15da9ff420f1e0822d7c35f82ddbca3aa30782dd3ebfe3c2b69d61c73722523e",
+      "target_proposition_ref": "consumer-obligation:filler-compatibility:syntax:dobj:0"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:15da9ff420f1e0822d7c35f82ddbca3aa30782dd3ebfe3c2b69d61c73722523e:treatment",
+      "kind": "AuthorityTreatment",
+      "residual_ref": "residual:relational:sha256:15da9ff420f1e0822d7c35f82ddbca3aa30782dd3ebfe3c2b69d61c73722523e",
+      "target_proposition_ref": "consumer-obligation:filler-compatibility:syntax:dobj:0"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:15da9ff420f1e0822d7c35f82ddbca3aa30782dd3ebfe3c2b69d61c73722523e:terminology",
+      "kind": "TerminologyExpansion",
+      "residual_ref": "residual:relational:sha256:15da9ff420f1e0822d7c35f82ddbca3aa30782dd3ebfe3c2b69d61c73722523e",
+      "target_proposition_ref": "consumer-obligation:filler-compatibility:syntax:dobj:0"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:7cc996937a3521b16634c965257914441cb98e529b41a687a4fe9811b7a9868c:support",
+      "kind": "Support",
+      "residual_ref": "residual:relational:sha256:7cc996937a3521b16634c965257914441cb98e529b41a687a4fe9811b7a9868c",
+      "target_proposition_ref": "consumer-obligation:filler-compatibility:syntax:nsubj:0"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:7cc996937a3521b16634c965257914441cb98e529b41a687a4fe9811b7a9868c:defeater",
+      "kind": "Defeater",
+      "residual_ref": "residual:relational:sha256:7cc996937a3521b16634c965257914441cb98e529b41a687a4fe9811b7a9868c",
+      "target_proposition_ref": "consumer-obligation:filler-compatibility:syntax:nsubj:0"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:7cc996937a3521b16634c965257914441cb98e529b41a687a4fe9811b7a9868c:comparator",
+      "kind": "Comparator",
+      "residual_ref": "residual:relational:sha256:7cc996937a3521b16634c965257914441cb98e529b41a687a4fe9811b7a9868c",
+      "target_proposition_ref": "consumer-obligation:filler-compatibility:syntax:nsubj:0"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:7cc996937a3521b16634c965257914441cb98e529b41a687a4fe9811b7a9868c:contradiction",
+      "kind": "Contradiction",
+      "residual_ref": "residual:relational:sha256:7cc996937a3521b16634c965257914441cb98e529b41a687a4fe9811b7a9868c",
+      "target_proposition_ref": "consumer-obligation:filler-compatibility:syntax:nsubj:0"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:7cc996937a3521b16634c965257914441cb98e529b41a687a4fe9811b7a9868c:treatment",
+      "kind": "AuthorityTreatment",
+      "residual_ref": "residual:relational:sha256:7cc996937a3521b16634c965257914441cb98e529b41a687a4fe9811b7a9868c",
+      "target_proposition_ref": "consumer-obligation:filler-compatibility:syntax:nsubj:0"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:7cc996937a3521b16634c965257914441cb98e529b41a687a4fe9811b7a9868c:terminology",
+      "kind": "TerminologyExpansion",
+      "residual_ref": "residual:relational:sha256:7cc996937a3521b16634c965257914441cb98e529b41a687a4fe9811b7a9868c",
+      "target_proposition_ref": "consumer-obligation:filler-compatibility:syntax:nsubj:0"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:2562b1593f9ad34a8f002b0a46d24a10d699a6ca6285511bb05bc01007ae21b9:support",
+      "kind": "Support",
+      "residual_ref": "residual:relational:sha256:2562b1593f9ad34a8f002b0a46d24a10d699a6ca6285511bb05bc01007ae21b9",
+      "target_proposition_ref": "consumer-obligation:filler-compatibility:syntax:punct:0"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:2562b1593f9ad34a8f002b0a46d24a10d699a6ca6285511bb05bc01007ae21b9:defeater",
+      "kind": "Defeater",
+      "residual_ref": "residual:relational:sha256:2562b1593f9ad34a8f002b0a46d24a10d699a6ca6285511bb05bc01007ae21b9",
+      "target_proposition_ref": "consumer-obligation:filler-compatibility:syntax:punct:0"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:2562b1593f9ad34a8f002b0a46d24a10d699a6ca6285511bb05bc01007ae21b9:comparator",
+      "kind": "Comparator",
+      "residual_ref": "residual:relational:sha256:2562b1593f9ad34a8f002b0a46d24a10d699a6ca6285511bb05bc01007ae21b9",
+      "target_proposition_ref": "consumer-obligation:filler-compatibility:syntax:punct:0"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:2562b1593f9ad34a8f002b0a46d24a10d699a6ca6285511bb05bc01007ae21b9:contradiction",
+      "kind": "Contradiction",
+      "residual_ref": "residual:relational:sha256:2562b1593f9ad34a8f002b0a46d24a10d699a6ca6285511bb05bc01007ae21b9",
+      "target_proposition_ref": "consumer-obligation:filler-compatibility:syntax:punct:0"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:2562b1593f9ad34a8f002b0a46d24a10d699a6ca6285511bb05bc01007ae21b9:treatment",
+      "kind": "AuthorityTreatment",
+      "residual_ref": "residual:relational:sha256:2562b1593f9ad34a8f002b0a46d24a10d699a6ca6285511bb05bc01007ae21b9",
+      "target_proposition_ref": "consumer-obligation:filler-compatibility:syntax:punct:0"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:2562b1593f9ad34a8f002b0a46d24a10d699a6ca6285511bb05bc01007ae21b9:terminology",
+      "kind": "TerminologyExpansion",
+      "residual_ref": "residual:relational:sha256:2562b1593f9ad34a8f002b0a46d24a10d699a6ca6285511bb05bc01007ae21b9",
+      "target_proposition_ref": "consumer-obligation:filler-compatibility:syntax:punct:0"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:c8587d41d5f37abceb6b6d5623db4ae653f4b872de2a623f9058a48ab15cf224:support",
+      "kind": "Support",
+      "residual_ref": "residual:relational:sha256:c8587d41d5f37abceb6b6d5623db4ae653f4b872de2a623f9058a48ab15cf224",
+      "target_proposition_ref": "consumer-obligation:evidence-polarity-unknown"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:c8587d41d5f37abceb6b6d5623db4ae653f4b872de2a623f9058a48ab15cf224:defeater",
+      "kind": "Defeater",
+      "residual_ref": "residual:relational:sha256:c8587d41d5f37abceb6b6d5623db4ae653f4b872de2a623f9058a48ab15cf224",
+      "target_proposition_ref": "consumer-obligation:evidence-polarity-unknown"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:c8587d41d5f37abceb6b6d5623db4ae653f4b872de2a623f9058a48ab15cf224:comparator",
+      "kind": "Comparator",
+      "residual_ref": "residual:relational:sha256:c8587d41d5f37abceb6b6d5623db4ae653f4b872de2a623f9058a48ab15cf224",
+      "target_proposition_ref": "consumer-obligation:evidence-polarity-unknown"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:c8587d41d5f37abceb6b6d5623db4ae653f4b872de2a623f9058a48ab15cf224:contradiction",
+      "kind": "Contradiction",
+      "residual_ref": "residual:relational:sha256:c8587d41d5f37abceb6b6d5623db4ae653f4b872de2a623f9058a48ab15cf224",
+      "target_proposition_ref": "consumer-obligation:evidence-polarity-unknown"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:c8587d41d5f37abceb6b6d5623db4ae653f4b872de2a623f9058a48ab15cf224:treatment",
+      "kind": "AuthorityTreatment",
+      "residual_ref": "residual:relational:sha256:c8587d41d5f37abceb6b6d5623db4ae653f4b872de2a623f9058a48ab15cf224",
+      "target_proposition_ref": "consumer-obligation:evidence-polarity-unknown"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:c8587d41d5f37abceb6b6d5623db4ae653f4b872de2a623f9058a48ab15cf224:terminology",
+      "kind": "TerminologyExpansion",
+      "residual_ref": "residual:relational:sha256:c8587d41d5f37abceb6b6d5623db4ae653f4b872de2a623f9058a48ab15cf224",
+      "target_proposition_ref": "consumer-obligation:evidence-polarity-unknown"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:b9d00ba1e0dc2dc6e81dc93dc3a9551327ab0cbf10cd8cfbae071ee87c7823d4:support",
+      "kind": "Support",
+      "residual_ref": "residual:relational:sha256:b9d00ba1e0dc2dc6e81dc93dc3a9551327ab0cbf10cd8cfbae071ee87c7823d4",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:scope"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:b9d00ba1e0dc2dc6e81dc93dc3a9551327ab0cbf10cd8cfbae071ee87c7823d4:defeater",
+      "kind": "Defeater",
+      "residual_ref": "residual:relational:sha256:b9d00ba1e0dc2dc6e81dc93dc3a9551327ab0cbf10cd8cfbae071ee87c7823d4",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:scope"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:b9d00ba1e0dc2dc6e81dc93dc3a9551327ab0cbf10cd8cfbae071ee87c7823d4:comparator",
+      "kind": "Comparator",
+      "residual_ref": "residual:relational:sha256:b9d00ba1e0dc2dc6e81dc93dc3a9551327ab0cbf10cd8cfbae071ee87c7823d4",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:scope"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:b9d00ba1e0dc2dc6e81dc93dc3a9551327ab0cbf10cd8cfbae071ee87c7823d4:contradiction",
+      "kind": "Contradiction",
+      "residual_ref": "residual:relational:sha256:b9d00ba1e0dc2dc6e81dc93dc3a9551327ab0cbf10cd8cfbae071ee87c7823d4",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:scope"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:b9d00ba1e0dc2dc6e81dc93dc3a9551327ab0cbf10cd8cfbae071ee87c7823d4:treatment",
+      "kind": "AuthorityTreatment",
+      "residual_ref": "residual:relational:sha256:b9d00ba1e0dc2dc6e81dc93dc3a9551327ab0cbf10cd8cfbae071ee87c7823d4",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:scope"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:b9d00ba1e0dc2dc6e81dc93dc3a9551327ab0cbf10cd8cfbae071ee87c7823d4:terminology",
+      "kind": "TerminologyExpansion",
+      "residual_ref": "residual:relational:sha256:b9d00ba1e0dc2dc6e81dc93dc3a9551327ab0cbf10cd8cfbae071ee87c7823d4",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:scope"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:e067ca4f026e23a2e81938a9329925621b0b5b36add6c727a0b0e3b73069db05:support",
+      "kind": "Support",
+      "residual_ref": "residual:relational:sha256:e067ca4f026e23a2e81938a9329925621b0b5b36add6c727a0b0e3b73069db05",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:time"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:e067ca4f026e23a2e81938a9329925621b0b5b36add6c727a0b0e3b73069db05:defeater",
+      "kind": "Defeater",
+      "residual_ref": "residual:relational:sha256:e067ca4f026e23a2e81938a9329925621b0b5b36add6c727a0b0e3b73069db05",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:time"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:e067ca4f026e23a2e81938a9329925621b0b5b36add6c727a0b0e3b73069db05:comparator",
+      "kind": "Comparator",
+      "residual_ref": "residual:relational:sha256:e067ca4f026e23a2e81938a9329925621b0b5b36add6c727a0b0e3b73069db05",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:time"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:e067ca4f026e23a2e81938a9329925621b0b5b36add6c727a0b0e3b73069db05:contradiction",
+      "kind": "Contradiction",
+      "residual_ref": "residual:relational:sha256:e067ca4f026e23a2e81938a9329925621b0b5b36add6c727a0b0e3b73069db05",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:time"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:e067ca4f026e23a2e81938a9329925621b0b5b36add6c727a0b0e3b73069db05:treatment",
+      "kind": "AuthorityTreatment",
+      "residual_ref": "residual:relational:sha256:e067ca4f026e23a2e81938a9329925621b0b5b36add6c727a0b0e3b73069db05",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:time"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:e067ca4f026e23a2e81938a9329925621b0b5b36add6c727a0b0e3b73069db05:terminology",
+      "kind": "TerminologyExpansion",
+      "residual_ref": "residual:relational:sha256:e067ca4f026e23a2e81938a9329925621b0b5b36add6c727a0b0e3b73069db05",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:time"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:0685d4da9d6e1d7c5e914a2bae314897c85347ff2e608129476520a9bdd9a6f5:support",
+      "kind": "Support",
+      "residual_ref": "residual:relational:sha256:0685d4da9d6e1d7c5e914a2bae314897c85347ff2e608129476520a9bdd9a6f5",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:modality"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:0685d4da9d6e1d7c5e914a2bae314897c85347ff2e608129476520a9bdd9a6f5:defeater",
+      "kind": "Defeater",
+      "residual_ref": "residual:relational:sha256:0685d4da9d6e1d7c5e914a2bae314897c85347ff2e608129476520a9bdd9a6f5",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:modality"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:0685d4da9d6e1d7c5e914a2bae314897c85347ff2e608129476520a9bdd9a6f5:comparator",
+      "kind": "Comparator",
+      "residual_ref": "residual:relational:sha256:0685d4da9d6e1d7c5e914a2bae314897c85347ff2e608129476520a9bdd9a6f5",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:modality"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:0685d4da9d6e1d7c5e914a2bae314897c85347ff2e608129476520a9bdd9a6f5:contradiction",
+      "kind": "Contradiction",
+      "residual_ref": "residual:relational:sha256:0685d4da9d6e1d7c5e914a2bae314897c85347ff2e608129476520a9bdd9a6f5",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:modality"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:0685d4da9d6e1d7c5e914a2bae314897c85347ff2e608129476520a9bdd9a6f5:treatment",
+      "kind": "AuthorityTreatment",
+      "residual_ref": "residual:relational:sha256:0685d4da9d6e1d7c5e914a2bae314897c85347ff2e608129476520a9bdd9a6f5",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:modality"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:0685d4da9d6e1d7c5e914a2bae314897c85347ff2e608129476520a9bdd9a6f5:terminology",
+      "kind": "TerminologyExpansion",
+      "residual_ref": "residual:relational:sha256:0685d4da9d6e1d7c5e914a2bae314897c85347ff2e608129476520a9bdd9a6f5",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:modality"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:318c6eba5b4beaccd432d8547b398f2b6e149a222fd90a24fc7ece0b136c3a68:support",
+      "kind": "Support",
+      "residual_ref": "residual:relational:sha256:318c6eba5b4beaccd432d8547b398f2b6e149a222fd90a24fc7ece0b136c3a68",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:quantifier"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:318c6eba5b4beaccd432d8547b398f2b6e149a222fd90a24fc7ece0b136c3a68:defeater",
+      "kind": "Defeater",
+      "residual_ref": "residual:relational:sha256:318c6eba5b4beaccd432d8547b398f2b6e149a222fd90a24fc7ece0b136c3a68",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:quantifier"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:318c6eba5b4beaccd432d8547b398f2b6e149a222fd90a24fc7ece0b136c3a68:comparator",
+      "kind": "Comparator",
+      "residual_ref": "residual:relational:sha256:318c6eba5b4beaccd432d8547b398f2b6e149a222fd90a24fc7ece0b136c3a68",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:quantifier"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:318c6eba5b4beaccd432d8547b398f2b6e149a222fd90a24fc7ece0b136c3a68:contradiction",
+      "kind": "Contradiction",
+      "residual_ref": "residual:relational:sha256:318c6eba5b4beaccd432d8547b398f2b6e149a222fd90a24fc7ece0b136c3a68",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:quantifier"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:318c6eba5b4beaccd432d8547b398f2b6e149a222fd90a24fc7ece0b136c3a68:treatment",
+      "kind": "AuthorityTreatment",
+      "residual_ref": "residual:relational:sha256:318c6eba5b4beaccd432d8547b398f2b6e149a222fd90a24fc7ece0b136c3a68",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:quantifier"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:318c6eba5b4beaccd432d8547b398f2b6e149a222fd90a24fc7ece0b136c3a68:terminology",
+      "kind": "TerminologyExpansion",
+      "residual_ref": "residual:relational:sha256:318c6eba5b4beaccd432d8547b398f2b6e149a222fd90a24fc7ece0b136c3a68",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:quantifier"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:712bbb871feb4618f15481c9b57ab56fed3f809e43bf88d9fa26ff63fd02c3a5:support",
+      "kind": "Support",
+      "residual_ref": "residual:relational:sha256:712bbb871feb4618f15481c9b57ab56fed3f809e43bf88d9fa26ff63fd02c3a5",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:attribution"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:712bbb871feb4618f15481c9b57ab56fed3f809e43bf88d9fa26ff63fd02c3a5:defeater",
+      "kind": "Defeater",
+      "residual_ref": "residual:relational:sha256:712bbb871feb4618f15481c9b57ab56fed3f809e43bf88d9fa26ff63fd02c3a5",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:attribution"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:712bbb871feb4618f15481c9b57ab56fed3f809e43bf88d9fa26ff63fd02c3a5:comparator",
+      "kind": "Comparator",
+      "residual_ref": "residual:relational:sha256:712bbb871feb4618f15481c9b57ab56fed3f809e43bf88d9fa26ff63fd02c3a5",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:attribution"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:712bbb871feb4618f15481c9b57ab56fed3f809e43bf88d9fa26ff63fd02c3a5:contradiction",
+      "kind": "Contradiction",
+      "residual_ref": "residual:relational:sha256:712bbb871feb4618f15481c9b57ab56fed3f809e43bf88d9fa26ff63fd02c3a5",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:attribution"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:712bbb871feb4618f15481c9b57ab56fed3f809e43bf88d9fa26ff63fd02c3a5:treatment",
+      "kind": "AuthorityTreatment",
+      "residual_ref": "residual:relational:sha256:712bbb871feb4618f15481c9b57ab56fed3f809e43bf88d9fa26ff63fd02c3a5",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:attribution"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:712bbb871feb4618f15481c9b57ab56fed3f809e43bf88d9fa26ff63fd02c3a5:terminology",
+      "kind": "TerminologyExpansion",
+      "residual_ref": "residual:relational:sha256:712bbb871feb4618f15481c9b57ab56fed3f809e43bf88d9fa26ff63fd02c3a5",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:attribution"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:99e24ef0696ba3d758dc78508c0ac52bc4e8fcf8f01902185a45841baa9d9bc3:support",
+      "kind": "Support",
+      "residual_ref": "residual:relational:sha256:99e24ef0696ba3d758dc78508c0ac52bc4e8fcf8f01902185a45841baa9d9bc3",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:ontology"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:99e24ef0696ba3d758dc78508c0ac52bc4e8fcf8f01902185a45841baa9d9bc3:defeater",
+      "kind": "Defeater",
+      "residual_ref": "residual:relational:sha256:99e24ef0696ba3d758dc78508c0ac52bc4e8fcf8f01902185a45841baa9d9bc3",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:ontology"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:99e24ef0696ba3d758dc78508c0ac52bc4e8fcf8f01902185a45841baa9d9bc3:comparator",
+      "kind": "Comparator",
+      "residual_ref": "residual:relational:sha256:99e24ef0696ba3d758dc78508c0ac52bc4e8fcf8f01902185a45841baa9d9bc3",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:ontology"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:99e24ef0696ba3d758dc78508c0ac52bc4e8fcf8f01902185a45841baa9d9bc3:contradiction",
+      "kind": "Contradiction",
+      "residual_ref": "residual:relational:sha256:99e24ef0696ba3d758dc78508c0ac52bc4e8fcf8f01902185a45841baa9d9bc3",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:ontology"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:99e24ef0696ba3d758dc78508c0ac52bc4e8fcf8f01902185a45841baa9d9bc3:treatment",
+      "kind": "AuthorityTreatment",
+      "residual_ref": "residual:relational:sha256:99e24ef0696ba3d758dc78508c0ac52bc4e8fcf8f01902185a45841baa9d9bc3",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:ontology"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:99e24ef0696ba3d758dc78508c0ac52bc4e8fcf8f01902185a45841baa9d9bc3:terminology",
+      "kind": "TerminologyExpansion",
+      "residual_ref": "residual:relational:sha256:99e24ef0696ba3d758dc78508c0ac52bc4e8fcf8f01902185a45841baa9d9bc3",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:ontology"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:7f8a1f75353617d8c35fcc64bce00580b7a0fb1f8a6fe85d0339af8833366829:support",
+      "kind": "Support",
+      "residual_ref": "residual:relational:sha256:7f8a1f75353617d8c35fcc64bce00580b7a0fb1f8a6fe85d0339af8833366829",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:language"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:7f8a1f75353617d8c35fcc64bce00580b7a0fb1f8a6fe85d0339af8833366829:defeater",
+      "kind": "Defeater",
+      "residual_ref": "residual:relational:sha256:7f8a1f75353617d8c35fcc64bce00580b7a0fb1f8a6fe85d0339af8833366829",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:language"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:7f8a1f75353617d8c35fcc64bce00580b7a0fb1f8a6fe85d0339af8833366829:comparator",
+      "kind": "Comparator",
+      "residual_ref": "residual:relational:sha256:7f8a1f75353617d8c35fcc64bce00580b7a0fb1f8a6fe85d0339af8833366829",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:language"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:7f8a1f75353617d8c35fcc64bce00580b7a0fb1f8a6fe85d0339af8833366829:contradiction",
+      "kind": "Contradiction",
+      "residual_ref": "residual:relational:sha256:7f8a1f75353617d8c35fcc64bce00580b7a0fb1f8a6fe85d0339af8833366829",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:language"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:7f8a1f75353617d8c35fcc64bce00580b7a0fb1f8a6fe85d0339af8833366829:treatment",
+      "kind": "AuthorityTreatment",
+      "residual_ref": "residual:relational:sha256:7f8a1f75353617d8c35fcc64bce00580b7a0fb1f8a6fe85d0339af8833366829",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:language"
+    },
+    {
+      "candidate_only": true,
+      "hypothesis_ref": "hyp:residual:relational:sha256:7f8a1f75353617d8c35fcc64bce00580b7a0fb1f8a6fe85d0339af8833366829:terminology",
+      "kind": "TerminologyExpansion",
+      "residual_ref": "residual:relational:sha256:7f8a1f75353617d8c35fcc64bce00580b7a0fb1f8a6fe85d0339af8833366829",
+      "target_proposition_ref": "consumer-obligation:consumer:context-unobserved:language"
+    }
+  ],
+  "inverse": [
+    {
+      "comparison_ref": "relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9",
+      "exact_residual": {
+        "kind": "unaligned_predicate",
+        "left_ref": "candidate-pnf-db:parser-run:sha256:0071e359b56b3e31342f45a59752cbbeb35636e7d4180ad6ad892b9884723b7c:document-region:source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8:sentence:1000:130437-130646:8:130470:130479",
+        "obligation_ref": "predicate-alignment-review",
+        "right_ref": "candidate-pnf-db:parser-run:sha256:56ea4c0a05c3beb97f05dfe447570c7d753f15d8b8bf76cb86145ca41f8f2d63:document-region:source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00:sentence:1000:130437-130646:8:130470:130479"
+      },
+      "lifecycle": {
+        "effective_availability": "not_located",
+        "effective_executable_frontier_route_refs": [],
+        "obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:predicate-alignment-review",
+        "reopening": null,
+        "terminal_update": null
+      },
+      "obligation": {
+        "authority_or_access_constraint_ref": "access:native-pnf-p3b",
+        "candidate_only": true,
+        "claim_truth_promoted": false,
+        "comparison_ref": "relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9",
+        "creates_semantic_authority": false,
+        "current_availability": "not_located",
+        "dependency_target_refs": [
+          "consumer:native-pnf-p3b"
+        ],
+        "obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:predicate-alignment-review",
+        "residual_obligation_ref": "predicate-alignment-review",
+        "source_revision_refs": [
+          "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+          "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+        ],
+        "target_description": "Resolve consumer obligation predicate-alignment-review at its retained source coordinates"
+      },
+      "ordinal": 0,
+      "requires_reviewed_reentry": false,
+      "residual_ref": "residual:relational:sha256:15b70ecbfea5a4420d698e37087a8f580f40211393cc3d5dd6aa1ec4a5d40d5d"
+    },
+    {
+      "comparison_ref": "relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9",
+      "exact_residual": {
+        "kind": "unaligned_role_filler",
+        "left_ref": "candidate-pnf-db:parser-run:sha256:0071e359b56b3e31342f45a59752cbbeb35636e7d4180ad6ad892b9884723b7c:document-region:source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8:sentence:1000:130437-130646:15:130531:130539",
+        "obligation_ref": "filler-compatibility:syntax:dobj:0",
+        "right_ref": "candidate-pnf-db:parser-run:sha256:56ea4c0a05c3beb97f05dfe447570c7d753f15d8b8bf76cb86145ca41f8f2d63:document-region:source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00:sentence:1000:130437-130646:15:130531:130539"
+      },
+      "lifecycle": {
+        "effective_availability": "not_located",
+        "effective_executable_frontier_route_refs": [],
+        "obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:filler-compatibility:syntax:dobj:0",
+        "reopening": null,
+        "terminal_update": null
+      },
+      "obligation": {
+        "authority_or_access_constraint_ref": "access:native-pnf-p3b",
+        "candidate_only": true,
+        "claim_truth_promoted": false,
+        "comparison_ref": "relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9",
+        "creates_semantic_authority": false,
+        "current_availability": "not_located",
+        "dependency_target_refs": [
+          "consumer:native-pnf-p3b"
+        ],
+        "obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:filler-compatibility:syntax:dobj:0",
+        "residual_obligation_ref": "filler-compatibility:syntax:dobj:0",
+        "source_revision_refs": [
+          "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+          "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+        ],
+        "target_description": "Resolve consumer obligation filler-compatibility:syntax:dobj:0 at its retained source coordinates"
+      },
+      "ordinal": 1,
+      "requires_reviewed_reentry": false,
+      "residual_ref": "residual:relational:sha256:22665cb02265fe0920692a73fde721e4426b2017d1445bad739ac404dae47d38"
+    },
+    {
+      "comparison_ref": "relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9",
+      "exact_residual": {
+        "kind": "unaligned_role_filler",
+        "left_ref": "candidate-pnf-db:parser-run:sha256:0071e359b56b3e31342f45a59752cbbeb35636e7d4180ad6ad892b9884723b7c:document-region:source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8:sentence:1000:130437-130646:7:130463:130469",
+        "obligation_ref": "filler-compatibility:syntax:nsubj:0",
+        "right_ref": "candidate-pnf-db:parser-run:sha256:56ea4c0a05c3beb97f05dfe447570c7d753f15d8b8bf76cb86145ca41f8f2d63:document-region:source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00:sentence:1000:130437-130646:7:130463:130469"
+      },
+      "lifecycle": {
+        "effective_availability": "not_located",
+        "effective_executable_frontier_route_refs": [],
+        "obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:filler-compatibility:syntax:nsubj:0",
+        "reopening": null,
+        "terminal_update": null
+      },
+      "obligation": {
+        "authority_or_access_constraint_ref": "access:native-pnf-p3b",
+        "candidate_only": true,
+        "claim_truth_promoted": false,
+        "comparison_ref": "relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9",
+        "creates_semantic_authority": false,
+        "current_availability": "not_located",
+        "dependency_target_refs": [
+          "consumer:native-pnf-p3b"
+        ],
+        "obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:filler-compatibility:syntax:nsubj:0",
+        "residual_obligation_ref": "filler-compatibility:syntax:nsubj:0",
+        "source_revision_refs": [
+          "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+          "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+        ],
+        "target_description": "Resolve consumer obligation filler-compatibility:syntax:nsubj:0 at its retained source coordinates"
+      },
+      "ordinal": 2,
+      "requires_reviewed_reentry": false,
+      "residual_ref": "residual:relational:sha256:cd9982e47160998ee15541e963107ca91e1cec51e9de8a2ce1c162ee553fa19b"
+    },
+    {
+      "comparison_ref": "relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9",
+      "exact_residual": {
+        "kind": "unaligned_role_filler",
+        "left_ref": "candidate-pnf-db:parser-run:sha256:0071e359b56b3e31342f45a59752cbbeb35636e7d4180ad6ad892b9884723b7c:document-region:source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8:sentence:1000:130437-130646:38:130645:130646",
+        "obligation_ref": "filler-compatibility:syntax:punct:0",
+        "right_ref": "candidate-pnf-db:parser-run:sha256:56ea4c0a05c3beb97f05dfe447570c7d753f15d8b8bf76cb86145ca41f8f2d63:document-region:source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00:sentence:1000:130437-130646:38:130645:130646"
+      },
+      "lifecycle": {
+        "effective_availability": "not_located",
+        "effective_executable_frontier_route_refs": [],
+        "obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:filler-compatibility:syntax:punct:0",
+        "reopening": null,
+        "terminal_update": null
+      },
+      "obligation": {
+        "authority_or_access_constraint_ref": "access:native-pnf-p3b",
+        "candidate_only": true,
+        "claim_truth_promoted": false,
+        "comparison_ref": "relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9",
+        "creates_semantic_authority": false,
+        "current_availability": "not_located",
+        "dependency_target_refs": [
+          "consumer:native-pnf-p3b"
+        ],
+        "obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:filler-compatibility:syntax:punct:0",
+        "residual_obligation_ref": "filler-compatibility:syntax:punct:0",
+        "source_revision_refs": [
+          "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+          "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+        ],
+        "target_description": "Resolve consumer obligation filler-compatibility:syntax:punct:0 at its retained source coordinates"
+      },
+      "ordinal": 3,
+      "requires_reviewed_reentry": false,
+      "residual_ref": "residual:relational:sha256:5dbeb3a992e7b8261775c0935731acb4f043f5e878fb5a42c42da9f7c6dfd1e7"
+    },
+    {
+      "comparison_ref": "relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9",
+      "exact_residual": {
+        "kind": "unresolved_polarity",
+        "left_ref": "checked-pnf-observation:sha256:87f9e19cc8e12d57adf63a9b65eaaa82bfd33efad641e8407fbb6575c1361b7c",
+        "obligation_ref": "evidence-polarity-unknown",
+        "right_ref": "checked-pnf-observation:sha256:6fb9204f2be1ea56205a8e90d986b972da03c19b8391f691cb13d1c06710527e"
+      },
+      "lifecycle": {
+        "effective_availability": "not_located",
+        "effective_executable_frontier_route_refs": [],
+        "obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:evidence-polarity-unknown",
+        "reopening": null,
+        "terminal_update": null
+      },
+      "obligation": {
+        "authority_or_access_constraint_ref": "access:native-pnf-p3b",
+        "candidate_only": true,
+        "claim_truth_promoted": false,
+        "comparison_ref": "relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9",
+        "creates_semantic_authority": false,
+        "current_availability": "not_located",
+        "dependency_target_refs": [
+          "consumer:native-pnf-p3b"
+        ],
+        "obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:evidence-polarity-unknown",
+        "residual_obligation_ref": "evidence-polarity-unknown",
+        "source_revision_refs": [
+          "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+          "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+        ],
+        "target_description": "Resolve consumer obligation evidence-polarity-unknown at its retained source coordinates"
+      },
+      "ordinal": 4,
+      "requires_reviewed_reentry": false,
+      "residual_ref": "residual:relational:sha256:66a7fce87a670ad74272df820e8a7116b7d2cf9d38abf577c9d4e43a9688de42"
+    },
+    {
+      "comparison_ref": "relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9",
+      "exact_residual": {
+        "kind": "scope_mismatch",
+        "left_ref": null,
+        "obligation_ref": "consumer:context-unobserved:scope",
+        "right_ref": null
+      },
+      "lifecycle": {
+        "effective_availability": "not_located",
+        "effective_executable_frontier_route_refs": [],
+        "obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:consumer:context-unobserved:scope",
+        "reopening": null,
+        "terminal_update": null
+      },
+      "obligation": {
+        "authority_or_access_constraint_ref": "access:native-pnf-p3b",
+        "candidate_only": true,
+        "claim_truth_promoted": false,
+        "comparison_ref": "relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9",
+        "creates_semantic_authority": false,
+        "current_availability": "not_located",
+        "dependency_target_refs": [
+          "consumer:native-pnf-p3b"
+        ],
+        "obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:consumer:context-unobserved:scope",
+        "residual_obligation_ref": "consumer:context-unobserved:scope",
+        "source_revision_refs": [
+          "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+          "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+        ],
+        "target_description": "Resolve consumer obligation consumer:context-unobserved:scope at its retained source coordinates"
+      },
+      "ordinal": 5,
+      "requires_reviewed_reentry": false,
+      "residual_ref": "residual:relational:sha256:2a33dd3096ae331b6d43299f93f49ce1463e046812984d8c57de5578d0feeddd"
+    },
+    {
+      "comparison_ref": "relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9",
+      "exact_residual": {
+        "kind": "time_mismatch",
+        "left_ref": null,
+        "obligation_ref": "consumer:context-unobserved:time",
+        "right_ref": null
+      },
+      "lifecycle": {
+        "effective_availability": "not_located",
+        "effective_executable_frontier_route_refs": [],
+        "obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:consumer:context-unobserved:time",
+        "reopening": null,
+        "terminal_update": null
+      },
+      "obligation": {
+        "authority_or_access_constraint_ref": "access:native-pnf-p3b",
+        "candidate_only": true,
+        "claim_truth_promoted": false,
+        "comparison_ref": "relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9",
+        "creates_semantic_authority": false,
+        "current_availability": "not_located",
+        "dependency_target_refs": [
+          "consumer:native-pnf-p3b"
+        ],
+        "obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:consumer:context-unobserved:time",
+        "residual_obligation_ref": "consumer:context-unobserved:time",
+        "source_revision_refs": [
+          "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+          "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+        ],
+        "target_description": "Resolve consumer obligation consumer:context-unobserved:time at its retained source coordinates"
+      },
+      "ordinal": 6,
+      "requires_reviewed_reentry": false,
+      "residual_ref": "residual:relational:sha256:34a6c9c869b9a1e314f8f96d2fdf13fcc10fbdf92484fa2679aad4cdba75b985"
+    },
+    {
+      "comparison_ref": "relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9",
+      "exact_residual": {
+        "kind": "modality_mismatch",
+        "left_ref": null,
+        "obligation_ref": "consumer:context-unobserved:modality",
+        "right_ref": null
+      },
+      "lifecycle": {
+        "effective_availability": "not_located",
+        "effective_executable_frontier_route_refs": [],
+        "obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:consumer:context-unobserved:modality",
+        "reopening": null,
+        "terminal_update": null
+      },
+      "obligation": {
+        "authority_or_access_constraint_ref": "access:native-pnf-p3b",
+        "candidate_only": true,
+        "claim_truth_promoted": false,
+        "comparison_ref": "relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9",
+        "creates_semantic_authority": false,
+        "current_availability": "not_located",
+        "dependency_target_refs": [
+          "consumer:native-pnf-p3b"
+        ],
+        "obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:consumer:context-unobserved:modality",
+        "residual_obligation_ref": "consumer:context-unobserved:modality",
+        "source_revision_refs": [
+          "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+          "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+        ],
+        "target_description": "Resolve consumer obligation consumer:context-unobserved:modality at its retained source coordinates"
+      },
+      "ordinal": 7,
+      "requires_reviewed_reentry": false,
+      "residual_ref": "residual:relational:sha256:cefee7ceeb5955f95f8348fc23ad97fe79f60d3e0b72b872dcc8651f02fe7c4b"
+    },
+    {
+      "comparison_ref": "relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9",
+      "exact_residual": {
+        "kind": "quantifier_mismatch",
+        "left_ref": null,
+        "obligation_ref": "consumer:context-unobserved:quantifier",
+        "right_ref": null
+      },
+      "lifecycle": {
+        "effective_availability": "not_located",
+        "effective_executable_frontier_route_refs": [],
+        "obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:consumer:context-unobserved:quantifier",
+        "reopening": null,
+        "terminal_update": null
+      },
+      "obligation": {
+        "authority_or_access_constraint_ref": "access:native-pnf-p3b",
+        "candidate_only": true,
+        "claim_truth_promoted": false,
+        "comparison_ref": "relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9",
+        "creates_semantic_authority": false,
+        "current_availability": "not_located",
+        "dependency_target_refs": [
+          "consumer:native-pnf-p3b"
+        ],
+        "obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:consumer:context-unobserved:quantifier",
+        "residual_obligation_ref": "consumer:context-unobserved:quantifier",
+        "source_revision_refs": [
+          "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+          "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+        ],
+        "target_description": "Resolve consumer obligation consumer:context-unobserved:quantifier at its retained source coordinates"
+      },
+      "ordinal": 8,
+      "requires_reviewed_reentry": false,
+      "residual_ref": "residual:relational:sha256:9762b50453cc0ce038100416bd231dfe4bf56ab9a40b61b517efee7fed2feb69"
+    },
+    {
+      "comparison_ref": "relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9",
+      "exact_residual": {
+        "kind": "attribution_mismatch",
+        "left_ref": null,
+        "obligation_ref": "consumer:context-unobserved:attribution",
+        "right_ref": null
+      },
+      "lifecycle": {
+        "effective_availability": "not_located",
+        "effective_executable_frontier_route_refs": [],
+        "obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:consumer:context-unobserved:attribution",
+        "reopening": null,
+        "terminal_update": null
+      },
+      "obligation": {
+        "authority_or_access_constraint_ref": "access:native-pnf-p3b",
+        "candidate_only": true,
+        "claim_truth_promoted": false,
+        "comparison_ref": "relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9",
+        "creates_semantic_authority": false,
+        "current_availability": "not_located",
+        "dependency_target_refs": [
+          "consumer:native-pnf-p3b"
+        ],
+        "obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:consumer:context-unobserved:attribution",
+        "residual_obligation_ref": "consumer:context-unobserved:attribution",
+        "source_revision_refs": [
+          "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+          "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+        ],
+        "target_description": "Resolve consumer obligation consumer:context-unobserved:attribution at its retained source coordinates"
+      },
+      "ordinal": 9,
+      "requires_reviewed_reentry": false,
+      "residual_ref": "residual:relational:sha256:81dec68095d14185a0cd966b4ddb8f22ad5822ef4374ac91e8a393aa09044f3e"
+    },
+    {
+      "comparison_ref": "relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9",
+      "exact_residual": {
+        "kind": "ontology_mismatch",
+        "left_ref": null,
+        "obligation_ref": "consumer:context-unobserved:ontology",
+        "right_ref": null
+      },
+      "lifecycle": {
+        "effective_availability": "not_located",
+        "effective_executable_frontier_route_refs": [],
+        "obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:consumer:context-unobserved:ontology",
+        "reopening": null,
+        "terminal_update": null
+      },
+      "obligation": {
+        "authority_or_access_constraint_ref": "access:native-pnf-p3b",
+        "candidate_only": true,
+        "claim_truth_promoted": false,
+        "comparison_ref": "relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9",
+        "creates_semantic_authority": false,
+        "current_availability": "not_located",
+        "dependency_target_refs": [
+          "consumer:native-pnf-p3b"
+        ],
+        "obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:consumer:context-unobserved:ontology",
+        "residual_obligation_ref": "consumer:context-unobserved:ontology",
+        "source_revision_refs": [
+          "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+          "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+        ],
+        "target_description": "Resolve consumer obligation consumer:context-unobserved:ontology at its retained source coordinates"
+      },
+      "ordinal": 10,
+      "requires_reviewed_reentry": false,
+      "residual_ref": "residual:relational:sha256:7d481f8ac77cc066208ca1c9896089d8a44394c90088a13017467c736f57ea72"
+    },
+    {
+      "comparison_ref": "relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9",
+      "exact_residual": {
+        "kind": "language_mismatch",
+        "left_ref": null,
+        "obligation_ref": "consumer:context-unobserved:language",
+        "right_ref": null
+      },
+      "lifecycle": {
+        "effective_availability": "not_located",
+        "effective_executable_frontier_route_refs": [],
+        "obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:consumer:context-unobserved:language",
+        "reopening": null,
+        "terminal_update": null
+      },
+      "obligation": {
+        "authority_or_access_constraint_ref": "access:native-pnf-p3b",
+        "candidate_only": true,
+        "claim_truth_promoted": false,
+        "comparison_ref": "relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9",
+        "creates_semantic_authority": false,
+        "current_availability": "not_located",
+        "dependency_target_refs": [
+          "consumer:native-pnf-p3b"
+        ],
+        "obligation_ref": "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:consumer:context-unobserved:language",
+        "residual_obligation_ref": "consumer:context-unobserved:language",
+        "source_revision_refs": [
+          "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+          "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+        ],
+        "target_description": "Resolve consumer obligation consumer:context-unobserved:language at its retained source coordinates"
+      },
+      "ordinal": 11,
+      "requires_reviewed_reentry": false,
+      "residual_ref": "residual:relational:sha256:8115e41c85578d3218e05fecf45ced21e142825179c79b6ca2eed4edd488ebd4"
+    },
+    {
+      "comparison_ref": "relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53",
+      "exact_residual": {
+        "kind": "unaligned_predicate",
+        "left_ref": "candidate-pnf-db:parser-run:sha256:56ea4c0a05c3beb97f05dfe447570c7d753f15d8b8bf76cb86145ca41f8f2d63:document-region:source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00:sentence:1000:130437-130646:8:130470:130479",
+        "obligation_ref": "predicate-alignment-review",
+        "right_ref": "candidate-pnf-db:parser-run:sha256:0071e359b56b3e31342f45a59752cbbeb35636e7d4180ad6ad892b9884723b7c:document-region:source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8:sentence:1000:130437-130646:8:130470:130479"
+      },
+      "lifecycle": {
+        "effective_availability": "not_located",
+        "effective_executable_frontier_route_refs": [],
+        "obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:predicate-alignment-review",
+        "reopening": null,
+        "terminal_update": null
+      },
+      "obligation": {
+        "authority_or_access_constraint_ref": "access:native-pnf-p3b",
+        "candidate_only": true,
+        "claim_truth_promoted": false,
+        "comparison_ref": "relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53",
+        "creates_semantic_authority": false,
+        "current_availability": "not_located",
+        "dependency_target_refs": [
+          "consumer:native-pnf-p3b"
+        ],
+        "obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:predicate-alignment-review",
+        "residual_obligation_ref": "predicate-alignment-review",
+        "source_revision_refs": [
+          "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+          "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+        ],
+        "target_description": "Resolve consumer obligation predicate-alignment-review at its retained source coordinates"
+      },
+      "ordinal": 0,
+      "requires_reviewed_reentry": false,
+      "residual_ref": "residual:relational:sha256:dad36c891813220a540ca257d0f7ff13713f793500481663556a5b13aedbc5d6"
+    },
+    {
+      "comparison_ref": "relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53",
+      "exact_residual": {
+        "kind": "unaligned_role_filler",
+        "left_ref": "candidate-pnf-db:parser-run:sha256:56ea4c0a05c3beb97f05dfe447570c7d753f15d8b8bf76cb86145ca41f8f2d63:document-region:source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00:sentence:1000:130437-130646:15:130531:130539",
+        "obligation_ref": "filler-compatibility:syntax:dobj:0",
+        "right_ref": "candidate-pnf-db:parser-run:sha256:0071e359b56b3e31342f45a59752cbbeb35636e7d4180ad6ad892b9884723b7c:document-region:source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8:sentence:1000:130437-130646:15:130531:130539"
+      },
+      "lifecycle": {
+        "effective_availability": "not_located",
+        "effective_executable_frontier_route_refs": [],
+        "obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:filler-compatibility:syntax:dobj:0",
+        "reopening": null,
+        "terminal_update": null
+      },
+      "obligation": {
+        "authority_or_access_constraint_ref": "access:native-pnf-p3b",
+        "candidate_only": true,
+        "claim_truth_promoted": false,
+        "comparison_ref": "relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53",
+        "creates_semantic_authority": false,
+        "current_availability": "not_located",
+        "dependency_target_refs": [
+          "consumer:native-pnf-p3b"
+        ],
+        "obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:filler-compatibility:syntax:dobj:0",
+        "residual_obligation_ref": "filler-compatibility:syntax:dobj:0",
+        "source_revision_refs": [
+          "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+          "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+        ],
+        "target_description": "Resolve consumer obligation filler-compatibility:syntax:dobj:0 at its retained source coordinates"
+      },
+      "ordinal": 1,
+      "requires_reviewed_reentry": false,
+      "residual_ref": "residual:relational:sha256:15da9ff420f1e0822d7c35f82ddbca3aa30782dd3ebfe3c2b69d61c73722523e"
+    },
+    {
+      "comparison_ref": "relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53",
+      "exact_residual": {
+        "kind": "unaligned_role_filler",
+        "left_ref": "candidate-pnf-db:parser-run:sha256:56ea4c0a05c3beb97f05dfe447570c7d753f15d8b8bf76cb86145ca41f8f2d63:document-region:source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00:sentence:1000:130437-130646:7:130463:130469",
+        "obligation_ref": "filler-compatibility:syntax:nsubj:0",
+        "right_ref": "candidate-pnf-db:parser-run:sha256:0071e359b56b3e31342f45a59752cbbeb35636e7d4180ad6ad892b9884723b7c:document-region:source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8:sentence:1000:130437-130646:7:130463:130469"
+      },
+      "lifecycle": {
+        "effective_availability": "not_located",
+        "effective_executable_frontier_route_refs": [],
+        "obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:filler-compatibility:syntax:nsubj:0",
+        "reopening": null,
+        "terminal_update": null
+      },
+      "obligation": {
+        "authority_or_access_constraint_ref": "access:native-pnf-p3b",
+        "candidate_only": true,
+        "claim_truth_promoted": false,
+        "comparison_ref": "relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53",
+        "creates_semantic_authority": false,
+        "current_availability": "not_located",
+        "dependency_target_refs": [
+          "consumer:native-pnf-p3b"
+        ],
+        "obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:filler-compatibility:syntax:nsubj:0",
+        "residual_obligation_ref": "filler-compatibility:syntax:nsubj:0",
+        "source_revision_refs": [
+          "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+          "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+        ],
+        "target_description": "Resolve consumer obligation filler-compatibility:syntax:nsubj:0 at its retained source coordinates"
+      },
+      "ordinal": 2,
+      "requires_reviewed_reentry": false,
+      "residual_ref": "residual:relational:sha256:7cc996937a3521b16634c965257914441cb98e529b41a687a4fe9811b7a9868c"
+    },
+    {
+      "comparison_ref": "relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53",
+      "exact_residual": {
+        "kind": "unaligned_role_filler",
+        "left_ref": "candidate-pnf-db:parser-run:sha256:56ea4c0a05c3beb97f05dfe447570c7d753f15d8b8bf76cb86145ca41f8f2d63:document-region:source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00:sentence:1000:130437-130646:38:130645:130646",
+        "obligation_ref": "filler-compatibility:syntax:punct:0",
+        "right_ref": "candidate-pnf-db:parser-run:sha256:0071e359b56b3e31342f45a59752cbbeb35636e7d4180ad6ad892b9884723b7c:document-region:source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8:sentence:1000:130437-130646:38:130645:130646"
+      },
+      "lifecycle": {
+        "effective_availability": "not_located",
+        "effective_executable_frontier_route_refs": [],
+        "obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:filler-compatibility:syntax:punct:0",
+        "reopening": null,
+        "terminal_update": null
+      },
+      "obligation": {
+        "authority_or_access_constraint_ref": "access:native-pnf-p3b",
+        "candidate_only": true,
+        "claim_truth_promoted": false,
+        "comparison_ref": "relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53",
+        "creates_semantic_authority": false,
+        "current_availability": "not_located",
+        "dependency_target_refs": [
+          "consumer:native-pnf-p3b"
+        ],
+        "obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:filler-compatibility:syntax:punct:0",
+        "residual_obligation_ref": "filler-compatibility:syntax:punct:0",
+        "source_revision_refs": [
+          "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+          "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+        ],
+        "target_description": "Resolve consumer obligation filler-compatibility:syntax:punct:0 at its retained source coordinates"
+      },
+      "ordinal": 3,
+      "requires_reviewed_reentry": false,
+      "residual_ref": "residual:relational:sha256:2562b1593f9ad34a8f002b0a46d24a10d699a6ca6285511bb05bc01007ae21b9"
+    },
+    {
+      "comparison_ref": "relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53",
+      "exact_residual": {
+        "kind": "unresolved_polarity",
+        "left_ref": "checked-pnf-observation:sha256:6fb9204f2be1ea56205a8e90d986b972da03c19b8391f691cb13d1c06710527e",
+        "obligation_ref": "evidence-polarity-unknown",
+        "right_ref": "checked-pnf-observation:sha256:87f9e19cc8e12d57adf63a9b65eaaa82bfd33efad641e8407fbb6575c1361b7c"
+      },
+      "lifecycle": {
+        "effective_availability": "not_located",
+        "effective_executable_frontier_route_refs": [],
+        "obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:evidence-polarity-unknown",
+        "reopening": null,
+        "terminal_update": null
+      },
+      "obligation": {
+        "authority_or_access_constraint_ref": "access:native-pnf-p3b",
+        "candidate_only": true,
+        "claim_truth_promoted": false,
+        "comparison_ref": "relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53",
+        "creates_semantic_authority": false,
+        "current_availability": "not_located",
+        "dependency_target_refs": [
+          "consumer:native-pnf-p3b"
+        ],
+        "obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:evidence-polarity-unknown",
+        "residual_obligation_ref": "evidence-polarity-unknown",
+        "source_revision_refs": [
+          "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+          "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+        ],
+        "target_description": "Resolve consumer obligation evidence-polarity-unknown at its retained source coordinates"
+      },
+      "ordinal": 4,
+      "requires_reviewed_reentry": false,
+      "residual_ref": "residual:relational:sha256:c8587d41d5f37abceb6b6d5623db4ae653f4b872de2a623f9058a48ab15cf224"
+    },
+    {
+      "comparison_ref": "relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53",
+      "exact_residual": {
+        "kind": "scope_mismatch",
+        "left_ref": null,
+        "obligation_ref": "consumer:context-unobserved:scope",
+        "right_ref": null
+      },
+      "lifecycle": {
+        "effective_availability": "not_located",
+        "effective_executable_frontier_route_refs": [],
+        "obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:consumer:context-unobserved:scope",
+        "reopening": null,
+        "terminal_update": null
+      },
+      "obligation": {
+        "authority_or_access_constraint_ref": "access:native-pnf-p3b",
+        "candidate_only": true,
+        "claim_truth_promoted": false,
+        "comparison_ref": "relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53",
+        "creates_semantic_authority": false,
+        "current_availability": "not_located",
+        "dependency_target_refs": [
+          "consumer:native-pnf-p3b"
+        ],
+        "obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:consumer:context-unobserved:scope",
+        "residual_obligation_ref": "consumer:context-unobserved:scope",
+        "source_revision_refs": [
+          "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+          "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+        ],
+        "target_description": "Resolve consumer obligation consumer:context-unobserved:scope at its retained source coordinates"
+      },
+      "ordinal": 5,
+      "requires_reviewed_reentry": false,
+      "residual_ref": "residual:relational:sha256:b9d00ba1e0dc2dc6e81dc93dc3a9551327ab0cbf10cd8cfbae071ee87c7823d4"
+    },
+    {
+      "comparison_ref": "relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53",
+      "exact_residual": {
+        "kind": "time_mismatch",
+        "left_ref": null,
+        "obligation_ref": "consumer:context-unobserved:time",
+        "right_ref": null
+      },
+      "lifecycle": {
+        "effective_availability": "not_located",
+        "effective_executable_frontier_route_refs": [],
+        "obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:consumer:context-unobserved:time",
+        "reopening": null,
+        "terminal_update": null
+      },
+      "obligation": {
+        "authority_or_access_constraint_ref": "access:native-pnf-p3b",
+        "candidate_only": true,
+        "claim_truth_promoted": false,
+        "comparison_ref": "relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53",
+        "creates_semantic_authority": false,
+        "current_availability": "not_located",
+        "dependency_target_refs": [
+          "consumer:native-pnf-p3b"
+        ],
+        "obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:consumer:context-unobserved:time",
+        "residual_obligation_ref": "consumer:context-unobserved:time",
+        "source_revision_refs": [
+          "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+          "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+        ],
+        "target_description": "Resolve consumer obligation consumer:context-unobserved:time at its retained source coordinates"
+      },
+      "ordinal": 6,
+      "requires_reviewed_reentry": false,
+      "residual_ref": "residual:relational:sha256:e067ca4f026e23a2e81938a9329925621b0b5b36add6c727a0b0e3b73069db05"
+    },
+    {
+      "comparison_ref": "relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53",
+      "exact_residual": {
+        "kind": "modality_mismatch",
+        "left_ref": null,
+        "obligation_ref": "consumer:context-unobserved:modality",
+        "right_ref": null
+      },
+      "lifecycle": {
+        "effective_availability": "not_located",
+        "effective_executable_frontier_route_refs": [],
+        "obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:consumer:context-unobserved:modality",
+        "reopening": null,
+        "terminal_update": null
+      },
+      "obligation": {
+        "authority_or_access_constraint_ref": "access:native-pnf-p3b",
+        "candidate_only": true,
+        "claim_truth_promoted": false,
+        "comparison_ref": "relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53",
+        "creates_semantic_authority": false,
+        "current_availability": "not_located",
+        "dependency_target_refs": [
+          "consumer:native-pnf-p3b"
+        ],
+        "obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:consumer:context-unobserved:modality",
+        "residual_obligation_ref": "consumer:context-unobserved:modality",
+        "source_revision_refs": [
+          "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+          "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+        ],
+        "target_description": "Resolve consumer obligation consumer:context-unobserved:modality at its retained source coordinates"
+      },
+      "ordinal": 7,
+      "requires_reviewed_reentry": false,
+      "residual_ref": "residual:relational:sha256:0685d4da9d6e1d7c5e914a2bae314897c85347ff2e608129476520a9bdd9a6f5"
+    },
+    {
+      "comparison_ref": "relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53",
+      "exact_residual": {
+        "kind": "quantifier_mismatch",
+        "left_ref": null,
+        "obligation_ref": "consumer:context-unobserved:quantifier",
+        "right_ref": null
+      },
+      "lifecycle": {
+        "effective_availability": "not_located",
+        "effective_executable_frontier_route_refs": [],
+        "obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:consumer:context-unobserved:quantifier",
+        "reopening": null,
+        "terminal_update": null
+      },
+      "obligation": {
+        "authority_or_access_constraint_ref": "access:native-pnf-p3b",
+        "candidate_only": true,
+        "claim_truth_promoted": false,
+        "comparison_ref": "relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53",
+        "creates_semantic_authority": false,
+        "current_availability": "not_located",
+        "dependency_target_refs": [
+          "consumer:native-pnf-p3b"
+        ],
+        "obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:consumer:context-unobserved:quantifier",
+        "residual_obligation_ref": "consumer:context-unobserved:quantifier",
+        "source_revision_refs": [
+          "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+          "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+        ],
+        "target_description": "Resolve consumer obligation consumer:context-unobserved:quantifier at its retained source coordinates"
+      },
+      "ordinal": 8,
+      "requires_reviewed_reentry": false,
+      "residual_ref": "residual:relational:sha256:318c6eba5b4beaccd432d8547b398f2b6e149a222fd90a24fc7ece0b136c3a68"
+    },
+    {
+      "comparison_ref": "relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53",
+      "exact_residual": {
+        "kind": "attribution_mismatch",
+        "left_ref": null,
+        "obligation_ref": "consumer:context-unobserved:attribution",
+        "right_ref": null
+      },
+      "lifecycle": {
+        "effective_availability": "not_located",
+        "effective_executable_frontier_route_refs": [],
+        "obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:consumer:context-unobserved:attribution",
+        "reopening": null,
+        "terminal_update": null
+      },
+      "obligation": {
+        "authority_or_access_constraint_ref": "access:native-pnf-p3b",
+        "candidate_only": true,
+        "claim_truth_promoted": false,
+        "comparison_ref": "relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53",
+        "creates_semantic_authority": false,
+        "current_availability": "not_located",
+        "dependency_target_refs": [
+          "consumer:native-pnf-p3b"
+        ],
+        "obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:consumer:context-unobserved:attribution",
+        "residual_obligation_ref": "consumer:context-unobserved:attribution",
+        "source_revision_refs": [
+          "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+          "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+        ],
+        "target_description": "Resolve consumer obligation consumer:context-unobserved:attribution at its retained source coordinates"
+      },
+      "ordinal": 9,
+      "requires_reviewed_reentry": false,
+      "residual_ref": "residual:relational:sha256:712bbb871feb4618f15481c9b57ab56fed3f809e43bf88d9fa26ff63fd02c3a5"
+    },
+    {
+      "comparison_ref": "relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53",
+      "exact_residual": {
+        "kind": "ontology_mismatch",
+        "left_ref": null,
+        "obligation_ref": "consumer:context-unobserved:ontology",
+        "right_ref": null
+      },
+      "lifecycle": {
+        "effective_availability": "not_located",
+        "effective_executable_frontier_route_refs": [],
+        "obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:consumer:context-unobserved:ontology",
+        "reopening": null,
+        "terminal_update": null
+      },
+      "obligation": {
+        "authority_or_access_constraint_ref": "access:native-pnf-p3b",
+        "candidate_only": true,
+        "claim_truth_promoted": false,
+        "comparison_ref": "relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53",
+        "creates_semantic_authority": false,
+        "current_availability": "not_located",
+        "dependency_target_refs": [
+          "consumer:native-pnf-p3b"
+        ],
+        "obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:consumer:context-unobserved:ontology",
+        "residual_obligation_ref": "consumer:context-unobserved:ontology",
+        "source_revision_refs": [
+          "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+          "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+        ],
+        "target_description": "Resolve consumer obligation consumer:context-unobserved:ontology at its retained source coordinates"
+      },
+      "ordinal": 10,
+      "requires_reviewed_reentry": false,
+      "residual_ref": "residual:relational:sha256:99e24ef0696ba3d758dc78508c0ac52bc4e8fcf8f01902185a45841baa9d9bc3"
+    },
+    {
+      "comparison_ref": "relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53",
+      "exact_residual": {
+        "kind": "language_mismatch",
+        "left_ref": null,
+        "obligation_ref": "consumer:context-unobserved:language",
+        "right_ref": null
+      },
+      "lifecycle": {
+        "effective_availability": "not_located",
+        "effective_executable_frontier_route_refs": [],
+        "obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:consumer:context-unobserved:language",
+        "reopening": null,
+        "terminal_update": null
+      },
+      "obligation": {
+        "authority_or_access_constraint_ref": "access:native-pnf-p3b",
+        "candidate_only": true,
+        "claim_truth_promoted": false,
+        "comparison_ref": "relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53",
+        "creates_semantic_authority": false,
+        "current_availability": "not_located",
+        "dependency_target_refs": [
+          "consumer:native-pnf-p3b"
+        ],
+        "obligation_ref": "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:consumer:context-unobserved:language",
+        "residual_obligation_ref": "consumer:context-unobserved:language",
+        "source_revision_refs": [
+          "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+          "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+        ],
+        "target_description": "Resolve consumer obligation consumer:context-unobserved:language at its retained source coordinates"
+      },
+      "ordinal": 11,
+      "requires_reviewed_reentry": false,
+      "residual_ref": "residual:relational:sha256:7f8a1f75353617d8c35fcc64bce00580b7a0fb1f8a6fe85d0339af8833366829"
+    }
+  ],
+  "planning_inputs_required": [
+    "consumer-owned lexical contexts",
+    "declared calibrated values",
+    "local index",
+    "research world snapshot"
+  ],
+  "residuals": [
+    {
+      "dependency_refs": [
+        "access:native-pnf-p3b",
+        "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:predicate-alignment-review",
+        "candidate-pnf-db:parser-run:sha256:0071e359b56b3e31342f45a59752cbbeb35636e7d4180ad6ad892b9884723b7c:document-region:source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8:sentence:1000:130437-130646:8:130470:130479",
+        "candidate-pnf-db:parser-run:sha256:56ea4c0a05c3beb97f05dfe447570c7d753f15d8b8bf76cb86145ca41f8f2d63:document-region:source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00:sentence:1000:130437-130646:8:130470:130479",
+        "consumer:native-pnf-p3b",
+        "relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9",
+        "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+        "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+      ],
+      "producer_class_ref": "producer:relational-discriminator",
+      "proposition_ref": "consumer-obligation:predicate-alignment-review",
+      "residual_ref": "residual:relational:sha256:15b70ecbfea5a4420d698e37087a8f580f40211393cc3d5dd6aa1ec4a5d40d5d",
+      "status": "open"
+    },
+    {
+      "dependency_refs": [
+        "access:native-pnf-p3b",
+        "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:filler-compatibility:syntax:dobj:0",
+        "candidate-pnf-db:parser-run:sha256:0071e359b56b3e31342f45a59752cbbeb35636e7d4180ad6ad892b9884723b7c:document-region:source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8:sentence:1000:130437-130646:15:130531:130539",
+        "candidate-pnf-db:parser-run:sha256:56ea4c0a05c3beb97f05dfe447570c7d753f15d8b8bf76cb86145ca41f8f2d63:document-region:source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00:sentence:1000:130437-130646:15:130531:130539",
+        "consumer:native-pnf-p3b",
+        "relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9",
+        "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+        "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+      ],
+      "producer_class_ref": "producer:relational-discriminator",
+      "proposition_ref": "consumer-obligation:filler-compatibility:syntax:dobj:0",
+      "residual_ref": "residual:relational:sha256:22665cb02265fe0920692a73fde721e4426b2017d1445bad739ac404dae47d38",
+      "status": "open"
+    },
+    {
+      "dependency_refs": [
+        "access:native-pnf-p3b",
+        "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:filler-compatibility:syntax:nsubj:0",
+        "candidate-pnf-db:parser-run:sha256:0071e359b56b3e31342f45a59752cbbeb35636e7d4180ad6ad892b9884723b7c:document-region:source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8:sentence:1000:130437-130646:7:130463:130469",
+        "candidate-pnf-db:parser-run:sha256:56ea4c0a05c3beb97f05dfe447570c7d753f15d8b8bf76cb86145ca41f8f2d63:document-region:source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00:sentence:1000:130437-130646:7:130463:130469",
+        "consumer:native-pnf-p3b",
+        "relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9",
+        "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+        "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+      ],
+      "producer_class_ref": "producer:relational-discriminator",
+      "proposition_ref": "consumer-obligation:filler-compatibility:syntax:nsubj:0",
+      "residual_ref": "residual:relational:sha256:cd9982e47160998ee15541e963107ca91e1cec51e9de8a2ce1c162ee553fa19b",
+      "status": "open"
+    },
+    {
+      "dependency_refs": [
+        "access:native-pnf-p3b",
+        "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:filler-compatibility:syntax:punct:0",
+        "candidate-pnf-db:parser-run:sha256:0071e359b56b3e31342f45a59752cbbeb35636e7d4180ad6ad892b9884723b7c:document-region:source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8:sentence:1000:130437-130646:38:130645:130646",
+        "candidate-pnf-db:parser-run:sha256:56ea4c0a05c3beb97f05dfe447570c7d753f15d8b8bf76cb86145ca41f8f2d63:document-region:source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00:sentence:1000:130437-130646:38:130645:130646",
+        "consumer:native-pnf-p3b",
+        "relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9",
+        "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+        "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+      ],
+      "producer_class_ref": "producer:relational-discriminator",
+      "proposition_ref": "consumer-obligation:filler-compatibility:syntax:punct:0",
+      "residual_ref": "residual:relational:sha256:5dbeb3a992e7b8261775c0935731acb4f043f5e878fb5a42c42da9f7c6dfd1e7",
+      "status": "open"
+    },
+    {
+      "dependency_refs": [
+        "access:native-pnf-p3b",
+        "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:evidence-polarity-unknown",
+        "checked-pnf-observation:sha256:6fb9204f2be1ea56205a8e90d986b972da03c19b8391f691cb13d1c06710527e",
+        "checked-pnf-observation:sha256:87f9e19cc8e12d57adf63a9b65eaaa82bfd33efad641e8407fbb6575c1361b7c",
+        "consumer:native-pnf-p3b",
+        "relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9",
+        "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+        "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+      ],
+      "producer_class_ref": "producer:relational-discriminator",
+      "proposition_ref": "consumer-obligation:evidence-polarity-unknown",
+      "residual_ref": "residual:relational:sha256:66a7fce87a670ad74272df820e8a7116b7d2cf9d38abf577c9d4e43a9688de42",
+      "status": "open"
+    },
+    {
+      "dependency_refs": [
+        "access:native-pnf-p3b",
+        "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:consumer:context-unobserved:scope",
+        "consumer:native-pnf-p3b",
+        "relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9",
+        "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+        "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+      ],
+      "producer_class_ref": "producer:relational-discriminator",
+      "proposition_ref": "consumer-obligation:consumer:context-unobserved:scope",
+      "residual_ref": "residual:relational:sha256:2a33dd3096ae331b6d43299f93f49ce1463e046812984d8c57de5578d0feeddd",
+      "status": "open"
+    },
+    {
+      "dependency_refs": [
+        "access:native-pnf-p3b",
+        "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:consumer:context-unobserved:time",
+        "consumer:native-pnf-p3b",
+        "relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9",
+        "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+        "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+      ],
+      "producer_class_ref": "producer:relational-discriminator",
+      "proposition_ref": "consumer-obligation:consumer:context-unobserved:time",
+      "residual_ref": "residual:relational:sha256:34a6c9c869b9a1e314f8f96d2fdf13fcc10fbdf92484fa2679aad4cdba75b985",
+      "status": "open"
+    },
+    {
+      "dependency_refs": [
+        "access:native-pnf-p3b",
+        "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:consumer:context-unobserved:modality",
+        "consumer:native-pnf-p3b",
+        "relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9",
+        "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+        "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+      ],
+      "producer_class_ref": "producer:relational-discriminator",
+      "proposition_ref": "consumer-obligation:consumer:context-unobserved:modality",
+      "residual_ref": "residual:relational:sha256:cefee7ceeb5955f95f8348fc23ad97fe79f60d3e0b72b872dcc8651f02fe7c4b",
+      "status": "open"
+    },
+    {
+      "dependency_refs": [
+        "access:native-pnf-p3b",
+        "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:consumer:context-unobserved:quantifier",
+        "consumer:native-pnf-p3b",
+        "relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9",
+        "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+        "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+      ],
+      "producer_class_ref": "producer:relational-discriminator",
+      "proposition_ref": "consumer-obligation:consumer:context-unobserved:quantifier",
+      "residual_ref": "residual:relational:sha256:9762b50453cc0ce038100416bd231dfe4bf56ab9a40b61b517efee7fed2feb69",
+      "status": "open"
+    },
+    {
+      "dependency_refs": [
+        "access:native-pnf-p3b",
+        "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:consumer:context-unobserved:attribution",
+        "consumer:native-pnf-p3b",
+        "relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9",
+        "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+        "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+      ],
+      "producer_class_ref": "producer:relational-discriminator",
+      "proposition_ref": "consumer-obligation:consumer:context-unobserved:attribution",
+      "residual_ref": "residual:relational:sha256:81dec68095d14185a0cd966b4ddb8f22ad5822ef4374ac91e8a393aa09044f3e",
+      "status": "open"
+    },
+    {
+      "dependency_refs": [
+        "access:native-pnf-p3b",
+        "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:consumer:context-unobserved:ontology",
+        "consumer:native-pnf-p3b",
+        "relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9",
+        "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+        "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+      ],
+      "producer_class_ref": "producer:relational-discriminator",
+      "proposition_ref": "consumer-obligation:consumer:context-unobserved:ontology",
+      "residual_ref": "residual:relational:sha256:7d481f8ac77cc066208ca1c9896089d8a44394c90088a13017467c736f57ea72",
+      "status": "open"
+    },
+    {
+      "dependency_refs": [
+        "access:native-pnf-p3b",
+        "acquisition:relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9:consumer:context-unobserved:language",
+        "consumer:native-pnf-p3b",
+        "relation-comparison:sha256:b977ebf2e1530f7807e83f60ed2b56f95130a57e5a545034c6e1970840d5c7a9",
+        "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+        "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+      ],
+      "producer_class_ref": "producer:relational-discriminator",
+      "proposition_ref": "consumer-obligation:consumer:context-unobserved:language",
+      "residual_ref": "residual:relational:sha256:8115e41c85578d3218e05fecf45ced21e142825179c79b6ca2eed4edd488ebd4",
+      "status": "open"
+    },
+    {
+      "dependency_refs": [
+        "access:native-pnf-p3b",
+        "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:predicate-alignment-review",
+        "candidate-pnf-db:parser-run:sha256:0071e359b56b3e31342f45a59752cbbeb35636e7d4180ad6ad892b9884723b7c:document-region:source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8:sentence:1000:130437-130646:8:130470:130479",
+        "candidate-pnf-db:parser-run:sha256:56ea4c0a05c3beb97f05dfe447570c7d753f15d8b8bf76cb86145ca41f8f2d63:document-region:source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00:sentence:1000:130437-130646:8:130470:130479",
+        "consumer:native-pnf-p3b",
+        "relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53",
+        "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+        "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+      ],
+      "producer_class_ref": "producer:relational-discriminator",
+      "proposition_ref": "consumer-obligation:predicate-alignment-review",
+      "residual_ref": "residual:relational:sha256:dad36c891813220a540ca257d0f7ff13713f793500481663556a5b13aedbc5d6",
+      "status": "open"
+    },
+    {
+      "dependency_refs": [
+        "access:native-pnf-p3b",
+        "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:filler-compatibility:syntax:dobj:0",
+        "candidate-pnf-db:parser-run:sha256:0071e359b56b3e31342f45a59752cbbeb35636e7d4180ad6ad892b9884723b7c:document-region:source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8:sentence:1000:130437-130646:15:130531:130539",
+        "candidate-pnf-db:parser-run:sha256:56ea4c0a05c3beb97f05dfe447570c7d753f15d8b8bf76cb86145ca41f8f2d63:document-region:source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00:sentence:1000:130437-130646:15:130531:130539",
+        "consumer:native-pnf-p3b",
+        "relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53",
+        "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+        "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+      ],
+      "producer_class_ref": "producer:relational-discriminator",
+      "proposition_ref": "consumer-obligation:filler-compatibility:syntax:dobj:0",
+      "residual_ref": "residual:relational:sha256:15da9ff420f1e0822d7c35f82ddbca3aa30782dd3ebfe3c2b69d61c73722523e",
+      "status": "open"
+    },
+    {
+      "dependency_refs": [
+        "access:native-pnf-p3b",
+        "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:filler-compatibility:syntax:nsubj:0",
+        "candidate-pnf-db:parser-run:sha256:0071e359b56b3e31342f45a59752cbbeb35636e7d4180ad6ad892b9884723b7c:document-region:source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8:sentence:1000:130437-130646:7:130463:130469",
+        "candidate-pnf-db:parser-run:sha256:56ea4c0a05c3beb97f05dfe447570c7d753f15d8b8bf76cb86145ca41f8f2d63:document-region:source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00:sentence:1000:130437-130646:7:130463:130469",
+        "consumer:native-pnf-p3b",
+        "relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53",
+        "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+        "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+      ],
+      "producer_class_ref": "producer:relational-discriminator",
+      "proposition_ref": "consumer-obligation:filler-compatibility:syntax:nsubj:0",
+      "residual_ref": "residual:relational:sha256:7cc996937a3521b16634c965257914441cb98e529b41a687a4fe9811b7a9868c",
+      "status": "open"
+    },
+    {
+      "dependency_refs": [
+        "access:native-pnf-p3b",
+        "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:filler-compatibility:syntax:punct:0",
+        "candidate-pnf-db:parser-run:sha256:0071e359b56b3e31342f45a59752cbbeb35636e7d4180ad6ad892b9884723b7c:document-region:source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8:sentence:1000:130437-130646:38:130645:130646",
+        "candidate-pnf-db:parser-run:sha256:56ea4c0a05c3beb97f05dfe447570c7d753f15d8b8bf76cb86145ca41f8f2d63:document-region:source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00:sentence:1000:130437-130646:38:130645:130646",
+        "consumer:native-pnf-p3b",
+        "relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53",
+        "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+        "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+      ],
+      "producer_class_ref": "producer:relational-discriminator",
+      "proposition_ref": "consumer-obligation:filler-compatibility:syntax:punct:0",
+      "residual_ref": "residual:relational:sha256:2562b1593f9ad34a8f002b0a46d24a10d699a6ca6285511bb05bc01007ae21b9",
+      "status": "open"
+    },
+    {
+      "dependency_refs": [
+        "access:native-pnf-p3b",
+        "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:evidence-polarity-unknown",
+        "checked-pnf-observation:sha256:6fb9204f2be1ea56205a8e90d986b972da03c19b8391f691cb13d1c06710527e",
+        "checked-pnf-observation:sha256:87f9e19cc8e12d57adf63a9b65eaaa82bfd33efad641e8407fbb6575c1361b7c",
+        "consumer:native-pnf-p3b",
+        "relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53",
+        "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+        "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+      ],
+      "producer_class_ref": "producer:relational-discriminator",
+      "proposition_ref": "consumer-obligation:evidence-polarity-unknown",
+      "residual_ref": "residual:relational:sha256:c8587d41d5f37abceb6b6d5623db4ae653f4b872de2a623f9058a48ab15cf224",
+      "status": "open"
+    },
+    {
+      "dependency_refs": [
+        "access:native-pnf-p3b",
+        "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:consumer:context-unobserved:scope",
+        "consumer:native-pnf-p3b",
+        "relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53",
+        "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+        "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+      ],
+      "producer_class_ref": "producer:relational-discriminator",
+      "proposition_ref": "consumer-obligation:consumer:context-unobserved:scope",
+      "residual_ref": "residual:relational:sha256:b9d00ba1e0dc2dc6e81dc93dc3a9551327ab0cbf10cd8cfbae071ee87c7823d4",
+      "status": "open"
+    },
+    {
+      "dependency_refs": [
+        "access:native-pnf-p3b",
+        "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:consumer:context-unobserved:time",
+        "consumer:native-pnf-p3b",
+        "relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53",
+        "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+        "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+      ],
+      "producer_class_ref": "producer:relational-discriminator",
+      "proposition_ref": "consumer-obligation:consumer:context-unobserved:time",
+      "residual_ref": "residual:relational:sha256:e067ca4f026e23a2e81938a9329925621b0b5b36add6c727a0b0e3b73069db05",
+      "status": "open"
+    },
+    {
+      "dependency_refs": [
+        "access:native-pnf-p3b",
+        "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:consumer:context-unobserved:modality",
+        "consumer:native-pnf-p3b",
+        "relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53",
+        "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+        "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+      ],
+      "producer_class_ref": "producer:relational-discriminator",
+      "proposition_ref": "consumer-obligation:consumer:context-unobserved:modality",
+      "residual_ref": "residual:relational:sha256:0685d4da9d6e1d7c5e914a2bae314897c85347ff2e608129476520a9bdd9a6f5",
+      "status": "open"
+    },
+    {
+      "dependency_refs": [
+        "access:native-pnf-p3b",
+        "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:consumer:context-unobserved:quantifier",
+        "consumer:native-pnf-p3b",
+        "relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53",
+        "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+        "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+      ],
+      "producer_class_ref": "producer:relational-discriminator",
+      "proposition_ref": "consumer-obligation:consumer:context-unobserved:quantifier",
+      "residual_ref": "residual:relational:sha256:318c6eba5b4beaccd432d8547b398f2b6e149a222fd90a24fc7ece0b136c3a68",
+      "status": "open"
+    },
+    {
+      "dependency_refs": [
+        "access:native-pnf-p3b",
+        "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:consumer:context-unobserved:attribution",
+        "consumer:native-pnf-p3b",
+        "relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53",
+        "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+        "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+      ],
+      "producer_class_ref": "producer:relational-discriminator",
+      "proposition_ref": "consumer-obligation:consumer:context-unobserved:attribution",
+      "residual_ref": "residual:relational:sha256:712bbb871feb4618f15481c9b57ab56fed3f809e43bf88d9fa26ff63fd02c3a5",
+      "status": "open"
+    },
+    {
+      "dependency_refs": [
+        "access:native-pnf-p3b",
+        "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:consumer:context-unobserved:ontology",
+        "consumer:native-pnf-p3b",
+        "relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53",
+        "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+        "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+      ],
+      "producer_class_ref": "producer:relational-discriminator",
+      "proposition_ref": "consumer-obligation:consumer:context-unobserved:ontology",
+      "residual_ref": "residual:relational:sha256:99e24ef0696ba3d758dc78508c0ac52bc4e8fcf8f01902185a45841baa9d9bc3",
+      "status": "open"
+    },
+    {
+      "dependency_refs": [
+        "access:native-pnf-p3b",
+        "acquisition:relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53:consumer:context-unobserved:language",
+        "consumer:native-pnf-p3b",
+        "relation-comparison:sha256:c983b18d4e8a38026838dc45dcfd50eedf305e6987f4f949b14b5f872777de53",
+        "source-revision:sha256:8dd2afe20c7cfb36bc1372f764b7683962e6acdfac6fe0bfa47554812d4eab00",
+        "source-revision:sha256:bc5c811a8e10281f3d6ebd3a6284e84711b4bd350906097f95a44569784259a8"
+      ],
+      "producer_class_ref": "producer:relational-discriminator",
+      "proposition_ref": "consumer-obligation:consumer:context-unobserved:language",
+      "residual_ref": "residual:relational:sha256:7f8a1f75353617d8c35fcc64bce00580b7a0fb1f8a6fe85d0339af8833366829",
+      "status": "open"
+    }
+  ],
+  "satisfied_payment_refs": [],
+  "schema": "slr.relational-research-frontier.v1",
+  "superseded_by": null,
+  "world_truth_paid": false,
+  "writes_database": false
+}

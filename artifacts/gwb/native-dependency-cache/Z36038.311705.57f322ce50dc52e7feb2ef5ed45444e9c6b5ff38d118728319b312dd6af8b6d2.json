@@ -1,0 +1,274 @@
+{
+    "Z1K1": "Z2",
+    "Z2K1": {
+        "Z1K1": "Z6",
+        "Z6K1": "Z36038"
+    },
+    "Z2K2": {
+        "Z1K1": "Z8",
+        "Z8K1": [
+            "Z17",
+            {
+                "Z1K1": "Z17",
+                "Z17K1": "Z310",
+                "Z17K2": "Z36038K1",
+                "Z17K3": {
+                    "Z1K1": "Z12",
+                    "Z12K1": [
+                        "Z11",
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1002",
+                            "Z11K2": "image"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1787",
+                            "Z11K2": "immagine"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1062",
+                            "Z11K2": "obrázek"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1430",
+                            "Z11K2": "Bild"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1592",
+                            "Z11K2": "bild"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1025",
+                            "Z11K2": "obraz"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1830",
+                            "Z11K2": "画像"
+                        }
+                    ]
+                }
+            },
+            {
+                "Z1K1": "Z17",
+                "Z17K1": "Z6",
+                "Z17K2": "Z36038K2",
+                "Z17K3": {
+                    "Z1K1": "Z12",
+                    "Z12K1": [
+                        "Z11",
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1002",
+                            "Z11K2": "alternative text"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1787",
+                            "Z11K2": "testo alternativo"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1062",
+                            "Z11K2": "alternativní text"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1430",
+                            "Z11K2": "Alt-Text"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1592",
+                            "Z11K2": "alternativtext"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1025",
+                            "Z11K2": "tekst alternatywny"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1830",
+                            "Z11K2": "代替テキスト"
+                        }
+                    ]
+                }
+            }
+        ],
+        "Z8K2": "Z89",
+        "Z8K3": [
+            "Z20",
+            "Z36042"
+        ],
+        "Z8K4": [
+            "Z14",
+            "Z36039",
+            "Z36040",
+            "Z36248"
+        ],
+        "Z8K5": "Z36038"
+    },
+    "Z2K3": {
+        "Z1K1": "Z12",
+        "Z12K1": [
+            "Z11",
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1002",
+                "Z11K2": "image thumbnail with alt text"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1787",
+                "Z11K2": "crea miniatura di immagine Commons"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1062",
+                "Z11K2": "náhled obrázku s alternativním textem"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1430",
+                "Z11K2": "Bild-Miniaturansicht mit Alt-Text"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1592",
+                "Z11K2": "miniatyrbild med alternativtext"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1025",
+                "Z11K2": "miniatura obrazu z tekstem alternatywnym"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1004",
+                "Z11K2": "image (vignette) avec alt-text défini à la main"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1830",
+                "Z11K2": "代替テキスト付き画像サムネイル"
+            }
+        ]
+    },
+    "Z2K4": {
+        "Z1K1": "Z32",
+        "Z32K1": [
+            "Z31",
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1002",
+                "Z31K2": [
+                    "Z6",
+                    "insert image",
+                    "image HTML",
+                    "thumbnail with alt text",
+                    "create Commons thumbnail image"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1062",
+                "Z31K2": [
+                    "Z6",
+                    "obrázek",
+                    "vložit obrázek",
+                    "Commons obrázek"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1430",
+                "Z31K2": [
+                    "Z6",
+                    "Bild einfügen"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1025",
+                "Z31K2": [
+                    "Z6",
+                    "wstaw obraz",
+                    "obraz z altem",
+                    "obraz z tekstem alternatywnym",
+                    "miniatura z tekstem alternatywnym",
+                    "kod HTML obrazu",
+                    "obraz w HTML",
+                    "utwórz miniaturę z Commons"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1004",
+                "Z31K2": [
+                    "Z6",
+                    "insérer une image",
+                    "illustration",
+                    "vignette",
+                    "Commons"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1830",
+                "Z31K2": [
+                    "Z6",
+                    "画像HTML",
+                    "代替テキスト付きサムネイル",
+                    "画像を挿入"
+                ]
+            }
+        ]
+    },
+    "Z2K5": {
+        "Z1K1": "Z12",
+        "Z12K1": [
+            "Z11",
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1002",
+                "Z11K2": "Given a Commons image file reference (Z310), returns an \u003Cext-wikilambda-image\u003E element string"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1787",
+                "Z11K2": "Dato un riferimento a immagine Commons, restituisce un frammento HTML con \u003Cext-wikilambda-image\u003E"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1062",
+                "Z11K2": "Vytvoří řetězec elementu \u003Cext-wikilambda-image\u003E pro zadanou Referenci na obrázkový soubor na Commons (Z310)"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1430",
+                "Z11K2": "Gibt bei Angabe einer Commons-Bilddateireferenz (Z310) eine Zeichenkette des Elements \u003Cext-wikilambda-image\u003E zurück"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1592",
+                "Z11K2": "infogar en bildminiatyr med Textsträng som alternativtext"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1025",
+                "Z11K2": "Podając odwołanie do pliku obrazu z Commons (Z310), zwraca ciąg znaków elementu \u003Cext-wikilambda-image\u003E"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1830",
+                "Z11K2": "Commons画像ファイル参照（Z310）を指定すると、\u003Cext-wikilambda-image\u003E要素文字列を返します。"
+            }
+        ]
+    }
+}

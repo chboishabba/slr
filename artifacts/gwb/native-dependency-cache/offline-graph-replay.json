@@ -1,0 +1,2012 @@
+{
+  "composition_candidates": [
+    {
+      "candidate_only": true,
+      "explicit_language": null,
+      "fuel_used": 8,
+      "held": "invalid provider input: unbound argument reference",
+      "runtime_selection_paid": false,
+      "schema": "slr.native-abstract-composition-candidate.v1",
+      "tester_acceptance_paid": false,
+      "trace": [],
+      "type_check_paid": false,
+      "value": null,
+      "world_truth_paid": false
+    },
+    {
+      "candidate_only": true,
+      "explicit_language": null,
+      "fuel_used": 5,
+      "held": "invalid provider input: unbound argument reference",
+      "runtime_selection_paid": false,
+      "schema": "slr.native-abstract-composition-candidate.v1",
+      "tester_acceptance_paid": false,
+      "trace": [],
+      "type_check_paid": false,
+      "value": null,
+      "world_truth_paid": false
+    },
+    {
+      "candidate_only": true,
+      "explicit_language": null,
+      "fuel_used": 15,
+      "held": "invalid provider input: unbound argument reference",
+      "runtime_selection_paid": false,
+      "schema": "slr.native-abstract-composition-candidate.v1",
+      "tester_acceptance_paid": false,
+      "trace": [],
+      "type_check_paid": false,
+      "value": null,
+      "world_truth_paid": false
+    }
+  ],
+  "graph": {
+    "as_of": "2026-10-15T23:37:24Z",
+    "candidate_only": true,
+    "edges": [
+      {
+        "kind": "implementation",
+        "pointer": "/Z2K2/Z8K4/1",
+        "priority": 0,
+        "source": "Z35370",
+        "target": "Z37781"
+      },
+      {
+        "kind": "signature_type",
+        "pointer": "/Z2K2/Z8K1/2/Z17K1",
+        "priority": 3,
+        "source": "Z35370",
+        "target": "Z60"
+      },
+      {
+        "kind": "signature_type",
+        "pointer": "/Z2K2/Z8K1/1/Z17K1",
+        "priority": 3,
+        "source": "Z35370",
+        "target": "Z6091"
+      },
+      {
+        "kind": "signature_type",
+        "pointer": "/Z2K2/Z8K2",
+        "priority": 3,
+        "source": "Z35370",
+        "target": "Z89"
+      },
+      {
+        "kind": "tester",
+        "pointer": "/Z2K2/Z8K3/1",
+        "priority": 4,
+        "source": "Z35370",
+        "target": "Z35373"
+      },
+      {
+        "kind": "tester",
+        "pointer": "/Z2K2/Z8K3/2",
+        "priority": 4,
+        "source": "Z35370",
+        "target": "Z37780"
+      },
+      {
+        "kind": "typed_list_head",
+        "pointer": "/Z2K2/Z8K4/0",
+        "priority": 5,
+        "source": "Z35370",
+        "target": "Z14"
+      },
+      {
+        "kind": "typed_list_head",
+        "pointer": "/Z2K2/Z8K1/0",
+        "priority": 5,
+        "source": "Z35370",
+        "target": "Z17"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z8K1/1/Z1K1",
+        "priority": 5,
+        "source": "Z35370",
+        "target": "Z17"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z8K1/2/Z1K1",
+        "priority": 5,
+        "source": "Z35370",
+        "target": "Z17"
+      },
+      {
+        "kind": "typed_list_head",
+        "pointer": "/Z2K2/Z8K3/0",
+        "priority": 5,
+        "source": "Z35370",
+        "target": "Z20"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z1K1",
+        "priority": 5,
+        "source": "Z35370",
+        "target": "Z8"
+      },
+      {
+        "kind": "implementation",
+        "pointer": "/Z2K2/Z8K4/1",
+        "priority": 0,
+        "source": "Z38053",
+        "target": "Z38055"
+      },
+      {
+        "kind": "signature_type",
+        "pointer": "/Z2K2/Z8K1/1/Z17K1",
+        "priority": 3,
+        "source": "Z38053",
+        "target": "Z310"
+      },
+      {
+        "kind": "signature_type",
+        "pointer": "/Z2K2/Z8K1/3/Z17K1",
+        "priority": 3,
+        "source": "Z38053",
+        "target": "Z60"
+      },
+      {
+        "kind": "signature_type",
+        "pointer": "/Z2K2/Z8K1/2/Z17K1",
+        "priority": 3,
+        "source": "Z38053",
+        "target": "Z6091"
+      },
+      {
+        "kind": "signature_type",
+        "pointer": "/Z2K2/Z8K2",
+        "priority": 3,
+        "source": "Z38053",
+        "target": "Z89"
+      },
+      {
+        "kind": "tester",
+        "pointer": "/Z2K2/Z8K3/1",
+        "priority": 4,
+        "source": "Z38053",
+        "target": "Z38056"
+      },
+      {
+        "kind": "typed_list_head",
+        "pointer": "/Z2K2/Z8K4/0",
+        "priority": 5,
+        "source": "Z38053",
+        "target": "Z14"
+      },
+      {
+        "kind": "typed_list_head",
+        "pointer": "/Z2K2/Z8K1/0",
+        "priority": 5,
+        "source": "Z38053",
+        "target": "Z17"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z8K1/1/Z1K1",
+        "priority": 5,
+        "source": "Z38053",
+        "target": "Z17"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z8K1/2/Z1K1",
+        "priority": 5,
+        "source": "Z38053",
+        "target": "Z17"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z8K1/3/Z1K1",
+        "priority": 5,
+        "source": "Z38053",
+        "target": "Z17"
+      },
+      {
+        "kind": "typed_list_head",
+        "pointer": "/Z2K2/Z8K3/0",
+        "priority": 5,
+        "source": "Z38053",
+        "target": "Z20"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z1K1",
+        "priority": 5,
+        "source": "Z38053",
+        "target": "Z8"
+      },
+      {
+        "kind": "implementation",
+        "pointer": "/Z2K2/Z8K4/1",
+        "priority": 0,
+        "source": "Z38757",
+        "target": "Z38758"
+      },
+      {
+        "kind": "call_target",
+        "pointer": "/Z2K2/Z8K1/2/Z17K1/Z7K1",
+        "priority": 1,
+        "source": "Z38757",
+        "target": "Z881"
+      },
+      {
+        "kind": "call_target",
+        "pointer": "/Z2K2/Z8K1/3/Z17K1/Z7K1",
+        "priority": 1,
+        "source": "Z38757",
+        "target": "Z881"
+      },
+      {
+        "kind": "signature_type",
+        "pointer": "/Z2K2/Z8K1/4/Z17K1",
+        "priority": 3,
+        "source": "Z38757",
+        "target": "Z60"
+      },
+      {
+        "kind": "signature_type",
+        "pointer": "/Z2K2/Z8K1/1/Z17K1",
+        "priority": 3,
+        "source": "Z38757",
+        "target": "Z6091"
+      },
+      {
+        "kind": "signature_type",
+        "pointer": "/Z2K2/Z8K2",
+        "priority": 3,
+        "source": "Z38757",
+        "target": "Z89"
+      },
+      {
+        "kind": "tester",
+        "pointer": "/Z2K2/Z8K3/1",
+        "priority": 4,
+        "source": "Z38757",
+        "target": "Z38759"
+      },
+      {
+        "kind": "tester",
+        "pointer": "/Z2K2/Z8K3/2",
+        "priority": 4,
+        "source": "Z38757",
+        "target": "Z38760"
+      },
+      {
+        "kind": "tester",
+        "pointer": "/Z2K2/Z8K3/3",
+        "priority": 4,
+        "source": "Z38757",
+        "target": "Z39656"
+      },
+      {
+        "kind": "typed_list_head",
+        "pointer": "/Z2K2/Z8K4/0",
+        "priority": 5,
+        "source": "Z38757",
+        "target": "Z14"
+      },
+      {
+        "kind": "typed_list_head",
+        "pointer": "/Z2K2/Z8K1/0",
+        "priority": 5,
+        "source": "Z38757",
+        "target": "Z17"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z8K1/1/Z1K1",
+        "priority": 5,
+        "source": "Z38757",
+        "target": "Z17"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z8K1/2/Z1K1",
+        "priority": 5,
+        "source": "Z38757",
+        "target": "Z17"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z8K1/3/Z1K1",
+        "priority": 5,
+        "source": "Z38757",
+        "target": "Z17"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z8K1/4/Z1K1",
+        "priority": 5,
+        "source": "Z38757",
+        "target": "Z17"
+      },
+      {
+        "kind": "typed_list_head",
+        "pointer": "/Z2K2/Z8K3/0",
+        "priority": 5,
+        "source": "Z38757",
+        "target": "Z20"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z8K1/2/Z17K1/Z1K1",
+        "priority": 5,
+        "source": "Z38757",
+        "target": "Z7"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z8K1/3/Z17K1/Z1K1",
+        "priority": 5,
+        "source": "Z38757",
+        "target": "Z7"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z1K1",
+        "priority": 5,
+        "source": "Z38757",
+        "target": "Z8"
+      },
+      {
+        "kind": "call_target",
+        "pointer": "/Z2K2/Z14K2/Z33328K3/6/Z37640K1/Z7K1",
+        "priority": 1,
+        "source": "Z37781",
+        "target": "Z27299"
+      },
+      {
+        "kind": "call_target",
+        "pointer": "/Z2K2/Z14K2/Z33328K3/6/Z37640K2/Z41064K2/Z41476K1/Z41473K1/Z7K1",
+        "priority": 1,
+        "source": "Z37781",
+        "target": "Z29691"
+      },
+      {
+        "kind": "call_target",
+        "pointer": "/Z2K2/Z14K2/Z33328K3/6/Z37640K1/Z27299K1/Z7K1",
+        "priority": 1,
+        "source": "Z37781",
+        "target": "Z30120"
+      },
+      {
+        "kind": "call_target",
+        "pointer": "/Z2K2/Z14K2/Z33328K3/6/Z37640K2/Z41064K2/Z41476K1/Z41473K1/Z29691K1/Z7K1",
+        "priority": 1,
+        "source": "Z37781",
+        "target": "Z30120"
+      },
+      {
+        "kind": "call_target",
+        "pointer": "/Z2K2/Z14K2/Z7K1",
+        "priority": 1,
+        "source": "Z37781",
+        "target": "Z33328"
+      },
+      {
+        "kind": "call_target",
+        "pointer": "/Z2K2/Z14K2/Z33328K3/6/Z37640K2/Z41064K1/Z7K1",
+        "priority": 1,
+        "source": "Z37781",
+        "target": "Z36517"
+      },
+      {
+        "kind": "call_target",
+        "pointer": "/Z2K2/Z14K2/Z33328K3/3/Z7K1",
+        "priority": 1,
+        "source": "Z37781",
+        "target": "Z37623"
+      },
+      {
+        "kind": "call_target",
+        "pointer": "/Z2K2/Z14K2/Z33328K3/5/Z7K1",
+        "priority": 1,
+        "source": "Z37781",
+        "target": "Z37623"
+      },
+      {
+        "kind": "call_target",
+        "pointer": "/Z2K2/Z14K2/Z33328K3/6/Z7K1",
+        "priority": 1,
+        "source": "Z37781",
+        "target": "Z37640"
+      },
+      {
+        "kind": "call_target",
+        "pointer": "/Z2K2/Z14K2/Z33328K3/1/Z7K1",
+        "priority": 1,
+        "source": "Z37781",
+        "target": "Z37644"
+      },
+      {
+        "kind": "call_target",
+        "pointer": "/Z2K2/Z14K2/Z33328K3/2/Z7K1",
+        "priority": 1,
+        "source": "Z37781",
+        "target": "Z37782"
+      },
+      {
+        "kind": "call_target",
+        "pointer": "/Z2K2/Z14K2/Z33328K3/4/Z7K1",
+        "priority": 1,
+        "source": "Z37781",
+        "target": "Z37782"
+      },
+      {
+        "kind": "call_target",
+        "pointer": "/Z2K2/Z14K2/Z33328K3/6/Z37640K2/Z7K1",
+        "priority": 1,
+        "source": "Z37781",
+        "target": "Z41064"
+      },
+      {
+        "kind": "call_target",
+        "pointer": "/Z2K2/Z14K2/Z33328K3/6/Z37640K2/Z41064K2/Z41476K1/Z7K1",
+        "priority": 1,
+        "source": "Z37781",
+        "target": "Z41473"
+      },
+      {
+        "kind": "call_target",
+        "pointer": "/Z2K2/Z14K2/Z33328K3/6/Z37640K2/Z41064K2/Z7K1",
+        "priority": 1,
+        "source": "Z37781",
+        "target": "Z41476"
+      },
+      {
+        "kind": "implementation_owner",
+        "pointer": "/Z2K2/Z14K1",
+        "priority": 2,
+        "source": "Z37781",
+        "target": "Z35370"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z1K1",
+        "priority": 5,
+        "source": "Z37781",
+        "target": "Z14"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z14K2/Z33328K3/1/Z37644K1/Z1K1",
+        "priority": 5,
+        "source": "Z37781",
+        "target": "Z18"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z14K2/Z33328K3/1/Z37644K3/Z1K1",
+        "priority": 5,
+        "source": "Z37781",
+        "target": "Z18"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z14K2/Z33328K3/2/Z37782K1/Z1K1",
+        "priority": 5,
+        "source": "Z37781",
+        "target": "Z18"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z14K2/Z33328K3/2/Z37782K3/Z1K1",
+        "priority": 5,
+        "source": "Z37781",
+        "target": "Z18"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z14K2/Z33328K3/3/Z37623K1/Z1K1",
+        "priority": 5,
+        "source": "Z37781",
+        "target": "Z18"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z14K2/Z33328K3/3/Z37623K3/Z1K1",
+        "priority": 5,
+        "source": "Z37781",
+        "target": "Z18"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z14K2/Z33328K3/4/Z37782K1/Z1K1",
+        "priority": 5,
+        "source": "Z37781",
+        "target": "Z18"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z14K2/Z33328K3/4/Z37782K3/Z1K1",
+        "priority": 5,
+        "source": "Z37781",
+        "target": "Z18"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z14K2/Z33328K3/5/Z37623K1/Z1K1",
+        "priority": 5,
+        "source": "Z37781",
+        "target": "Z18"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z14K2/Z33328K3/5/Z37623K3/Z1K1",
+        "priority": 5,
+        "source": "Z37781",
+        "target": "Z18"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z14K2/Z33328K3/6/Z37640K1/Z27299K1/Z30120K1/Z1K1",
+        "priority": 5,
+        "source": "Z37781",
+        "target": "Z18"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z14K2/Z33328K3/6/Z37640K2/Z41064K1/Z36517K2/Z1K1",
+        "priority": 5,
+        "source": "Z37781",
+        "target": "Z18"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z14K2/Z33328K3/6/Z37640K2/Z41064K2/Z41476K1/Z41473K1/Z29691K1/Z30120K1/Z1K1",
+        "priority": 5,
+        "source": "Z37781",
+        "target": "Z18"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z14K2/Z33328K3/6/Z37640K2/Z41064K2/Z41476K1/Z41473K3/Z1K1",
+        "priority": 5,
+        "source": "Z37781",
+        "target": "Z18"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z14K2/Z33328K3/6/Z37640K2/Z41064K2/Z41476K1/Z41473K2/Z1K1",
+        "priority": 5,
+        "source": "Z37781",
+        "target": "Z40"
+      },
+      {
+        "kind": "typed_list_head",
+        "pointer": "/Z2K2/Z14K2/Z33328K3/6/Z37640K1/Z27299K1/Z30120K3/0",
+        "priority": 5,
+        "source": "Z37781",
+        "target": "Z60"
+      },
+      {
+        "kind": "typed_list_head",
+        "pointer": "/Z2K2/Z14K2/Z33328K3/6/Z37640K2/Z41064K2/Z41476K1/Z41473K1/Z29691K1/Z30120K3/0",
+        "priority": 5,
+        "source": "Z37781",
+        "target": "Z60"
+      },
+      {
+        "kind": "typed_list_head",
+        "pointer": "/Z2K2/Z14K2/Z33328K3/6/Z37640K1/Z27299K1/Z30120K2/0",
+        "priority": 5,
+        "source": "Z37781",
+        "target": "Z6030"
+      },
+      {
+        "kind": "typed_list_head",
+        "pointer": "/Z2K2/Z14K2/Z33328K3/6/Z37640K2/Z41064K2/Z41476K1/Z41473K1/Z29691K1/Z30120K2/0",
+        "priority": 5,
+        "source": "Z37781",
+        "target": "Z6030"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z14K2/Z33328K3/6/Z37640K2/Z41064K1/Z36517K1/Z1K1",
+        "priority": 5,
+        "source": "Z37781",
+        "target": "Z6091"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z14K2/Z33328K3/2/Z37782K2/Z1K1",
+        "priority": 5,
+        "source": "Z37781",
+        "target": "Z6092"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z14K2/Z33328K3/3/Z37623K2/Z1K1",
+        "priority": 5,
+        "source": "Z37781",
+        "target": "Z6092"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z14K2/Z33328K3/4/Z37782K2/Z1K1",
+        "priority": 5,
+        "source": "Z37781",
+        "target": "Z6092"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z14K2/Z33328K3/5/Z37623K2/Z1K1",
+        "priority": 5,
+        "source": "Z37781",
+        "target": "Z6092"
+      },
+      {
+        "kind": "typed_list_head",
+        "pointer": "/Z2K2/Z14K2/Z33328K3/6/Z37640K1/Z27299K1/Z30120K4/0",
+        "priority": 5,
+        "source": "Z37781",
+        "target": "Z6092"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z14K2/Z33328K3/6/Z37640K1/Z27299K1/Z30120K4/1/Z1K1",
+        "priority": 5,
+        "source": "Z37781",
+        "target": "Z6092"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z14K2/Z33328K3/6/Z37640K1/Z27299K2/Z1K1",
+        "priority": 5,
+        "source": "Z37781",
+        "target": "Z6092"
+      },
+      {
+        "kind": "typed_list_head",
+        "pointer": "/Z2K2/Z14K2/Z33328K3/6/Z37640K2/Z41064K2/Z41476K1/Z41473K1/Z29691K1/Z30120K4/0",
+        "priority": 5,
+        "source": "Z37781",
+        "target": "Z6092"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z14K2/Z33328K3/6/Z37640K2/Z41064K2/Z41476K1/Z41473K1/Z29691K1/Z30120K4/1/Z1K1",
+        "priority": 5,
+        "source": "Z37781",
+        "target": "Z6092"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z14K2/Z33328K3/6/Z37640K2/Z41064K2/Z41476K1/Z41473K1/Z29691K2/Z1K1",
+        "priority": 5,
+        "source": "Z37781",
+        "target": "Z6092"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z14K2/Z1K1",
+        "priority": 5,
+        "source": "Z37781",
+        "target": "Z7"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z14K2/Z33328K3/1/Z1K1",
+        "priority": 5,
+        "source": "Z37781",
+        "target": "Z7"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z14K2/Z33328K3/2/Z1K1",
+        "priority": 5,
+        "source": "Z37781",
+        "target": "Z7"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z14K2/Z33328K3/3/Z1K1",
+        "priority": 5,
+        "source": "Z37781",
+        "target": "Z7"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z14K2/Z33328K3/4/Z1K1",
+        "priority": 5,
+        "source": "Z37781",
+        "target": "Z7"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z14K2/Z33328K3/5/Z1K1",
+        "priority": 5,
+        "source": "Z37781",
+        "target": "Z7"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z14K2/Z33328K3/6/Z1K1",
+        "priority": 5,
+        "source": "Z37781",
+        "target": "Z7"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z14K2/Z33328K3/6/Z37640K1/Z1K1",
+        "priority": 5,
+        "source": "Z37781",
+        "target": "Z7"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z14K2/Z33328K3/6/Z37640K1/Z27299K1/Z1K1",
+        "priority": 5,
+        "source": "Z37781",
+        "target": "Z7"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z14K2/Z33328K3/6/Z37640K2/Z1K1",
+        "priority": 5,
+        "source": "Z37781",
+        "target": "Z7"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z14K2/Z33328K3/6/Z37640K2/Z41064K1/Z1K1",
+        "priority": 5,
+        "source": "Z37781",
+        "target": "Z7"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z14K2/Z33328K3/6/Z37640K2/Z41064K2/Z1K1",
+        "priority": 5,
+        "source": "Z37781",
+        "target": "Z7"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z14K2/Z33328K3/6/Z37640K2/Z41064K2/Z41476K1/Z1K1",
+        "priority": 5,
+        "source": "Z37781",
+        "target": "Z7"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z14K2/Z33328K3/6/Z37640K2/Z41064K2/Z41476K1/Z41473K1/Z1K1",
+        "priority": 5,
+        "source": "Z37781",
+        "target": "Z7"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z14K2/Z33328K3/6/Z37640K2/Z41064K2/Z41476K1/Z41473K1/Z29691K1/Z1K1",
+        "priority": 5,
+        "source": "Z37781",
+        "target": "Z7"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z14K2/Z33328K1/Z1K1",
+        "priority": 5,
+        "source": "Z37781",
+        "target": "Z89"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z14K2/Z33328K2/Z1K1",
+        "priority": 5,
+        "source": "Z37781",
+        "target": "Z89"
+      },
+      {
+        "kind": "typed_list_head",
+        "pointer": "/Z2K2/Z14K2/Z33328K3/0",
+        "priority": 5,
+        "source": "Z37781",
+        "target": "Z89"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z14K2/Z33328K3/6/Z37640K3/Z1K1",
+        "priority": 5,
+        "source": "Z37781",
+        "target": "Z89"
+      },
+      {
+        "kind": "call_target",
+        "pointer": "/Z2K2/Z14K2/Z7K1",
+        "priority": 1,
+        "source": "Z38055",
+        "target": "Z36038"
+      },
+      {
+        "kind": "call_target",
+        "pointer": "/Z2K2/Z14K2/Z36038K2/Z7K1",
+        "priority": 1,
+        "source": "Z38055",
+        "target": "Z36270"
+      },
+      {
+        "kind": "implementation_owner",
+        "pointer": "/Z2K2/Z14K1",
+        "priority": 2,
+        "source": "Z38055",
+        "target": "Z38053"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z1K1",
+        "priority": 5,
+        "source": "Z38055",
+        "target": "Z14"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z14K2/Z36038K1/Z1K1",
+        "priority": 5,
+        "source": "Z38055",
+        "target": "Z18"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z14K2/Z36038K2/Z36270K1/Z1K1",
+        "priority": 5,
+        "source": "Z38055",
+        "target": "Z18"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z14K2/Z36038K2/Z36270K2/Z1K1",
+        "priority": 5,
+        "source": "Z38055",
+        "target": "Z18"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z14K2/Z1K1",
+        "priority": 5,
+        "source": "Z38055",
+        "target": "Z7"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z14K2/Z36038K2/Z1K1",
+        "priority": 5,
+        "source": "Z38055",
+        "target": "Z7"
+      },
+      {
+        "kind": "call_target",
+        "pointer": "/Z2K2/Z14K2/Z37726K1/Z37464K1/Z32819K4/Z7K1",
+        "priority": 1,
+        "source": "Z38758",
+        "target": "Z10216"
+      },
+      {
+        "kind": "call_target",
+        "pointer": "/Z2K2/Z14K2/Z37726K1/Z37464K1/Z32819K4/Z10216K1/Z7K1",
+        "priority": 1,
+        "source": "Z38758",
+        "target": "Z26696"
+      },
+      {
+        "kind": "call_target",
+        "pointer": "/Z2K2/Z14K2/Z37726K1/Z37464K1/Z7K1",
+        "priority": 1,
+        "source": "Z38758",
+        "target": "Z32819"
+      },
+      {
+        "kind": "call_target",
+        "pointer": "/Z2K2/Z14K2/Z37726K1/Z7K1",
+        "priority": 1,
+        "source": "Z38758",
+        "target": "Z37464"
+      },
+      {
+        "kind": "call_target",
+        "pointer": "/Z2K2/Z14K2/Z7K1",
+        "priority": 1,
+        "source": "Z38758",
+        "target": "Z37726"
+      },
+      {
+        "kind": "implementation_owner",
+        "pointer": "/Z2K2/Z14K1",
+        "priority": 2,
+        "source": "Z38758",
+        "target": "Z38757"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z1K1",
+        "priority": 5,
+        "source": "Z38758",
+        "target": "Z14"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z14K2/Z37726K1/Z37464K1/Z32819K1/Z1K1",
+        "priority": 5,
+        "source": "Z38758",
+        "target": "Z18"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z14K2/Z37726K1/Z37464K1/Z32819K2/Z1K1",
+        "priority": 5,
+        "source": "Z38758",
+        "target": "Z18"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z14K2/Z37726K1/Z37464K1/Z32819K3/Z1K1",
+        "priority": 5,
+        "source": "Z38758",
+        "target": "Z18"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z14K2/Z37726K1/Z37464K1/Z32819K4/Z10216K1/Z26696K1/Z1K1",
+        "priority": 5,
+        "source": "Z38758",
+        "target": "Z18"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z14K2/Z37726K1/Z37464K1/Z32819K5/Z1K1",
+        "priority": 5,
+        "source": "Z38758",
+        "target": "Z18"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z14K2/Z37726K1/Z37464K3/1/Z1K1",
+        "priority": 5,
+        "source": "Z38758",
+        "target": "Z18"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z14K2/Z37726K1/Z37464K4/1/Z1K1",
+        "priority": 5,
+        "source": "Z38758",
+        "target": "Z18"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z14K2/Z37726K1/Z37464K5/Z1K1",
+        "priority": 5,
+        "source": "Z38758",
+        "target": "Z18"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z14K2/Z37726K2/Z1K1",
+        "priority": 5,
+        "source": "Z38758",
+        "target": "Z18"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z14K2/Z37726K1/Z37464K2/Z96K1/Z1K1",
+        "priority": 5,
+        "source": "Z38758",
+        "target": "Z6"
+      },
+      {
+        "kind": "typed_list_head",
+        "pointer": "/Z2K2/Z14K2/Z37726K1/Z37464K3/0",
+        "priority": 5,
+        "source": "Z38758",
+        "target": "Z6091"
+      },
+      {
+        "kind": "typed_list_head",
+        "pointer": "/Z2K2/Z14K2/Z37726K1/Z37464K4/0",
+        "priority": 5,
+        "source": "Z38758",
+        "target": "Z6091"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z14K2/Z1K1",
+        "priority": 5,
+        "source": "Z38758",
+        "target": "Z7"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z14K2/Z37726K1/Z1K1",
+        "priority": 5,
+        "source": "Z38758",
+        "target": "Z7"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z14K2/Z37726K1/Z37464K1/Z1K1",
+        "priority": 5,
+        "source": "Z38758",
+        "target": "Z7"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z14K2/Z37726K1/Z37464K1/Z32819K4/Z10216K1/Z1K1",
+        "priority": 5,
+        "source": "Z38758",
+        "target": "Z7"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z14K2/Z37726K1/Z37464K1/Z32819K4/Z1K1",
+        "priority": 5,
+        "source": "Z38758",
+        "target": "Z7"
+      },
+      {
+        "kind": "object_type",
+        "pointer": "/Z2K2/Z14K2/Z37726K1/Z37464K2/Z1K1",
+        "priority": 5,
+        "source": "Z38758",
+        "target": "Z96"
+      }
+    ],
+    "network_attempts": 0,
+    "nodes": {
+      "Z35370": {
+        "body": {
+          "Z1K1": "Z8",
+          "Z8K1": [
+            "Z17",
+            {
+              "Z17K1": "Z6091",
+              "Z17K2": "Z35370K1",
+              "Z17K3": {
+                "Z12K1": [
+                  "Z11",
+                  {
+                    "Z11K1": "Z1787",
+                    "Z11K2": "persona",
+                    "Z1K1": "Z11"
+                  },
+                  {
+                    "Z11K1": "Z1002",
+                    "Z11K2": "person",
+                    "Z1K1": "Z11"
+                  },
+                  {
+                    "Z11K1": "Z1004",
+                    "Z11K2": "personne",
+                    "Z1K1": "Z11"
+                  },
+                  {
+                    "Z11K1": "Z1592",
+                    "Z11K2": "person",
+                    "Z1K1": "Z11"
+                  },
+                  {
+                    "Z11K1": "Z1830",
+                    "Z11K2": "人物",
+                    "Z1K1": "Z11"
+                  }
+                ],
+                "Z1K1": "Z12"
+              },
+              "Z1K1": "Z17"
+            },
+            {
+              "Z17K1": "Z60",
+              "Z17K2": "Z35370K2",
+              "Z17K3": {
+                "Z12K1": [
+                  "Z11",
+                  {
+                    "Z11K1": "Z1787",
+                    "Z11K2": "lingua",
+                    "Z1K1": "Z11"
+                  },
+                  {
+                    "Z11K1": "Z1002",
+                    "Z11K2": "language",
+                    "Z1K1": "Z11"
+                  },
+                  {
+                    "Z11K1": "Z1004",
+                    "Z11K2": "langue",
+                    "Z1K1": "Z11"
+                  },
+                  {
+                    "Z11K1": "Z1592",
+                    "Z11K2": "språk",
+                    "Z1K1": "Z11"
+                  },
+                  {
+                    "Z11K1": "Z1830",
+                    "Z11K2": "言語",
+                    "Z1K1": "Z11"
+                  }
+                ],
+                "Z1K1": "Z12"
+              },
+              "Z1K1": "Z17"
+            }
+          ],
+          "Z8K2": "Z89",
+          "Z8K3": [
+            "Z20",
+            "Z35373",
+            "Z37780"
+          ],
+          "Z8K4": [
+            "Z14",
+            "Z37781"
+          ],
+          "Z8K5": "Z35370"
+        },
+        "receipt": {
+          "as_of": "2026-10-15T23:37:24Z",
+          "byte_length": 5021,
+          "candidate_only": true,
+          "function": "Z35370",
+          "path": "artifacts/gwb/native-zobjects/Z35370.309574.56e1fddaba6f7969c5a7d9243a224d9f42fac5e3473a8448f8698d21ea503d8e.json",
+          "revision": 309574,
+          "sha256": "56e1fddaba6f7969c5a7d9243a224d9f42fac5e3473a8448f8698d21ea503d8e",
+          "timestamp": "2026-09-06T15:14:39Z"
+        }
+      },
+      "Z37781": {
+        "body": {
+          "Z14K1": "Z35370",
+          "Z14K2": {
+            "Z1K1": "Z7",
+            "Z33328K1": {
+              "Z1K1": "Z89",
+              "Z89K1": ""
+            },
+            "Z33328K2": {
+              "Z1K1": "Z89",
+              "Z89K1": ""
+            },
+            "Z33328K3": [
+              "Z89",
+              {
+                "Z1K1": "Z7",
+                "Z37644K1": {
+                  "Z18K1": "Z35370K1",
+                  "Z1K1": "Z18"
+                },
+                "Z37644K2": "person",
+                "Z37644K3": {
+                  "Z18K1": "Z35370K2",
+                  "Z1K1": "Z18"
+                },
+                "Z7K1": "Z37644"
+              },
+              {
+                "Z1K1": "Z7",
+                "Z37782K1": {
+                  "Z18K1": "Z35370K1",
+                  "Z1K1": "Z18"
+                },
+                "Z37782K2": {
+                  "Z1K1": "Z6092",
+                  "Z6092K1": "P569"
+                },
+                "Z37782K3": {
+                  "Z18K1": "Z35370K2",
+                  "Z1K1": "Z18"
+                },
+                "Z7K1": "Z37782"
+              },
+              {
+                "Z1K1": "Z7",
+                "Z37623K1": {
+                  "Z18K1": "Z35370K1",
+                  "Z1K1": "Z18"
+                },
+                "Z37623K2": {
+                  "Z1K1": "Z6092",
+                  "Z6092K1": "P19"
+                },
+                "Z37623K3": {
+                  "Z18K1": "Z35370K2",
+                  "Z1K1": "Z18"
+                },
+                "Z7K1": "Z37623"
+              },
+              {
+                "Z1K1": "Z7",
+                "Z37782K1": {
+                  "Z18K1": "Z35370K1",
+                  "Z1K1": "Z18"
+                },
+                "Z37782K2": {
+                  "Z1K1": "Z6092",
+                  "Z6092K1": "P570"
+                },
+                "Z37782K3": {
+                  "Z18K1": "Z35370K2",
+                  "Z1K1": "Z18"
+                },
+                "Z7K1": "Z37782"
+              },
+              {
+                "Z1K1": "Z7",
+                "Z37623K1": {
+                  "Z18K1": "Z35370K1",
+                  "Z1K1": "Z18"
+                },
+                "Z37623K2": {
+                  "Z1K1": "Z6092",
+                  "Z6092K1": "P20"
+                },
+                "Z37623K3": {
+                  "Z18K1": "Z35370K2",
+                  "Z1K1": "Z18"
+                },
+                "Z7K1": "Z37623"
+              },
+              {
+                "Z1K1": "Z7",
+                "Z37640K1": {
+                  "Z1K1": "Z7",
+                  "Z27299K1": {
+                    "Z1K1": "Z7",
+                    "Z30120K1": {
+                      "Z18K1": "Z35370K1",
+                      "Z1K1": "Z18"
+                    },
+                    "Z30120K2": [
+                      "Z6030",
+                      "Z6036"
+                    ],
+                    "Z30120K3": [
+                      "Z60",
+                      "Z1360"
+                    ],
+                    "Z30120K4": [
+                      "Z6092",
+                      {
+                        "Z1K1": "Z6092",
+                        "Z6092K1": "P106"
+                      }
+                    ],
+                    "Z7K1": "Z30120"
+                  },
+                  "Z27299K2": {
+                    "Z1K1": "Z6092",
+                    "Z6092K1": "P106"
+                  },
+                  "Z7K1": "Z27299"
+                },
+                "Z37640K2": {
+                  "Z1K1": "Z7",
+                  "Z41064K1": {
+                    "Z1K1": "Z7",
+                    "Z36517K1": {
+                      "Z1K1": "Z6091",
+                      "Z6091K1": "Q12737077"
+                    },
+                    "Z36517K2": {
+                      "Z18K1": "Z35370K2",
+                      "Z1K1": "Z18"
+                    },
+                    "Z7K1": "Z36517"
+                  },
+                  "Z41064K2": {
+                    "Z1K1": "Z7",
+                    "Z41476K1": {
+                      "Z1K1": "Z7",
+                      "Z41473K1": {
+                        "Z1K1": "Z7",
+                        "Z29691K1": {
+                          "Z1K1": "Z7",
+                          "Z30120K1": {
+                            "Z18K1": "Z35370K1",
+                            "Z1K1": "Z18"
+                          },
+                          "Z30120K2": [
+                            "Z6030",
+                            "Z6036"
+                          ],
+                          "Z30120K3": [
+                            "Z60",
+                            "Z1360"
+                          ],
+                          "Z30120K4": [
+                            "Z6092",
+                            {
+                              "Z1K1": "Z6092",
+                              "Z6092K1": "P106"
+                            }
+                          ],
+                          "Z7K1": "Z30120"
+                        },
+                        "Z29691K2": {
+                          "Z1K1": "Z6092",
+                          "Z6092K1": "P106"
+                        },
+                        "Z7K1": "Z29691"
+                      },
+                      "Z41473K2": {
+                        "Z1K1": "Z40",
+                        "Z40K1": "Z42"
+                      },
+                      "Z41473K3": {
+                        "Z18K1": "Z35370K2",
+                        "Z1K1": "Z18"
+                      },
+                      "Z7K1": "Z41473"
+                    },
+                    "Z7K1": "Z41476"
+                  },
+                  "Z7K1": "Z41064"
+                },
+                "Z37640K3": {
+                  "Z1K1": "Z89",
+                  "Z89K1": ""
+                },
+                "Z7K1": "Z37640"
+              }
+            ],
+            "Z7K1": "Z33328"
+          },
+          "Z1K1": "Z14"
+        },
+        "receipt": {
+          "as_of": "2026-10-15T23:37:24Z",
+          "byte_length": 7845,
+          "candidate_only": true,
+          "exact_revision_url": "https://www.wikifunctions.org/w/api.php?action=query&format=json&formatversion=2&prop=revisions&revids=311743&rvprop=ids%7Ctimestamp%7Ccontent&rvslots=main",
+          "function": "Z37781",
+          "lookup_url": "https://www.wikifunctions.org/w/api.php?action=query&format=json&formatversion=2&prop=revisions&titles=Z37781&rvstart=2026-10-15T23:37:24Z&rvdir=older&rvlimit=1&rvprop=ids%7Ctimestamp",
+          "path": "Z37781.311743.644cc144f9bf93fa0e2408d24fe0e7350325cf331307d165c0bbdb8f9eb81327.json",
+          "revision": 311743,
+          "runtime_dependency_resolution_paid": false,
+          "schema": "slr.historical-zobject-acquisition.v1",
+          "sha256": "644cc144f9bf93fa0e2408d24fe0e7350325cf331307d165c0bbdb8f9eb81327",
+          "timestamp": "2026-09-10T09:39:46Z",
+          "world_truth_paid": false
+        }
+      },
+      "Z38053": {
+        "body": {
+          "Z1K1": "Z8",
+          "Z8K1": [
+            "Z17",
+            {
+              "Z17K1": "Z310",
+              "Z17K2": "Z38053K1",
+              "Z17K3": {
+                "Z12K1": [
+                  "Z11",
+                  {
+                    "Z11K1": "Z1002",
+                    "Z11K2": "image",
+                    "Z1K1": "Z11"
+                  },
+                  {
+                    "Z11K1": "Z1830",
+                    "Z11K2": "画像",
+                    "Z1K1": "Z11"
+                  },
+                  {
+                    "Z11K1": "Z1062",
+                    "Z11K2": "obrázek",
+                    "Z1K1": "Z11"
+                  }
+                ],
+                "Z1K1": "Z12"
+              },
+              "Z1K1": "Z17"
+            },
+            {
+              "Z17K1": "Z6091",
+              "Z17K2": "Z38053K2",
+              "Z17K3": {
+                "Z12K1": [
+                  "Z11",
+                  {
+                    "Z11K1": "Z1002",
+                    "Z11K2": "item QID used to construct alt text",
+                    "Z1K1": "Z11"
+                  },
+                  {
+                    "Z11K1": "Z1830",
+                    "Z11K2": "代替テキストを生成するために使用される項目QID",
+                    "Z1K1": "Z11"
+                  },
+                  {
+                    "Z11K1": "Z1062",
+                    "Z11K2": "QID položky, podle které se má vyrobit alt text",
+                    "Z1K1": "Z11"
+                  }
+                ],
+                "Z1K1": "Z12"
+              },
+              "Z1K1": "Z17"
+            },
+            {
+              "Z17K1": "Z60",
+              "Z17K2": "Z38053K3",
+              "Z17K3": {
+                "Z12K1": [
+                  "Z11",
+                  {
+                    "Z11K1": "Z1002",
+                    "Z11K2": "language for alt text",
+                    "Z1K1": "Z11"
+                  },
+                  {
+                    "Z11K1": "Z1830",
+                    "Z11K2": "代替テキストの言語",
+                    "Z1K1": "Z11"
+                  },
+                  {
+                    "Z11K1": "Z1062",
+                    "Z11K2": "jazyk alternativního textu",
+                    "Z1K1": "Z11"
+                  }
+                ],
+                "Z1K1": "Z12"
+              },
+              "Z1K1": "Z17"
+            }
+          ],
+          "Z8K2": "Z89",
+          "Z8K3": [
+            "Z20",
+            "Z38056"
+          ],
+          "Z8K4": [
+            "Z14",
+            "Z38055"
+          ],
+          "Z8K5": "Z38053"
+        },
+        "receipt": {
+          "as_of": "2026-10-15T23:37:24Z",
+          "byte_length": 4096,
+          "candidate_only": true,
+          "function": "Z38053",
+          "path": "artifacts/gwb/native-zobjects/Z38053.316698.32f3f0df27fe241ef117a57b8a359c69f6e9d91c720be0cf37353c526a84e1be.json",
+          "revision": 316698,
+          "sha256": "32f3f0df27fe241ef117a57b8a359c69f6e9d91c720be0cf37353c526a84e1be",
+          "timestamp": "2026-09-21T11:29:57Z"
+        }
+      },
+      "Z38055": {
+        "body": {
+          "Z14K1": "Z38053",
+          "Z14K2": {
+            "Z1K1": "Z7",
+            "Z36038K1": {
+              "Z18K1": "Z38053K1",
+              "Z1K1": "Z18"
+            },
+            "Z36038K2": {
+              "Z1K1": "Z7",
+              "Z36270K1": {
+                "Z18K1": "Z38053K2",
+                "Z1K1": "Z18"
+              },
+              "Z36270K2": {
+                "Z18K1": "Z38053K3",
+                "Z1K1": "Z18"
+              },
+              "Z7K1": "Z36270"
+            },
+            "Z7K1": "Z36038"
+          },
+          "Z1K1": "Z14"
+        },
+        "receipt": {
+          "as_of": "2026-10-15T23:37:24Z",
+          "byte_length": 1137,
+          "candidate_only": true,
+          "exact_revision_url": "https://www.wikifunctions.org/w/api.php?action=query&format=json&formatversion=2&prop=revisions&revids=292724&rvprop=ids%7Ctimestamp%7Ccontent&rvslots=main",
+          "function": "Z38055",
+          "lookup_url": "https://www.wikifunctions.org/w/api.php?action=query&format=json&formatversion=2&prop=revisions&titles=Z38055&rvstart=2026-10-15T23:37:24Z&rvdir=older&rvlimit=1&rvprop=ids%7Ctimestamp",
+          "path": "Z38055.292724.89d146714f2a747efaed81b54fb2a5e617b5c5036010ec94e5891e91d0cf87bd.json",
+          "revision": 292724,
+          "runtime_dependency_resolution_paid": false,
+          "schema": "slr.historical-zobject-acquisition.v1",
+          "sha256": "89d146714f2a747efaed81b54fb2a5e617b5c5036010ec94e5891e91d0cf87bd",
+          "timestamp": "2026-07-21T11:04:21Z",
+          "world_truth_paid": false
+        }
+      },
+      "Z38757": {
+        "body": {
+          "Z1K1": "Z8",
+          "Z8K1": [
+            "Z17",
+            {
+              "Z17K1": "Z6091",
+              "Z17K2": "Z38757K1",
+              "Z17K3": {
+                "Z12K1": [
+                  "Z11",
+                  {
+                    "Z11K1": "Z1002",
+                    "Z11K2": "person (QID)",
+                    "Z1K1": "Z11"
+                  },
+                  {
+                    "Z11K1": "Z1004",
+                    "Z11K2": "personne (QID)",
+                    "Z1K1": "Z11"
+                  },
+                  {
+                    "Z11K1": "Z1830",
+                    "Z11K2": "人物 (QID)",
+                    "Z1K1": "Z11"
+                  }
+                ],
+                "Z1K1": "Z12"
+              },
+              "Z1K1": "Z17"
+            },
+            {
+              "Z17K1": {
+                "Z1K1": "Z7",
+                "Z7K1": "Z881",
+                "Z881K1": "Z6091"
+              },
+              "Z17K2": "Z38757K2",
+              "Z17K3": {
+                "Z12K1": [
+                  "Z11",
+                  {
+                    "Z11K1": "Z1002",
+                    "Z11K2": "list of countries",
+                    "Z1K1": "Z11"
+                  },
+                  {
+                    "Z11K1": "Z1004",
+                    "Z11K2": "liste de nationalités",
+                    "Z1K1": "Z11"
+                  },
+                  {
+                    "Z11K1": "Z1830",
+                    "Z11K2": "国リスト",
+                    "Z1K1": "Z11"
+                  }
+                ],
+                "Z1K1": "Z12"
+              },
+              "Z1K1": "Z17"
+            },
+            {
+              "Z17K1": {
+                "Z1K1": "Z7",
+                "Z7K1": "Z881",
+                "Z881K1": "Z6091"
+              },
+              "Z17K2": "Z38757K3",
+              "Z17K3": {
+                "Z12K1": [
+                  "Z11",
+                  {
+                    "Z11K1": "Z1002",
+                    "Z11K2": "list of professions",
+                    "Z1K1": "Z11"
+                  },
+                  {
+                    "Z11K1": "Z1004",
+                    "Z11K2": "liste de professions ou activités",
+                    "Z1K1": "Z11"
+                  },
+                  {
+                    "Z11K1": "Z1830",
+                    "Z11K2": "職業リスト",
+                    "Z1K1": "Z11"
+                  }
+                ],
+                "Z1K1": "Z12"
+              },
+              "Z1K1": "Z17"
+            },
+            {
+              "Z17K1": "Z60",
+              "Z17K2": "Z38757K4",
+              "Z17K3": {
+                "Z12K1": [
+                  "Z11",
+                  {
+                    "Z11K1": "Z1002",
+                    "Z11K2": "language",
+                    "Z1K1": "Z11"
+                  },
+                  {
+                    "Z11K1": "Z1004",
+                    "Z11K2": "langue",
+                    "Z1K1": "Z11"
+                  },
+                  {
+                    "Z11K1": "Z1830",
+                    "Z11K2": "言語",
+                    "Z1K1": "Z11"
+                  }
+                ],
+                "Z1K1": "Z12"
+              },
+              "Z1K1": "Z17"
+            }
+          ],
+          "Z8K2": "Z89",
+          "Z8K3": [
+            "Z20",
+            "Z38759",
+            "Z38760",
+            "Z39656"
+          ],
+          "Z8K4": [
+            "Z14",
+            "Z38758"
+          ],
+          "Z8K5": "Z38757"
+        },
+        "receipt": {
+          "as_of": "2026-10-15T23:37:24Z",
+          "byte_length": 7529,
+          "candidate_only": true,
+          "function": "Z38757",
+          "path": "artifacts/gwb/native-zobjects/Z38757.326825.64ee066e2c1cf0f4a924b87b7fc87211d344517509141748da70a0e6cf6babe4.json",
+          "revision": 326825,
+          "sha256": "64ee066e2c1cf0f4a924b87b7fc87211d344517509141748da70a0e6cf6babe4",
+          "timestamp": "2026-10-12T19:15:49Z"
+        }
+      },
+      "Z38758": {
+        "body": {
+          "Z14K1": "Z38757",
+          "Z14K2": {
+            "Z1K1": "Z7",
+            "Z37726K1": {
+              "Z1K1": "Z7",
+              "Z37464K1": {
+                "Z1K1": "Z7",
+                "Z32819K1": {
+                  "Z18K1": "Z38757K1",
+                  "Z1K1": "Z18"
+                },
+                "Z32819K2": {
+                  "Z18K1": "Z38757K2",
+                  "Z1K1": "Z18"
+                },
+                "Z32819K3": {
+                  "Z18K1": "Z38757K3",
+                  "Z1K1": "Z18"
+                },
+                "Z32819K4": {
+                  "Z10216K1": {
+                    "Z1K1": "Z7",
+                    "Z26696K1": {
+                      "Z18K1": "Z38757K1",
+                      "Z1K1": "Z18"
+                    },
+                    "Z7K1": "Z26696"
+                  },
+                  "Z1K1": "Z7",
+                  "Z7K1": "Z10216"
+                },
+                "Z32819K5": {
+                  "Z18K1": "Z38757K4",
+                  "Z1K1": "Z18"
+                },
+                "Z7K1": "Z32819"
+              },
+              "Z37464K2": {
+                "Z1K1": "Z96",
+                "Z96K1": {
+                  "Z1K1": "Z6",
+                  "Z6K1": "Z32826"
+                }
+              },
+              "Z37464K3": [
+                "Z6091",
+                {
+                  "Z18K1": "Z38757K1",
+                  "Z1K1": "Z18"
+                }
+              ],
+              "Z37464K4": [
+                "Z6091",
+                {
+                  "Z18K1": "Z38757K1",
+                  "Z1K1": "Z18"
+                }
+              ],
+              "Z37464K5": {
+                "Z18K1": "Z38757K4",
+                "Z1K1": "Z18"
+              },
+              "Z7K1": "Z37464"
+            },
+            "Z37726K2": {
+              "Z18K1": "Z38757K1",
+              "Z1K1": "Z18"
+            },
+            "Z7K1": "Z37726"
+          },
+          "Z1K1": "Z14"
+        },
+        "receipt": {
+          "as_of": "2026-10-15T23:37:24Z",
+          "byte_length": 3144,
+          "candidate_only": true,
+          "exact_revision_url": "https://www.wikifunctions.org/w/api.php?action=query&format=json&formatversion=2&prop=revisions&revids=314544&rvprop=ids%7Ctimestamp%7Ccontent&rvslots=main",
+          "function": "Z38758",
+          "lookup_url": "https://www.wikifunctions.org/w/api.php?action=query&format=json&formatversion=2&prop=revisions&titles=Z38758&rvstart=2026-10-15T23:37:24Z&rvdir=older&rvlimit=1&rvprop=ids%7Ctimestamp",
+          "path": "Z38758.314544.407b20bb8f09844431050f3c98d0d3cc0a1c615ac14d126581c46e338bc7e6be.json",
+          "revision": 314544,
+          "runtime_dependency_resolution_paid": false,
+          "schema": "slr.historical-zobject-acquisition.v1",
+          "sha256": "407b20bb8f09844431050f3c98d0d3cc0a1c615ac14d126581c46e338bc7e6be",
+          "timestamp": "2026-09-17T03:55:29Z",
+          "world_truth_paid": false
+        }
+      }
+    },
+    "pending": [
+      {
+        "depth": 1,
+        "priority": 1,
+        "reason": "not_acquired",
+        "target": "Z881"
+      },
+      {
+        "depth": 2,
+        "priority": 1,
+        "reason": "not_acquired",
+        "target": "Z10216"
+      },
+      {
+        "depth": 2,
+        "priority": 1,
+        "reason": "not_acquired",
+        "target": "Z26696"
+      },
+      {
+        "depth": 2,
+        "priority": 1,
+        "reason": "not_acquired",
+        "target": "Z27299"
+      },
+      {
+        "depth": 2,
+        "priority": 1,
+        "reason": "not_acquired",
+        "target": "Z29691"
+      },
+      {
+        "depth": 2,
+        "priority": 1,
+        "reason": "not_acquired",
+        "target": "Z30120"
+      },
+      {
+        "depth": 2,
+        "priority": 1,
+        "reason": "not_acquired",
+        "target": "Z32819"
+      },
+      {
+        "depth": 2,
+        "priority": 1,
+        "reason": "not_acquired",
+        "target": "Z33328"
+      },
+      {
+        "depth": 2,
+        "priority": 1,
+        "reason": "not_acquired",
+        "target": "Z36038"
+      },
+      {
+        "depth": 2,
+        "priority": 1,
+        "reason": "not_acquired",
+        "target": "Z36270"
+      },
+      {
+        "depth": 2,
+        "priority": 1,
+        "reason": "not_acquired",
+        "target": "Z36517"
+      },
+      {
+        "depth": 2,
+        "priority": 1,
+        "reason": "not_acquired",
+        "target": "Z37464"
+      },
+      {
+        "depth": 2,
+        "priority": 1,
+        "reason": "not_acquired",
+        "target": "Z37623"
+      },
+      {
+        "depth": 2,
+        "priority": 1,
+        "reason": "not_acquired",
+        "target": "Z37640"
+      },
+      {
+        "depth": 2,
+        "priority": 1,
+        "reason": "not_acquired",
+        "target": "Z37644"
+      },
+      {
+        "depth": 2,
+        "priority": 1,
+        "reason": "not_acquired",
+        "target": "Z37726"
+      },
+      {
+        "depth": 2,
+        "priority": 1,
+        "reason": "not_acquired",
+        "target": "Z37782"
+      },
+      {
+        "depth": 2,
+        "priority": 1,
+        "reason": "not_acquired",
+        "target": "Z41064"
+      },
+      {
+        "depth": 2,
+        "priority": 1,
+        "reason": "not_acquired",
+        "target": "Z41473"
+      },
+      {
+        "depth": 2,
+        "priority": 1,
+        "reason": "not_acquired",
+        "target": "Z41476"
+      },
+      {
+        "depth": 1,
+        "priority": 3,
+        "reason": "not_acquired",
+        "target": "Z310"
+      },
+      {
+        "depth": 1,
+        "priority": 3,
+        "reason": "not_acquired",
+        "target": "Z60"
+      },
+      {
+        "depth": 1,
+        "priority": 3,
+        "reason": "not_acquired",
+        "target": "Z6091"
+      },
+      {
+        "depth": 1,
+        "priority": 3,
+        "reason": "not_acquired",
+        "target": "Z89"
+      },
+      {
+        "depth": 1,
+        "priority": 4,
+        "reason": "not_acquired",
+        "target": "Z35373"
+      },
+      {
+        "depth": 1,
+        "priority": 4,
+        "reason": "not_acquired",
+        "target": "Z37780"
+      },
+      {
+        "depth": 1,
+        "priority": 4,
+        "reason": "not_acquired",
+        "target": "Z38056"
+      },
+      {
+        "depth": 1,
+        "priority": 4,
+        "reason": "not_acquired",
+        "target": "Z38759"
+      },
+      {
+        "depth": 1,
+        "priority": 4,
+        "reason": "not_acquired",
+        "target": "Z38760"
+      },
+      {
+        "depth": 1,
+        "priority": 4,
+        "reason": "not_acquired",
+        "target": "Z39656"
+      },
+      {
+        "depth": 1,
+        "priority": 5,
+        "reason": "not_acquired",
+        "target": "Z14"
+      },
+      {
+        "depth": 1,
+        "priority": 5,
+        "reason": "not_acquired",
+        "target": "Z17"
+      },
+      {
+        "depth": 1,
+        "priority": 5,
+        "reason": "not_acquired",
+        "target": "Z20"
+      },
+      {
+        "depth": 1,
+        "priority": 5,
+        "reason": "not_acquired",
+        "target": "Z7"
+      },
+      {
+        "depth": 1,
+        "priority": 5,
+        "reason": "not_acquired",
+        "target": "Z8"
+      },
+      {
+        "depth": 2,
+        "priority": 5,
+        "reason": "not_acquired",
+        "target": "Z18"
+      },
+      {
+        "depth": 2,
+        "priority": 5,
+        "reason": "not_acquired",
+        "target": "Z40"
+      },
+      {
+        "depth": 2,
+        "priority": 5,
+        "reason": "not_acquired",
+        "target": "Z6"
+      },
+      {
+        "depth": 2,
+        "priority": 5,
+        "reason": "not_acquired",
+        "target": "Z6030"
+      },
+      {
+        "depth": 2,
+        "priority": 5,
+        "reason": "not_acquired",
+        "target": "Z6092"
+      },
+      {
+        "depth": 2,
+        "priority": 5,
+        "reason": "not_acquired",
+        "target": "Z96"
+      }
+    ],
+    "requested_target": null,
+    "roots": [
+      "Z35370",
+      "Z38053",
+      "Z38757"
+    ],
+    "runtime_selection_paid": false,
+    "schema": "slr.native-historical-zobject-graph.v1",
+    "world_truth_paid": false
+  }
+}

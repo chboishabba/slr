@@ -1,0 +1,26 @@
+{
+  "schema": "slr.p3b.acceptance-receipt.v1",
+  "commit": "0dc1bf1a67e1a4bf55cacc7349b916612932011d",
+  "branch": "research/world-formalism-actor-event-maxcut-20261127",
+  "tests": {
+    "source_store_relational_family": {"passed": 7, "failed": 0},
+    "proof_search_loop_all_tests": {"passed": 138, "failed": 0},
+    "cli_relational_family": {"passed": 0, "failed": 0, "filtered": 42},
+    "cli_build": "passed"
+  },
+  "live_frontier_inspection": {
+    "attempted": true,
+    "database": "configured DATABASE_URL from slr/.env",
+    "family_table": "semantic.itir_relational_family",
+    "family_table_present": false,
+    "family_rows": 0,
+    "result": "blocked-no-persisted-relational-family",
+    "writes_database": false,
+    "reason": "The configured database has no semantic.itir_relational_family table, so no valid FAMILY reference exists for inspect-research-frontier."
+  },
+  "authority": {
+    "semantic_payment": false,
+    "world_truth": false,
+    "writes_database": false
+  }
+}

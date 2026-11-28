@@ -1,0 +1,39 @@
+{
+    "Z1K1": "Z2",
+    "Z2K1": {
+        "Z1K1": "Z6",
+        "Z6K1": "Z36040"
+    },
+    "Z2K2": {
+        "Z1K1": "Z14",
+        "Z14K1": "Z36038",
+        "Z14K3": {
+            "Z1K1": "Z16",
+            "Z16K1": "Z610",
+            "Z16K2": "def Z36038(Z36038K1, Z36038K2):\n\tmid = Z36038K1['Z310K1']\n\thtml = f'\u003Cext-wikilambda-image mid=\"{mid}\" alt=\"{Z36038K2}\" size=\"thumb\" /\u003E'\n\treturn ZObject(\n\t\t{\n\t\t\t\"Z1K1\": \"Z9\",\n\t\t\t\"Z9K1\": \"Z89\"\n\t\t},\n\t\tZ89K1=html\n\t)"
+        }
+    },
+    "Z2K3": {
+        "Z1K1": "Z12",
+        "Z12K1": [
+            "Z11",
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1002",
+                "Z11K2": "f-string with ext-wikilambda-image tag"
+            }
+        ]
+    },
+    "Z2K4": {
+        "Z1K1": "Z32",
+        "Z32K1": [
+            "Z31"
+        ]
+    },
+    "Z2K5": {
+        "Z1K1": "Z12",
+        "Z12K1": [
+            "Z11"
+        ]
+    }
+}

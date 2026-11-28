@@ -1,0 +1,286 @@
+{
+    "Z1K1": "Z2",
+    "Z2K1": {
+        "Z1K1": "Z6",
+        "Z6K1": "Z6092"
+    },
+    "Z2K2": {
+        "Z1K1": "Z4",
+        "Z4K1": "Z6092",
+        "Z4K2": [
+            "Z3",
+            {
+                "Z1K1": "Z3",
+                "Z3K1": "Z6",
+                "Z3K2": "Z6092K1",
+                "Z3K3": {
+                    "Z1K1": "Z12",
+                    "Z12K1": [
+                        "Z11",
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1002",
+                            "Z11K2": "Wikidata property id"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1430",
+                            "Z11K2": "Wikidata-Eigenschaft-ID"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1011",
+                            "Z11K2": "উইকিউপাত্ত বৈশিষ্ট্য আইডি"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1004",
+                            "Z11K2": "identifiant de la propriété Wikidata"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1672",
+                            "Z11K2": "維基數據ID"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1001",
+                            "Z11K2": "معرّف خاصية ويكي بيانات"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1787",
+                            "Z11K2": "ID proprietà Wikidata"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1820",
+                            "Z11K2": "विकिडेटा गुणधर्म ID"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1078",
+                            "Z11K2": "ID properti Wikidata"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1062",
+                            "Z11K2": "identifikátor vlastnosti Wikidat"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1157",
+                            "Z11K2": "Wikidata-eigenschapsidentificatiecode "
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1830",
+                            "Z11K2": "ウィキデータのプロパティID"
+                        }
+                    ]
+                },
+                "Z3K4": {
+                    "Z1K1": "Z40",
+                    "Z40K1": "Z42"
+                }
+            }
+        ],
+        "Z4K3": "Z101",
+        "Z4K4": "Z19267",
+        "Z4K7": [
+            "Z46"
+        ],
+        "Z4K8": [
+            "Z64"
+        ]
+    },
+    "Z2K3": {
+        "Z1K1": "Z12",
+        "Z12K1": [
+            "Z11",
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1002",
+                "Z11K2": "Wikidata property reference"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1430",
+                "Z11K2": "Wikidata-Eigenschaft-Referenz"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1186",
+                "Z11K2": "התייחסות למאפיין של ויקינתונים"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1011",
+                "Z11K2": "উইকিউপাত্ত বৈশিষ্ট্য উল্লেখ"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1004",
+                "Z11K2": "référence de la propriété Wikidata"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1005",
+                "Z11K2": "Ссылка на свойство Викиданных"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1672",
+                "Z11K2": "維基數據屬性參照"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1001",
+                "Z11K2": "إحالة لخاصية ويكي بيانات"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1787",
+                "Z11K2": "Riferimento a proprietà Wikidata"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1827",
+                "Z11K2": "κωδικός ιδιότητας των Wikidata"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1820",
+                "Z11K2": "विकिडेटा गुणधर्म संदर्भ"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1830",
+                "Z11K2": "ウィキデータのプロパティの参照"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1062",
+                "Z11K2": "Reference na vlastnost Wikidat"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1157",
+                "Z11K2": "Wikidata-eigenschapsverwijzing"
+            }
+        ]
+    },
+    "Z2K4": {
+        "Z1K1": "Z32",
+        "Z32K1": [
+            "Z31",
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1011",
+                "Z31K2": [
+                    "Z6",
+                    "উইকিউপাত্ত বৈশিষ্ট্য রেফারেন্স",
+                    "উইকিউপাত্ত প্রপার্টি রেফারেন্স"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1002",
+                "Z31K2": [
+                    "Z6",
+                    "pid",
+                    "property ID",
+                    "ID of Wikidata property"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1062",
+                "Z31K2": [
+                    "Z6",
+                    "PID",
+                    "ID vlastnosti"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1157",
+                "Z31K2": [
+                    "Z6",
+                    "PID",
+                    "eigenschapsidentificatiecode "
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1830",
+                "Z31K2": [
+                    "Z6",
+                    "プロパティID",
+                    "ウィキデータのプロパティID"
+                ]
+            }
+        ]
+    },
+    "Z2K5": {
+        "Z1K1": "Z12",
+        "Z12K1": [
+            "Z11",
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1002",
+                "Z11K2": "A link to a Wikidata property, using the property's Wikidata ID (PID)"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1430",
+                "Z11K2": "Link auf eine Wikidata-Eigenschaft über die ID der Eigenschaft auf Wikidata (PID)"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1011",
+                "Z11K2": "বৈশিষ্ট্যের উইকিউপাত্ত আইডি ব্যবহার করে, উইকিউপাত্ত বৈশিষ্ট্যের সাথে একটি সংযোগ বা লিঙ্ক।"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1004",
+                "Z11K2": "un lien vers une propriété Wikidata, utilisant l'ID Wikidata (P-ID) de la propriété"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1672",
+                "Z11K2": "維基數據屬性的連結，使用屬性的維基數據ID (PID)"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1001",
+                "Z11K2": "وصلة لخاصية ويكي بيانات باستعمال معرّف خاصية ويكي بيانات (PID)"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1787",
+                "Z11K2": "Un collegamento alla proprietà Wikidata tramite l'ID Wikidata"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1820",
+                "Z11K2": "विकिडेटा के किसी गुणधर्म की विकिडेटा ID (PID) की मदद से गुणधर्म की कड़ी"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1062",
+                "Z11K2": "Odkaz na vlastnost Wikidat prostřednictvím jejího identifikátoru na Wikidatech (PID)"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1157",
+                "Z11K2": " link naar een Wikidata-eigenschap, met behulp van de Wikidata-identificatiecode (PID) van die eigenschap"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1830",
+                "Z11K2": "ウィキデータのプロパティへのリンク（プロパティのウィキデータID（PID）を使用）"
+            }
+        ]
+    }
+}

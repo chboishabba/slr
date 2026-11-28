@@ -1,0 +1,209 @@
+{
+    "Z1K1": "Z2",
+    "Z2K1": {
+        "Z1K1": "Z6",
+        "Z6K1": "Z37464"
+    },
+    "Z2K2": {
+        "Z1K1": "Z8",
+        "Z8K1": [
+            "Z17",
+            {
+                "Z1K1": "Z17",
+                "Z17K1": "Z11",
+                "Z17K2": "Z37464K1",
+                "Z17K3": {
+                    "Z1K1": "Z12",
+                    "Z12K1": [
+                        "Z11",
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1002",
+                            "Z11K2": "text"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1830",
+                            "Z11K2": "テキスト"
+                        }
+                    ]
+                }
+            },
+            {
+                "Z1K1": "Z17",
+                "Z17K1": "Z96",
+                "Z17K2": "Z37464K2",
+                "Z17K3": {
+                    "Z1K1": "Z12",
+                    "Z12K1": [
+                        "Z11",
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1002",
+                            "Z11K2": "ZID for link to configuration"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1830",
+                            "Z11K2": "設定へのリンク用ZID"
+                        }
+                    ]
+                }
+            },
+            {
+                "Z1K1": "Z17",
+                "Z17K1": {
+                    "Z1K1": "Z7",
+                    "Z7K1": "Z881",
+                    "Z881K1": "Z6091"
+                },
+                "Z17K2": "Z37464K3",
+                "Z17K3": {
+                    "Z1K1": "Z12",
+                    "Z12K1": [
+                        "Z11",
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1002",
+                            "Z11K2": "QIDs to link (first occurrence) to AW"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1830",
+                            "Z11K2": "抽象ウィキペディアへのリンクを付けるQID (最初の出現箇所)"
+                        }
+                    ]
+                }
+            },
+            {
+                "Z1K1": "Z17",
+                "Z17K1": {
+                    "Z1K1": "Z7",
+                    "Z7K1": "Z881",
+                    "Z881K1": "Z6091"
+                },
+                "Z17K2": "Z37464K4",
+                "Z17K3": {
+                    "Z1K1": "Z12",
+                    "Z12K1": [
+                        "Z11",
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1002",
+                            "Z11K2": "QIDs to add WD edit links to if missing label"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1830",
+                            "Z11K2": "ラベルがない場合にウィキデータ編集リンクを追加するQID"
+                        }
+                    ]
+                }
+            },
+            {
+                "Z1K1": "Z17",
+                "Z17K1": "Z60",
+                "Z17K2": "Z37464K5",
+                "Z17K3": {
+                    "Z1K1": "Z12",
+                    "Z12K1": [
+                        "Z11",
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1002",
+                            "Z11K2": "language expected"
+                        },
+                        {
+                            "Z1K1": "Z11",
+                            "Z11K1": "Z1830",
+                            "Z11K2": "想定する言語"
+                        }
+                    ]
+                }
+            }
+        ],
+        "Z8K2": "Z89",
+        "Z8K3": [
+            "Z20",
+            "Z37469",
+            "Z37506",
+            "Z37669",
+            "Z38922",
+            "Z38321",
+            "Z37799",
+            "Z38316",
+            "Z39132",
+            "Z41493"
+        ],
+        "Z8K4": [
+            "Z14",
+            "Z37540"
+        ],
+        "Z8K5": "Z37464"
+    },
+    "Z2K3": {
+        "Z1K1": "Z12",
+        "Z12K1": [
+            "Z11",
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1002",
+                "Z11K2": "monolingual text as HTML with lang, col, ✏️🔧links"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1830",
+                "Z11K2": "言語・色・✏️🔧リンク付き単一言語テキストのHTML"
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1004",
+                "Z11K2": "HTML depuis texte monol. avec langue+couleur+✏️🔧"
+            }
+        ]
+    },
+    "Z2K4": {
+        "Z1K1": "Z32",
+        "Z32K1": [
+            "Z31",
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1002",
+                "Z31K2": [
+                    "Z6",
+                    "monolingual text to HTML",
+                    "HTML from monolingual text",
+                    "monolingual to HTML with calls to action",
+                    "mark up monolingual text",
+                    "mark-up for monolingual text to HTML"
+                ]
+            },
+            {
+                "Z1K1": "Z31",
+                "Z31K1": "Z1830",
+                "Z31K2": [
+                    "Z6",
+                    "単一言語テキストをHTMLに変換",
+                    "単一言語テキストからHTMLを生成",
+                    "単一言語テキストをマークアップ"
+                ]
+            }
+        ]
+    },
+    "Z2K5": {
+        "Z1K1": "Z12",
+        "Z12K1": [
+            "Z11",
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1002",
+                "Z11K2": "Returns an HTML fragment containing the text with links \u0026 QID ✏️s. If not matching the requested language, wrap in a span with a language, the default text colour, a 🔧 link to the configuration ZID."
+            },
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1830",
+                "Z11K2": "リンクとQIDの✏️リンクを含むテキストのHTMLフラグメントを返す。要求された言語と一致しない場合は、言語、既定の文字色、設定ZIDへの🔧リンクを指定したspanで囲む。"
+            }
+        ]
+    }
+}

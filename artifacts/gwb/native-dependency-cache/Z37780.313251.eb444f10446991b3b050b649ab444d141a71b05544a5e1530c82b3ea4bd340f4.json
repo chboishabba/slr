@@ -1,0 +1,57 @@
+{
+    "Z1K1": "Z2",
+    "Z2K1": {
+        "Z1K1": "Z6",
+        "Z6K1": "Z37780"
+    },
+    "Z2K2": {
+        "Z1K1": "Z20",
+        "Z20K1": "Z35370",
+        "Z20K2": {
+            "Z1K1": "Z7",
+            "Z7K1": "Z35370",
+            "Z35370K1": {
+                "Z1K1": "Z6091",
+                "Z6091K1": "Q273073"
+            },
+            "Z35370K2": {
+                "Z1K1": "Z60",
+                "Z60K1": "it",
+                "Z60K2": [
+                    "Z6"
+                ]
+            }
+        },
+        "Z20K3": {
+            "Z1K1": "Z7",
+            "Z7K1": "Z877",
+            "Z877K2": {
+                "Z1K1": "Z89",
+                "Z89K1": "\u003Ctable style=\"background-color:var(--background-color-interactive-subtle,#F8F9FA);border:1px solid var(--border-color-base,#A2A9B1);border-spacing:3px;clear:inline-end;float: inline-end;margin:0.5em 0 0.5em 1em;padding:0.2em;width:250px;\"\u003E\u003Ctr\u003E\u003Ctd colspan=\"2\" align=\"center\" style=\"--infobox-accent-hue:264deg;background-color:oklch(from var(--background-color-success-subtle,#DFF2EB) calc(0.8*l + 0.15) calc(c + 0.05) var(--infobox-accent-hue,264deg));font-weight: bold;\"\u003EMilly Carlucci\u003C/td\u003E\u003C/tr\u003E\u003Ctr valign=\"top\"\u003E\u003Ctd style=\"font-weight:bold\"\u003EData di nascita\u003C/td\u003E\u003Ctd\u003E1 ottobre 1954\u003C/td\u003E\u003C/tr\u003E\u003Ctr valign=\"top\"\u003E\u003Ctd style=\"font-weight:bold\"\u003ELuogo di nascita\u003C/td\u003E\u003Ctd\u003E\u003Ca href=\"https://abstract.wikipedia.org/wiki/Q50157\"\u003ESulmona\u003C/a\u003E\u003C/td\u003E\u003C/tr\u003E\u003Ctr valign=\"top\"\u003E\u003Ctd style=\"font-weight:bold\"\u003E\u003Ca href=\"https://abstract.wikipedia.org/wiki/Q12737077\"\u003Eoccupazione\u003C/a\u003E\u003C/td\u003E\u003Ctd\u003E\u003Cul style=\"line-height:inherit;list-style:none none;margin:0;\"\u003E\u003Cli style=\"margin-bottom:0;\"\u003E\u003Ca href=\"https://abstract.wikipedia.org/wiki/Q10800557\"\u003Eattore cinematografico\u003C/a\u003E\u003C/li\u003E\u003Cli style=\"margin-bottom:0;\"\u003E\u003Ca href=\"https://abstract.wikipedia.org/wiki/Q947873\"\u003Econduttore televisivo\u003C/a\u003E\u003C/li\u003E\u003Cli style=\"margin-bottom:0;\"\u003E\u003Ca href=\"https://abstract.wikipedia.org/wiki/Q177220\"\u003Ecantante\u003C/a\u003E\u003C/li\u003E\u003C/ul\u003E\u003C/td\u003E\u003C/tr\u003E\u003C/table\u003E"
+            }
+        }
+    },
+    "Z2K3": {
+        "Z1K1": "Z12",
+        "Z12K1": [
+            "Z11",
+            {
+                "Z1K1": "Z11",
+                "Z11K1": "Z1002",
+                "Z11K2": "infobox for Milly Carlucci "
+            }
+        ]
+    },
+    "Z2K4": {
+        "Z1K1": "Z32",
+        "Z32K1": [
+            "Z31"
+        ]
+    },
+    "Z2K5": {
+        "Z1K1": "Z12",
+        "Z12K1": [
+            "Z11"
+        ]
+    }
+}
