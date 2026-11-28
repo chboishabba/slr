@@ -762,6 +762,135 @@ pub fn inspect_persisted_relational_family(config:&DatabaseConfig,family_ref:&st
     Ok(result)
 }
 
+
+/// Recorded syntax is a separate bounded consumer, never a semantic
+/// alignment licence. Verify the candidate key against its checked owner
+/// rather than treating arbitrary suffixes or provenance refs as digests.
+fn checked_recorded_key(o:&RelationalObservation,value:&str)->Option<String>{
+    let owner=o.parser_or_producer_ref.strip_prefix("db-parser:")?;
+    let suffix=format!(":{}",o.source_span_ref);
+    let run=owner.strip_suffix(suffix.as_str())?;
+    if !run.starts_with("parser-run:") {return None;}
+    let prefix=format!("candidate-pnf-db:{owner}:");
+    let token=value.strip_prefix(prefix.as_str())?;
+    let mut parts=token.split(':');
+    let ordinal=parts.next()?.parse::<u32>().ok()?;
+    let start=parts.next()?.parse::<u64>().ok()?;
+    let end=parts.next()?.parse::<u64>().ok()?;
+    if parts.next().is_some()||end<=start{return None;}
+    let (_,region)=o.source_span_ref.rsplit_once(":sentence:")?;
+    let (sentence,span)=region.split_once(':')?;
+    let sentence=sentence.parse::<u64>().ok()?;
+    let (lo,hi)=span.split_once('-')?;
+    let (lo,hi)=(lo.parse::<u64>().ok()?,hi.parse::<u64>().ok()?);
+    if lo>start||end>hi{return None;}
+    Some(format!("{sentence}:{lo}-{hi}:{ordinal}:{start}:{end}"))
+}
+
+fn recorded_syntax_chart(o:&RelationalObservation)->Option<BTreeMap<(String,String,u32,String),String>>{
+    let mut chart=BTreeMap::new();
+    for coord in observed_coordinates(o).into_iter().filter(|c|c.axis=="predicate"||c.axis=="role"){
+        let key=checked_recorded_key(o,&coord.value_ref)?;
+        if chart.insert((coord.axis,coord.slot,coord.occurrence,key),coord.value_ref).is_some(){
+            return None;
+        }
+    }
+    if chart.len()!=1+o.role_bindings.len(){return None;}
+    Some(chart)
+}
+
+/// Compare the selected checked predicate and all direct recorded role
+/// occurrences. Both complete finite charts must be covered; a complete
+/// anchor-only transport cannot conceal extra coordinates in another chart.
+fn recorded_syntax_pair(left:&SelectedRelationalSource,right:&SelectedRelationalSource,
+    left_digest:&str,right_digest:&str)->serde_json::Value{
+    use serde_json::json;
+    let base=json!({"left_selector_ref":left.selector_ref,"right_selector_ref":right.selector_ref,
+        "left_source_revision_ref":left.observation.source_revision_ref,
+        "right_source_revision_ref":right.observation.source_revision_ref,
+        "left_content_digest":left_digest,"right_content_digest":right_digest});
+    let mut out=base;
+    let same=left_digest==right_digest&&!left_digest.is_empty();
+    let charts=recorded_syntax_chart(&left.observation).zip(recorded_syntax_chart(&right.observation));
+    let Some((a,b))=charts.filter(|_|same) else {
+        out["status"]=json!(if same{"invalid_checked_coordinate"}else{"different_source_content"});
+        out["recorded_answer_equal"]=json!(false);
+        return out;
+    };
+    let common:Vec<_>=a.iter().filter_map(|(key,value)|b.get(key).map(|other|
+        json!({"coordinate":key,"left_original":value,"right_original":other}))).collect();
+    let left_only:Vec<_>=a.iter().filter(|(key,_)|!b.contains_key(*key))
+        .map(|(key,v)|json!({"coordinate":key,"original":v})).collect();
+    let right_only:Vec<_>=b.iter().filter(|(key,_)|!a.contains_key(*key))
+        .map(|(key,v)|json!({"coordinate":key,"original":v})).collect();
+    let equal=left_only.is_empty()&&right_only.is_empty();
+    out["status"]=json!(if equal{"equal_recorded_syntax"}else{"different_recorded_syntax"});
+    out["left_count"]=json!(a.len());out["right_count"]=json!(b.len());
+    out["common"]=json!(common);out["left_only"]=json!(left_only);out["right_only"]=json!(right_only);
+    out["recorded_answer_equal"]=json!(equal);
+    out
+}
+
+/// Read the real family and original generic source content digests within
+/// one read-only snapshot. No caller-supplied digest, semantic witness or
+/// review receipt can be used to pay the bounded recorded-syntax query.
+pub fn inspect_recorded_family_parity(config:&DatabaseConfig,family_ref:&str)
+    ->Result<serde_json::Value,RelationalFamilyError>{
+    use serde_json::json;
+    use sensiblaw_core::consumer_parity::ConsumerAdequacyReceipt;
+    let mut connection=Client::connect(config.database_url(),NoTls)?;
+    let mut tx=connection.transaction()?;
+    tx.batch_execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY; SET LOCAL statement_timeout='90000ms'")?;
+    let m=read_manifest(&mut tx,family_ref)?;
+    let family=read_family_on_client(&mut tx,&m)?;
+    let mut digests=BTreeMap::new();
+    for s in &family.projection.sources{
+        let (source,_)=crate::generic_source_content_store::load_generic_text_source_on_client(
+            &mut tx,&s.observation.source_revision_ref)
+            .map_err(PersistedRelationalObservationError::from)?;
+        if !s.observation.provenance_refs.contains(&source.content_digest_ref){
+            return Err(RelationalFamilyError::ChangedReplay);
+        }
+        digests.insert(s.selector_ref.clone(),source.content_digest_ref);
+    }
+    let sources=&family.projection.sources;
+    let query_family="query-family:checked-selected-predicate-direct-role-coordinates:v1";
+    let bounded_consumer=format!("consumer:recorded-syntax:{family_ref}");
+    let mut pairs=Vec::new();
+    for (i,left) in sources.iter().enumerate(){
+        for right in sources.iter().skip(i+1){
+            pairs.push(recorded_syntax_pair(left,right,&digests[&left.selector_ref],&digests[&right.selector_ref]));
+        }
+    }
+    let equal=family.superseded_by.is_none()&&!pairs.is_empty()&&pairs.iter()
+        .all(|p|p["recorded_answer_equal"]==true);
+    // The exact chart comparison is its own inspectable finite witness.
+    // Use the existing adequacy constructor for this declared observed query
+    // only. Do not issue RepresentationParityReceipt without actual review.
+    let evidence_ref=format!("recorded-syntax-factorisation:{}",digest_bytes(&serde_json::to_vec(&pairs)?));
+    let mut adequacy=Vec::new();
+    if equal{
+        for s in sources{
+            let a=ConsumerAdequacyReceipt::new(&s.observation.observation_ref,&bounded_consumer,
+                query_family,&evidence_ref,[evidence_ref.as_str()],true,true,None)
+                .map_err(|_|RelationalFamilyError::ChangedReplay)?;
+            adequacy.push(json!({"representation_ref":a.representation_ref,"consumer_ref":a.consumer_ref,
+                "query_family_ref":a.query_family_ref,"admissibility_receipt_ref":a.admissibility_receipt_ref,
+                "factorisation_receipt_refs":a.factorisation_receipt_refs,"admissible":a.admissible,
+                "consumer_adequate":a.consumer_adequate}));
+        }
+    }
+    tx.commit()?;
+    Ok(json!({"schema":"slr.recorded-family-parity.v1","family_ref":family_ref,
+        "consumer_ref":bounded_consumer,"query_family_ref":query_family,
+        "original_semantic_consumer_ref":family.projection.consumer_ref,
+        "superseded_by":family.superseded_by,"pairs":pairs,"all_recorded_answers_equal":equal,
+        "factorisation_evidence_ref":evidence_ref,"recorded_consumer_adequacy":adequacy,
+        "reviewed_representation_parity_paid":false,"formal_consumer_equivalence_paid":false,
+        "semantic_residuals_retained":family.projection.acquisition_demands.len(),
+        "candidate_only":true,"source_independence_paid":false,"world_truth_paid":false,"writes_database":false}))
+}
+
 #[derive(Debug,Clone,PartialEq,Eq,Serialize,Deserialize)]
 pub struct FamilyRevisionTransition{
     pub schema:String,
