@@ -605,7 +605,7 @@ pub fn read_article_numeric_coordinate_meet(config:&DatabaseConfig,
 /// matches the checked predicate. Keep all numeric relation alternatives.
 fn predicate_role_transport(meet:&serde_json::Value)
     ->Result<serde_json::Value,PersistedRelationalObservationError>{
-    use serde_json::{json,Value};
+    use serde_json::json;
     let bad=||PersistedRelationalObservationError::CheckedSourceMismatch;
     let groups=meet["coordinates"].as_array().ok_or_else(bad)?;
     let batches=meet["checked_batches"].as_array().ok_or_else(bad)?;
@@ -678,6 +678,57 @@ fn predicate_role_transport(meet:&serde_json::Value)
         "numeric_only_predicates":unmatched,"numeric_context_relations":context,
         "source_coordinate_meet":meet,"semantic_coverage_paid":false,
         "outside_model_possible":true,"world_truth_paid":false}))
+}
+
+/// Port the existing Agda SpacyDependencyToCandidateLogicalPNFExact
+/// constructors, as candidates only. Every emitted fragment retains the
+/// original dependency witness; no syntax implies an asserted world fact.
+fn candidate_semantic_fragments(transport:&serde_json::Value)
+    ->Result<serde_json::Value,PersistedRelationalObservationError>{
+    use serde_json::json;
+    let bad=||PersistedRelationalObservationError::CheckedSourceMismatch;
+    let mut rows=Vec::new();
+    for item in transport["checked_predicates"].as_array().ok_or_else(bad)?{
+        let obs=&item["checked_observation"];
+        let event=obs["predicate_candidate_ref"].as_str().ok_or_else(bad)?;
+        let mut fragments=Vec::new();
+        for role in obs["role_bindings"].as_array().ok_or_else(bad)?{
+            let dep=role["role_ref"].as_str().ok_or_else(bad)?;
+            let filler=role["filler_candidate_ref"].as_str().ok_or_else(bad)?;
+            let (kind,formula)=match dep{
+                "syntax:nsubj"|"syntax:csubj"=>("actor_fragment","Actor"),
+                "syntax:nsubjpass"|"syntax:nsubj:pass"|"syntax:csubjpass"|"syntax:csubj:pass"|
+                "syntax:obj"|"syntax:dobj"=>("patient_fragment","Patient"),
+                "syntax:ccomp"|"syntax:xcomp"=>("content_clause_fragment","ContentClause"),
+                "syntax:advcl"|"syntax:acl"|"syntax:relcl"=>("clause_attachment_fragment","ClauseAttachment"),
+                "syntax:conj"=>("conjunction_fragment","Conjunction"),
+                "syntax:neg"=>("negation_fragment","ScopedNegationCandidate"),
+                "syntax:aux"|"syntax:auxpass"|"syntax:aux:pass"=>("modality_fragment","AuxiliaryCandidate"),
+                "syntax:tmod"|"syntax:npadvmod"=>("temporal_fragment","TemporalCandidate"),
+                _=>("unresolved_fragment","UnresolvedDependency"),
+            };
+            fragments.push(json!({"kind":kind,"formula_candidate":{"predicate":formula,
+                "event_factor_ref":event,"dependent_factor_ref":filler},
+                "forward_witness":{"observation_ref":obs["observation_ref"],"role":role},
+                "candidate_only":true,"scope_resolved":false,"world_identity_paid":false}));
+        }
+        rows.push(json!({"original_predicate_transport":item,"fragments":fragments,
+            "referent_alternatives":["entity","eventuality","proposition","expletive","outside"],
+            "scope_alternatives":["asserted","reported","predicted","hypothetical","mentioned","unknown"],
+            "signed_alternatives":[-1,0,1],"outside_model_possible":true,
+            "live_coverage_paid":false,"source_factorisation_paid":false}));
+    }
+    Ok(json!({"schema":"slr.source-semantic-candidate-fragments.v1",
+        "golden_donor":"DASHI.Reasoning.SpacyDependencyToCandidateLogicalPNFExact",
+        "rows":rows,"original_transport":transport,"semantic_coverage_paid":false,
+        "world_truth_paid":false}))
+}
+
+pub fn read_article_semantic_candidates(config:&DatabaseConfig,
+    revision:&str,batches:&[String],run:&str,doc:&str,snapshot:&str,digest:&str)
+    ->Result<serde_json::Value,PersistedRelationalObservationError>{
+    let transport=read_article_numeric_predicate_transport(config,revision,batches,run,doc,snapshot,digest)?;
+    candidate_semantic_fragments(&transport)
 }
 
 pub fn read_article_numeric_predicate_transport(config:&DatabaseConfig,
