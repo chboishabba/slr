@@ -10,6 +10,16 @@ fn print_json<T:serde::Serialize>(value:&T)->Result<(),String>{
 pub fn run(args:&[String])->Result<(),String>{
     let config=load_database_config(None).map_err(|e|e.to_string())?;
     match args {
+        [mode,revision,batches_path,run,doc,snapshot,digest,observation,consumer,query,evidence,repo,sha,path,thread] if mode=="licensed-semantic"=>{
+            let raw=std::fs::read_to_string(batches_path).map_err(|e|e.to_string())?;
+            let batches:Vec<String>=serde_json::from_str(&raw).map_err(|e|e.to_string())?;
+            let locator=sensiblaw_pg_source_store::RefereeReceiptLocator{
+                repo:repo.clone(),sha:sha.clone(),path:path.clone(),canonical_thread_id:thread.clone(),
+            };
+            print_json(&sensiblaw_pg_source_store::read_authenticated_source_semantic_query(
+                &config,revision,&batches,run,doc,snapshot,digest,observation,consumer,query,evidence,&locator)
+                .map_err(|e|e.to_string())?)
+        },
         [mode,revision,batches_path,run,doc,snapshot,digest] if mode=="predicate-transport"||mode=="semantic-candidates"=>{
             let raw=std::fs::read_to_string(batches_path).map_err(|e|e.to_string())?;
             let batches:Vec<String>=serde_json::from_str(&raw).map_err(|e|e.to_string())?;
@@ -102,6 +112,6 @@ pub fn run(args:&[String])->Result<(),String>{
                 "candidate_review_status":format!("{:?}",item.current_status),"creates_semantic_authority":false}))
         },
         _ if (4..=12).contains(&args.len())=>print_json(&run_persisted_relational_family(&config,&args[0],&args[1],&args[2..]).map_err(|e|e.to_string())?),
-        _=>Err("usage: relational-family CONSUMER ACCESS SELECTOR SELECTOR ... | predicate-transport REVISION BATCH_REFS_JSON RUN DOC SNAPSHOT DIGEST | semantic-candidates REVISION BATCH_REFS_JSON RUN DOC SNAPSHOT DIGEST | coordinate-meet REVISION BATCH_REFS_JSON RUN DOC SNAPSHOT DIGEST | numeric-action-roles RUN DOC SNAPSHOT DIGEST MENTION_TOKEN_IDS_JSON | article-actions REVISION BATCH_REFS_JSON MENTION_REFS_JSON | licensed-reciprocal FAMILY LEFT RIGHT QUERY EVIDENCE REPO SHA PATH THREAD | reciprocal FAMILY LEFT RIGHT | participant FAMILY FILLER_REF | inspect FAMILY | prepare-revision FAMILY OLD_SELECTOR NEW_SELECTOR | inspect-revision TRANSITION | review-revision TRANSITION COMMAND REVIEWER accept|reject|abstain | publish-revision TRANSITION".into())
+        _=>Err("usage: relational-family CONSUMER ACCESS SELECTOR SELECTOR ... | licensed-semantic REVISION BATCH_REFS_JSON RUN DOC SNAPSHOT DIGEST OBSERVATION CONSUMER QUERY EVIDENCE REPO SHA PATH THREAD | predicate-transport REVISION BATCH_REFS_JSON RUN DOC SNAPSHOT DIGEST | semantic-candidates REVISION BATCH_REFS_JSON RUN DOC SNAPSHOT DIGEST | coordinate-meet REVISION BATCH_REFS_JSON RUN DOC SNAPSHOT DIGEST | numeric-action-roles RUN DOC SNAPSHOT DIGEST MENTION_TOKEN_IDS_JSON | article-actions REVISION BATCH_REFS_JSON MENTION_REFS_JSON | licensed-reciprocal FAMILY LEFT RIGHT QUERY EVIDENCE REPO SHA PATH THREAD | reciprocal FAMILY LEFT RIGHT | participant FAMILY FILLER_REF | inspect FAMILY | prepare-revision FAMILY OLD_SELECTOR NEW_SELECTOR | inspect-revision TRANSITION | review-revision TRANSITION COMMAND REVIEWER accept|reject|abstain | publish-revision TRANSITION".into())
     }
 }
